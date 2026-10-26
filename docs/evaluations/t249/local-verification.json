@@ -7,7 +7,7 @@
         "tests/project_bundle.py"
       ],
       "exit_code": 0,
-      "seconds": 0.34,
+      "seconds": 0.31,
       "stderr": "",
       "stdout": "Project bundle round-trip and safety checks passed\n"
     },
@@ -33,7 +33,7 @@
         "{{.Repository}}:{{.Tag}}"
       ],
       "exit_code": 0,
-      "seconds": 0.22,
+      "seconds": 0.18,
       "stderr": "",
       "stdout": "sigma-frontend:local-check\nsigma-backend:local-check\nsigma-t100-local:check\nsigma-t100-backend:latest\nsigma-backend:t99\nsigma-research-python:0.1\nsigma-api:t22-deployment-final\nsigma-api:t22-deployment-test\nsigma-research-sage:10.8\ncloudflare-dev/fastapi:b75662b5\nsigma-t221-fastapi:spike\npython:3.13-slim-bookworm\npython:3.13-slim-bookworm\nalpine:3.21\ncloudflare/cloudflared:2026.10.0\nghcr.io/astral-sh/uv:0.12.17\ncloudflare/proxy-everything:<none>\nsagemath/sagemath:<none>\nnode:22.14.0-bookworm-slim\ndocker:27.5.1-cli\nnginx:1.27.4-alpine\npython:3.12.8-slim\npython:3.12.8-slim\ncaddy:<none>\ndocker/compose:latest\n"
     },
@@ -54,10 +54,10 @@
         "/Users/admin/sigma_blue/.venv/bin/python",
         "tests/t249_docker_lifecycle.py"
       ],
-      "exit_code": 1,
-      "seconds": 1.42,
-      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/t249_docker_lifecycle.py\", line 168, in <module>\n    asyncio.run(verify())\n    ~~~~~~~~~~~^^^^^^^^^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/asyncio/runners.py\", line 205, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/asyncio/runners.py\", line 128, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/asyncio/base_events.py\", line 720, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n  File \"/Users/admin/sigma_blue/tests/t249_docker_lifecycle.py\", line 146, in verify\n    raise AssertionError(\n    ...<2 lines>...\n    )\nAssertionError: Docker worker exited before reservation:   File \"<string>\", line 1\n    import asyncio,sys\\nfrom sigma.python_sandbox import execute_research_code\\nasyncio.run(execute_research_code(sys.argv[1], 'import time; time.sleep(6); print(42)'))\\n\n                       ^\nSyntaxError: unexpected character after line continuation character\n\n",
-      "stdout": "PASS real Docker execution and JSON-backed record persistence\nPASS real Docker binary artifact capture and integrity\nPASS export/import execution persistence\nPASS interrupted reservation remains inspectable after lock loss\nPASS interruption evidence survives export/import\nPASS corrupted artifact rejected without losing valid evidence\n"
+      "exit_code": 0,
+      "seconds": 1.52,
+      "stderr": "",
+      "stdout": "PASS real Docker execution and JSON-backed record persistence\nPASS real Docker binary artifact capture and integrity\nPASS export/import execution persistence\nPASS interrupted reservation remains inspectable after lock loss\nPASS interruption evidence survives export/import\nPASS corrupted artifact rejected without losing valid evidence\nPASS real SIGMA worker termination preserves uncertain execution\n"
     },
     "simulation:project_creation.py": {
       "command": [
@@ -65,7 +65,7 @@
         "tests/project_creation.py"
       ],
       "exit_code": 0,
-      "seconds": 3.64,
+      "seconds": 3.6,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS all research types serialized/reopened, destination preview, collision and strategy integrity\nPASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection\nPASS publication rollback, concurrent data preservation and exclusive name reservation\nPASS API create/preview/errors and both CLI research modes\nPASS v1/v2/v3 default-mode reads without rewriting and retained history on writes\nPASS explicit default/configured roots, missing parents, ownership and root symlinks\nAll project-creation scenarios passed.\n"
     },
@@ -85,7 +85,7 @@
         "tests/project_settings.py"
       ],
       "exit_code": 0,
-      "seconds": 0.77,
+      "seconds": 0.78,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen\nPASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes\nPASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior\n"
     },
@@ -95,7 +95,7 @@
         "tests/python_sandbox.py"
       ],
       "exit_code": 0,
-      "seconds": 0.52,
+      "seconds": 0.55,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API\n"
     },
@@ -105,9 +105,9 @@
         "tests/research_sessions.py"
       ],
       "exit_code": 0,
-      "seconds": 40.6,
+      "seconds": 40.77,
       "stderr": "",
-      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.820s\nPersistent research session scenarios passed.\n"
+      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.769s\nPersistent research session scenarios passed.\n"
     },
     "simulation:sage_execution.py": {
       "command": [
@@ -120,15 +120,14 @@
       "stdout": "PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery\n"
     }
   },
-  "failing_or_unavailable": [
-    "docker_lifecycle"
-  ],
+  "failing_or_unavailable": [],
   "initial_git_status": "?? gmail_test.py\n?? smtp_test.py\n",
   "passing": [
     "compile",
     "bundle_simulation",
     "docker_info",
     "docker_images",
+    "docker_lifecycle",
     "simulation:project_creation.py",
     "simulation:project_reports.py",
     "simulation:project_settings.py",
@@ -137,7 +136,7 @@
     "simulation:sage_execution.py"
   ],
   "python": "/Users/admin/sigma_blue/.venv/bin/python",
-  "tested_head": "27c15214f5f87de1c2435dd120f72499829a2574",
+  "tested_head": "a063059459596eb787777d1197940d71adfcacb9",
   "ticket": "T249",
-  "utc": "2026-10-26T23:41:04.347572+00:00"
+  "utc": "2026-10-26T23:42:40.003318+00:00"
 }
