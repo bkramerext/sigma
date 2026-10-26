@@ -527,9 +527,17 @@ def _execution_directory(path: str | Path) -> Path:
     if target.is_relative_to(samples):
         raise ProjectError("Research executions cannot be stored in sample projects")
     if target.suffix == ".json":
-        raise ProjectError(
-            "Research execution persistence for single-file JSON projects is not yet supported"
-        )
+        # Runtime liveness locks are transient sidecars; execution records and
+        # captured output bytes themselves are authoritative bundle members.
+        directory = target.with_name("." + target.name + ".runtime")
+        if directory.is_symlink():
+            raise ProjectError("Research execution runtime directory is unsafe")
+        try:
+            directory.mkdir(mode=0o700, exist_ok=True)
+            os.chmod(directory, 0o700)
+        except OSError as exc:
+            raise ProjectError("Research execution runtime storage is unavailable") from exc
+        return directory
     directory = target / "research-executions"
     if directory.is_symlink():
         raise ProjectError("Research execution directory must not be a symbolic link")
@@ -539,6 +547,18 @@ def _execution_directory(path: str | Path) -> Path:
     except OSError as exc:
         raise ProjectError("Research execution storage is unavailable") from exc
     return directory
+
+
+def _execution_bundle_path(directory: Path) -> Path | None:
+    name = directory.name
+    if not (name.startswith(".") and name.endswith(".json.runtime")):
+        return None
+    candidate = directory.with_name(name[1:-len(".runtime")])
+    return candidate if candidate.suffix == ".json" else None
+
+
+def _bundle_execution_member(identifier: str) -> str:
+    return f"research-executions/{identifier}.json"
 
 
 def _metadata_id(value: str | None, label: str) -> str | None:
@@ -560,6 +580,80 @@ def _save_record(
     encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_ARTIFACT_BYTES:
         raise ProjectError("Research execution artifact exceeded its storage limit")
+    bundle_path = _execution_bundle_path(directory)
+    if bundle_path is not None:
+        from sigma.project_bundle import BundleError, transform_members
+
+        identifier = _metadata_id(str(record.get("id", "")), "execution")
+        assert identifier
+        member = _bundle_execution_member(identifier)
+
+        def update(members: dict[str, bytes]) -> dict[str, bytes | None]:
+            if not isinstance(members.get("project.json"), bytes):
+                raise ProjectError("Project document is missing from execution bundle")
+            if not finalizing and record.get("session_id") is not None:
+                for name, data in members.items():
+                    if not name.startswith("research-executions/") or not name.endswith(".json"):
+                        continue
+                    try:
+                        prior = json.loads(data)
+                    except (ValueError, UnicodeDecodeError):
+                        continue
+                    if (isinstance(prior, dict)
+                        and prior.get("runtime", "python") == record.get("runtime", "python")
+                        and all(prior.get(key) == record.get(key) for key in (
+                            "project_id", "session_id", "strategy_id", "cycle", "source"
+                        ))):
+                        raise ProjectError(
+                            "This research proposal is already reserved; no second run was started"
+                        )
+            previous = members.get(member)
+            if finalizing:
+                try:
+                    reserved = json.loads(previous) if previous is not None else None
+                except (ValueError, UnicodeDecodeError) as exc:
+                    raise ProjectError("Research execution reservation is unreadable") from exc
+                if (not isinstance(reserved, dict)
+                    or reserved.get("status") != "running"
+                    or reserved.get("runtime", "python") != record.get("runtime", "python")
+                    or any(reserved.get(key) != record.get(key) for key in (
+                        "id", "project_id", "session_id", "strategy_id", "cycle",
+                        "source", "runtime_version", "syntax", "source_sha256", "agent"
+                    ))):
+                    raise ProjectError("Research execution reservation does not match the result")
+            artifact_records = []
+            changes: dict[str, bytes | None] = {}
+            prefix = f"research-executions/{identifier}.artifacts/"
+            for name in members:
+                if name.startswith(prefix):
+                    changes[name] = None
+            for filename, media_type, content in artifacts:
+                if (len(content) > MAX_CAPTURED_ARTIFACT_BYTES
+                    or Path(filename).name != filename or filename in {".", ".."}):
+                    raise ProjectError("Research output artifact is invalid")
+                artifact_records.append({
+                    "filename": filename, "media_type": media_type,
+                    "size_bytes": len(content), "sha256": hashlib.sha256(content).hexdigest(),
+                })
+                changes[prefix + filename] = content
+            record["artifacts"] = artifact_records
+            encoded_record = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+            if len(encoded_record) > MAX_ARTIFACT_BYTES:
+                raise ProjectError("Research execution artifact exceeded its storage limit")
+            changes[member] = encoded_record
+            total = sum(len(value) for name, value in members.items() if name not in changes)
+            total += sum(len(value) for value in changes.values() if value is not None)
+            if total > MAX_STORAGE_BYTES:
+                raise ProjectError("Research execution storage limit reached")
+            return changes
+
+        try:
+            transform_members(bundle_path, update)
+        except (BundleError, OSError, ValueError) as exc:
+            if isinstance(exc, ProjectError):
+                raise
+            raise ProjectError("Could not store research execution in project bundle") from exc
+        return
     try:
         fd = os.open(
             directory / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
@@ -714,6 +808,20 @@ def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
     identifier = _metadata_id(execution_id, "execution")
     assert identifier
     directory = _execution_directory(path)
+    bundle_path = _execution_bundle_path(directory)
+    if bundle_path is not None:
+        from sigma.project_bundle import BundleError, read_file
+        try:
+            raw = read_file(bundle_path, _bundle_execution_member(identifier))
+            if len(raw) > MAX_ARTIFACT_BYTES:
+                raise ProjectError("Research execution artifact is oversized")
+            record = json.loads(raw)
+        except (BundleError, ValueError, UnicodeDecodeError) as exc:
+            raise ProjectError("Research execution artifact not found or unreadable") from exc
+        if (not isinstance(record, dict) or record.get("id") != identifier
+            or record.get("project_id") != inspect_project(path).project.id):
+            raise ProjectError("Research execution artifact does not match this project")
+        return _execution_state(record, directory)
     target = directory / f"{identifier}.json"
     if target.is_symlink() or not target.is_file() or target.stat().st_size > MAX_ARTIFACT_BYTES:
         raise ProjectError("Research execution artifact not found")
@@ -733,6 +841,36 @@ def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
 def list_executions(path: str | Path) -> list[dict[str, Any]]:
     directory = _execution_directory(path)
     project_id = inspect_project(path).project.id
+    bundle_path = _execution_bundle_path(directory)
+    if bundle_path is not None:
+        from sigma.project_bundle import read_bundle
+        import base64
+        try:
+            members = read_bundle(bundle_path)["files"]
+        except (OSError, ValueError) as exc:
+            raise ProjectError("Research execution bundle is unreadable") from exc
+        records = []
+        prefix = "research-executions/"
+        for name, encoded in members.items():
+            if not name.startswith(prefix) or not name.endswith(".json") or ".artifacts/" in name:
+                continue
+            try:
+                raw = base64.b64decode(encoded, validate=True)
+                if len(raw) > MAX_ARTIFACT_BYTES:
+                    continue
+                record = json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if (not isinstance(record, dict) or record.get("project_id") != project_id
+                or name != _bundle_execution_member(str(record.get("id", "")))
+                or not isinstance(record.get("created_at"), str)):
+                continue
+            try:
+                _metadata_id(record["id"], "execution")
+            except ProjectError:
+                continue
+            records.append(_execution_state(record, directory))
+        return sorted(records, key=lambda item: item.get("created_at", ""), reverse=True)
     records = []
     for target in directory.glob("*.json"):
         if (
@@ -978,7 +1116,19 @@ def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -
     )
     if metadata is None or Path(filename).name != filename:
         raise ProjectError("Research output artifact not found")
-    artifact_directory = _execution_directory(path) / f"{record['id']}.artifacts"
+    execution_directory = _execution_directory(path)
+    bundle_path = _execution_bundle_path(execution_directory)
+    if bundle_path is not None:
+        from sigma.project_bundle import read_file
+        member = f"research-executions/{record['id']}.artifacts/{filename}"
+        try:
+            content = read_file(bundle_path, member)
+        except (OSError, ValueError, KeyError) as exc:
+            raise ProjectError("Research output artifact not found") from exc
+        if len(content) != metadata["size_bytes"] or hashlib.sha256(content).hexdigest() != metadata["sha256"]:
+            raise ProjectError("Research output artifact failed its integrity check")
+        return content, str(metadata["media_type"])
+    artifact_directory = execution_directory / f"{record['id']}.artifacts"
     if artifact_directory.is_symlink():
         raise ProjectError("Research output artifact directory is unsafe")
     target = artifact_directory / filename
