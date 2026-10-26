@@ -2161,12 +2161,15 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     const controller = new AbortController();
     setCatalogReady(false);
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
-      if (!response.ok) throw new Error('Model availability could not be checked.');
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) throw new Error('Model availability requires an authorized session. Sign in again or contact the SIGMA administrator. Saved settings are unchanged.');
+        throw new Error(`Model availability check failed (HTTP ${response.status}). Retry after connectivity is restored. Saved settings are unchanged.`);
+      }
       return response.json();
     }).then(data => {
       if (!controller.signal.aborted) setModels(Array.isArray(data.models) ? data.models : []);
-    }).catch(() => {
-      if (!controller.signal.aborted) setMessage('Model availability could not be verified. Saved settings are unchanged.');
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Model availability could not be verified. Saved settings are unchanged.');
     }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
     return () => controller.abort();
   }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
