@@ -393,7 +393,7 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     # Hosted users begin on their explicitly personal choice. Sponsored access
     # is available only after an authenticated user selects it.
     model_access = "personal"
-    sponsorship_eligible = int(not cfg.local)
+    sponsorship_eligible = int(not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")))
     with _db(cfg) as db:
         _upsert_user_state(
             db,
@@ -456,7 +456,7 @@ def set_model_access(subject: str, mode: str) -> None:
     if mode not in {"personal", "sponsored"}:
         raise ValueError("Unsupported model connection choice.")
     cfg = config()
-    if not cfg.enabled or cfg.error or cfg.local:
+    if not cfg.enabled or cfg.error or (cfg.local and not _mock_enabled(cfg)):
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
         changed = db.execute(
@@ -703,6 +703,26 @@ def _mock_enabled(cfg: Config) -> bool:
         and cfg.origin in {"http://127.0.0.1:5173", "http://localhost:5173"}
         and os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().lower() in {"1", "true", "yes"}
     )
+
+
+@router.post("/mock/model-access")
+def mock_model_access(request: Request, mode: str):
+    """Change simulated funding without touching a real provider."""
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock authentication requires a loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    if mode not in {"personal", "sponsored"}:
+        raise HTTPException(400, "Unknown mock funding mode.")
+    _persist_user_state(cfg, principal)
+    set_model_access(principal.subject, mode)
+    return {"mode": mode, "simulated": True}
 
 
 @router.post("/mock/select")
