@@ -64,7 +64,14 @@ def enabled() -> bool:
         "true",
         "yes",
     }
-    return enabled and (persistent_disk_enabled() or not local_auth)
+    mock_auth = os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
+    mock_local = (
+        mock_auth
+        and local_auth
+        and os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").rstrip("/")
+        in {"http://127.0.0.1:5173", "http://localhost:5173"}
+    )
+    return enabled and (persistent_disk_enabled() or not local_auth or mock_local)
 
 
 def current() -> Workspace | None:
