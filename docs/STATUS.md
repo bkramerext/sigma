@@ -5143,3 +5143,39 @@ Assessment checks:
   additionally hit a `tests/research_sessions.py` shared worker-active lock;
   the focused auth/workspace/storage scenarios still passed.
 - `git diff --check`: PASS. No authentication source or T163 files changed.
+
+## T131 — Production Google OAuth configuration readiness (2026-10-26)
+
+Reviewed current `main` at `a335f3f`, T172's auth audit, T131's hosted OAuth
+acceptance procedure, the operations/deployment runbooks, Compose wiring,
+read-only GCE preflight, secret fetch helper and auth implementation. Added the
+[T131 production readiness checklist](T131_PRODUCTION_OAUTH_READINESS.md)
+with exact project/consent/client/origin/callback/scope settings, secret and
+runtime IAM requirements, bootstrap/member setup, observed fail-closed auth
+behavior, escalation rules and the first-live-sign-in acceptance procedure.
+
+Evidence remains preparatory: the runbook identifies `SIGMA Auth`
+(`sigma-auth-512601`) as an existing OAuth project but leaves production client
+project selection unresolved. Its 2026-10-25 checkpoint says the OAuth Secret
+Manager secret was not created because an initial version was required. Secret
+payload, active version, resource-scoped `roles/secretmanager.secretAccessor`
+binding, deployed environment/client ID, bootstrap/member grants and hosted
+status have not been inspected. The runbook records DNS/external IP verification
+pending; the coordinator and human are independently checking it, so no DNS
+correctness is assumed. Actual HTTPS callback and Google consent configuration
+remain unverified.
+
+No OAuth client, consent screen, IAM, secret, production environment, DNS,
+infrastructure, identity or hosted endpoint was modified or exercised. No
+Google OAuth, provider call, or personal ChatGPT auth occurred. `./sigma test`
+ran and **failed overall** on the existing deployment contract mismatch in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
+the assertions still expect `Requires=docker.service sigma-sandbox.service
+srv-sigma\\x2dstate.mount`, while the current `deploy/systemd/sigma.service`
+uses `RequiresMountsFor=/srv/sigma-state`. Research scenarios, cloud auth
+(16 tests), storage/cloud workspace/research scenarios, public endpoint (7
+tests), Ruff check/format, Pyright (0 diagnostics), and frontend typecheck
+passed. The frontend production build was skipped after earlier failures. No
+real-browser check was run because no browser workflow changed; fixture and
+Chrome evidence remains the previously recorded T172 result, not this hosted
+configuration review. `git diff --check` is recorded in the handoff.
