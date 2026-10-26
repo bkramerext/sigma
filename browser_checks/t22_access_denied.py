@@ -39,7 +39,7 @@ with sync_playwright() as playwright:
                     "ready": True,
                     "authenticated": False,
                     "user": None,
-                    "admin_contact_email": "access@example.org",
+                    "admin_contact_email": "zetacontinuation@gmail.com",
                 }
             ),
         )
@@ -72,7 +72,7 @@ with sync_playwright() as playwright:
     expect(demo).to_have_attribute("href", "/demo?access=denied")
     invite = page.get_by_role("link", name="Request Invitation")
     parts = urlsplit(invite.get_attribute("href") or "")
-    assert parts.scheme == "mailto" and parts.path == "access@example.org"
+    assert parts.scheme == "mailto" and parts.path == "zetacontinuation@gmail.com"
     request_fields = parse_qs(parts.query)
     assert request_fields["subject"] == ["SIGMA invitation request"]
     assert "visitor@example.org" in request_fields["body"][0]
@@ -148,7 +148,7 @@ with sync_playwright() as playwright:
                     "ready": True,
                     "authenticated": True,
                     "user": {"email": "admin@example.org", "role": "admin"},
-                    "admin_contact_email": "access@example.org",
+                    "admin_contact_email": "zetacontinuation@gmail.com",
                 }
             ),
         ),

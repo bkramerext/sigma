@@ -64,7 +64,7 @@ The ordinary local launch is single-user and does not require an administrator a
    ./sigma start --navigate
    ```
 
-   The first successful verified Google sign-in binds that account as administrator for this local installation. The setting also supplies the administrator invitation contact. Local auth data is stored under `~/.sigma/local-cloud-auth`; other users need an explicit access grant. This local setup does not administer a hosted SIGMA deployment.
+   If you keep this setting in a shell startup file, load that file in the launching shell first. On a fresh local auth database, the first successful verified Google sign-in matching this address binds that account as administrator. Later changes to the contact address update invitation requests and preserve the existing administrator email and Google subject binding. Local auth data is stored under `~/.sigma/local-cloud-auth`; other users need an explicit access grant. This local setup does not administer a hosted SIGMA deployment.
 
 For hosted setup, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). Hosted deployments require their own OAuth and administrator configuration; do not reuse the local loopback OAuth settings.
 
