@@ -319,7 +319,12 @@ def main() -> None:
             assert get_execution_artifact(imported, execution_id, "result.bin") == (
                 bytes(range(128)), "application/octet-stream"
             )
-            assert {item["id"] for item in list_executions(imported)} == {execution_id, extra_id}
+            assert {item["id"] for item in list_executions(imported)} == {
+                execution_id, extra_id, integrated["id"]
+            }
+            assert get_execution_artifact(imported, integrated["id"], "integration.bin") == (
+                b"evidence", "application/octet-stream"
+            )
             # Tampered binary evidence is rejected even when metadata survives.
             write_file(imported, f"research-executions/{execution_id}.artifacts/result.bin",
                        b"tampered")
