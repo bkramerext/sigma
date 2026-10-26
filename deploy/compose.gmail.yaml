@@ -1,0 +1,13 @@
+# Optional Gmail API delivery override for the hosted backend.
+# Use with: docker compose -f deploy/compose.yaml -f deploy/compose.gmail.yaml ...
+# SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST must point to a protected host file.
+services:
+  backend:
+    volumes:
+      - type: bind
+        source: ${SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST:?set protected host OAuth token path}
+        target: /run/secrets/invitation_gmail_token
+        read_only: true
+    environment:
+      SIGMA_INVITATION_GMAIL_TOKEN_FILE: /run/secrets/invitation_gmail_token
+      SIGMA_INVITATION_GMAIL_SENDER: ${SIGMA_INVITATION_GMAIL_SENDER:-zetacontinuation@gmail.com}
