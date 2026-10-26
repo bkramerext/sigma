@@ -726,9 +726,9 @@ def mock_select(request: Request, identity: str):
                     (subject, email, _now()),
                 )
                 db.execute(
-                    "INSERT INTO grants(kind,value,role,active) VALUES('email',?,?,1) "
-                    "ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1",
-                    (email, role),
+                    "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,?,1,?) "
+                    "ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1,updated_at=excluded.updated_at",
+                    (email, role, _now()),
                 )
                 _upsert_user_state(db, subject, email, role, None, 0, "personal")
                 db.execute(
