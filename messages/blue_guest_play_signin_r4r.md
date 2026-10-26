@@ -4,7 +4,7 @@ Branch: `fix/guest-samples-about-privacy` (continued for overlap with the active
 Guest implementation).
 PR: https://github.com/bkramerext/sigma/pull/246 (open against `main`; not merged)
 Base: `main` at `6a607a488106f9c9233336eb940f0458024e527b`
-Final PR head SHA: reported in the R4R notice.
+Final PR head SHA: `ab1c381` (`ab1c381...` full SHA on branch).
 
 Guest Play now opens the “Ready to investigate?” dialog:
 
