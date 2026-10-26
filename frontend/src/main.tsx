@@ -547,6 +547,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
   </div>;
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
+    {!!session.artifacts.length && <div className="research-session-actions"><button type="button" className="text-view-link" onClick={() => onForkFromFindings(session)}>Fork strategy from findings</button></div>}
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {provenancePrelude}
@@ -640,7 +641,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {!!session.steps.filter(step => ['failed', 'interrupted', 'running'].includes(step.status)).length && <section className="outcome-provider-attempts" aria-label="Incomplete provider attempts"><h4>Incomplete or failed attempts</h4><ul>{session.steps.filter(step => ['failed', 'interrupted', 'running'].includes(step.status)).map(step => <li key={step.id}><strong>{step.status} · {step.role}</strong><span>Cycle {step.cycle}, call {step.call_number}{step.provider_http_status ? ` · HTTP ${step.provider_http_status}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}</span>{step.interruption_reason && <p>{step.interruption_reason}</p>}{step.status === 'interrupted' && <p>The provider may have completed or charged usage; SIGMA did not repeat this ambiguous attempt automatically.</p>}</li>)}</ul></section>}
             {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && !session.steps.some(step => ['failed', 'interrupted', 'running'].includes(step.status)) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. This attempt is not a completed research artifact.</p></section>}
             {!!session.current_question && <p><strong>Current focus:</strong> {session.current_question}</p>}
-            <div className="research-session-actions"><a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>{!!session.artifacts.length && <button type="button" className="text-view-link" onClick={() => onForkFromFindings(session)}>Fork strategy from findings</button>}</div>
+            <div className="research-session-actions"><a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a></div>
           </div>
         </details>
           <details className="outcome-subsection">
@@ -892,7 +893,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
       await load(next.id);
       revealSession(next.id);
-    } catch (cause) { await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } catch (cause) { setConfirmStart(false); await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { submittingStart.current = false; setBusy(false); }
   }
 
