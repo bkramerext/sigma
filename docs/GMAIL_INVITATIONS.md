@@ -41,7 +41,7 @@ and may require Google's verification process.
 
 ## Acceptance
 
-Run `uv run pytest tests/gmail_delivery.py` locally. Then test an actual
+Run `uv run python -m unittest discover -s tests -p gmail_delivery.py` locally. Then test an actual
 denied-access invitation request in a non-production environment and confirm
 the notification reaches the designated recipient. Production acceptance also
 requires verifying the container mount, permissions, token refresh, and
