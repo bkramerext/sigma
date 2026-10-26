@@ -1,5 +1,21 @@
 # T128 — GCE host readiness and runtime security
 
+## Integration against current main
+
+This branch was reconciled with T129 merge
+`7d4898733690fa17931e7f2c86aa92b03317ea79`; Git merged without conflicts. The
+integrated diff changes only T128 readiness documentation/tracking and the
+three stale mount assertions. T129's `deploy/release_image.py`, SHA verification
+in `deploy/start-gce.sh`, release provenance message, and release/storage tests
+remain identical to current `main`.
+
+After integration, `tests/deployment_package.py`, `tests/gce_host.py` (17),
+`tests/host_monitor.py` (9), `tests/release_image.py` (3), and `tests/storage.py`
+passed. `./sigma test` passed all offline scenarios, Ruff, formatting, Pyright
+(0 diagnostics), frontend typecheck, and production build. No host or
+deployment services were touched; production readiness remains blocked as
+described below.
+
 **Readiness: BLOCKED for production activation.** This review used current
 `main` at `8e8d979`. It made no SSH connection, provider call, installer run,
 service start, reboot, or infrastructure change. The host details in the

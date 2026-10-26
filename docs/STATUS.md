@@ -32,8 +32,17 @@ typecheck, and production build (existing large-chunk advisory). Local Docker
 was not rootless; Compose v2 and `systemd-analyze` were unavailable. No real
 browser check applied to this configuration/documentation change. No provider
 calls or costs occurred. Corrections and the readiness record are in
-[PR #181](https://github.com/bkramerext/sigma/pull/181), open and unmerged,
-with the final tracking/handoff documentation.
+[PR #181](https://github.com/bkramerext/sigma/pull/181).
+
+Integration follow-up: fetched T129 merge `7d4898733690fa17931e7f2c86aa92b03317ea79`
+and merged current `main` into the T128 branch without conflicts. The integrated
+diff was limited to T128 docs/tracking and the three mount assertions. T129's
+release builder, requested-SHA verification in `start-gce.sh`, provenance
+message, and release/storage tests are unchanged from current `main`. Focused
+deployment, GCE host (17), host monitor (9), release-image (3), and storage
+checks passed. `./sigma test` passed all offline scenarios, Ruff, formatting,
+Pyright (0 diagnostics), frontend typecheck and production build (existing
+large-chunk advisory). No GCE or deployment services were touched.
 
 ## T171 GCE host readiness audit (2026-10-26)
 

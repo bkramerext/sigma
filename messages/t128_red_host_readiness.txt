@@ -1,7 +1,8 @@
 T128 — GCE host readiness and runtime security review
 
 Branch: red/t128-readiness-review
-Base: main at 8e8d979
+Original review base: main at 8e8d979
+Integrated base: T129 merge 7d4898733690fa17931e7f2c86aa92b03317ea79
 PR: https://github.com/bkramerext/sigma/pull/181
 Implementation commit: 04e6fe3f19016f8e74333f07e2ba6ebac5bfdd33; the PR also
 contains the final tracking/handoff update.
@@ -51,6 +52,11 @@ Tests actually run:
   (0 diagnostics), frontend typecheck and production build (existing large
   chunk warning).
 - `git diff --check`: passed.
+- After integrating current main with T129: deployment package passed; GCE host
+  17 passed; host monitor 9 passed; release image 3 passed; storage passed;
+  final `./sigma test` passed all checks. T129's release builder, requested-SHA
+  verification, provenance record, and release/storage tests remained
+  unchanged from current main.
 - Local daemon is not rootless; Docker Compose v2 and `systemd-analyze` are
   unavailable. These are environment limits, not GCE observations.
 - No real-browser check applied to these deployment tests/docs.
@@ -65,5 +71,4 @@ an separately approved application-path Python/Sage isolation probe. Keep
 provider-backed OAuth/research acceptance are also outside this assignment.
 
 Handoff: `docs/T128_HOST_READINESS.md`, `docs/STATUS.md`, and `tickets/t128.md`.
-Elapsed: about 23 minutes from initial repository inspection through test,
-documentation, commit, push and PR handoff. No paid calls or provider costs.
+No deployment or GCE changes occurred. No paid calls or provider costs.
