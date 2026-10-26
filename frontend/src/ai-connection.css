@@ -1,4 +1,12 @@
 .connection-details { max-height: min(560px, calc(100dvh - 170px)); overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+.account-model-lines { display: grid; gap: 1px; min-width: 0; text-align: left; line-height: 1.2; }
+.account-model-lines > span:first-child { color: #e9c49e; font-weight: 600; }
+.account-model-lines > span:last-child { color: #bdc7ce; font-size: .92em; }
+.account-identity-state { margin: 0 0 16px; padding: 0 0 12px; border-bottom: 1px solid #6d523b; }
+.account-identity-state h2 { margin: 0 0 6px; color: #e5ad8f; font: 400 19px/1.25 Georgia, serif; }
+.account-identity-state p { margin: 4px 0; color: #bcc5cc; font-size: 12px; line-height: 1.5; }
+.account-model-status > summary { min-height: 40px; }
+.account-model-status > summary > .connection-dot { flex: 0 0 auto; }
 .connection-details :is(.account-label, .google-account-email) { margin: 0 0 12px; color: #f0cca0; font: 400 15px/1.7 Inter, ui-sans-serif, system-ui, sans-serif; }
 .connection-details button { margin: 4px 6px 6px 0; min-height: 36px; }
 .connection-details a, .plan-welcome a { color: #e4b87f; display: inline-block; padding: 6px 0; }

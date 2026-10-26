@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any, Literal
@@ -174,6 +175,31 @@ def cloud_research_budget():
         )
     except cloud_research.CloudResearchUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
+
+
+@app.get("/api/cloud-research/connection")
+async def cloud_sponsored_connection(request: Request):
+    """Check only the server-held sponsored credential's model-catalog access."""
+    if not cloud_workspaces.enabled():
+        raise HTTPException(404, "Sponsored cloud connection is unavailable.")
+    state = await connection(refresh=True)
+    principal = getattr(request.state, "cloud_principal", None)
+    if not isinstance(principal, cloud_auth.Principal):
+        raise HTTPException(401, "Authentication required.")
+    try:
+        cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
+        raise HTTPException(503, "Account connection state could not be saved.") from exc
+    return JSONResponse(
+        {
+            "mode": "sponsored",
+            "status": state.get("status", "unavailable"),
+            "label": state.get("label", "Sponsored model access unavailable"),
+            "guidance": state.get("guidance", "Retry the connection check."),
+            "checked_at": state.get("checked_at"),
+        },
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @app.middleware("http")
@@ -945,8 +971,16 @@ def update_project_view(body: UpdateProjectRequest):
 
 
 @app.get("/api/ai/connection")
-async def connection_view(refresh: bool = False):
-    return await connection(refresh)
+async def connection_view(request: Request, refresh: bool = False):
+    state = await connection(refresh)
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if cfg.enabled and cfg.local and isinstance(principal, cloud_auth.Principal):
+        try:
+            cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
+        except (sqlite3.Error, OSError, RuntimeError) as exc:
+            raise HTTPException(503, "Account connection state could not be saved.") from exc
+    return state
 
 
 @app.get("/api/ai/models")

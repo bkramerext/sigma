@@ -13,9 +13,7 @@ def forward_api(route):
     headers = dict(route.request.headers)
     headers["origin"] = BASE_URL
     route.fulfill(
-        response=route.fetch(
-            url=route.request.url.replace(BASE_URL, FIXTURE_URL), headers=headers
-        )
+        response=route.fetch(url=route.request.url.replace(BASE_URL, FIXTURE_URL), headers=headers)
     )
 
 
@@ -66,8 +64,8 @@ with sync_playwright() as playwright:
     for status, expected_message in cases:
         page.route(
             "**/api/ai/models",
-            lambda route: route.fulfill(
-                status=status,
+            lambda route, response_status=status: route.fulfill(
+                status=response_status,
                 content_type="application/json",
                 body=json.dumps({"error": "fixture failure"}),
             ),
@@ -94,10 +92,14 @@ with sync_playwright() as playwright:
         )
         assert {
             key: saved_after[key] for key in ("id", "ai_model", "reasoning_effort", "difficulty")
-        } == {key: saved_before[key] for key in ("id", "ai_model", "reasoning_effort", "difficulty")}
+        } == {
+            key: saved_before[key] for key in ("id", "ai_model", "reasoning_effort", "difficulty")
+        }
         page.unroute("**/api/ai/models")
 
     assert not page_errors, page_errors
     browser.close()
 
-print("PASS model catalog HTTP errors preserve saved settings and expose disabled/unverified controls at desktop and mobile widths; no inference calls made.")
+print(
+    "PASS model catalog HTTP errors preserve saved settings and expose disabled/unverified controls at desktop and mobile widths; no inference calls made."
+)
