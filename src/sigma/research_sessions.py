@@ -2674,20 +2674,24 @@ def _project_manager_lock(path: str):
 
 def _save(path: str, record: dict[str, Any]) -> None:
     if project_path(path).suffix == ".json":
-        from sigma.project_bundle import list_files, read_file, write_file
+        from sigma.project_bundle import transform_members
 
         encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
         if len(encoded) > MAX_RECORD:
             raise ProjectError("Research session storage limit reached")
-        members = [name for name in list_files(path) if name.startswith("research-sessions/") and name.endswith(".json")]
-        total = 0
-        for name in members:
-            data = read_file(path, name)
-            if name != f"research-sessions/{record['id']}.json":
-                total += len(data)
-        if total + len(encoded) > MAX_TOTAL:
-            raise ProjectError("Research session storage limit reached")
-        write_file(path, f"research-sessions/{record['id']}.json", encoded)
+        member = f"research-sessions/{record['id']}.json"
+
+        def update(members: dict[str, bytes]) -> dict[str, bytes]:
+            total = sum(
+                len(data) for name, data in members.items()
+                if name.startswith("research-sessions/") and name.endswith(".json")
+                and name != member
+            )
+            if total + len(encoded) > MAX_TOTAL:
+                raise ProjectError("Research session storage limit reached")
+            return {member: encoded}
+
+        transform_members(path, update)
         if cloud_workspaces.enabled():
             try:
                 cloud_research.sync_job(record)
