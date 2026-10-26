@@ -234,6 +234,17 @@ def main() -> None:
             assert _read(created.path, session_id) == record
             assert _all(created.path) == [record]
             assert read_session_snapshot(created.path) == ([record], 0)
+            from sigma.research_sessions import (
+                _allocate_session_number, get_limits, save_limits, DEFAULT_LIMITS,
+            )
+            assert get_limits(created.path) == dict(DEFAULT_LIMITS)
+            assert _allocate_session_number(created.path, []) == 1
+            assert _allocate_session_number(created.path, []) == 2
+            assert json.loads(read_file(created.path, "research-sessions/sequence.json"))[
+                "next_session_number"
+            ] == 3
+            assert save_limits(created.path, dict(DEFAULT_LIMITS)) == dict(DEFAULT_LIMITS)
+            assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             assert read_file(created.path, f"research-sessions/{session_id}.json")
             assert json.loads(export_complete_project(created.path))["files"][
                 f"research-sessions/{session_id}.json"
