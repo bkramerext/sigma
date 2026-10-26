@@ -5867,3 +5867,32 @@ navigation/export portion did not complete. `./sigma test` ran all scenarios,
 then exited 1 at repository Ruff B023/formatting findings in unchanged
 `browser_checks/model_availability.py` (same file as current main). The separate
 frontend build passed. See [Issue #209 handoff](../messages/issue_209_green.txt).
+
+## T192 — Per-User Project Isolation (2026-10-26)
+
+Audited the current-main Google OIDC subject-to-workspace flow, protected API
+dependency, project path resolver, authenticated project services, reports,
+papers/downloads, research execution artifacts, and Docker/Sage sandbox
+configuration. Existing implementation derives durable workspace mappings from
+the verified Google `sub`; no server-side identity header or caller-selected
+workspace ID controls project ownership. Local-mode project storage and Recents
+remain unchanged. Reused the T43.2 / PR #166 fixture account-switching evidence
+and its explicitly unverified live OAuth boundary.
+
+Added cross-owner API regressions for project metadata update, text-source
+evidence writes, and research execution creation. Guessed victim paths are
+rejected with the same not-found response; project bytes and prior execution
+records remain unchanged, and no text-source directory is created. Existing
+tests continue to cover guessed IDs, strategy/session/evidence/report/paper and
+export reads, downloads, traversal and symlinks, forged headers, SQLite mapping
+durability, filesystem permissions, restart/restore, and unmounted sandbox
+commands.
+
+`python tests/cloud_workspaces.py`, `python tests/cloud_auth.py`,
+`python tests/python_sandbox.py`, and full `./sigma test` passed. The full run
+included Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and
+production build. The build retains the existing >500 kB chunk advisory. No
+production deployment, live OAuth, paid inference, or provider calls occurred.
+Production OAuth/account switching, hosted mount permissions, revocation, and
+runtime sandbox isolation still need live production verification; they were
+not tested under this assignment's constraints. See [T192](../tickets/t192.md).

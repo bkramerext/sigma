@@ -420,6 +420,10 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 params={"path": b_path},
             )
             assert artifact.content == b"persistent private artifact\n"
+            execution_files_before_denials = {
+                path.name: path.read_bytes()
+                for path in (Path(b_path) / "research-executions").glob("*.json")
+            }
 
             cross_reads = [
                 user_a.get("/api/projects/inspect", params={"path": b_path}),
@@ -492,7 +496,53 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 json={"path": b_path, "strategy_id": strategy_id},
             )
             expect_hidden(denied_strategy_remove)
+            # Exercise additional mutation families with a guessed victim path.
+            # They must fail at project ownership before validating caller data,
+            # starting a sandbox, or changing project/evidence bytes.
+            denied_mutations = [
+                user_a.post(
+                    "/api/projects/update",
+                    json={
+                        "path": b_path,
+                        "title": "Hijacked title",
+                        "problem": "Hijacked question",
+                        "investigation_type": "default",
+                        "ai_model": "gpt-6.1-sol",
+                        "reasoning_effort": "high",
+                        "difficulty": "medium",
+                        "expected": {
+                            "title": "Workspace B project",
+                            "problem": "B private question",
+                            "investigation_type": "default",
+                            "ai_model": "gpt-6.1-sol",
+                            "reasoning_effort": "high",
+                            "difficulty": "medium",
+                        },
+                    },
+                ),
+                user_a.post(
+                    "/api/projects/text/source",
+                    json={
+                        "path": b_path,
+                        "scope": "project",
+                        "body": "cross-account injected source",
+                        "format": "markdown",
+                        "expected_digest": "0" * 64,
+                    },
+                ),
+                user_a.post(
+                    "/api/projects/research-executions",
+                    json={"path": b_path, "source": "open('/etc/passwd').read()"},
+                ),
+            ]
+            for denied in denied_mutations:
+                expect_hidden(denied)
             assert (Path(b_path) / "project.json").read_bytes() == b_project_before_denials
+            assert {
+                path.name: path.read_bytes()
+                for path in (Path(b_path) / "research-executions").glob("*.json")
+            } == execution_files_before_denials
+            assert not (Path(b_path) / "text-sources").exists()
             owner_strategy = request(
                 user_b, "GET", "/api/projects/strategies", params={"path": b_path}
             )
