@@ -240,6 +240,23 @@ def main() -> None:
             assert media_type == "application/octet-stream"
             assert f"research-executions/{execution_id}.json" in list_files(created.path)
             assert f"research-executions/{execution_id}.artifacts/result.bin" in list_files(created.path)
+            # A complete export/import preserves executable evidence exactly.
+            imported = root / "imported-execution.json"
+            import_bundle(json.loads(export_complete_project(created.path)), imported)
+            assert get_execution(imported, execution_id)["status"] == "completed"
+            assert get_execution_artifact(imported, execution_id, "result.bin") == (
+                bytes(range(128)), "application/octet-stream"
+            )
+            assert len(list_executions(imported)) == 1
+            # Tampered binary evidence is rejected even when metadata survives.
+            write_file(imported, f"research-executions/{execution_id}.artifacts/result.bin",
+                       b"tampered")
+            try:
+                get_execution_artifact(imported, execution_id, "result.bin")
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Corrupted imported execution artifact was accepted")
             assert created.project.id in {item.project.id for item in list_json_projects()}
             assert json.loads(export_complete_project(created.path)) == read_bundle(created.path)
             try:
