@@ -252,7 +252,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(self.client.post(
                 "/api/cloud-auth/mock/select", params={"identity": "member-a"},
                 headers=origin,
-            ).status_code, 200)
+            ).status_code, 204)
             created = self.client.post(
                 "/api/projects/create",
                 json={"title": "Private mock session", "problem": "Test isolation"},
@@ -272,7 +272,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(self.client.post(
                 "/api/cloud-auth/mock/select", params={"identity": "member-b"},
                 headers=origin,
-            ).status_code, 200)
+            ).status_code, 204)
             for endpoint in (
                 "/api/projects/research-sessions",
                 f"/api/projects/research-sessions/{session_id}",
@@ -282,7 +282,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(self.client.post(
                 "/api/cloud-auth/mock/select", params={"identity": "member-a"},
                 headers=origin,
-            ).status_code, 200)
+            ).status_code, 204)
             self.assertEqual(self.client.get(
                 "/api/projects/research-sessions", params={"path": path},
             ).status_code, 200)
