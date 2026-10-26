@@ -705,6 +705,67 @@ def _mock_enabled(cfg: Config) -> bool:
     )
 
 
+_MOCK_ALLOWANCES = {"available": 25.0, "low": 1.0, "exhausted": 0.0}
+
+
+def _mock_allowance(cfg: Config, subject: str) -> dict[str, Any]:
+    with _db(cfg) as db:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS mock_allowances (
+                subject TEXT PRIMARY KEY, scenario TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )"""
+        )
+        row = db.execute(
+            "SELECT scenario FROM mock_allowances WHERE subject=?", (subject,)
+        ).fetchone()
+    scenario = row["scenario"] if row else "available"
+    return {"scenario": scenario, "remaining_usd": _MOCK_ALLOWANCES[scenario], "simulated": True}
+
+
+@router.get("/mock/funding")
+def mock_funding(request: Request):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    _persist_user_state(cfg, principal)
+    return {"mode": model_access_for_subject(principal.subject),
+            "allowance": _mock_allowance(cfg, principal.subject)}
+
+
+@router.post("/mock/allowance")
+def mock_allowance(request: Request, scenario: str):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock authentication requires a loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    if scenario not in _MOCK_ALLOWANCES:
+        raise HTTPException(400, "Unknown mock allowance scenario.")
+    with _db(cfg) as db:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS mock_allowances (
+                subject TEXT PRIMARY KEY, scenario TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )"""
+        )
+        db.execute(
+            """INSERT INTO mock_allowances(subject,scenario,updated_at) VALUES(?,?,?)
+            ON CONFLICT(subject) DO UPDATE SET scenario=excluded.scenario,
+            updated_at=excluded.updated_at""",
+            (principal.subject, scenario, _now()),
+        )
+    return _mock_allowance(cfg, principal.subject)
+
+
 @router.post("/mock/model-access")
 def mock_model_access(request: Request, mode: str):
     """Change simulated funding without touching a real provider."""
