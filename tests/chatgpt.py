@@ -204,6 +204,21 @@ async def checks(root):
         started = await auth.begin()
         auth.cancel(started["id"])
         assert auth.attempt_status(started["id"])["status"] == "cancelled"
+        async with REAL_CLIENT(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8000"
+        ) as auth_api:
+            response = await auth_api.post(
+                "/api/ai/auth/begin", json={}, headers={"Origin": "http://127.0.0.1:5173"}
+            )
+            assert response.status_code == 200, response.text
+            api_attempt_id = response.json()["id"]
+            cancelled = await auth_api.post(
+                f"/api/ai/auth/cancel/{api_attempt_id}",
+                json={},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            assert cancelled.status_code == 200, cancelled.text
+        assert auth.attempt_status(api_attempt_id)["status"] == "cancelled"
         assert (await auth.preferences())["active_account"] == first_id
         fixture.discovery_override = {"token_endpoint": "https://foreign.example/token"}
         await rejection(auth.begin(), "discovery")
@@ -213,6 +228,7 @@ async def checks(root):
         )
 
         fixture.subject = "fixture-subject-two"
+        fixture.email = "second-account@example.test"
         fixture.scope = "openid profile email offline_access resource.invoke"
         _, result = await sign_in(fixture)
         assert result["status"] == "plan_not_permitted"
@@ -224,6 +240,31 @@ async def checks(root):
         assert result["status"] == "connected"
         await auth.select("chatgpt", first_id)
         assert (await auth.session())["account"]["subject"] == first_record["subject"]
+        async with transaction() as stored:
+            second_record = copy.deepcopy(stored["accounts"][denied_id])
+            assert second_record["subject"] == "fixture-subject-two"
+            assert second_record["email"] == "second-account@example.test"
+            assert second_record["access_token"] != first_record["access_token"]
+        # Disconnecting the selected identity clears only its credentials. The
+        # other saved ChatGPT identity remains selectable and usable.
+        await auth.disconnect()
+        async with transaction() as stored:
+            assert "access_token" not in stored["accounts"][first_id]
+            assert stored["accounts"][denied_id]["access_token"] == second_record["access_token"]
+            assert stored["active"] == first_id
+        await auth.select("chatgpt", denied_id)
+        assert (await auth.session())["account"]["subject"] == "fixture-subject-two"
+        assert (await auth.session())["status"] == "connected"
+        # Reconnect the first identity in place, without replacing the second.
+        fixture.subject = first_record["subject"]
+        fixture.email = first_record["email"]
+        _, reconnect = await sign_in(fixture, first_id)
+        assert reconnect["status"] == "connected"
+        async with transaction() as stored:
+            assert stored["accounts"][first_id]["subject"] == first_record["subject"]
+            assert stored["accounts"][denied_id]["subject"] == second_record["subject"]
+            assert stored["accounts"][denied_id]["access_token"] == second_record["access_token"]
+        await auth.select("chatgpt", first_id)
         reset_connection()
         plan_catalog = await connection.models()
         assert plan_catalog["default_verified"]
