@@ -1,0 +1,5 @@
+# Add this site block to the existing host Caddy configuration. Host Caddy
+# remains the public TLS endpoint; the Compose edge is available on loopback.
+sigma-research.duckdns.org {
+	reverse_proxy 127.0.0.1:18080
+}

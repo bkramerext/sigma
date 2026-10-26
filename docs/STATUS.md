@@ -1,5 +1,25 @@
 # SIGMA status
 
+## Host Caddy and GCE Compose port contract (2026-10-26)
+
+Kept host Caddy as the GCE public HTTPS endpoint. `deploy/compose.gce.yaml`
+now overrides the Compose edge publication to a single
+`127.0.0.1:18080:80/tcp` binding and runs that edge in HTTP mode. Its upstream
+scheme is explicitly HTTPS so the application receives the production origin
+scheme. Local Compose retains its configurable 80/443 defaults. The exact host
+site block is in `deploy/host-caddy.Caddyfile`; GCE preflight now rejects any
+other published port, non-loopback bind, or additional edge publication.
+
+Fetched T128 merge `37b2433e90da10afe09c478284cbee6aea44a005` before final
+verification. The stale systemd mount assertions were corrected there; I did
+not modify Red's files. Focused GCE port-contract/preflight checks passed, as
+did the deployment package, GCE host (18 tests), host monitor (9 tests), and
+release-image (3 tests). `./sigma test` passed all scenarios, Ruff check and
+format, Pyright (0 diagnostics), frontend typecheck, and frontend production
+build (with the existing large-chunk advisory). Docker Compose v2 is
+unavailable here, so I could not render the merged Compose configuration
+locally. No live VM, GCE, or deployment operation was performed.
+
 ## T128 GCE host readiness and runtime security review (2026-10-26)
 
 **Readiness: BLOCKED for production activation.** Reviewed current `main`
