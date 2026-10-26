@@ -2604,7 +2604,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
     if project_path(path).suffix == ".json":
         from sigma.project_bundle import list_files, read_file, write_file
 
-        encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\\n").encode()
+        encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
         if len(encoded) > MAX_RECORD:
             raise ProjectError("Research session storage limit reached")
         members = [name for name in list_files(path) if name.startswith("research-sessions/") and name.endswith(".json")]
