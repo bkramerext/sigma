@@ -13,6 +13,9 @@ import os
 import re
 import sqlite3
 import stat
+import tempfile
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
@@ -37,9 +40,13 @@ class Workspace:
     subject_hash: str
     path: Path
     email: str | None = None
+    guest: bool = False
 
 
 _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", default=None)
+_GUESTS: dict[str, tuple[Workspace, tempfile.TemporaryDirectory[str], float]] = {}
+_GUESTS_LOCK = threading.Lock()
+GUEST_TTL_SECONDS = 8 * 60 * 60
 
 
 def enabled() -> bool:
@@ -77,6 +84,36 @@ def bind(principal: Principal) -> Token[Workspace | None]:
 
 def reset(token: Token[Workspace | None]) -> None:
     _CURRENT.reset(token)
+
+
+def guest_workspace(token: str, *, create: bool = False) -> Workspace | None:
+    """Resolve an opaque, process-local guest workspace, expiring it after inactivity."""
+    if not re.fullmatch(r"[0-9a-f]{64}", token):
+        return None
+    now = time.monotonic()
+    with _GUESTS_LOCK:
+        for key, (_, directory, expires_at) in list(_GUESTS.items()):
+            if expires_at <= now:
+                directory.cleanup()
+                del _GUESTS[key]
+        existing = _GUESTS.get(token)
+        if existing is not None:
+            workspace, directory, _ = existing
+            _GUESTS[token] = (workspace, directory, now + GUEST_TTL_SECONDS)
+            return workspace
+        if not create:
+            return None
+        directory = tempfile.TemporaryDirectory(prefix="sigma-guest-")
+        os.chmod(directory.name, 0o700)
+        path = Path(directory.name).resolve(strict=True)
+        workspace = Workspace(token[:32], "guest", path, guest=True)
+        _GUESTS[token] = (workspace, directory, now + GUEST_TTL_SECONDS)
+        return workspace
+
+
+def bind_workspace(workspace: Workspace) -> Token[Workspace | None]:
+    """Bind an already resolved server-managed workspace for one request."""
+    return _CURRENT.set(workspace)
 
 
 def storage_root() -> Path:

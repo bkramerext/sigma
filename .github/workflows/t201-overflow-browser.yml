@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: ./sigma setup
       - run: uv run --with playwright python -m playwright install --with-deps chromium
-      - name: Exercise saved-session recovery without provider inference
+      - name: Exercise saved-session recovery with a fake provider
         shell: bash
         run: |
           set -euo pipefail

@@ -64,9 +64,18 @@ from sigma.text_views import inspect_text, save_source
 
 async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
     """Bind each protected cloud request to its verified subject's durable root."""
+    guest_workspace = getattr(request.state, "cloud_guest_workspace", None)
+    if isinstance(guest_workspace, cloud_workspaces.Workspace):
+        token = cloud_workspaces.bind_workspace(guest_workspace)
+        try:
+            yield
+        finally:
+            cloud_workspaces.reset(token)
+        return
     if (
         not cloud_workspaces.enabled()
         or request.url.path == "/api/ui-instance"
+        or request.url.path == "/api/projects/samples"
         or request.url.path.startswith("/api/cloud-auth/")
     ):
         yield

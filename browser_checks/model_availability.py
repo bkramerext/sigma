@@ -11,7 +11,7 @@ FIXTURE_URL = os.environ.get("SIGMA_BROWSER_FIXTURE_URL", "http://127.0.0.1:8001
 
 def forward_api(route):
     headers = dict(route.request.headers)
-    headers["origin"] = BASE_URL
+    headers["origin"] = os.environ.get("SIGMA_BROWSER_REQUEST_ORIGIN", BASE_URL)
     route.fulfill(
         response=route.fetch(url=route.request.url.replace(BASE_URL, FIXTURE_URL), headers=headers)
     )
@@ -31,7 +31,11 @@ with sync_playwright() as playwright:
     page.route("**/api/**", forward_api)
     page.goto(BASE_URL)
     samples = page.get_by_role("tabpanel", name="Samples", exact=True)
-    samples.get_by_role("button", name="Open Maximum Regions Formed by Lines", exact=True).click()
+    sample_group = samples.locator("details.sample-type-group").filter(has_text="Mathematics")
+    if not sample_group.evaluate("group => group.open"):
+        sample_group.locator("summary").click()
+    sample = samples.get_by_role("button", name="Open Maximum Regions Formed by Lines", exact=True)
+    sample.click()
     expect(page.get_by_role("heading", name="Maximum Regions Formed by Lines")).to_be_visible()
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
     assert path

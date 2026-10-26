@@ -1,5 +1,79 @@
 # SIGMA status
 
+## T81 PR #242 reconciliation with current main (2026-10-26)
+
+Reconciled PR #242 with `origin/main` at
+`48fe9a1fee87a23c1af1665f1f30723ef39d9e97`, including merged PR #230. Kept
+the current-main Guest startup test and combined it with T81 coverage for the
+friendly missing-admin `--signin` error and configured `--signin` credential
+handling. Resolved the email-test overlap with the current-main typed bytes
+assertion. `src/sigma/cloud_auth.py` merged automatically; the formatter
+changes remain present with current-main #230 behavior intact.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and frontend build (existing >500 kB chunk advisory). Real
+Chrome passed `browser_checks/t81_public_legal_pages.py` for signed-out direct
+navigation and refresh of `/privacy` and `/tos`, draft labels, About Privacy,
+and no `/tos` app links. GitHub CI results are recorded in the updated PR and
+handoff. No deployment occurred.
+
+## T81 PR #242 CI unblock (2026-10-26)
+
+Updated the stale `tests/tooling.py` startup checks to match current `main`:
+ordinary launch without `--signin` works with a blank admin-contact setting
+as Guest (`SIGMA_LOCAL_AUTO_ADMIN=false`); `--signin` without the contact
+returns its friendly error before constructing the launcher or starting
+servers; and configured `--signin` continues to exercise server-only OAuth
+credentials and local admin setup. Applied Ruff's formatting-only changes to
+three expressions in `src/sigma/cloud_auth.py` without changing behavior.
+This file also overlaps Blue's PR #246; the overlap is limited to those
+formatting changes and is reported in the Gray handoff for coordinator
+reconciliation through Brian.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build (existing >500 kB chunk advisory).
+Real Chrome passed `browser_checks/t81_public_legal_pages.py` for signed-out
+direct navigation and refresh of `/privacy` and `/tos`, draft labels, the About
+Privacy link, and absence of app `/tos` links. No deployment occurred. See the
+[Gray handoff](../messages/t81_gray_public_legal_pages.txt).
+
+## T81 public legal pages follow-up (2026-10-26)
+
+On current `main` `623a9464fed585cf951b02be54e8e4ab683bb559`, the existing
+public `/privacy` route remains labeled as a proposed notice awaiting Brian's
+approval. The About dialog link is now clearly labeled **Privacy**. Added a
+public `/tos` route with concise proposed terms for experimental research
+features. It is visibly marked as a draft for Brian's review, and no `/tos`
+navigation link is added to the SIGMA app. The draft is recorded in
+[TOS_DRAFT_v1.md](TOS_DRAFT_v1.md); it must be reviewed before production
+publication.
+
+Local verification: real Chrome passed direct signed-out navigation and
+refresh at `/privacy` and `/tos`, both draft labels, the About Privacy link,
+and absence of `/tos` app links. Frontend typecheck and
+`npm --prefix frontend run build` passed (existing >500 kB chunk advisory).
+`./sigma test` ran the application scenarios and frontend typecheck but exited
+1 on current-main Ruff findings in `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, and `tests/gmail_delivery.py`, formatting findings
+in those files, and the existing Pyright error at
+`tests/gmail_delivery.py:56`; the build step was skipped by the suite and then
+passed when run directly. The new browser check passes targeted Ruff check and
+format. Hosted verification and production behavior are unverified because
+deployment was explicitly out of scope. See the [Gray
+handoff](../messages/t81_gray_public_legal_pages.txt).
+
+T81 CI-unblock follow-up: reconciled PR #242 with current `main` at
+`6a607a4` (merge commit `a98b2f0`). Corrected only the named inherited
+Ruff/format findings in `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, `src/sigma/cli.py`, and
+`tests/gmail_delivery.py`, plus the Pyright narrowing in the email test. The
+named-file Ruff check/format, Pyright, and focused email delivery tests pass;
+the legal-page Chrome check passes. On this reconciled tree, `./sigma test`
+still exits 1 on a startup-warning assertion in `tests/tooling.py` and
+formatting in current-main `src/sigma/cloud_auth.py`, both outside this
+follow-up's authorized fix scope. Hosted verification remains unverified.
+See the updated [handoff](../messages/t81_gray_public_legal_pages.txt).
+
 ## T81 remaining feedback and privacy increment (2026-10-26)
 
 Continues T81 after invitation PR #225 merged at
@@ -6092,6 +6166,107 @@ deterministic local fixtures; no provider calls or costs occurred. See the
 Implementation is in [PR #232](https://github.com/bkramerext/sigma/pull/232),
 open against `main`, current and mergeable, and not merged.
 
+## Guest sample projects and About privacy actions (2026-10-26)
+
+Guest Home now uses the normal Projects layout and existing sample catalog;
+New/Open project actions are hidden. The normal Recent/Samples toggle is present, Recent is
+selectable, and Samples is selected by default. Selecting Recent shows only the
+static, two-line message “Sign in to create and / save your own projects.”
+styled with the Projects header font at a smaller size; it does not
+load or save project history. Recent and sample groups start collapsed. Opening
+or creating a guest project uses
+an opaque eight-hour, in-memory guest session and a private temporary workspace.
+The project path resolver confines access to that workspace, guest Recents are
+always empty, and expired workspaces are cleaned up on later guest requests.
+Guest sessions cannot run provider-backed research, paper/proposal generation,
+or AI text conversion. The Guest sign-in pill uses the normal Google sign-in
+dialog and link. Guest attempts to generate a strategy receive a clear
+signed-in-account message; the temporary project remains available. The TeX
+dialog tells guests “Sign in to export your research as TeX.” without requesting
+paper data. The guest UI no longer makes personal model or catalog requests that
+produced misleading authentication-error toasts.
+
+The separate Guest welcome panel is removed; Projects appears in the same Home
+location as for signed-in users. Browse Published Research is absent for guests.
+The About dialog keeps Privacy Policy as a lower-left action button, the policy
+page has a Return to SIGMA action at the top, the Google pill copy is shorter,
+and artwork credit reads “Brian Kramer” / “& GPT Models”.
+
+Verification: `uv run python tests/cloud_auth.py` passed (29 tests), including
+guest sample opening with configured and unready Google Auth, temporary path
+containment, empty Recent, and blocked provider-backed routes. Changed-file
+Ruff check/format and Pyright passed. The
+real Chrome flow `uv run --with playwright python browser_checks/guest_samples.py`
+passed the standard Projects Home, guest Recent static message without a Recent
+request, default Samples selection and collapsed groups, normal Google sign-in
+action, TeX guest message without paper API requests, Generate feedback, sample open
+into the full workspace, no 401 toast, empty Recent, and both privacy actions.
+Frontend typecheck and production build
+passed; build retains the existing >500 kB chunk advisory. No provider calls or
+costs occurred.
+
+`./sigma test` completed with four repository checks failing outside the guest
+change: `tests/tooling.py` expects the admin-contact warning; Ruff reports four
+issues in `src/sigma/gmail_delivery.py` and `tests/gmail_delivery.py`; format
+check reports existing formatting in `src/sigma/cli.py`, `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, and `tests/gmail_delivery.py`; Pyright reports
+`tests/gmail_delivery.py:56` accessing `.decode` on `Message[str, str]`. The
+frontend typecheck and all guest-focused checks passed. The build step was
+skipped by `./sigma test` after those failures and was run separately
+successfully. See the [Blue guest-samples handoff](../messages/guest_samples_blue_r4r.md).
+Implementation is in [PR #246](https://github.com/bkramerext/sigma/pull/246),
+open against `main` and not merged.
+
+## ChatGPT authentication guidance copy (2026-10-26)
+
+Updated the existing ChatGPT connection guidance to distinguish a user with no
+connected ChatGPT account (`disconnected`) from a saved account requiring
+interactive recovery (`reauth_required`). The first is told “Research requires a
+ChatGPT connection. Sign in to continue.”; the second is told “Your ChatGPT
+session has expired. Please sign in again to continue.” The state distinction
+comes from the existing auth snapshot: no active account versus a retained
+account record that needs reauthorization. No credential, authentication, or
+research persistence behavior changed.
+
+Focused verification: `uv run python tests/chatgpt.py` passed. Ruff check,
+format, and Pyright passed for `src/sigma/openai_connection.py` and
+`tests/chatgpt.py`. `./sigma test` ran to completion but retained four known
+failures: the admin-contact warning assertion; four Gmail delivery Ruff
+findings; formatting in Gmail delivery, CLI, UI instance, and the previously
+committed `browser_checks/guest_samples.py`; and the Gmail test `.decode`
+Pyright error. All ChatGPT tests passed during the full run. The frontend
+typecheck passed; the full runner skipped its build after failures. No
+authentication flow, credentials, or saved research were changed. Handoff:
+[`messages/blue_chatgpt_auth_messaging_r4r.md`](../messages/blue_chatgpt_auth_messaging_r4r.md).
+The change is included in [PR #246](https://github.com/bkramerext/sigma/pull/246)
+against `main` due to overlap with the active Guest connection UI branch; it is
+open and not merged.
+
+## Guest research-session Play sign-in prompt (2026-10-26)
+
+Guest Play now opens an accessible “Ready to investigate?” dialog with the
+message “Sign in to run a research session. You can explore sample projects as a
+guest.” The “Sign in now” action opens the existing Google sign-in pill, whose
+Google link starts the established login workflow. “Cancel” and Escape dismiss
+the dialog and restore focus to Play. Guests can activate Play
+even when normal session-start preconditions would disable it, but that path only
+changes dialog UI state. It does not call the research start handler, read
+provider configuration/limits, reserve budget, or mutate the project. Signed-in
+Play continues to use the existing handler.
+
+Verification: `uv run --with playwright python browser_checks/guest_samples.py`
+passed in real Chrome, including assertions that Play, opening the Google
+sign-in pill, and Cancel issue no
+research/configuration/limits requests or write requests, and that focus returns
+to Play. Frontend typecheck and production build passed. `./sigma test` ran to
+completion; all reached tests including ChatGPT and cloud auth passed, while
+four pre-existing checks failed: the admin-contact warning assertion, Gmail
+delivery Ruff findings, formatting in CLI/Gmail/UI instance files, and the
+Gmail test `.decode` Pyright error. The suite skipped its build after these
+failures; the standalone production build passed. Handoff:
+[`messages/blue_guest_play_signin_r4r.md`](../messages/blue_guest_play_signin_r4r.md).
+The change is included in [PR #246](https://github.com/bkramerext/sigma/pull/246)
+against `main` on the active Guest implementation branch; open and not merged.
 ## Issue #200 reconciliation with current main
 
 PR #230 reconciled with main `6a607a4`; both #200 and #228 status records and
@@ -6113,4 +6288,48 @@ large histories, preserves saved research, and guides users to fork from a saved
 session while disabling the over-limit original. Blocked attempts no longer reserve
 session numbers. Focused regression uses a disposable project and fake provider;
 see [the T201 handoff](../messages/issue_201_local_recovery.txt). Original hosted
-project acceptance remains unverified and issue #201 stays open.
+project acceptance remains unverified; local acceptance is the T201 closure criterion.
+
+## PR #246 — guest integration with current main (2026-10-26)
+
+Integrated `origin/main` at `48fe9a1fee87a23c1af1665f1f30723ef39d9e97` into
+the Guest branch in merge commit `9743cd704b8a97a50b8187877c1464f988818e42`.
+The merge's only conflict was in this status file; both the Guest history and
+T200 reconciliation were retained. Source and test changes from main merged
+without conflicts. Guest Play's “Sign in now” Google pill handoff, “Cancel”
+behavior, and guest no-dispatch/no-mutation constraints passed real-Chrome
+acceptance after the merge. `tests/cloud_auth.py` (30 tests), `tests/chatgpt.py`,
+frontend typecheck/build, and focused Guest Ruff checks passed. `./sigma test`
+passed all steps, including Ruff, formatting, Pyright (0 diagnostics), typecheck,
+and build. Main's T200 integration also resolves the four earlier repository
+baseline failures. Existing >500 kB frontend chunk advisory remains. PR #246 is
+returned open for review; it has not been merged. See the [updated Blue
+handoff](../messages/blue_guest_play_signin_r4r.md).
+
+## PR #246 — browser acceptance for collapsed sample groups (2026-10-26)
+
+Updated T92 Recent Projects and T200 Model Availability browser checks to
+expand the Mathematics sample group before locating/clicking its sample. T92
+also expands the Recent Mathematics group before locating the opened project,
+including after reload. Product UI defaults are unchanged; sample groups still
+start collapsed. Correction commit:
+`56cdbdf65a56d025d15b1192dd19b0a4aa65be3d`.
+
+Both requested workflows and `browser_checks/guest_samples.py` passed in real
+Chrome. Changed-file Ruff check/format passed. `./sigma test` passed every step,
+including repository Ruff, formatting, Pyright, frontend typecheck, and build.
+Local acceptance used temporary ports because standard ports were occupied;
+GitHub Actions retains the workflow's standard ports. PR #246 is updated and
+open for review, not merged. See the [Blue handoff](../messages/blue_guest_play_signin_r4r.md).
+
+## PR #246 — latest-main integration and review refresh (2026-10-26)
+
+Integrated current `main` at `6f6a910a64efd29268b5898b2e8f3e8c8791934a` in
+merge commit `d527bef94f7bf0ddae562dce0b299de80e66082c`. The single conflict in
+`frontend/src/main.tsx` was resolved by retaining the requested Privacy Policy
+action while preserving main's new `/tos` route. Updated the T81 legal-page
+browser check for that approved label. T92 Recent Projects, T200 Model
+Availability, Guest samples/Play, and T81 legal-page browser checks passed in
+real Chrome. Ruff check/format and `./sigma test` passed, including Pyright,
+typecheck, and production build. PR #246 is updated and open for review, not
+merged. See the [Blue R4R handoff](../messages/blue_guest_play_signin_r4r.md).

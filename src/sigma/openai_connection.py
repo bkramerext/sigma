@@ -249,7 +249,7 @@ def cloud_credential(context: Mapping[str, Any]) -> bool:
 PLAN_MESSAGES = {
     "disconnected": (
         "Connect AI",
-        "Use your ChatGPT plan for eligible requests, or choose optional API-key billing. Manual research needs no connection.",
+        "Research requires a ChatGPT connection. Sign in to continue.",
     ),
     "connected": (
         "ChatGPT connected",
@@ -257,7 +257,7 @@ PLAN_MESSAGES = {
     ),
     "reauth_required": (
         "Reconnect ChatGPT",
-        "Your ChatGPT session needs sign-in again. Research and saved account identity are retained.",
+        "Your ChatGPT session has expired. Please sign in again to continue.",
     ),
     "plan_not_permitted": (
         "ChatGPT · plan access not enabled",

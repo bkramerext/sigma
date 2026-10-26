@@ -1,6 +1,6 @@
 T201 local recovery follow-up
 
-Base: main 48fe9a1fee87a23c1af1665f1f30723ef39d9e97. T201 remains open for later original-project acceptance.
+Base: main 48fe9a1fee87a23c1af1665f1f30723ef39d9e97. T201 closure is based on local acceptance; original-project hosted acceptance is separate.
 
 The local admission path now reports bounded IDs and obligation excerpts even when prior history exceeds 64 unresolved obligations. It still refuses to dispatch when the frozen per-strategy context limit is exceeded. The error names the existing fork-from-findings action and tells the user to disable the over-limit original; editing it retains history. Fork is available directly on an expanded saved session. A rejected start no longer reserves a session number, and the confirmation controls close after rejection so recovery actions are available. Saved research is not erased or reclassified.
 
@@ -9,3 +9,5 @@ Local isolated regression covers 25 and 65 unresolved obligations, displayed IDs
 The local full suite is subject to this environment's AF_UNIX restrictions (instance_ownership and ui_registry); an earlier run also hit SOCKS proxy configuration. Real browser and original hosted state are not verified locally. No deployment, production changes, real provider calls or costs. The original incident and actual hosted owner remain unverified; later acceptance is required.
 
 Validation update: On code head d68ff781f4be9b580d79785456aa0e99dd7e095a, GitHub Actions T201 real Chromium run 40402916504 passed the block, obligation details, fork and disable flow using the isolated provider-free fixture. T200 model availability, T92 recents, and Research Outcome Chromium checks also passed. The local frontend typecheck and production build passed. The full local ./sigma test completed with only the two AF_UNIX environment failures noted above; CI full verification is tracked on the PR. A follow-up strengthens the browser assertion that no new session file was created; its CI result must be checked as well.
+
+Reconciliation (2026-10-26): merged main bea2108; the only conflict was docs/STATUS.md, resolved by retaining both T201 and intervening guest/legal sections. Extended the Chromium fixture to perform two deterministic fake-provider calls after forking and disabling the blocked parent; verifies the new child is session 2, produces a saved artifact, and leaves the original session byte-identical. No production service or paid provider is used. Final run and head evidence are recorded in PR #247.

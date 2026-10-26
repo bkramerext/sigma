@@ -79,6 +79,7 @@
 .home-page .catalog-tabs button { min-height: 38px; padding: 8px 15px; border: 1px solid transparent; border-radius: 4px; background: #0b1725; box-shadow: none; color: #bfc5cb; font-size: 12px; text-shadow: none; }
 .home-page .catalog-tabs button:hover:not([aria-selected="true"]) { background: #182432; color: #f3d2c0; }
 .home-page .catalog-tabs button[aria-selected="true"] { background: var(--copper-gradient); border-color: #ac7054; color: #fff2e9; text-shadow: 0 1px 1px #24120d; }
+.home-page .catalog-tabs button:disabled { cursor: not-allowed; opacity: .5; color: #9099a1; }
 .home-page .home-catalog .home-empty { margin: 0; padding: 14px 0 20px; border: 0; max-width: none; }
 .home-page .home-samples li { border-color: #a965483d; }
 .home-page .home-samples ul { list-style: none; padding: 0; margin: 12px 0 0; }
@@ -151,6 +152,7 @@
 .home-page .catalog-tabs { flex: 0 0 auto; }
 .home-page #samples-panel, .home-page #recent-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
 .home-page #samples-panel[hidden], .home-page #recent-panel[hidden] { display: none; }
+.home-page #recent-panel > .guest-recent-message { display: flex; flex-direction: column; margin: 18px 4px; color: #e6af92; font: 400 18px/1.45 Georgia, serif; letter-spacing: 0; }
 .home-page #samples-panel > .home-samples, .home-page #recent-panel > .home-recents { flex: 1 1 auto; height: 100%; min-height: 0; max-height: none; margin: 0; padding: 8px 4px 0 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
 .home-page .home-samples .sample-type-group ul { margin: 0 0 0 20px; }
 .home-page .home-samples .sample-type-group li:last-child { border-bottom: 0; }
