@@ -14,8 +14,9 @@ Guest Play now opens the “Ready to investigate?” dialog:
   the established SIGMA login workflow.
 - “Cancel” and Escape dismiss the dialog and restore focus to Play.
 
-The action buttons use the Session remove confirmation action style. The Guest
-Play control opens only the dialog. It does not invoke the normal
+The action buttons use the Session remove confirmation action style, are
+left-aligned, and share the same copper text color. The Guest Play control opens
+only the dialog. It does not invoke the normal
 session start handler, read provider configuration or limits, reserve budget,
 make a provider request, or mutate the project. Authenticated users still call
 the original Play handler. The dialog uses the shared project-settings modal and
