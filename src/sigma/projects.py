@@ -1341,3 +1341,86 @@ def update_project(
         with _title_registry_lock(projects_root()):
             return _update_project(value, update, edit)
     return _update_project(value, update, edit)
+
+
+def export_complete_project(value: str | Path) -> bytes:
+    """Download all project data, including research evidence and artifacts.
+
+    Legacy directory exports are snapshots. Stop active research writers before
+    using a snapshot as a migration source.
+    """
+    path = project_path(value)
+    inspect_project(path)
+    from sigma.project_bundle import download_bytes, encode
+
+    if path.suffix == ".json":
+        return download_bytes(path)
+    return encode(path)
+
+
+def migrate_project(value: str | Path, destination: str | Path | None = None) -> ProjectView:
+    """Copy a legacy project into one JSON file without deleting its source.
+
+    Research must be stopped before migration: independent legacy file writers
+    cannot be frozen by the bundle's destination lock.
+    """
+    source = project_path(value)
+    if source.suffix != ".sigma":
+        raise ProjectError("Only legacy .sigma directories can be migrated")
+    existing = inspect_project(source)
+    target = project_path(destination if destination is not None else source.with_suffix(".json"))
+    if target.suffix != ".json":
+        raise ProjectError("Migration destination must end in .json")
+    from sigma.project_bundle import migrate
+
+    try:
+        migrate(source, target)
+        result = inspect_project(target)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot migrate project: {exc}") from exc
+    if result.project != existing.project:
+        raise ProjectError("Migrated project did not match its source")
+    return result
+
+
+def create_json_project(
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
+    difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
+) -> ProjectView:
+    """Explicit single-file creation until research storage supports JSON paths."""
+    title, name = _project_name(title)
+    problem = _text(problem, "Research problem", 20000)
+    root = projects_root()
+    destination = (root / name).with_suffix(".json")
+    legacy = root / name
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        if os.path.lexists(destination) or os.path.lexists(legacy):
+            raise ProjectError("A project with that filename already exists")
+        view = initialize_project(
+            destination, title, problem, research_mode, ai_model,
+            reasoning_effort, difficulty, show_advanced_outcome_details,
+        )
+        from sigma.recents import record_access
+
+        record_access(view)
+        return view
+
+
+def list_json_projects() -> tuple[ProjectView, ...]:
+    """Discover valid single-file projects in the current owner's root."""
+    root = projects_root()
+    result: list[ProjectView] = []
+    for candidate in sorted(root.glob("*.json")):
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        try:
+            result.append(inspect_project(candidate))
+        except ProjectError:
+            continue
+    return tuple(result)
