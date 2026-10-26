@@ -48,7 +48,7 @@ def main() -> None:
             import cloud_workspace_test_app
             from fastapi.testclient import TestClient
 
-            from sigma import cloud_research
+            from sigma import cloud_auth, cloud_research
 
             # Exercise the real server credential lookup, model discovery,
             # Responses request construction, usage parsing, and cloud ledger.
@@ -183,13 +183,37 @@ def main() -> None:
                 client.headers.update(
                     {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
                 )
+                cloud_auth._persist_user_state(
+                    cloud_auth.config(),
+                    cloud_auth.Principal("cloud-a", "a@example.test", "member"),
+                )
                 client.headers["X-Test-Revoked"] = "true"
                 assert client.get("/api/ai/models").status_code == 401
                 del client.headers["X-Test-Revoked"]
+                sponsor_status = client.get("/api/cloud-research/connection")
+                assert sponsor_status.status_code == 200, sponsor_status.text
+                assert sponsor_status.json()["mode"] == "sponsored"
+                assert sponsor_status.json()["status"] == "connected"
+                assert "authorization" not in sponsor_status.json()
+                import sqlite3
+
+                with sqlite3.connect(root / "auth" / "access.sqlite3") as db:
+                    assert db.execute(
+                        "SELECT model_connection_status FROM user_state WHERE subject=?",
+                        ("cloud-a",),
+                    ).fetchone() == ("connected",)
                 with patch.dict(os.environ, {"SIGMA_CLOUD_OPENAI_API_KEY": ""}):
                     unconfigured = client.get("/api/ai/models")
+                    sponsor_unconfigured = client.get("/api/cloud-research/connection")
                 assert unconfigured.status_code == 200
                 assert unconfigured.json()["connection"]["status"] == "unconfigured"
+                assert sponsor_unconfigured.status_code == 200
+                assert sponsor_unconfigured.json()["status"] == "unconfigured"
+                with sqlite3.connect(root / "auth" / "access.sqlite3") as db:
+                    assert db.execute(
+                        "SELECT model_connection_status FROM user_state WHERE subject=?",
+                        ("cloud-a",),
+                    ).fetchone() == ("unconfigured",)
                 assert provider_calls == []
                 created = client.post(
                     "/api/projects/create",

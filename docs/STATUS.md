@@ -1,5 +1,76 @@
 # SIGMA status
 
+## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
+
+Replaced the “Continue from Saved Evidence” control with an explicitly
+requested **Suggest a Strategy** action nested after the Current Understanding
+synthesis. The new provider request uses the selected project/account binding,
+existing billing and cloud usage accounting, an enforced 48,000-character
+context bound, the cross-session Current Understanding projection, bounded
+relevance-selected session evidence, and all saved strategies including
+disabled/removed ones. It returns at most one copy-only Markdown suggestion or
+a no-additional-strategy result. Suggestions use the safe existing Markdown
+renderer and standard copy-control styling; no project strategy or session
+record is changed. Removed the continuation proposal/approval API routes while
+retaining read-only compatibility for historical continuation packets and
+session dispatch.
+
+Verification: `tests/proposals.py` passed against a deterministic mock
+Responses transport, including strategy-context input, one Markdown result, a
+null/no-new-strategy result, no project.json mutation, and the removed legacy
+proposal route returning 404. Existing continuation/history tests passed in
+the full suite. Focused Ruff check/format, Pyright (0 diagnostics), frontend
+typecheck, and frontend production build passed. Real Chrome exercised the
+suggestion button, rendered block, collapse, clipboard contents, no dialog,
+and unchanged strategy count using a mocked API response; the broader
+`browser_checks/current_understanding.py` then failed in its pre-existing
+evidence-focus assertion before completing the full navigation/export pass.
+No real provider call was made.
+
+The final `./sigma test` run reached repository-wide Ruff checks after all
+scenarios passed, then exited 1 on unchanged `browser_checks/model_availability.py`
+(B023 loop closure and existing formatting). A preceding run also reported
+`tests/research_sessions.py` nonzero; its standalone rerun and the subsequent
+full-suite run both passed. The full command skipped its frontend build after
+the Ruff failure; `npm --prefix frontend run build` was run separately and
+passed. This is R4R with that baseline Ruff defect and the unrelated browser
+evidence-focus failure recorded for review, in [PR #213](https://github.com/bkramerext/sigma/pull/213).
+
+## Current state — research effectiveness (2026-10-26)
+
+Engineering tests and deterministic dry-runs establish implementation
+properties only; they do not establish research superiority. T146 preserved
+one authorized, same-model paired live case on a single scheduling problem.
+Both arms found the exact answer; SIGMA's Skeptic added no substantive
+correction, and the single-role baseline later weakened a correct result after
+an invalid self-critique. This is a descriptive within-session observation, not
+a test of cumulative cross-strategy research. Full records and limitations are
+in the [T146 assessment](evaluations/increment_22/exports/trial_20261025/assessment.md).
+
+The blinded unfamiliar-task comparison of cumulative Investigator/Skeptic
+research across multiple strategies and saved sessions remains **not frozen and
+not run**. Its current design, proposed $15.60 / 192-call maximum, scoring plan,
+failure handling, and freeze/authorization gates are in the
+[T114 cumulative preregistration](evaluations/T114_CUMULATIVE_PREREGISTRATION.md).
+No paid or live provider call is authorized by that document. The earlier
+public six-task dry-run and T146's one-task comparison are not substitutes.
+Same-model Investigator/Skeptic agreement is not independent verification.
+
+The bounded maintainability review records `research_sessions.py` at 8,666
+lines and recommends staged, behavior-preserving extraction only if separately
+prioritized; no wholesale refactor was performed. See the preregistration for
+module seams and current blockers. Cloud acceptance status is recorded in its
+dated entries below and is separate from research-quality evidence.
+
+T114 engineering verification: the cumulative planner's deterministic,
+budget, pairing, and failure-retention checks pass; focused Ruff and Pyright
+pass. `./sigma test` reaches all scenarios and Pyright (0 diagnostics), but
+exits 1 at pre-existing Ruff/format findings in
+`browser_checks/model_availability.py`; consequently the frontend production
+build is skipped by the runner. Frontend typecheck passes. No browser workflow
+or new SIGMA project/session was exercised; the existing T146 exports remain
+the actual live paired evidence. No provider call was made.
+
 ## T129 initial GCE preview deployment (2026-10-26)
 
 Deployed release `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` to
@@ -45,6 +116,62 @@ isolation test, research runtime execution, paid provider call, reboot recovery,
 or restore drill was performed. The recurring backup scheduler is not
 configured; the one-off snapshot is the current recovery point. No tests were
 run as part of this deployment operation.
+
+## T88 Google account and sponsored model access (2026-10-26)
+
+Implemented on ticket branch red/t88-google-sponsored-auth from current
+main (2c409e6). The canonical scope is [issue #88](https://github.com/bkramerext/sigma/issues/88).
+
+Hosted guests now land on a distinct Explore-only entry and can browse the
+public saved Demo without mounting the inference UI. Protected APIs still
+require the verified Google session. Invited accounts persist a subject-keyed
+account record containing verified email, current role/access, the existing
+subject-derived workspace ID, model access mode and latest server-checked model
+connection state. Sponsorship eligibility is a separate revocable flag; spend
+and held/unknown usage remain in T99's persistent ledger. Grant role/revocation
+changes synchronize account authorization without resetting usage. Admins use
+the same budget admission as regular users.
+
+The existing account/model controls are combined into a two-line pill and one
+dialog. In local Google-auth mode, mounting the authorized app automatically
+checks its existing personal model connection. Hosted mode checks the server's
+sponsored credential against the provider model catalog (no research prompt)
+and shows checking, reachable, unconfigured, rejected, unavailable, retry and
+exhausted-budget states. It does not silently fall back to personal credentials.
+Sign-out clears the browser's remembered project pointer. Existing visual
+tokens and dialog conventions are reused.
+
+Integration findings: T22.2's verified OIDC, invitation/admin grant, session,
+and denied-account paths remain authoritative and are reused. T174's existing
+subject-keyed durable workspaces and path checks remain authoritative and are
+reused. T99/T99.1's server credential selection, persistent admission ledger,
+usage reconciliation, and budgets remain authoritative and are reused. T43.2's
+multi-account browser acceptance now asserts the integrated account/model
+control. One pre-existing design boundary remains explicit: T22.2's opt-in
+local-auth mode deliberately keeps the traditional shared local project root;
+private per-subject workspaces are provided by hosted mode. Changing that local
+data model would conflict with T22.2's promise to preserve local projects, so
+the hosted isolation path is what the two-user acceptance exercises. Hosted
+personal ChatGPT OAuth remains forbidden per T172; hosted model use is the
+sponsored server credential only.
+
+Verification on this branch: tests/cloud_auth.py (17 tests),
+tests/cloud_research_sponsored_api.py, tests/cloud_research_api.py,
+tests/cloud_workspaces.py, real Chrome browser_checks/t23_1_google_signin.py
+(guest Demo, member/admin switch, isolated workspaces, two-line status, sponsor
+connection success/provider outage and auth rejection/retry, budget exhaustion,
+sign-out and denied account), frontend typecheck/build, Ruff and Pyright. The
+The final `./sigma test` passed every repository scenario, static analysis,
+frontend typecheck and production build. The initial full-suite attempt found
+an existing Ruff B023/format defect in browser_checks/model_availability.py;
+its test lambda now binds the response status explicitly. No external OAuth,
+GCP changes, paid inference, secrets, or live provider requests were used;
+Google and provider boundaries were deterministically mocked. Live hosted
+OAuth, real two-account deployment isolation, and production provider
+connectivity remain unverified.
+
+See [T88 worker handoff](../messages/t88_red_google_sponsored_auth.txt) for the
+requirement evidence and exact final verification results.
 
 ## Issue #98 integrated local browser acceptance (2026-10-25)
 
@@ -914,13 +1041,16 @@ structured scrutiny, not independent verification.
 solution-bearing stock strategy and cannot count as independent discovery. A
 later answer-free live run produced a reviewed proof candidate, but exact role
 inputs were not retained and output fields were truncated; its independence is
-unverified. Deterministic fixtures and archived sessions are useful engineering
-evidence, not new live trials. The matched-budget blind comparison remains
-**unexecuted**. Its current proposal is [issue 114 preregistration](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
-It tests only within-session adversarial review against single-role self-review;
-it cannot establish cumulative persistence. The separate longitudinal design
-is [issue #119](https://github.com/bkramerext/sigma/issues/119). No live
-shakedown or scored run is authorized.
+unverified. T146 later completed one authorized same-model paired case on a
+single scheduling task. Both arms found the optimum; the Skeptic added no
+substantive correction and the single-role baseline later withdrew its correct
+conclusion after an invalid critique. This remains a descriptive
+within-session observation; it does not test cumulative cross-strategy or
+cross-session value. The unfamiliar-task cumulative comparison remains
+**not frozen and not run**. Its current design is [T114 cumulative
+preregistration](evaluations/T114_CUMULATIVE_PREREGISTRATION.md); the old
+within-session protocol remains [historical](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
+No further live run is authorized by T114.
 
 **What is established:** the dated entries below link to actual tests, exports,
 browser observations and bounded engineering results, with their stated limits.
@@ -5702,3 +5832,22 @@ occurred. Live OAuth, deployed behavior, provider authorization, and two-live-
 account isolation remain **UNVERIFIED**. The acceptance dependency and request
 to resume after the PR merge are recorded in
 [the Gray handoff](../messages/t43_2_gray_multi_account.txt).
+## Issue #209 — Copy-only strategy suggestions (reconciled 2026-10-26)
+
+PR #213 was reconciled with Gray PR #212 at `6bab28f`. The resulting interface
+preserves the copper Current Understanding heading, visible chevron,
+default-expanded disclosure, and session count placement, with Suggest a
+Strategy nested after the synthesis. Suggestions remain ephemeral, safe
+collapsible Markdown copied through SIGMA's shared clipboard control. Historical
+continuation data remains readable; research-session lifecycle, evidence
+navigation implementation, strategy editing, provider authorization, cost
+limits, and bounded context safeguards were retained.
+
+Focused proposal tests, Ruff for changed files, Pyright, frontend typecheck and
+build passed. Real Chrome's focused header/suggestion check passed at 1440, 390,
+and 320 pixels. The broader Chrome check passed the disclosure and suggestion
+flows, then failed at the existing linked-artifact focus assertion; evidence
+navigation/export portion did not complete. `./sigma test` ran all scenarios,
+then exited 1 at repository Ruff B023/formatting findings in unchanged
+`browser_checks/model_availability.py` (same file as current main). The separate
+frontend build passed. See [Issue #209 handoff](../messages/issue_209_green.txt).

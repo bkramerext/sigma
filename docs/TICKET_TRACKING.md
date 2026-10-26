@@ -1,5 +1,11 @@
 # SIGMA Ticket Tracking
 
+## Current main assignment update (2026-10-26)
+
+| Issue | Owner | Status | Branch / handoff |
+|---|---|---|---|
+| #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R · [PR #213](https://github.com/bkramerext/sigma/pull/213) | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |
+
 **Snapshot:** October 23, 2026 (Days 0–3; updated during PR #11 integration review)
 **Scope:** Cumulative ticket and minor-work tracker. A status of `Done` indicates reported/verified implementation, not proof of research effectiveness. `Proposed` does not mean a Codex worker has started.
 
@@ -53,6 +59,7 @@
 | T91.2 | Packaged real-PDF and disaster-recovery acceptance | R4R · [PR #113](https://github.com/bkramerext/sigma/pull/113) · [ticket](../tickets/t91.2.md) · [evidence](evaluations/t91.2/README.md) | Gray |
 | T99.1 | Pre-cloud sponsored inference API and spending acceptance | Implemented; R4R · [PR #110](https://github.com/bkramerext/sigma/pull/110) · [ticket](../tickets/t99.1.md) | Blue |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
+| T88 | Google user sign-in with SIGMA-sponsored ChatGPT inference | Implemented; R4R · [PR #214](https://github.com/bkramerext/sigma/pull/214) · [ticket](../tickets/t88.md) · [handoff](../messages/t88_red_google_sponsored_auth.txt) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Original implementation merged in PR #12; local Google-pill acceptance follow-up in review | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
@@ -67,6 +74,7 @@
 | T45 | **HIGH:** Long-form TeX paper generation under output/context limits | Implemented; PR #68 open for final review | [ticket](../tickets/t45.md) · [PR #68](https://github.com/bkramerext/sigma/pull/68) |
 | T46 | Home and Project About dialog and product introduction | R4R · Green · [PR #73](https://github.com/bkramerext/sigma/pull/73) · [ticket](../tickets/t46.md) |
 | T47 | First-class Markdown Conclusion in Research Session Outcome | Implemented; R4R | Gray · [ticket](tickets/t47.md) · [PR #72](https://github.com/bkramerext/sigma/pull/72) |
+| T114 | Blind matched-budget comparison of cumulative research; bounded maintainability review | P0 preregistration / deterministic planner R4R; no cumulative blind run · [PR #216](https://github.com/bkramerext/sigma/pull/216) | Blue · [issue #114](https://github.com/bkramerext/sigma/issues/114) · [cumulative preregistration](evaluations/T114_CUMULATIVE_PREREGISTRATION.md) · [T146 single-case evidence](evaluations/increment_22/exports/trial_20261025/assessment.md) |
 
 ### T23.1 scope
 

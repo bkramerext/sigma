@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any, Literal
@@ -26,9 +27,7 @@ from sigma import (
 )
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
-from sigma.continuations import Approval, approved_packets
-from sigma.continuations import approve as approve_continuation
-from sigma.continuations import proposal as continuation_proposal
+from sigma.continuations import approved_packets
 from sigma.openai_connection import auth_context, connection, models
 from sigma.projects import (
     ProjectError,
@@ -176,6 +175,31 @@ def cloud_research_budget():
         raise HTTPException(503, str(exc)) from exc
 
 
+@app.get("/api/cloud-research/connection")
+async def cloud_sponsored_connection(request: Request):
+    """Check only the server-held sponsored credential's model-catalog access."""
+    if not cloud_workspaces.enabled():
+        raise HTTPException(404, "Sponsored cloud connection is unavailable.")
+    state = await connection(refresh=True)
+    principal = getattr(request.state, "cloud_principal", None)
+    if not isinstance(principal, cloud_auth.Principal):
+        raise HTTPException(401, "Authentication required.")
+    try:
+        cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
+        raise HTTPException(503, "Account connection state could not be saved.") from exc
+    return JSONResponse(
+        {
+            "mode": "sponsored",
+            "status": state.get("status", "unavailable"),
+            "label": state.get("label", "Sponsored model access unavailable"),
+            "guidance": state.get("guidance", "Retry the connection check."),
+            "checked_at": state.get("checked_at"),
+        },
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @app.middleware("http")
 async def local_browser_only(request: Request, call_next):
     origin = request.headers.get("origin")
@@ -216,24 +240,6 @@ async def workspace_access_error(request: Request, exc: WorkspaceAccessError):
 
 class OpenRequest(BaseModel):
     path: str
-
-
-class ContinuationApprovalRequest(Approval):
-    path: str
-
-
-@app.get("/api/projects/continuations/proposal")
-def continuation_proposal_view(
-    path: str, parent_strategy_id: str, obligation_id: str | None = None
-):
-    return continuation_proposal(path, parent_strategy_id, obligation_id)
-
-
-@app.post("/api/projects/continuations/approve")
-def continuation_approve_view(body: ContinuationApprovalRequest):
-    return asdict(
-        approve_continuation(body.path, Approval.model_validate(body.model_dump(exclude={"path"})))
-    )
 
 
 class ResearchStartRequest(OpenRequest):
@@ -750,6 +756,19 @@ class ProposalRequest(OpenRequest):
     request_id: UUID | None = None
 
 
+@app.post("/api/projects/strategy-suggestions")
+async def strategy_suggestion_view(body: ProposalRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return await generate_proposal(
+        body.path,
+        expected_binding=body.expected_binding,
+        expected_project_id=body.expected_project_id,
+        suggestion_only=True,
+    )
+
+
 class ProposalCancelRequest(BaseModel):
     request_id: UUID
 
@@ -945,8 +964,16 @@ def update_project_view(body: UpdateProjectRequest):
 
 
 @app.get("/api/ai/connection")
-async def connection_view(refresh: bool = False):
-    return await connection(refresh)
+async def connection_view(request: Request, refresh: bool = False):
+    state = await connection(refresh)
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if cfg.enabled and cfg.local and isinstance(principal, cloud_auth.Principal):
+        try:
+            cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
+        except (sqlite3.Error, OSError, RuntimeError) as exc:
+            raise HTTPException(503, "Account connection state could not be saved.") from exc
+    return state
 
 
 @app.get("/api/ai/models")

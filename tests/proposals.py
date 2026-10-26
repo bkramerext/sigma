@@ -12,7 +12,13 @@ from fastapi.testclient import TestClient
 
 from sigma import chatgpt_auth, openai_connection, proposals, research_sessions
 from sigma.api import app
-from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
+from sigma.projects import (
+    ProjectError,
+    create_strategy,
+    initialize_project,
+    inspect_project,
+    set_strategy_enabled,
+)
 
 DRAFT = {
     "title": "Moment positivity obstruction",
@@ -52,10 +58,12 @@ async def rejects(awaitable, contains=None):
 
 async def check(path):
     await chatgpt_auth.select("api_key")
+    project_id = inspect_project(str(path)).project.id
     research_sessions._save(
         str(path),
         {
-            "id": "session-moment",
+            "id": "00000000-0000-4000-8000-000000000001",
+            "project_id": project_id,
             "session_number": 1,
             "project_path": str(path.resolve()),
             "status": "completed",
@@ -77,8 +85,33 @@ async def check(path):
             ],
         },
     )
+    research_sessions._save(
+        str(path),
+        {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "project_id": project_id,
+            "project_path": str(path.resolve()),
+            "session_number": 2,
+            "status": "completed",
+            "created_at": "2026-01-02T00:00:00+00:00",
+            "strategy_title": "Independent boundary check",
+            "artifacts": [
+                {
+                    "id": "finding-boundary",
+                    "sequence": 1,
+                    "claim_or_question": "A real mathematical question about the boundary case.",
+                    "method": "Check the boundary of the moment positivity condition.",
+                    "evidence_status": "The boundary remains unresolved.",
+                    "open_obligations": ["Test the limiting boundary value."],
+                }
+            ],
+        },
+    )
     before = (path / "project.json").read_bytes()
     calls = []
+    suggestion_output: dict[str, str | None] = {
+        "markdown": "## Independent boundary test\n\nCompare the boundary case with the saved moment positivity approach.\n\n**Rationale:** Session evidence leaves the boundary obligation open."
+    }
 
     async def handler(request):
         if request.method == "GET":
@@ -95,6 +128,24 @@ async def check(path):
         assert payload["reasoning"] == {"effort": "high"}
         assert payload["model"] == "gpt-6.1-sol"
         assert payload["max_output_tokens"] == 8000
+        if "ready-to-copy strategy description in Markdown" in payload["instructions"]:
+            context = json.loads(payload["input"])
+            assert context["project_question"] == "A real mathematical question"
+            assert "current_understanding" in context
+            assert context["current_understanding"]["session_count"] == 2
+            assert isinstance(context["current_understanding"]["unavailable_session_records"], int)
+            assert context["selected_session_evidence"]
+            assert {row["id"] for row in context["selected_session_evidence"]} >= {
+                "finding-moment",
+                "finding-boundary",
+            }
+            assert context["existing_strategies_including_disabled"]
+            assert context["existing_strategies_including_disabled"][0]["enabled"] is False
+            calls.append(payload)
+            return httpx.Response(
+                200,
+                json=response(suggestion_output),
+            )
         # Generation must propose a candidate answer, leaving viability assessment for later.
         instructions = payload["instructions"]
         assert "bounded STRATEGY" in instructions
@@ -107,9 +158,10 @@ async def check(path):
         assert context["research_mode"] == "mathematical"
         assert context["existing_strategies"][0]["approach"] == "Existing full content"
         assert len(context["starting_point"]) <= 4000
-        assert len(context["prior_research_findings"]) == 1
-        assert context["prior_research_findings"][0]["id"] == "finding-moment"
-        assert context["prior_research_findings"][0]["session_id"] == "session-moment"
+        assert {row["id"] for row in context["prior_research_findings"]} >= {
+            "finding-moment",
+            "finding-boundary",
+        }
         calls.append(payload)
         return httpx.Response(200, json=response())
 
@@ -134,6 +186,37 @@ async def check(path):
             assert generated.status_code == 200, generated.text
             assert generated.json()["draft"]["title"] == DRAFT["title"]
             assert generated.json()["provenance"]["model"] == "gpt-4.1-fixture"
+            before_suggestion = (path / "project.json").read_bytes()
+            suggestion = api.post(
+                "/api/projects/strategy-suggestions",
+                json={"path": str(path), "expected_project_id": inspect_project(path).project.id},
+            )
+            assert suggestion.status_code == 200, suggestion.text
+            assert suggestion.json()["markdown"].startswith("## Independent boundary test")
+            assert (path / "project.json").read_bytes() == before_suggestion
+            suggestion_output["markdown"] = None
+            no_suggestion = api.post(
+                "/api/projects/strategy-suggestions",
+                json={"path": str(path), "expected_project_id": inspect_project(path).project.id},
+            )
+            assert no_suggestion.status_code == 200 and no_suggestion.json()["markdown"] is None
+            assert (path / "project.json").read_bytes() == before_suggestion
+            suggestion_output["markdown"] = (
+                "## Existing direction\n\nRepeat the already saved strategy."
+            )
+            duplicate = api.post(
+                "/api/projects/strategy-suggestions",
+                json={"path": str(path), "expected_project_id": inspect_project(path).project.id},
+            )
+            assert duplicate.status_code == 200 and duplicate.json()["markdown"] is None
+            assert (path / "project.json").read_bytes() == before_suggestion
+            assert (
+                api.get(
+                    "/api/projects/continuations/proposal",
+                    params={"path": str(path), "parent_strategy_id": "unused"},
+                ).status_code
+                == 404
+            )
             accepted = api.post(
                 "/api/projects/strategies",
                 json={
@@ -165,7 +248,7 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(calls) == 3
+        assert len(calls) == 6
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",
@@ -367,6 +450,7 @@ def main():
         path = Path(directory) / "proposal.sigma"
         initialize_project(path, "Proposal fixture", "A real mathematical question", "mathematical")
         create_strategy(path, "Existing direction", "Existing full content")
+        set_strategy_enabled(path, inspect_project(path).project.strategies[0].id, False)
         asyncio.run(check(path))
         assert inspect_project(path).project.strategies[0].provenance is None
 

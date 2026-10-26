@@ -28,7 +28,7 @@ CHROME = os.environ.get(
 )
 ACCOUNTS = {
     "A": {"email": "member-a@example.test", "subject": "t131-member-a"},
-    "B": {"email": "member-b@example.test", "subject": "t131-member-b"},
+    "B": {"email": "member-b@example.test", "subject": "t131-member-b", "role": "admin"},
     "denied": {"email": "denied@example.test", "subject": "t131-denied"},
 }
 
@@ -65,6 +65,8 @@ def main() -> None:
         environment.update(
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_HOME": str(root / "auth"),
+                "SIGMA_CLOUD_OPENAI_API_KEY": "fixture-sponsored-credential",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": ui_url,
                 "SIGMA_TEST_BROWSER_ORIGIN": ui_url,
                 "SIGMA_CLOUD_WORKSPACES_ROOT": str(root / "workspaces"),
@@ -83,7 +85,7 @@ def main() -> None:
                     os.environ.get("SIGMA_PYTHON", str(ROOT / ".venv/bin/python")),
                     "-m",
                     "uvicorn",
-                    "cloud_workspace_test_app:app",
+                    "cloud_t88_browser_app:app",
                     "--host",
                     "127.0.0.1",
                     "--port",
@@ -145,7 +147,16 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
         context = browser.new_context(viewport={"width": 1280, "height": 800})
         page = context.new_page()
         errors: list[str] = []
+        guest_ai_requests: list[str] = []
         page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on(
+            "request",
+            lambda request: (
+                guest_ai_requests.append(request.url)
+                if identity is None and "/api/ai/" in request.url
+                else None
+            ),
+        )
 
         def headers_for(principal: dict[str, str] | None) -> dict[str, str]:
             headers = {"Origin": ui_url}
@@ -154,6 +165,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                     {
                         "X-Test-Subject": principal["subject"],
                         "X-Test-Email": principal["email"],
+                        "X-Test-Role": principal.get("role", "member"),
                     }
                 )
             return headers
@@ -176,12 +188,14 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                 content_type="application/json",
                 body=json.dumps(
                     {
-                        "target": "local",
+                        "target": "hosted",
                         "enabled": True,
                         "ready": True,
                         "authenticated": identity is not None,
                         "user": (
-                            {"email": identity["email"], "role": "member"} if identity else None
+                            {"email": identity["email"], "role": identity.get("role", "member")}
+                            if identity
+                            else None
                         ),
                         "admin_contact_email": None,
                     }
@@ -210,6 +224,8 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             else:
                 denied_email = None
                 set_identity(ACCOUNTS[account])
+                authorized = api_request("POST", "/__fixture/authorize", identity)
+                assert authorized.status_code == 200, authorized.text
                 location = ui_url + "/"
             route.fulfill(status=302, headers={"Location": location})
 
@@ -256,18 +272,23 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             assert rejected.status_code == 401, rejected.text
 
             page.goto(ui_url + "/", wait_until="networkidle")
-            expect(
-                page.get_by_role(
-                    "heading", name="Sign in with approved Gmail account to access projects."
-                )
-            ).to_be_visible()
+            expect(page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
+            expect(page.get_by_text("Explore only · no execution", exact=True)).to_be_visible()
+            expect(page.get_by_role("link", name="Explore SIGMA")).to_be_visible()
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-            page.get_by_role("button", name="Sign in with Google").click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            expect(account.locator(".google-account-target")).to_have_count(0)
-            account.get_by_role("link", name="Sign in with Google", exact=True).click()
+            page.get_by_role("link", name="Explore SIGMA").click()
+            expect(
+                page.get_by_role("heading", name="Explore a SIGMA research project")
+            ).to_be_visible()
+            assert not guest_ai_requests, guest_ai_requests
+            page.goto(ui_url + "/", wait_until="networkidle")
+            page.get_by_role("link", name="Sign in with Google").click()
             expect(page).to_have_url(ui_url + "/")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            status_pill = page.locator(".account-model-status > summary")
+            expect(status_pill).to_contain_text("Regular user")
+            expect(status_pill).to_contain_text("SIGMA-sponsored")
+            expect(status_pill).to_contain_text("budget exhausted")
             assert login_attempts == ["A"]
 
             # Reload preserves the deterministic fixture principal; protected project
@@ -296,9 +317,9 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                 wait_until="networkidle",
             )
             controls = page.locator(".project-art-header .header-controls")
-            google = controls.locator(".project-google-signin")
-            expect(google).to_have_text("Google account connected")
-            expect(google).not_to_contain_text(ACCOUNTS["A"]["email"])
+            google = controls.locator(".account-model-status > summary")
+            expect(google).to_contain_text("Regular user")
+            expect(google).to_contain_text("SIGMA-sponsored")
             model = controls.locator(".project-model-pill")
             thinking = controls.locator(".project-thinking-pill")
             difficulty = controls.locator(".project-difficulty-badge")
@@ -313,26 +334,48 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             # Account switch is another fixture redirect; the API must expose only B's
             # workspace after the browser identity changes and the app reloads.
             google.click()
-            account = page.get_by_role("dialog", name="Google account")
+            account = page.get_by_role("dialog", name="AI connection settings")
             expect(account.get_by_text(ACCOUNTS["A"]["email"], exact=True)).to_be_visible()
-            page.evaluate("window.scrollTo(0, 0)")
-            expect(account.get_by_role("button", name="Sign out", exact=True)).to_be_visible()
-            account.get_by_role("button", name="Sign out", exact=True).click()
-            expect(page).to_have_url(ui_url + "/")
+            expect(account.get_by_role("heading", name="Model access")).to_be_visible()
             expect(
-                page.get_by_role(
-                    "heading", name="Sign in with approved Gmail account to access projects."
+                account.get_by_text(
+                    "The SIGMA-sponsored model connection is reachable.", exact=False
                 )
             ).to_be_visible()
+            assert (
+                api_request("POST", "/__fixture/provider/unavailable", identity).status_code == 200
+            )
+            account.get_by_role("button", name="Retry sponsored connection check").click()
+            expect(account.get_by_text("No research was run.", exact=False)).to_be_visible()
+            assert (
+                api_request("POST", "/__fixture/provider/unauthorized", identity).status_code == 200
+            )
+            account.get_by_role("button", name="Retry sponsored connection check").click()
+            expect(
+                account.get_by_text("The SIGMA-sponsored credential was rejected.", exact=False)
+            ).to_be_visible()
+            assert api_request("POST", "/__fixture/provider/connected", identity).status_code == 200
+            account.get_by_role("button", name="Retry sponsored connection check").click()
+            expect(
+                account.get_by_text(
+                    "The SIGMA-sponsored model connection is reachable.", exact=False
+                )
+            ).to_be_visible()
+            page.evaluate("window.scrollTo(0, 0)")
+            expect(
+                account.get_by_role("button", name="Sign out of Google", exact=True)
+            ).to_be_visible()
+            account.get_by_role("button", name="Sign out of Google", exact=True).click()
+            expect(page).to_have_url(ui_url + "/")
+            expect(page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
             assert api_request("GET", "/api/projects/recent").status_code == 401
 
-            page.get_by_role("button", name="Sign in with Google").click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            account.get_by_role("link", name="Sign in with Google", exact=True).click()
+            page.get_by_role("link", name="Sign in with Google").click()
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             assert login_attempts == ["A", "B"]
             page.reload(wait_until="networkidle")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            expect(page.locator(".account-model-status > summary")).to_contain_text("Administrator")
             assert api_request("GET", "/api/projects/recent", identity).json()["projects"] == []
             project_b = api_request(
                 "POST",
@@ -359,12 +402,10 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
 
             # A valid but ungranted fixture identity returns the rejected-access UI
             # and still has no private API principal.
-            page.get_by_role("button", name="Google account connected").click()
-            account = page.get_by_role("dialog", name="Google account")
-            account.get_by_role("button", name="Sign out", exact=True).click()
-            page.get_by_role("button", name="Sign in with Google").click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            account.get_by_role("link", name="Sign in with Google", exact=True).click()
+            page.locator(".account-model-status > summary").click()
+            account = page.get_by_role("dialog", name="AI connection settings")
+            account.get_by_role("button", name="Sign out of Google", exact=True).click()
+            page.get_by_role("link", name="Sign in with Google").click()
             expect(page.get_by_role("heading", name="Access not yet granted")).to_be_visible()
             expect(page.get_by_text(ACCOUNTS["denied"]["email"], exact=True)).to_be_visible()
             assert api_request("GET", "/api/projects/recent").status_code == 401
@@ -375,9 +416,9 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             browser.close()
 
     print(
-        "PASS real Chrome deterministic local sign-in, reload persistence, logout, "
-        "anonymous/revoked denial, rejected identity, account switching and isolated project workspaces; "
-        "no external Google OAuth or provider calls"
+        "PASS real Chrome guest Explore, Google identity A/member and B/admin transitions, "
+        "two-line status/dialog, sponsored connectivity failure/retry, exhausted budget display, "
+        "sign-out, denied access and isolated workspaces; only external identity/provider boundaries mocked"
     )
 
 
