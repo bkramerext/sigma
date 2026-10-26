@@ -1,7 +1,7 @@
 # Academic paper using LaTeX: dialog UX and recovery contract
 
-Status: **Owner-requested revision; manual UI acceptance pending**  
-Owner: Green | Branch: `green/t95-t125-ui` | Related UI work: T95/T125 / PR #135  
+Status: **Owner-requested revision; manual UI acceptance pending**
+Owner: Green | Branch: `green/t95-t125-ui` | Related UI work: T95/T125 / PR #135
 Scope: The paper generation dialog, not a rewrite of the LaTeX authoring engine.
 
 ## Launch priority: deliberately minimal UI

@@ -21,6 +21,107 @@ release SHA, and all ten checks `NOT RUN`. Hosted T131/T134/T133 flows and
 operator T135/T136 restore/recovery steps remain to be performed and reviewed.
 Focused implementation elapsed approximately 10 minutes; hosted acceptance is
 unfinished by design and remains with the authorized owner/coordinator.
+## T146 Increment 22 authorized live comparison (2026-10-26)
+
+Executed the one owner-authorized OpenAI API comparison after a successful
+project-scoped-key Models API lookup for `gpt-6.1-sol` with the configured
+project context. The first recorded metadata attempt returned 401; later
+metadata lookups succeeded, and both results are preserved. No credential
+value was written to the repository. The frozen protocol manifest remained
+valid.
+
+The fair coin selected the four-turn single-agent baseline first. It used all
+four calls and found a valid makespan-10 schedule and lower bound, but then
+adopted a false self-critique claiming the task's eligibility/precedence data
+were missing and withdrew its correct conclusion. The production SIGMA
+Investigator/Skeptic workflow used two calls in one cycle. The Investigator
+found a valid makespan-10 schedule and lower bound, and its isolated Python
+enumeration checked 2,016 assignment/order cases. The Skeptic received the
+saved work and completed computation, confirmed the result, and stopped
+productively without a substantive objection or a second Investigator cycle.
+The independent checker confirms the proposed makespan-13 schedule is valid
+and the exact optimum is 10. In this case the Skeptic did not materially
+improve the result; the one-cycle record demonstrates evidence transfer, not
+multi-cycle revision.
+
+Provider usage was 18,586 input and 9,948 output tokens across six completed
+Responses. Usage-derived charge at the frozen Standard rates was $0.145100;
+the conservative settled-ledger cost was $0.145945, below the $0.67 per-arm
+local ceilings and $1.32768 full reservation. Brian confirmed the project's
+$1.40 enforced limit. A billing dashboard export was unavailable, so posted
+project aggregate spend was not independently observed. No response clipped
+or had uncertain usage. Arm times were 79.678 seconds (baseline) and 104.935
+seconds (SIGMA); overall elapsed time was 232.236 seconds including the local
+setup correction. Full transcripts, raw requests/responses, usage, ledgers,
+SIGMA project/session/Outcome, computation, preflight attempts, checker output,
+and assessment are under
+[`T146 trial evidence`](evaluations/increment_22/exports/trial_20261025/assessment.md).
+
+Reconciled the branch with current `main` at
+`6c9ebbb0d588cadc885c724b90ff51420935ba55`, preserving the T128 Cloud unit
+change. On the merged tree, `./sigma test` ran through Ruff check/format,
+Pyright (0 diagnostics), and frontend typecheck, but exited 1 in three existing
+deployment assertions (`tests/deployment_package.py`, `tests/gce_host.py`,
+`tests/host_monitor.py`) that still expect the former explicit
+`srv-sigma\\x2dstate.mount` dependency. The merged unit instead uses
+`RequiresMountsFor=/srv/sigma-state`. Cloud files were not changed for T146.
+The frontend production build passed separately; it reports the existing
+greater-than-500-kB chunk advisory. The frozen protocol hashes verify, the
+credential scan found zero artifact matches, and a SHA-256 manifest covers all
+67 evidence files. Final-head GitHub Actions status is pending publication.
+
+On final head `b9c1538958d37607a40cb6145d986a6cc117b26a`, GitHub Actions
+confirmed the local finding: SIGMA verification failed in the same deployment
+assertion, while Research Outcome browser acceptance and T92 Recent Projects
+browser acceptance passed. See the run links on PR #150. No Cloud source or
+deployment files were changed in this increment.
+
+T147 is recommended for a narrowly scoped diagnosis, but was not started.
+The saved Skeptic output combines `assessment=stop`, `stop_reason=unresolved`,
+and `strategy_contribution=solution`, while the coordinator records a
+productive stop with an achieved objective and no open obligations. No merge
+was performed; PR #150 remains the review boundary.
+
+## T132 Red hosted research and Python/Sage execution audit (2026-10-25)
+
+Started from current `main` at `803a62d` on `red/t132-hosted-research-execution`.
+Audited the hosted sponsored API integration and existing deterministic
+coverage. Existing suites already join authenticated HTTP proposal, agentic,
+conversion, paper, and research-session generation with owner/global usage
+accounting, unknown-outcome no-replay behavior, cross-workspace controls,
+execution provenance/artifacts, and recovery; Python/Sage tests cover runtime
+limits, errors, timeouts, and persistence. Corrected a stale Cloud Deployment
+statement that still described these sponsored routes as disabled despite the
+current ledger-backed implementation and regression coverage. Added a pure
+rootless-mode policy guard and deterministic regression coverage: the
+production path rejects non-rootless daemons unless the explicit development
+override is supplied.
+
+Added [T132 hosted research acceptance](T132_HOSTED_RESEARCH_ACCEPTANCE.md)
+with repeatable offline commands, a no-override target-host rootless runtime
+proof, authorized-only hosted workflow steps, interruption/no-retry handling,
+and a sanitized evidence record. Linked it from the operations runbook. No
+production service, provider, identity, or cloud resource was contacted or
+modified. This is preparation, not hosted acceptance.
+
+The local Docker Desktop ARM64 development smoke passed using
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check
+--allow-nonrootless-dev`: Python and Sage both ran as UID 65532 and reported
+network, host sentinel, host state, and daemon socket blocked; artifact and
+execution persistence passed; Tectonic PDF compilation and paper snapshot/PDF
+hash persistence passed. It explicitly reported `daemon_rootless: false`, so
+it does not validate the GCE rootless boundary. Docker Compose v2 is absent on
+this workstation; packaged Compose/browser integration did not run. The strict
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check` command exited
+1 with the expected non-rootless refusal. `tests/deployment_package.py` passed,
+and the final `./sigma test` passed all scenarios, Ruff check/format, Pyright
+(0 diagnostics), frontend typecheck and production build. Actual rootless GCE,
+hosted OAuth/browser, provider-backed generation, and restart acceptance remain
+dependent on Brian's host verification and separate owner authorization for
+any live provider usage. Implementation commit `4e8111e22a27f4bb5a9319578ebdd30bc5b5941f`
+was submitted in [PR #157](https://github.com/bkramerext/sigma/pull/157); no
+merge was performed. Elapsed preparation time through PR creation was about
+15 minutes.
 
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
@@ -50,6 +151,26 @@ identities. T130 routing/TLS and T129 deployment remain outside this change.
 Preparation elapsed approximately 20 minutes; exact handoff SHA and PR are in
 [messages/t131_gray_hosted_oauth_preparation.txt](../messages/t131_gray_hosted_oauth_preparation.txt) and
 [PR #156](https://github.com/bkramerext/sigma/pull/156).
+
+### T131 browser harness repair follow-up (2026-10-25)
+
+The previously unverified `browser_checks/t23_1_google_signin.py` check now
+starts its own loopback API and Vite servers with temporary storage. Its
+Google status/login/logout redirects are deterministic browser fixtures; the
+test-only identity adapter handles protected API requests. Real Chrome passed
+fixture sign-in, reload persistence, logout, anonymous and revoked-identity
+401s, rejected-access UI, account switching, per-account project isolation,
+and desktop/mobile project-header checks. No Google endpoint, production OAuth
+configuration, credential, or paid provider was used. This resolves the local
+harness setup gap only; deployed cookie behavior and hosted Google OAuth remain
+unverified. See the self-contained command and fixture boundary in
+[`browser_checks/README.md`](../browser_checks/README.md). `./sigma test` also
+passed all scenarios, Ruff, format, Pyright, frontend typecheck, and production
+build. No SIGMA production auth code changed. Implementation commit
+`424ca3aa2cac5ba01a35c9dc11e58c1e251c83ae` is on
+[`red/t131-google-oauth-harness`](https://github.com/bkramerext/sigma/tree/red/t131-google-oauth-harness)
+and submitted R4R, unmerged, as [PR #158](https://github.com/bkramerext/sigma/pull/158).
+Elapsed implementation and validation time was approximately 20 minutes.
 
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 
@@ -4622,6 +4743,53 @@ fixture), and the T100 persistent-disk configuration (this run uses Compose's
 default local storage). T99 inference is also skipped; no provider calls were
 made. This is local acceptance, not live OAuth or cloud-deployment evidence.
 
+## Increment 22 / issue #146 — offline preparation (2026-10-25)
+
+Read the complete issue #146 and started from fresh `main` (`19e5bd7`) on
+`blue/increment-22-issue-146`. The preparation record is
+[`increment_22/preparation.md`](evaluations/increment_22/preparation.md).
+It proposes one custom finite scheduling problem and a strong four-call
+self-critique baseline against the actual two-cycle, four-call SIGMA session.
+No stock task is reused. This remains an exploratory single-case comparison,
+not a longitudinal or general-superiority claim.
+
+The authored seven-job/two-machine task and independent exhaustive checker are
+preserved with hashes in [`increment_22/evidence/offline-manifest.json`](evaluations/increment_22/evidence/offline-manifest.json).
+The checker validates the proposed 13-unit schedule and enumerates 2,016
+machine assignments/orders, finding an exact 10-unit minimum; M1-only jobs
+also provide a direct matching lower bound. This is a validated offline oracle,
+not provider research evidence, and its answer is withheld from model contexts.
+
+Proposed run: OpenAI API-key billing, `gpt-6.1-sol`, high reasoning, standard
+tier, no tools/search/retries/fallback; four calls per arm, 4,096 output tokens
+per call, 200,000 reserved input and 16,384 output tokens per arm, 15 minutes
+per arm / 45 minutes overall, $0.67 local pre-dispatch cost ceiling per arm.
+The conservative price-based reservation is $0.66384 per arm / $1.32768 total;
+operator verification that the selected OpenAI API project has a $1.40
+monthly limit with **Enforce a hard limit** enabled remains required.
+The 1,024-token cap included hidden reasoning and was not adequate to defend
+against clipping at high reasoning. The smallest recommended adjustment is
+4,096 output tokens/call. Clipping remains an incomplete result, is not scored
+as incorrect, and is not retried. The output limit includes visible and
+reasoning tokens; see the official [Responses API reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
+and [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning).
+The complete request, limits, cost derivation, execution procedure and
+authorization wording are frozen in `evaluations/increment_22/` and hashed in
+`increment_22/evidence/frozen-manifest.sha256`.
+
+Reconciled with current `main` (`803a62d`) in merge commit `2eb1ae0`; Green
+T95/T125 and Cloud T129/T130/T131/T133 changes are retained. The latest full
+`./sigma test` passed: backend scenarios, Ruff, formatting, Pyright (0
+errors), frontend typecheck and production build. The independent checker
+validated its exact 10-unit optimum across 2,016 assignment/order cases; all
+11 offline cumulative-budget tests passed. The real-Chrome Home running-status
+check passed against a fresh local fixture. One initial browser attempt used
+an already-populated project root and failed its fresh-fixture assumption; the
+isolated rerun passed. After later `main` updates, the latest full `./sigma test`
+passed again, as did checker execution, frozen-manifest verification, and all 11
+offline budget tests. The final post-merge Actions run is pending push. No provider calls or spending occurred. The trial is not authorized,
+and no Increment 23 work or Cloud deployment operation was started.
+
 ## Issue 118 — harden within-session blind comparison (2026-10-25)
 
 Revised the T114 proposal after adversarial review. The active design uses three
@@ -4759,6 +4927,52 @@ and reproducible machine outputs/hashes are retained in
 readiness and retrospective checks passed. The full `./sigma test` passed after
 installing locked frontend dependencies. No provider calls or cost occurred;
 no comparative result is claimed.
+
+## Round 2 Increment 22 — cumulative collaboration trial preparation (2026-10-25)
+
+Prepared one custom, independently enumerable two-machine scheduling case for
+issue #146. The exact checker finds the proposed 13-unit schedule feasible but
+suboptimal; enumeration over 2,016 eligible machine/order cases finds a
+10-unit optimum, also supported by the M1-only D/F/G lower bound. The complete
+task, checker result, frozen baseline prompts, scoring rubric, caps and execution
+procedure are retained in [Increment 22](evaluations/increment_22/).
+
+Implemented a persisted, fail-closed pre-dispatch ledger shared by SIGMA and
+the baseline dispatch adapter. It reserves serialized request bytes plus
+8,192 input tokens, output ceiling and conservative cost before dispatch;
+unknown or in-flight calls hold their full reservations and block further calls.
+The real SIGMA request-path regression test inspects reserved request IDs/bytes
+and settlement. Provider `max_output_tokens` clipping is retained as a partial
+incomplete result with usage; it is not scored as incorrect and is not retried.
+Ruff I001 and RUF007 in the checker were corrected. Offline checks only; no
+provider inference or spend occurred. Following the API token-counting guidance,
+the proposed output cap is now 4,096 per call: 1,024 could leave too little
+visible room after high-effort reasoning. This is a reasoned adjustment, not a
+live verification of no-clipping.
+
+Brian's authorization for one trial is recorded in the latest PR #150
+coordinator comment (2026-10-25 22:48 UTC), with the frozen model and strict
+limits. Latest `main` (`bcda1de`) is integrated in merge commit `cc3d766`,
+retaining its T131/T132 work and all Green/Cloud/evaluation artifacts. The
+frozen manifest still verifies exactly; it was not rewritten. The full local
+`./sigma test` and all 11 budget tests passed on this merge. No provider request
+was made and no spend occurred: the execution gate fails closed because this
+runtime and checkout `.env` have no OpenAI API key, and no OpenAI admin
+credential or project/key metadata is available to independently verify the
+key's project, current project usage, or model access. The owner's limit
+confirmation does not establish those separate checks. Trial outputs and
+actual trial elapsed time therefore do not exist. No Increment 23 work or
+Cloud deployment operation was undertaken.
+
+Final verification for this preparation SHA: `./sigma test` passed all lifecycle,
+research, storage, API, Cloud-regression, Ruff, format, Pyright, frontend
+typecheck, and production-build steps. `git diff --check` and the frozen SHA-256
+manifest validation passed. The optional existing Chrome settings fixture check
+did not initialize its expected API-key fixture state: the browser opened with
+the stored “ChatGPT sign-in · Google sign-in required” state and failed its
+initial `Checking AI…` assertion. No browser-triggered provider request was
+made; this check result is retained as an environment/fixture mismatch, not a
+product conclusion.
 
 ## T130 — Public DNS and HTTPS preparation (2026-10-25)
 

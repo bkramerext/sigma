@@ -95,6 +95,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/increment13_integrity.py"],
             [*python, "python", "tests/increment14_protocol.py"],
             [*python, "python", "tests/increment14_audit.py"],
+            [*python, "python", "tests/increment22_budget.py"],
             [
                 *python,
                 "python",

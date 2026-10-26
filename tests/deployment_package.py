@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from sigma import cloud_auth, openai_connection
+from sigma import cloud_auth, cloud_runtime_check, openai_connection
 from sigma.config_secrets import SecretConfigurationError, secret_value
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +46,14 @@ def main() -> None:
     assert "GOOGLE_OIDC_CLIENT_SECRET_FILE" in compose
     assert "SIGMA_CLOUD_AUTH_LOCAL" not in compose
     assert "SIGMA_SANDBOX_DOCKER_SOCKET" in compose
+    assert cloud_runtime_check._require_rootless(["name=rootless"], False) is True
+    assert cloud_runtime_check._require_rootless(["name=seccomp"], True) is False
+    try:
+        cloud_runtime_check._require_rootless(["name=seccomp"], False)
+    except SystemExit as exc:
+        assert "does not report rootless mode" in str(exc)
+    else:
+        raise AssertionError("Production runtime check accepted a non-rootless daemon")
     assert ":443/tcp" in compose and ":80/tcp" in compose
     assert ":443/udp" not in compose
     assert compose.count("    ports:") == 1

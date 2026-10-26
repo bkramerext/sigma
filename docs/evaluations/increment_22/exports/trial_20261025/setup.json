@@ -1,0 +1,25 @@
+{
+  "task_id": "custom-two-machine-schedule-v1",
+  "project_path": "/Users/admin/sigma_blue/docs/evaluations/increment_22/exports/trial_20261025/sigma_projects/t146-sigma-arm-custom-workshop-schedule.sigma",
+  "project_id": "b82b87fb-83a9-4cd1-ba92-2d177e3f46aa",
+  "strategy_id": "e38ee5cf-e418-408b-a5bd-06bde004510e",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "mode": "api_key",
+  "limits": {
+    "research_rounds": 2,
+    "model_calls": 4,
+    "session_duration_minutes": 15,
+    "output_tokens_per_call": 4096,
+    "maximum_estimated_cost_usd": 0.67,
+    "maximum_input_tokens_per_session": 200000
+  },
+  "randomization": {
+    "method": "secrets.randbits(1)",
+    "bit": 1,
+    "arm_order": [
+      "baseline",
+      "sigma"
+    ]
+  }
+}

@@ -1,0 +1,327 @@
+{
+  "trial_status": "paired_trial_executed_sigma_early_productive_stop",
+  "provider": "OpenAI API",
+  "billing_mode": "project-scoped API key",
+  "api_project_id": "proj_ZqoKimk90I8vLSFDM7FGeLVj",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "service_tier_requested": "auto/default via project default (omitted from both request bodies)",
+  "service_tier_returned": [
+    "default"
+  ],
+  "store_false": true,
+  "arm_order": [
+    "baseline",
+    "sigma"
+  ],
+  "arms": {
+    "baseline": {
+      "status": "completed",
+      "turns": 4,
+      "input_tokens": 4264,
+      "output_tokens": 3449,
+      "total_tokens": 7713,
+      "reasoning_tokens": 1787,
+      "usage_derived_cost_usd": 0.044308,
+      "conservative_usage_cost_usd": 0.04515,
+      "ledger": {
+        "calls_including_unknown": 4,
+        "input_tokens_used_or_reserved": 4264,
+        "output_tokens_used_or_reserved": 3449,
+        "cost_usd_used_or_reserved": 0.04515,
+        "blocked_reason": null
+      },
+      "elapsed_seconds": 79.678
+    },
+    "sigma": {
+      "status": "ended",
+      "cycles_completed": 1,
+      "calls": 2,
+      "input_tokens": 14322,
+      "output_tokens": 6499,
+      "total_tokens": 20821,
+      "reasoning_tokens": 2867,
+      "usage_derived_cost_usd": 0.100792,
+      "conservative_usage_cost_usd": 0.100795,
+      "ledger": {
+        "calls_including_unknown": 2,
+        "input_tokens_used_or_reserved": 14322,
+        "output_tokens_used_or_reserved": 6499,
+        "cost_usd_used_or_reserved": 0.100795,
+        "blocked_reason": null
+      },
+      "elapsed_seconds": 104.935,
+      "coordinator_decision": "stop_productive_conclusion",
+      "execution": {
+        "status": "completed",
+        "exit_code": 0,
+        "source_sha256": "4b0ad0a073aa550735aa5be0d804af291c1f57b84f0e6ba79c43657c64de24b1",
+        "result_excerpt": "{\"acyclic_orders\": 808, \"candidate_makespan\": 10, \"examined_orders\": 2016, \"lower_bound\": 10, \"optimal_orders\": 14, \"proposed_makespan\": 13, \"search_minimum\": 10, \"search_schedule\": [[[\"D\", 0, 3], [\"F\", 3, 5], [\"G\", 5, 10]], [[\"A\", 0, 2], [\"B\", 2, 4], [\"E\", 4, 5], [\"C\", 5, 10]]]}\n"
+      }
+    }
+  },
+  "combined": {
+    "generation_calls": 6,
+    "input_tokens": 18586,
+    "output_tokens": 9948,
+    "total_tokens": 28534,
+    "reasoning_tokens": 4654,
+    "usage_derived_cost_usd": 0.1451,
+    "conservative_usage_cost_usd": 0.145945,
+    "full_frozen_reservation_max_usd": 1.32768,
+    "project_hard_limit_usd": 1.4,
+    "project_dashboard_export_available": false,
+    "overall_elapsed_seconds": 232.236,
+    "overall_elapsed_basis": "cross-process UTC delta reconciled with current monotonic timer; SIGMA-arm elapsed is directly monotonic"
+  },
+  "responses": [
+    {
+      "file": "baseline/calls/turn-1-response.json",
+      "id": "resp_0b300f60188aa318016ade9ac5676487d0a787262285a049cf",
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "service_tier": "default",
+      "usage": {
+        "input_tokens": 959,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 846,
+        "output_tokens_details": {
+          "reasoning_tokens": 516
+        },
+        "total_tokens": 1805
+      },
+      "usage_derived_cost_usd": 0.010378,
+      "conservative_cost_at_max_input_rate_usd": 0.0108575,
+      "incomplete_details": null,
+      "store_requested": false,
+      "max_output_tokens_requested": 4096,
+      "reasoning_effort_requested": "high",
+      "no_tools_or_search": true
+    },
+    {
+      "file": "baseline/calls/turn-2-response.json",
+      "id": "resp_02622a31f03cc59f016ade9ad7705887d0bcc44ddd480a0a2a",
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "service_tier": "default",
+      "usage": {
+        "input_tokens": 719,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 825,
+        "output_tokens_details": {
+          "reasoning_tokens": 477
+        },
+        "total_tokens": 1544
+      },
+      "usage_derived_cost_usd": 0.009688,
+      "conservative_cost_at_max_input_rate_usd": 0.0100475,
+      "incomplete_details": null,
+      "store_requested": false,
+      "max_output_tokens_requested": 4096,
+      "reasoning_effort_requested": "high",
+      "no_tools_or_search": true
+    },
+    {
+      "file": "baseline/calls/turn-3-response.json",
+      "id": "resp_086ba2c33ff37767016ade9aeb324087d0a5aa9cef40a6b143",
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "service_tier": "default",
+      "usage": {
+        "input_tokens": 1045,
+        "input_tokens_details": {
+          "cache_write_tokens": 1042,
+          "cached_tokens": 0
+        },
+        "output_tokens": 833,
+        "output_tokens_details": {
+          "reasoning_tokens": 342
+        },
+        "total_tokens": 1878
+      },
+      "usage_derived_cost_usd": 0.010941,
+      "conservative_cost_at_max_input_rate_usd": 0.0109425,
+      "incomplete_details": null,
+      "store_requested": false,
+      "max_output_tokens_requested": 4096,
+      "reasoning_effort_requested": "high",
+      "no_tools_or_search": true
+    },
+    {
+      "file": "baseline/calls/turn-4-response.json",
+      "id": "resp_0c1165e701ebb2b2016ade9aff0d5087d09f5a3915d361c651",
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "service_tier": "default",
+      "usage": {
+        "input_tokens": 1541,
+        "input_tokens_details": {
+          "cache_write_tokens": 1538,
+          "cached_tokens": 0
+        },
+        "output_tokens": 945,
+        "output_tokens_details": {
+          "reasoning_tokens": 452
+        },
+        "total_tokens": 2486
+      },
+      "usage_derived_cost_usd": 0.013301,
+      "conservative_cost_at_max_input_rate_usd": 0.0133025,
+      "incomplete_details": null,
+      "store_requested": false,
+      "max_output_tokens_requested": 4096,
+      "reasoning_effort_requested": "high",
+      "no_tools_or_search": true
+    },
+    {
+      "file": "sigma/http-exchanges/exchange-01.response.json",
+      "id": "resp_05d513a4be1abd7d016ade9b445bf887d0992825e0ce6af986",
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "service_tier": "default",
+      "usage": {
+        "input_tokens": 4660,
+        "input_tokens_details": {
+          "cache_write_tokens": 4657,
+          "cached_tokens": 0
+        },
+        "output_tokens": 3383,
+        "output_tokens_details": {
+          "reasoning_tokens": 1367
+        },
+        "total_tokens": 8043
+      },
+      "usage_derived_cost_usd": 0.0454785,
+      "conservative_cost_at_max_input_rate_usd": 0.04548,
+      "incomplete_details": null,
+      "store_requested": false,
+      "max_output_tokens_requested": 4096,
+      "reasoning_effort_requested": "high",
+      "no_tools_or_search": true
+    },
+    {
+      "file": "sigma/http-exchanges/exchange-02.response.json",
+      "id": "resp_08af93780e5ec486016ade9b79df3487d0b1acf28bfcc17be5",
+      "model": "gpt-6.1-sol",
+      "status": "completed",
+      "service_tier": "default",
+      "usage": {
+        "input_tokens": 9662,
+        "input_tokens_details": {
+          "cache_write_tokens": 9659,
+          "cached_tokens": 0
+        },
+        "output_tokens": 3116,
+        "output_tokens_details": {
+          "reasoning_tokens": 1500
+        },
+        "total_tokens": 12778
+      },
+      "usage_derived_cost_usd": 0.0553135,
+      "conservative_cost_at_max_input_rate_usd": 0.055315,
+      "incomplete_details": null,
+      "store_requested": false,
+      "max_output_tokens_requested": 4096,
+      "reasoning_effort_requested": "high",
+      "no_tools_or_search": true
+    }
+  ],
+  "preflight_attempt_files": [
+    "preflight/models-api-preflight-attempt-1-401.json",
+    "preflight/models-api-preflight-attempt-2-success.json",
+    "preflight/models-api-preflight-attempt-3-success.json"
+  ],
+  "raw_responses_all_completed": true,
+  "baseline_ledger": {
+    "version": 1,
+    "call_limit": 4,
+    "input_token_limit": 200000,
+    "output_tokens_per_call": 4096,
+    "cost_limit_usd": 0.67,
+    "input_price_per_million": 2.5,
+    "output_price_per_million": 10.0,
+    "calls": [
+      {
+        "call_id": "baseline-turn-1",
+        "status": "settled",
+        "request_body_bytes": 4330,
+        "input_token_bound": 12522,
+        "output_token_reservation": 4096,
+        "cost_bound_usd": 0.0108575,
+        "input_tokens": 959,
+        "output_tokens": 846
+      },
+      {
+        "call_id": "baseline-turn-2",
+        "status": "settled",
+        "request_body_bytes": 3384,
+        "input_token_bound": 11576,
+        "output_token_reservation": 4096,
+        "cost_bound_usd": 0.0100475,
+        "input_tokens": 719,
+        "output_tokens": 825
+      },
+      {
+        "call_id": "baseline-turn-3",
+        "status": "settled",
+        "request_body_bytes": 4930,
+        "input_token_bound": 13122,
+        "output_token_reservation": 4096,
+        "cost_bound_usd": 0.0109425,
+        "input_tokens": 1045,
+        "output_tokens": 833
+      },
+      {
+        "call_id": "baseline-turn-4",
+        "status": "settled",
+        "request_body_bytes": 7075,
+        "input_token_bound": 15267,
+        "output_token_reservation": 4096,
+        "cost_bound_usd": 0.0133025,
+        "input_tokens": 1541,
+        "output_tokens": 945
+      }
+    ],
+    "blocked_reason": null
+  },
+  "sigma_ledger": {
+    "version": 1,
+    "call_limit": 4,
+    "input_token_limit": 200000,
+    "output_tokens_per_call": 4096,
+    "cost_limit_usd": 0.67,
+    "input_price_per_million": 2.5,
+    "output_price_per_million": 10.0,
+    "calls": [
+      {
+        "call_id": "80cf9e5b-5cb9-4ce7-9c34-bfb6fa5a396c",
+        "status": "settled",
+        "request_body_bytes": 22634,
+        "input_token_bound": 30826,
+        "output_token_reservation": 4096,
+        "cost_bound_usd": 0.04548,
+        "input_tokens": 4660,
+        "output_tokens": 3383
+      },
+      {
+        "call_id": "21bf715a-e42c-4212-9ac4-1652e2c8fc38",
+        "status": "settled",
+        "request_body_bytes": 43428,
+        "input_token_bound": 51620,
+        "output_token_reservation": 4096,
+        "cost_bound_usd": 0.055315,
+        "input_tokens": 9662,
+        "output_tokens": 3116
+      }
+    ],
+    "blocked_reason": null
+  },
+  "all_responses_store_false": true,
+  "all_responses_same_model_effort": true
+}

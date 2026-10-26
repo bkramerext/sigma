@@ -111,6 +111,9 @@ For T134's repeatable two-identity privacy matrix, direct-reference probes,
 sign-out/sign-in transitions, no-mutation checks and sanitized evidence template,
 see [T134 hosted acceptance](T134_HOSTED_ACCEPTANCE.md). Do not run provider-backed
 checks without separate authorization. Local fixtures do not satisfy hosted acceptance.
+For deterministic hosted research API coverage, target-rootless Python/Sage
+proof, provider authorization boundaries, and the T132 evidence record, see
+[T132 hosted research acceptance](T132_HOSTED_RESEARCH_ACCEPTANCE.md).
 For production Google OAuth settings and the focused desktop sign-in, callback,
 session, sign-out, denial and account-switch procedure, see
 [T131 hosted OAuth acceptance](T131_HOSTED_OAUTH_ACCEPTANCE.md). Hosted OAuth
