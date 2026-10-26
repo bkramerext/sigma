@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -158,6 +160,17 @@ class StateBackupTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unmapped workspace"):
                 restore.verify(root, 2, 1, 1, 1)
 
+    def test_generated_snapshot_name_matches_gce_resource_contract(self) -> None:
+        script = (ROOT / "deploy/backup-state.sh").read_text()
+        match = re.search(r"stamp=\$\(date -u \+([^)]*)\)", script)
+        self.assertIsNotNone(match)
+        assert match is not None
+        stamp = subprocess.check_output(["date", "-u", f"+{match[1]}"], text=True).strip()
+        name = f"sigma-state-{stamp}"
+        self.assertLessEqual(len(name), 63)
+        self.assertRegex(name, r"^[a-z]([-a-z0-9]*[a-z0-9])?$")
+        self.assertIsNotNone(backup_retention.NAME.fullmatch(name))
+
     def test_retention_prunes_only_old_managed_ready_points(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "snapshots.json"
@@ -166,7 +179,7 @@ class StateBackupTests(unittest.TestCase):
             )
             rows = [
                 {
-                    "name": f"sigma-state-202601{day:02}T021700Z",
+                    "name": f"sigma-state-202601{day:02}t021700z",
                     "creationTimestamp": f"2026-01-{day:02}T02:17:00Z",
                     "sourceDisk": source,
                     "labels": {"sigma-daily-backup": "true", "sigma-source-disk": "sigma-state"},
@@ -177,8 +190,20 @@ class StateBackupTests(unittest.TestCase):
             path.write_text(json.dumps(rows))
             self.assertEqual(
                 backup_retention.expired_snapshots(path, 14),
-                ["sigma-state-20260101T021700Z"],
+                ["sigma-state-20260101t021700z"],
             )
+
+    def test_no_expired_snapshots_emits_no_deletion_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "snapshots.json"
+            path.write_text("[]")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "deploy/backup-retention.py"), str(path), "14"],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(result.stdout, "")
 
     def test_retention_rejects_unsafe_policy_or_managed_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
