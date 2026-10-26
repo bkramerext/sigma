@@ -298,6 +298,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   width: min(440px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 26px 30px 24px;
   border: 1px solid #9a684c;
   border-radius: 8px;
@@ -315,3 +316,19 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .sigma-signin-footer { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 18px; padding-top: 9px; border-top: 1px solid #76583d70; }
 .google-connection-details .sigma-signin-footer .cloud-text-button { display: inline-flex; margin: 0; padding: 5px 0; min-height: 28px; border: 0; background: none; color: #d9b28d; font: 12px/1.4 Inter, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 @media (max-width: 480px) { .google-connection-details.sigma-signin-dialog { padding: 22px 18px; } }
+
+.google-connection-details.sigma-signin-dialog :is(a, button):focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.google-connection-details.sigma-signin-dialog .sigma-signin-invite:hover,
+.google-connection-details.sigma-signin-dialog .sigma-signin-footer .cloud-text-button:hover { color: #f5d2a4; }
+@media (max-width: 480px) {
+  .google-connection-details.sigma-signin-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 20px 18px; }
+  .sigma-signin-identity img { max-height: 70px; margin-bottom: 14px; }
+  .google-connection-details .sigma-signin-identity h2 { font-size: 23px; }
+  .sigma-signin-footer { gap: 12px; }
+}
+@media (max-height: 540px) {
+  .google-connection-details.sigma-signin-dialog { max-height: calc(100dvh - 16px); padding-top: 14px; padding-bottom: 14px; }
+  .sigma-signin-identity img { max-height: 54px; margin-bottom: 8px; }
+  .sigma-signin-identity > p:last-child { margin-bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .google-connection-details.sigma-signin-dialog { scroll-behavior: auto; } }
