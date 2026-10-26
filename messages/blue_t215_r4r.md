@@ -6,11 +6,15 @@
 
 **Implementation commit:** `069b81d91b90be4b4edcdc0487fbd100e19272ec`
 
-**PR:** [PR #221 (T215)](https://github.com/bkramerext/sigma/pull/221), open against `main`, not merged
+**PR:** [PR #221 (T215)](https://github.com/bkramerext/sigma/pull/221), merged by the coordinator
 
 **Reconciled code head:** `7f89dcb` (merge of current `main` `084e23b`)
 
 **GitHub-CI-verified PR head:** `9d1510b61979938ed21a8974ecb3101e6e00fded`
+
+**Merge commit:** `466e8fcc1615b892d3b307820c9776fa84630749`
+
+**Current main:** `e62d808` (advanced after the PR merge)
 
 ## Delivered
 
@@ -45,9 +49,9 @@
 
 GitHub Actions passed on the verified PR head above: SIGMA verification run
 737, Research Outcome browser acceptance run 122, and T92 Recent Projects
-browser acceptance run 53. This handoff-only documentation update follows that
-verified implementation/reconciliation state. The PR remains open and is not
-self-merged.
+browser acceptance run 53. The coordinator merged the PR at the commit above;
+Blue did not merge it. This handoff update records the final merge state after
+CI passed.
 
 ## Limitations
 
