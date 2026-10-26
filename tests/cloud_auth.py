@@ -121,6 +121,36 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_member_switches_bind_separate_project_workspaces(self):
+        from sigma import cloud_workspaces
+
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+        }):
+            self.assertTrue(cloud_workspaces.enabled())
+            seen = []
+            for identity in ("member-a", "member-b", "member-a"):
+                response = self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": identity},
+                    headers={"Origin": "http://127.0.0.1:5173"},
+                )
+                self.assertEqual(response.status_code, 200)
+                status = self.client.get("/api/cloud-auth/status")
+                self.assertEqual(status.status_code, 200)
+                self.assertTrue(status.json()["authenticated"])
+                seen.append(status.json()["account"]["workspace"]["id"])
+                # The project endpoint executes through the same workspace
+                # dependency used by all project operations.
+                projects = self.client.get("/api/projects/recent")
+                self.assertEqual(projects.status_code, 200)
+            self.assertNotEqual(seen[0], seen[1])
+            self.assertEqual(seen[0], seen[2])
+
     def test_mock_project_mutations_are_not_blanket_blocked(self):
         with patch.dict(os.environ, {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
