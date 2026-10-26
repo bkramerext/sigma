@@ -35,6 +35,7 @@ from sigma.config_secrets import SecretConfigurationError, secret_value
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
+INVITE_INTENT_COOKIE = "__Host-sigma_invite_intent"
 DENIED_COOKIE = "__Host-sigma_denied"
 FEEDBACK_RATE_COOKIE = "__Host-sigma_feedback_rate"
 SESSION_SECONDS = 8 * 60 * 60
@@ -618,6 +619,7 @@ def status(request: Request):
 @router.get("/login")
 def login(
     request: Request,
+    invite: bool = False,
 ):
     cfg = config()
     if not cfg.enabled:
@@ -664,6 +666,13 @@ def login(
         state,
         **_cookie_options(cfg, FLOW_COOKIE, max_age=FLOW_SECONDS),
     )
+    if invite:
+        response.set_cookie(
+            _cookie_name(INVITE_INTENT_COOKIE, cfg), state,
+            **_cookie_options(cfg, INVITE_INTENT_COOKIE, max_age=FLOW_SECONDS),
+        )
+    else:
+        _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
     _clear_cookie(response, cfg, SESSION_COOKIE)
     response.headers["Cache-Control"] = "no-store"
@@ -767,6 +776,7 @@ async def callback(
             raise ValueError("Invalid subject")
     except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(401, "Google sign-in could not be verified.") from None
+    invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
     role = _authorization(cfg, subject, email)
     if not role:
         denied_token = secrets.token_urlsafe(32)
@@ -780,8 +790,9 @@ async def callback(
                 "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
                 (_hash(denied_token), email, subject, _now() + DENIED_SECONDS),
             )
-        response = RedirectResponse("/?access=denied", status_code=303)
+        response = RedirectResponse("/?access=denied&invite=1" if invite_intent else "/?access=denied", status_code=303)
         _clear_cookie(response, cfg, FLOW_COOKIE)
+        _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
         _clear_cookie(response, cfg, SESSION_COOKIE)
         response.set_cookie(
             _cookie_name(DENIED_COOKIE, cfg),
@@ -831,6 +842,7 @@ async def callback(
         **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
     _clear_cookie(response, cfg, FLOW_COOKIE)
+    _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
