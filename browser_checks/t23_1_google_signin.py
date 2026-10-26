@@ -482,12 +482,11 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
             page.get_by_role("button", name="Sign in with Google").click()
             page.get_by_role("dialog", name="Welcome to SIGMA").get_by_role("link", name="Continue with Google").click()
-            expect(
-                page.get_by_text("Your Google account is not yet invited to SIGMA.")
-            ).to_be_visible()
-            expect(page.get_by_text(ACCOUNTS["denied"]["email"], exact=True)).to_be_visible()
+            invitation_dialog = page.get_by_role("dialog", name="Welcome to SIGMA")
+            expect(invitation_dialog.locator(".sigma-invitation-art")).to_be_visible()
+            expect(invitation_dialog.get_by_text(ACCOUNTS["denied"]["email"], exact=True)).to_be_visible()
             assert api_request("GET", "/api/projects/recent").status_code == 401
-            page.get_by_role("button", name="Invite Me", exact=True).click()
+            # All uninvited accounts request access automatically, including normal Google sign-in.
             expect(
                 page.get_by_text("Glad you're interested! We'll get back to you!", exact=True)
             ).to_be_visible()
