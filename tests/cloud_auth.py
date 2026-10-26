@@ -247,6 +247,20 @@ class CloudAuthTests(TestCase):
         stale.cookies.set(cloud_auth.SESSION_COOKIE, raw)
         self.assertEqual(stale.get("/api/projects/recent").status_code, 401)
 
+    def test_admin_contact_does_not_grant_bootstrap_admin_role(self):
+        # The contact is intentionally distinct from the configured bootstrap
+        # identity. It is public contact metadata, never an authorization rule.
+        response = self.finish(email="access@example.org", subject="contact-subject")
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/?access=denied")
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, response.cookies)
+        self.client.cookies.set(
+            cloud_auth.DENIED_COOKIE, response.cookies[cloud_auth.DENIED_COOKIE]
+        )
+        self.assertEqual(self.client.get("/api/cloud-auth/denied").status_code, 200)
+        self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
+        self.assertFalse((self.root / "workspaces").exists())
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)

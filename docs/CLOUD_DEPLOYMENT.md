@@ -370,10 +370,14 @@ trial-signup, project-creation, or API-enablement command.
    `chgrp sigma-sandbox` and `chmod 0660` after every socket creation. Confirm
    socket ownership/group/mode, numeric group ID, rootless daemon mode, and that
    `sigma-sandbox` is in neither `docker` nor `sudo`. Do not grant world access.
-4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; use the exact 40-digit
-   release SHA, production hostname/OAuth client ID, approved limits, socket
-   path and actual numeric GID. The environment file contains only non-secret
-   values and secret-file paths. Set `root:root` mode `0600`. Create the two
+4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; set the bootstrap
+   address to the approved initial administrator's exact verified Google email
+   and the contact address to the approved invitation contact. Use one address
+   for both only if those identities intentionally are the same. Use the exact
+   40-digit release SHA, production hostname/OAuth client ID, approved limits,
+   socket path and actual numeric GID. The environment file contains only
+   non-secret values and secret-file paths. Set `root:root` mode `0600`. Create
+   the two
    Secret Manager entries and fetch them with the approved VM service account:
 
    ```sh
@@ -1142,10 +1146,17 @@ Set these deployment environment values to enable cloud authentication:
 | `SIGMA_CLOUD_PUBLIC_ORIGIN=https://sigma.example.org` | Exact public HTTPS origin, with no path or trailing slash. Used for callback and CSRF origin validation. |
 | `GOOGLE_OIDC_CLIENT_ID` | Google OAuth web client ID. |
 | `GOOGLE_OIDC_CLIENT_SECRET` | Google OAuth web client secret; keep server-side only. |
-| `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` | Verified email permitted to establish the first administrator. Its first Google subject is permanently bound in the auth database. |
-| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public contact address used to prefill an invitation request. SIGMA opens a mail draft and never sends it. |
+| `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` | Exact verified Google account permitted to establish the first administrator. Its first Google subject is permanently bound in the auth database. This is an authorization setting, not a contact field. |
+| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public contact address used to prefill an invitation request. SIGMA opens a mail draft and never sends it; this value grants no access or role. |
 | `SIGMA_CLOUD_AUTH_HOME=/var/lib/sigma-auth` | Absolute, service-owned private directory; mode 0700. The SQLite database is mode 0600. |
 | `SIGMA_CLOUD_DEMO_AUDIT=/opt/sigma/cloud-demo/handshake-demo-audit.json` | Absolute path to the curated, server-owned, read-only Project Audit v2 snapshot served to guests. It is separate from private project storage and required for the public Demo. |
+
+Keep these settings conceptually separate. They may contain the same address
+only when the approved public contact is also the exact Google account intended
+to receive the initial, configuration-bound administrator role. A general
+support or operations contact must not be substituted for that identity. The
+bootstrap value cannot be inferred from the contact, and changing it changes
+which verified Google account can claim the initial administrator binding.
 
 Create a Google OAuth client for a web application. Register the exact redirect
 URI `${SIGMA_CLOUD_PUBLIC_ORIGIN}/api/cloud-auth/callback`. SIGMA uses Google's

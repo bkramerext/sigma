@@ -1,5 +1,28 @@
 # SIGMA status
 
+## Issue #186 bootstrap administrator versus admin contact (2026-10-26)
+
+Reviewed the auth service and deployment preflight. `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`
+is an authorization input: the first verified Google identity matching it is
+bound to the configured email and granted admin; later sign-ins require both
+that email and the bound Google subject. `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is
+only invitation-contact display metadata and grants no access. Replacing or
+falling back to the contact would change which account can claim the initial,
+non-revocable administrator role. Therefore the settings remain distinct; they
+may be equal only when the approved contact is intentionally that same Google
+account. No authorization code or live production configuration was changed.
+
+Updated the deployment env example and runbook to state the identity distinction,
+and added a cloud-auth regression proving the contact account is denied and
+does not receive an authenticated session/workspace. `tests/cloud_auth.py` (17
+tests) and `tests/gce_host.py` (18 tests, including deployment env preflight)
+passed. The first `./sigma test` run reached Ruff format and reported only the
+new test's formatting. After formatting it, `./sigma test` passed all scenarios,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck and production
+build. The build emitted the existing large-chunk advisory. No browser check
+applied to this auth configuration and documentation change. No provider calls,
+costs, or live production operations occurred.
+
 ## Host Caddy and GCE Compose port contract (2026-10-26)
 
 Kept host Caddy as the GCE public HTTPS endpoint. `deploy/compose.gce.yaml`
