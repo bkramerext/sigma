@@ -121,6 +121,47 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_research_route_never_invokes_live_start(self):
+        from sigma import research_sessions
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+        }):
+            self.assertEqual(self.client.post(
+                "/api/cloud-auth/mock/select", params={"identity": "member-a"},
+                headers=origin,
+            ).status_code, 200)
+            created = self.client.post(
+                "/api/projects/create",
+                json={"title": "Research fixture", "problem": "Test mock research."},
+                headers=origin,
+            )
+            self.assertEqual(created.status_code, 201, created.text)
+            project = created.json()
+            with patch.object(research_sessions, "start_session", side_effect=AssertionError(
+                "Real research start must never run in mock mode"
+            )), patch.object(research_sessions, "mock_session", return_value={
+                "id": "mock-session", "status": "queued", "simulated": True,
+            }) as fake:
+                response = self.client.post(
+                    "/api/projects/research-sessions/mock",
+                    json={"path": project["path"], "strategy_id": "fixture-strategy",
+                          "expected_project_id": project["project"]["id"],
+                          "idempotency_key": "11111111-1111-4111-8111-111111111111"},
+                    headers=origin,
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()["simulated"])
+                fake.assert_called_once()
+            blocked = self.client.post(
+                "/api/projects/research-sessions/start", json={}, headers=origin,
+            )
+            self.assertEqual(blocked.status_code, 403)
+
     def test_mock_member_projects_are_not_visible_to_other_members(self):
         origin = {"Origin": "http://127.0.0.1:5173"}
         with patch.dict(os.environ, {
