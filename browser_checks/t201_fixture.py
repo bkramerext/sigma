@@ -55,6 +55,7 @@ limits = research_sessions.get_limits(str(path))
 research_sessions.save_limits(str(path), {**limits, "research_rounds": 1, "model_calls": 2})
 index = research_sessions._prior_session_obligations_index(str(path), str(uuid4()), [strategy.id])
 call_log = Path(os.environ["SIGMA_T201_INFO"]).with_suffix(".calls")
+call_log.unlink(missing_ok=True)
 Path(os.environ["SIGMA_T201_INFO"]).write_text(
     json.dumps(
         {

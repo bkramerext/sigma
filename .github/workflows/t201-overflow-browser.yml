@@ -50,6 +50,8 @@ jobs:
           curl -fsS http://127.0.0.1:8000/openapi.json >/dev/null
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/t201_overflow.py
+          uv run --with playwright python browser_checks/t81_public_legal_pages.py
+          uv run --with playwright python browser_checks/guest_samples.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
