@@ -2820,7 +2820,6 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     absent evidence or followed into another project.
     """
     view = inspect_project(path)
-    directory = Path(view.path) / "research-sessions"
     if Path(view.path).suffix == ".json":
         from sigma.project_bundle import read_bundle
         import base64
@@ -2848,6 +2847,7 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
             except (ValueError, OSError):
                 unavailable += 1
         return records, unavailable
+    directory = Path(view.path) / "research-sessions"
     if directory.is_symlink():
         raise ProjectError("Research session directory must not be a symbolic link")
     if not directory.exists():
