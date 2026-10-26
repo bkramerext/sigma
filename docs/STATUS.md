@@ -1,5 +1,20 @@
 # SIGMA status
 
+## Issue #215 — request-toast expiry (2026-10-26)
+
+Request-error toasts now expire after 60 seconds, slide downward before removal,
+and collapse their stack slot so remaining toasts reflow smoothly. Each toast
+has an independent timer; manual dismissal remains available, reduced-motion
+users receive immediate expiration, and the existing four-toast/mobile width
+limits remain intact.
+
+Seven fake-clock Node tests cover timing, independent lifetimes, manual and
+simultaneous dismissal, burst/cleanup behavior, reduced motion, and the CSS
+exit contract. A real-Chrome check verified the downward transform, stack
+reflow, reduced-motion mode, and 390px layout. The complete `./sigma test`
+passed, including Ruff, Pyright, frontend typecheck, and production build. No
+provider calls or research projects were involved.
+
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
 Replaced the “Continue from Saved Evidence” control with an explicitly

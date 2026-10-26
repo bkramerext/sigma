@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import './request-toast.css';
+import { RequestToastStore } from './request-toast-store.js';
 
-type Failure = { id: number; message: string };
-const listeners = new Set<(failure: Failure) => void>();
-let nextId = 0;
+const toastStore = new RequestToastStore();
 
 export function reportRequestFailure(message: string) {
-  const failure = { id: ++nextId, message };
-  listeners.forEach(listener => listener(failure));
+  toastStore.add(message);
 }
 
 function describeError(body: unknown): string | null {
@@ -67,16 +65,15 @@ export function installRequestErrorToasts() {
 }
 
 export function RequestErrorToasts() {
-  const [failures, setFailures] = useState<Failure[]>([]);
-  useEffect(() => {
-    const receive = (failure: Failure) => setFailures(current => [...current, failure].slice(-4));
-    listeners.add(receive);
-    return () => { listeners.delete(receive); };
-  }, []);
+  const failures = useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, toastStore.getSnapshot);
   return <div className="request-toast-stack" aria-label="Request errors">
-    {failures.map(failure => <div className="request-toast" role="alert" key={failure.id}>
-      <div className="request-toast-content"><strong>Request Failed</strong><p>{failure.message}</p></div>
-      <button type="button" aria-label="Dismiss request error" onClick={() => setFailures(current => current.filter(item => item.id !== failure.id))}>Dismiss</button>
+    {failures.map(failure => <div className="request-toast-item" data-phase={failure.phase} key={failure.id}>
+      <div className="request-toast-item-inner">
+        <div className="request-toast" data-phase={failure.phase} role="alert">
+          <div className="request-toast-content"><strong>Request Failed</strong><p>{failure.message}</p></div>
+          <button type="button" aria-label="Dismiss request error" onClick={() => toastStore.dismiss(failure.id)}>Dismiss</button>
+        </div>
+      </div>
     </div>)}
   </div>;
 }
