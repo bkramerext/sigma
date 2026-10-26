@@ -1392,7 +1392,7 @@ def create_json_project(
     difficulty: str = "medium",
     show_advanced_outcome_details: bool = False,
 ) -> ProjectView:
-    """Explicit single-file creation until research storage supports JSON paths."""
+    """Create a durable, single-file JSON project in the current owner root."""
     title, name = _project_name(title)
     problem = _text(problem, "Research problem", 20000)
     root = projects_root()
