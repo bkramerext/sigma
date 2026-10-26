@@ -1136,7 +1136,9 @@ def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -
     metadata = next(
         (item for item in record.get("artifacts", []) if item.get("filename") == filename), None
     )
-    if metadata is None or Path(filename).name != filename:
+    if (metadata is None or not isinstance(filename, str)
+        or filename in {"", ".", ".."} or Path(filename).name != filename
+        or "/" in filename or "\\" in filename):
         raise ProjectError("Research output artifact not found")
     execution_directory = _execution_directory(path)
     bundle_path = _execution_bundle_path(execution_directory)
