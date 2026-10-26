@@ -1,5 +1,60 @@
 # SIGMA status
 
+## T146 Increment 22 authorized live comparison (2026-10-26)
+
+Executed the one owner-authorized OpenAI API comparison after a successful
+project-scoped-key Models API lookup for `gpt-6.1-sol` with the configured
+project context. The first recorded metadata attempt returned 401; later
+metadata lookups succeeded, and both results are preserved. No credential
+value was written to the repository. The frozen protocol manifest remained
+valid.
+
+The fair coin selected the four-turn single-agent baseline first. It used all
+four calls and found a valid makespan-10 schedule and lower bound, but then
+adopted a false self-critique claiming the task's eligibility/precedence data
+were missing and withdrew its correct conclusion. The production SIGMA
+Investigator/Skeptic workflow used two calls in one cycle. The Investigator
+found a valid makespan-10 schedule and lower bound, and its isolated Python
+enumeration checked 2,016 assignment/order cases. The Skeptic received the
+saved work and completed computation, confirmed the result, and stopped
+productively without a substantive objection or a second Investigator cycle.
+The independent checker confirms the proposed makespan-13 schedule is valid
+and the exact optimum is 10. In this case the Skeptic did not materially
+improve the result; the one-cycle record demonstrates evidence transfer, not
+multi-cycle revision.
+
+Provider usage was 18,586 input and 9,948 output tokens across six completed
+Responses. Usage-derived charge at the frozen Standard rates was $0.145100;
+the conservative settled-ledger cost was $0.145945, below the $0.67 per-arm
+local ceilings and $1.32768 full reservation. Brian confirmed the project's
+$1.40 enforced limit. A billing dashboard export was unavailable, so posted
+project aggregate spend was not independently observed. No response clipped
+or had uncertain usage. Arm times were 79.678 seconds (baseline) and 104.935
+seconds (SIGMA); overall elapsed time was 232.236 seconds including the local
+setup correction. Full transcripts, raw requests/responses, usage, ledgers,
+SIGMA project/session/Outcome, computation, preflight attempts, checker output,
+and assessment are under
+[`T146 trial evidence`](evaluations/increment_22/exports/trial_20261025/assessment.md).
+
+Reconciled the branch with current `main` at
+`6c9ebbb0d588cadc885c724b90ff51420935ba55`, preserving the T128 Cloud unit
+change. On the merged tree, `./sigma test` ran through Ruff check/format,
+Pyright (0 diagnostics), and frontend typecheck, but exited 1 in three existing
+deployment assertions (`tests/deployment_package.py`, `tests/gce_host.py`,
+`tests/host_monitor.py`) that still expect the former explicit
+`srv-sigma\\x2dstate.mount` dependency. The merged unit instead uses
+`RequiresMountsFor=/srv/sigma-state`. Cloud files were not changed for T146.
+The frontend production build passed separately; it reports the existing
+greater-than-500-kB chunk advisory. The frozen protocol hashes verify, the
+credential scan found zero artifact matches, and a SHA-256 manifest covers all
+67 evidence files. Final-head GitHub Actions status is pending publication.
+
+T147 is recommended for a narrowly scoped diagnosis, but was not started.
+The saved Skeptic output combines `assessment=stop`, `stop_reason=unresolved`,
+and `strategy_contribution=solution`, while the coordinator records a
+productive stop with an achieved objective and no open obligations. No merge
+was performed; PR #150 remains the review boundary.
+
 ## T132 Red hosted research and Python/Sage execution audit (2026-10-25)
 
 Started from current `main` at `803a62d` on `red/t132-hosted-research-execution`.
