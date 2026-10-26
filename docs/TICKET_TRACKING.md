@@ -45,7 +45,7 @@
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
 | T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
 | T22 | Cloud deployment | Gates A/C merged; Gate B PR #49 refreshed against main `803e655` and R4R; deployment prep PR #52 open; T22.5 remains separate and unimplemented | Red |
-| T171 | Pre-deployment host security and runtime readiness audit | Offline audit BLOCKED for production start; live host checks intentionally not run · [ticket](../tickets/t171.md) · [assessment](T171_HOST_READINESS.md) | Red |
+| T171 | Pre-deployment host security and runtime readiness audit | R4R · [PR #175](https://github.com/bkramerext/sigma/pull/175) · Offline launch assessment BLOCKED · [ticket](../tickets/t171.md) · [assessment](T171_HOST_READINESS.md) | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
 | T100 | Local validation of production-compatible persistent storage and real-Chrome restart/restore acceptance | Implementing · [issue #100](https://github.com/bkramerext/sigma/issues/100) | Red |
 | T89 | Ship-ready stock sample curation, increment 1 | R4R · [PR #120](https://github.com/bkramerext/sigma/pull/120) · [issue #89](https://github.com/bkramerext/sigma/issues/89) · [implementation](evaluations/t89-stock-sample-curation-increment1.md) · prior audit [PR #115](https://github.com/bkramerext/sigma/pull/115) | Gray |

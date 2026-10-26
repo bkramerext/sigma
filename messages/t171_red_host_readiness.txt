@@ -2,7 +2,7 @@ R4R — T171 pre-deployment host security and runtime readiness audit
 
 Branch: red/t171-host-readiness
 Base: main (fresh worktree from origin/main b33e994)
-PR: pending
+PR: https://github.com/bkramerext/sigma/pull/175
 
 Result: BLOCKED for production start. Offline implementation review is
 complete, but no live GCE host verification was authorized in this assignment.
