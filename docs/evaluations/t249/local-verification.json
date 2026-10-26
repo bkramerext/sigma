@@ -7,8 +7,8 @@
         "tests/project_bundle.py"
       ],
       "exit_code": 1,
-      "seconds": 0.04,
-      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 641, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 124, in main\n    assert import_bundle(read_bundle(migrated), imported) == imported\n           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/admin/sigma_blue/src/sigma/project_bundle.py\", line 396, in import_bundle\n    raise BundleError(\"Cannot import foreign research session\")\nsigma.project_bundle.BundleError: Cannot import foreign research session\n",
+      "seconds": 0.27,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_blue/src/sigma/project_bundle.py\", line 190, in read_file\n    return _decode(json.loads(path.read_text(encoding=\"utf-8\")))[relative_path]\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\nKeyError: 'artifacts/trace.bin'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 641, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 489, in main\n    assert read_file(created.path, \"artifacts/trace.bin\") == bytes(range(256))\n           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/admin/sigma_blue/src/sigma/project_bundle.py\", line 192, in read_file\n    raise BundleError(\"Cannot read project bundle member\") from exc\nsigma.project_bundle.BundleError: Cannot read project bundle member\n",
       "stdout": ""
     },
     "compile": {
@@ -54,10 +54,10 @@
         "/Users/admin/sigma_blue/.venv/bin/python",
         "tests/project_creation.py"
       ],
-      "exit_code": 1,
-      "seconds": 0.68,
-      "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\nTraceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_creation.py\", line 308, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_creation.py\", line 136, in main\n    ).read_text() == \"Concurrent research\"\n      ~~~~~~~~~^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/pathlib/__init__.py\", line 787, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:\n         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/pathlib/__init__.py\", line 771, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmphcomm60p/managed/preserve-partial.sigma/notes.txt'\n",
-      "stdout": "PASS all research types serialized/reopened, destination preview, collision and strategy integrity\nPASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection\n"
+      "exit_code": 0,
+      "seconds": 3.53,
+      "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
+      "stdout": "PASS all research types serialized/reopened, destination preview, collision and strategy integrity\nPASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection\nPASS publication rollback, concurrent data preservation and exclusive name reservation\nPASS API create/preview/errors and both CLI research modes\nPASS v1/v2/v3 default-mode reads without rewriting and retained history on writes\nPASS explicit default/configured roots, missing parents, ownership and root symlinks\nAll project-creation scenarios passed.\n"
     },
     "simulation:project_reports.py": {
       "command": [
@@ -65,7 +65,7 @@
         "tests/project_reports.py"
       ],
       "exit_code": 0,
-      "seconds": 0.26,
+      "seconds": 0.27,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS empty and populated reports, lifecycle/outcome distinction, UTF-8 and escaping\nPASS report API formats and unchanged Project Audit export\n"
     },
@@ -75,7 +75,7 @@
         "tests/project_settings.py"
       ],
       "exit_code": 0,
-      "seconds": 0.78,
+      "seconds": 0.81,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen\nPASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes\nPASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior\n"
     },
@@ -85,7 +85,7 @@
         "tests/python_sandbox.py"
       ],
       "exit_code": 0,
-      "seconds": 0.5,
+      "seconds": 0.51,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API\n"
     },
@@ -95,9 +95,9 @@
         "tests/research_sessions.py"
       ],
       "exit_code": 0,
-      "seconds": 40.69,
+      "seconds": 40.36,
       "stderr": "",
-      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.779s\nPersistent research session scenarios passed.\n"
+      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.771s\nPersistent research session scenarios passed.\n"
     },
     "simulation:sage_execution.py": {
       "command": [
@@ -105,20 +105,20 @@
         "tests/sage_execution.py"
       ],
       "exit_code": 0,
-      "seconds": 0.79,
+      "seconds": 0.65,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery\n"
     }
   },
   "failing_or_unavailable": [
-    "bundle_simulation",
-    "simulation:project_creation.py"
+    "bundle_simulation"
   ],
   "initial_git_status": "?? gmail_test.py\n?? smtp_test.py\n",
   "passing": [
     "compile",
     "docker_info",
     "docker_images",
+    "simulation:project_creation.py",
     "simulation:project_reports.py",
     "simulation:project_settings.py",
     "simulation:python_sandbox.py",
@@ -126,7 +126,7 @@
     "simulation:sage_execution.py"
   ],
   "python": "/Users/admin/sigma_blue/.venv/bin/python",
-  "tested_head": "d9626d788243cb4f585da22c6183f843e2869cab",
+  "tested_head": "437cde85a4c038ebc91b096e10474ec0fb94324d",
   "ticket": "T249",
-  "utc": "2026-10-26T23:24:52.732676+00:00"
+  "utc": "2026-10-26T23:28:40.525352+00:00"
 }
