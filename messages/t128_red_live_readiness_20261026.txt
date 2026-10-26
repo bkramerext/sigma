@@ -1,6 +1,6 @@
 R4R — T128 host-readiness preflight socket correction
 
-PR: pending creation
+PR: https://github.com/bkramerext/sigma/pull/199
 Branch: red/t128-rootless-preflight-socket
 Base: current `main` `3cba4e1` after rebase; host fix builds on PR #195
 Ticket: #98 / T128

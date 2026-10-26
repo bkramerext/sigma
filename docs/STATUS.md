@@ -56,7 +56,8 @@ Using PR #195's current-main preflight as the basis, live
 failure: Docker was invoked as root with `--host /run/user/1001/docker.sock`,
 which Docker parsed as TCP `localhost:2375`. Running it as `sigma-sandbox`
 with the explicit `unix:///run/user/1001/docker.sock` endpoint fixed the rootless
-checks while preserving inherited-context clearing. The reviewed script was
+checks while preserving inherited-context clearing. The fix is in
+[PR #199](https://github.com/bkramerext/sigma/pull/199). The reviewed script was
 copied temporarily to `/tmp`, run read-only as root, and removed. The live
 host gate exited 0: all rows PASS, including Ubuntu, UUID/fstab mount,
 `nodev,nosuid,noexec`, private root ownership and sandbox denial, active/enabled
