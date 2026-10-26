@@ -240,9 +240,17 @@ def main() -> None:
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             assert _allocate_session_number(created.path, []) == 1
             assert _allocate_session_number(created.path, []) == 2
+            # Two concurrent allocators must never issue the same session number.
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                numbers = list(executor.map(
+                    lambda _: _allocate_session_number(created.path, []), range(24)
+                ))
+            assert sorted(numbers) == list(range(3, 27))
             assert json.loads(read_file(created.path, "research-sessions/sequence.json"))[
                 "next_session_number"
-            ] == 3
+            ] == 27
             assert save_limits(created.path, dict(DEFAULT_LIMITS)) == dict(DEFAULT_LIMITS)
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             from sigma.research_sessions import _snapshot
