@@ -187,16 +187,33 @@ def main() -> None:
             assert Path(created.path).is_file()
             assert Path(created.path).suffix == ".json"
             assert inspect_project(created.path).project == created.project
-            # Until execution records and binary outputs are bundle-backed,
-            # fail explicitly rather than attempting directory creation beneath
-            # the JSON file and leaving ambiguous partial state.
-            from sigma.python_sandbox import _execution_directory
-            try:
-                _execution_directory(created.path)
-            except ProjectError as exc:
-                assert "not yet supported" in str(exc)
-            else:
-                raise AssertionError("JSON execution storage was incorrectly treated as a directory")
+            # Execution records and binary outputs are stored as bundle members;
+            # only transient liveness locks use the private sidecar directory.
+            from sigma.python_sandbox import (
+                _execution_directory, _save_record, get_execution,
+                get_execution_artifact, list_executions,
+            )
+            from uuid import uuid4
+            execution_id = str(uuid4())
+            execution = {
+                "id": execution_id, "project_id": created.project.id,
+                "created_at": "2026-10-26T12:00:00+00:00",
+                "status": "completed", "runtime": "python",
+                "session_id": None, "strategy_id": None, "cycle": None,
+                "source": "print('portable')",
+            }
+            _save_record(
+                _execution_directory(created.path), execution,
+                (("result.bin", "application/octet-stream", bytes(range(128))),),
+            )
+            saved_execution = get_execution(created.path, execution_id)
+            assert saved_execution["status"] == "completed"
+            assert [item["id"] for item in list_executions(created.path)] == [execution_id]
+            contents, media_type = get_execution_artifact(created.path, execution_id, "result.bin")
+            assert contents == bytes(range(128))
+            assert media_type == "application/octet-stream"
+            assert f"research-executions/{execution_id}.json" in list_files(created.path)
+            assert f"research-executions/{execution_id}.artifacts/result.bin" in list_files(created.path)
             assert created.project.id in {item.project.id for item in list_json_projects()}
             assert json.loads(export_complete_project(created.path)) == read_bundle(created.path)
             try:
