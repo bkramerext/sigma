@@ -5,6 +5,7 @@ on:
       - 'src/sigma/project_bundle.py'
       - 'src/sigma/projects.py'
       - 'src/sigma/research_sessions.py'
+      - 'src/sigma/python_sandbox.py'
       - 'tests/project_bundle.py'
       - '.github/workflows/t249-project-bundle.yml'
   workflow_dispatch:
