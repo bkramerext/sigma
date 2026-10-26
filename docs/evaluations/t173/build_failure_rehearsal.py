@@ -36,6 +36,10 @@ def main() -> None:
 
         def runner(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
             calls.append(argv)
+            if argv[:2] == ["python3", str(checkout / "deploy/release_image.py")]:
+                if argv[2] == "build":
+                    return subprocess.CompletedProcess(argv, 17, "", "fixture failure")
+                return subprocess.CompletedProcess(argv, 0, "fixture", "")
             if argv[:1] == ["python3"]:
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
             if argv[:3] == ["git", "-C", str(checkout)]:
@@ -45,19 +49,13 @@ def main() -> None:
                     return subprocess.CompletedProcess(argv, 0, old_sha, "")
                 if argv[3] in {"fetch", "cat-file"}:
                     return subprocess.CompletedProcess(argv, 0, "", "")
-            if argv[:3] == ["docker", "compose", "--project-name"] and argv[-3:] == [
-                "build",
-                "backend",
-                "frontend",
-            ]:
-                return subprocess.CompletedProcess(argv, 17, "", "fixture failure")
             raise AssertionError(f"unexpected release command: {argv}")
 
         deployment = module.Deployment(checkout, deploy_env, root / "preflight.py", runner, False)
         try:
             deployment.deploy(candidate_sha, backup_verified=True, schema_compatible=True)
         except module.DeployFailure as error:
-            assert "command failed (docker, exit 17)" in str(error)
+            assert "command failed (python3, exit 17)" in str(error)
         else:
             raise AssertionError("failed candidate build unexpectedly succeeded")
 
