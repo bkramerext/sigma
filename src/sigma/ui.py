@@ -111,22 +111,17 @@ def run_ui(*, navigate: bool = False, signin: bool = False) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
-        local_google_auth = signin or bool(os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip())
-        if local_google_auth:
-            if not os.environ.get("GOOGLE_OIDC_CLIENT_ID") or not os.environ.get(
-                "GOOGLE_OIDC_CLIENT_SECRET"
-            ):
-                raise RuntimeError(
-                    "Local Google sign-in needs GOOGLE_OIDC_CLIENT_ID and "
-                    "GOOGLE_OIDC_CLIENT_SECRET configured."
-                )
-            if not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip():
-                raise RuntimeError(
-                    "Local Google sign-in needs SIGMA_CLOUD_ADMIN_CONTACT_EMAIL "
-                    "set to the designated administrator's actual Google account."
-                )
-        elif warning := local_google_configuration_warning():
-            print(warning, file=sys.stderr, flush=True)
+        admin_email = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
+        if signin and not admin_email:
+            print(
+                "Cannot start SIGMA with --signin.\n\n"
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL is not configured.\n"
+                "Set it to your local SIGMA administrator email and retry.\n\n"
+                'Example:\n  export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"\n'
+                "  ./sigma start --signin --navigate",
+                file=sys.stderr,
+            )
+            return 2
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:
@@ -153,16 +148,13 @@ def run_ui(*, navigate: bool = False, signin: bool = False) -> int:
                 ]
                 instance_id = uuid4().hex
                 child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
-                if local_google_auth:
-                    child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
-                    child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
-                    child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
-                    child_env.setdefault(
-                        "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
-                    )
-                else:
-                    child_env.pop("SIGMA_CLOUD_AUTH_LOCAL", None)
-                    child_env.pop("SIGMA_CLOUD_AUTH_ENABLED", None)
+                child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
+                child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
+                child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
+                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
+                child_env.setdefault(
+                    "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
+                )
                 for command in commands:
                     children.append(
                         subprocess.Popen(
