@@ -74,7 +74,7 @@ sync -f "$MOUNT"
 disk_name=$(gcloud compute disks describe "$SIGMA_BACKUP_DISK" \
   --project "$SIGMA_BACKUP_PROJECT" --zone "$SIGMA_BACKUP_ZONE" --format='value(name)')
 [[ $disk_name == "$SIGMA_BACKUP_DISK" ]] || fail 'configured source disk was not found'
-stamp=$(date -u +%Y%m%dT%H%M%SZ)
+stamp=$(date -u +%Y%m%dt%H%M%Sz)
 snapshot="sigma-state-${stamp}"
 log "creating snapshot ${snapshot} from ${SIGMA_BACKUP_DISK}"
 gcloud compute disks snapshot "$SIGMA_BACKUP_DISK" \
@@ -103,7 +103,7 @@ gcloud compute snapshots list --project "$SIGMA_BACKUP_PROJECT" \
   --filter='labels.sigma-daily-backup=true AND status=READY' \
   --format='json(name,creationTimestamp,labels,sourceDisk)' > "$listing"
 python3 /usr/local/libexec/sigma/backup-retention.py "$listing" "$SIGMA_BACKUP_RETENTION" | while IFS= read -r old_snapshot; do
-  [[ $old_snapshot =~ ^sigma-state-[0-9]{8}T[0-9]{6}Z$ ]] || fail "refusing unexpected snapshot name: ${old_snapshot}"
+  [[ $old_snapshot =~ ^sigma-state-[0-9]{8}t[0-9]{6}z$ ]] || fail "refusing unexpected snapshot name: ${old_snapshot}"
   log "pruning expired managed snapshot ${old_snapshot}"
   gcloud compute snapshots delete "$old_snapshot" --project "$SIGMA_BACKUP_PROJECT" --quiet
 done

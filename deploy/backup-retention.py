@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-NAME = re.compile(r"^sigma-state-[0-9]{8}T[0-9]{6}Z$")
+NAME = re.compile(r"^sigma-state-[0-9]{8}t[0-9]{6}z$")
 
 
 def expired_snapshots(path: Path, retention: int) -> list[str]:
@@ -46,7 +46,8 @@ def main() -> int:
     try:
         if len(sys.argv) != 3:
             raise ValueError("usage: backup-retention.py SNAPSHOTS.json RETENTION")
-        print("\n".join(expired_snapshots(Path(sys.argv[1]), int(sys.argv[2]))))
+        for name in expired_snapshots(Path(sys.argv[1]), int(sys.argv[2])):
+            print(name)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         print(f"FAIL retention planning: {exc}", file=sys.stderr)
         return 1
