@@ -169,42 +169,62 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
     return dict(_cached)
 
 
+async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
+    from sigma.config_secrets import SecretConfigurationError, secret_value
+
+    if subject_hash is None:
+        return AuthContext(token="", mode="chatgpt", status="unavailable", identity="cloud_unbound")
+    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+    if provider == "chatgpt":
+        from sigma.cloud_sponsor import sponsor_session
+
+        selected = await sponsor_session()
+        account = selected.get("account") or {}
+        return AuthContext(
+            token=account.get("access_token", ""),
+            mode="chatgpt",
+            status=selected["status"],
+            identity=f"cloud_sponsor:{subject_hash}:" + str(selected.get("account_id", "")),
+        )
+    if provider != "api_key":
+        return AuthContext(token="", mode="chatgpt", status="unavailable", identity="cloud_invalid")
+    try:
+        token = secret_value("SIGMA_CLOUD_OPENAI_API_KEY") or ""
+    except SecretConfigurationError:
+        token = ""
+    return AuthContext(
+        token=token,
+        mode="api_key",
+        status="connected" if token else "unconfigured",
+        identity=f"cloud_service_api_key:{subject_hash}" if token else "cloud_unconfigured",
+    )
+
+
 async def auth_context() -> AuthContext:
     # Google OIDC identifies a cloud workspace; it does not grant use of the
-    # local operator's account or API key. Cloud inference uses only an
-    # explicitly provisioned sponsor session or service key, bounded by the durable
-    # cloud research ledger. Local mode retains its existing account selection.
+    # local operator's account or API key. Hosted personal access remains behind
+    # an unavailable adapter. Sponsor access requires an explicit stored choice.
     from sigma import cloud_workspaces
 
     if cloud_workspaces.enabled():
-        from sigma.config_secrets import SecretConfigurationError, secret_value
+        from sigma import cloud_auth, cloud_personal
 
-        provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
-        if provider == "chatgpt":
-            from sigma.cloud_sponsor import sponsor_session
-
-            selected = await sponsor_session()
-            account = selected.get("account") or {}
+        workspace = cloud_workspaces.current()
+        subject = workspace.verified_subject if workspace else None
+        subject_hash = workspace.subject_hash if workspace else None
+        if not subject:
             return AuthContext(
-                token=account.get("access_token", ""),
-                mode="chatgpt",
-                status=selected["status"],
-                identity="cloud_sponsor:" + str(selected.get("account_id", "")),
-            )
-        if provider != "api_key":
-            return AuthContext(
-                token="", mode="chatgpt", status="unavailable", identity="cloud_invalid"
+                token="", mode="chatgpt", status="unavailable", identity="cloud_unbound"
             )
         try:
-            token = secret_value("SIGMA_CLOUD_OPENAI_API_KEY") or ""
-        except SecretConfigurationError:
-            token = ""
-        return AuthContext(
-            token=token,
-            mode="api_key",
-            status="connected" if token else "unconfigured",
-            identity="cloud_service_api_key" if token else "cloud_unconfigured",
-        )
+            selected_mode = cloud_auth.model_access_for_subject(subject)
+        except (RuntimeError, OSError):
+            return AuthContext(
+                token="", mode="chatgpt", status="unavailable", identity="cloud_state_unavailable"
+            )
+        if selected_mode == "personal":
+            return cloud_personal.auth_context(subject_hash)
+        return await _cloud_sponsored_context(subject_hash)
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":
@@ -235,7 +255,7 @@ def cloud_credential(context: Mapping[str, Any]) -> bool:
             (
                 provider == "api_key"
                 and context.get("mode") == "api_key"
-                and context.get("identity") == "cloud_service_api_key"
+                and str(context.get("identity", "")).startswith("cloud_service_api_key:")
             )
             or (
                 provider == "chatgpt"
@@ -243,6 +263,16 @@ def cloud_credential(context: Mapping[str, Any]) -> bool:
                 and str(context.get("identity", "")).startswith("cloud_sponsor:")
             )
         )
+    )
+
+
+async def sponsored_auth_context(subject_hash: str | None = None) -> AuthContext:
+    """Check the designated sponsor independently of the user's current choice."""
+    from sigma import cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    return await _cloud_sponsored_context(
+        subject_hash or (workspace.subject_hash if workspace else None)
     )
 
 
@@ -335,7 +365,14 @@ async def connection(
             await asyncio.shield(_pending)
         state = dict(_cached or _result("unavailable", None))
     label, guidance = (PLAN_MESSAGES if mode == "chatgpt" else MESSAGES)[state["status"]]
-    if cloud_workspaces.enabled() and mode == "chatgpt":
+    if cloud_workspaces.enabled() and str(context.get("identity", "")).startswith(
+        "cloud_personal_unavailable:"
+    ):
+        label = "Personal ChatGPT connection unavailable"
+        from sigma.cloud_personal import UNAVAILABLE_GUIDANCE
+
+        guidance = UNAVAILABLE_GUIDANCE
+    elif cloud_workspaces.enabled() and mode == "chatgpt":
         label = "SIGMA-sponsored ChatGPT · " + str(state["status"]).replace("_", " ")
         if state["status"] != "connected":
             guidance = (

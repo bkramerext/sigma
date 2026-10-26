@@ -67,6 +67,8 @@ def main() -> None:
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
                 "SIGMA_CLOUD_AUTH_HOME": str(root / "auth"),
                 "SIGMA_CLOUD_OPENAI_API_KEY": "fixture-sponsored-credential",
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": ui_url,
                 "SIGMA_TEST_BROWSER_ORIGIN": ui_url,
                 "SIGMA_CLOUD_WORKSPACES_ROOT": str(root / "workspaces"),
@@ -133,14 +135,16 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
     denied_email: str | None = None
     next_login = "A"
     login_attempts: list[str] = []
+    selected_connections: dict[str, str] = {}
     budget = {
         "allowance_usd": 2.0,
-        "estimated_usage_usd": 2.0,
+        "estimated_usage_usd": 0.0,
         "held_usd": 0.0,
-        "reserved_and_estimated_usd": 2.0,
-        "remaining_usd": 0.0,
+        "reserved_and_estimated_usd": 0.0,
+        "remaining_usd": 2.0,
         "unknown_provider_attempts": 0,
     }
+    invitation_requests: list[dict[str, str]] = []
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
@@ -175,12 +179,21 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             identity = principal
 
         def forward_api(route) -> None:
-            route.fulfill(
-                response=route.fetch(
-                    url=route.request.url.replace(ui_url, api_url),
-                    headers={**route.request.headers, **headers_for(identity)},
+            if route.request.url.endswith("/api/cloud-auth/invitation-request"):
+                invitation_requests.append(
+                    {"method": route.request.method, "body": route.request.post_data or ""}
                 )
+                route.fulfill(status=200, content_type="application/json", body='{"status":"sent"}')
+                return
+            response = route.fetch(
+                url=route.request.url.replace(ui_url, api_url),
+                headers={**route.request.headers, **headers_for(identity)},
             )
+            if route.request.url.endswith("/api/ai/mode") and response.ok and identity:
+                selected_connections[identity["subject"]] = json.loads(route.request.post_data)[
+                    "mode"
+                ]
+            route.fulfill(response=response)
 
         def auth_status(route) -> None:
             route.fulfill(
@@ -192,6 +205,19 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                         "enabled": True,
                         "ready": True,
                         "authenticated": identity is not None,
+                        "account": (
+                            {
+                                "model_access": {
+                                    "mode": selected_connections.get(
+                                        identity["subject"], "personal"
+                                    ),
+                                    "connection": "checking",
+                                },
+                                "sponsorship": {"eligible": True},
+                            }
+                            if identity
+                            else None
+                        ),
                         "user": (
                             {"email": identity["email"], "role": identity.get("role", "member")}
                             if identity
@@ -224,6 +250,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             else:
                 denied_email = None
                 set_identity(ACCOUNTS[account])
+                selected_connections.setdefault(identity["subject"], "personal")
                 authorized = api_request("POST", "/__fixture/authorize", identity)
                 assert authorized.status_code == 200, authorized.text
                 location = ui_url + "/"
@@ -272,23 +299,43 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             assert rejected.status_code == 401, rejected.text
 
             page.goto(ui_url + "/", wait_until="networkidle")
-            expect(page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
-            expect(page.get_by_text("Explore only · no execution", exact=True)).to_be_visible()
-            expect(page.get_by_role("link", name="Explore SIGMA")).to_be_visible()
+            expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_be_visible()
+            expect(page.get_by_role("link", name="Continue with Google")).to_be_visible()
+            expect(page.get_by_role("link", name="Invite Me")).to_be_visible()
+            expect(page.get_by_role("link", name="Continue as Guest")).to_be_visible()
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-            page.get_by_role("link", name="Explore SIGMA").click()
+            page.get_by_role("link", name="Continue as Guest").click()
             expect(
                 page.get_by_role("heading", name="Explore a SIGMA research project")
             ).to_be_visible()
             assert not guest_ai_requests, guest_ai_requests
             page.goto(ui_url + "/", wait_until="networkidle")
-            page.get_by_role("link", name="Sign in with Google").click()
+            page.get_by_role("link", name="Continue with Google").click()
             expect(page).to_have_url(ui_url + "/")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             status_pill = page.locator(".account-model-status > summary")
             expect(status_pill).to_contain_text("Regular user")
+            expect(status_pill).to_contain_text("Personal ChatGPT · unavailable")
+            status_pill.click()
+            account = page.get_by_role("dialog", name="AI connection settings")
+            expect(
+                account.get_by_text(
+                    "Connect your own ChatGPT account through OpenAI authentication."
+                )
+            ).to_be_visible()
+            expect(
+                account.get_by_text(
+                    "Hosted personal ChatGPT authentication is unavailable", exact=False
+                )
+            ).to_be_visible()
+            sponsored_choice = account.get_by_role(
+                "button", name="Or you can use your allowance that's on us."
+            )
+            expect(sponsored_choice).to_be_visible()
+            sponsored_choice.click()
             expect(status_pill).to_contain_text("SIGMA-sponsored")
-            expect(status_pill).to_contain_text("budget exhausted")
+            expect(status_pill).not_to_contain_text("budget exhausted")
+            page.locator(".connection-backdrop").click(position={"x": 2, "y": 2})
             assert login_attempts == ["A"]
 
             # Reload preserves the deterministic fixture principal; protected project
@@ -361,6 +408,26 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                     "The SIGMA-sponsored model connection is reachable.", exact=False
                 )
             ).to_be_visible()
+            account.get_by_role("button", name="Use personal connection").click()
+            expect(google).to_contain_text("Personal ChatGPT · unavailable")
+            account.get_by_role(
+                "button", name="Or you can use your allowance that's on us."
+            ).click()
+            expect(google).to_contain_text("SIGMA-sponsored")
+            budget["remaining_usd"] = 0.0
+            budget["estimated_usage_usd"] = 2.0
+            budget["reserved_and_estimated_usd"] = 2.0
+            page.reload(wait_until="networkidle")
+            google = page.locator(".account-model-status > summary")
+            expect(google).to_contain_text("allowance exhausted")
+            google.click()
+            account = page.get_by_role("dialog", name="AI connection settings")
+            expect(
+                account.get_by_role("button", name="Or you can use your allowance that's on us.")
+            ).to_have_count(0)
+            expect(account.get_by_text("$0.00 remaining")).to_be_visible()
+            account.get_by_role("button", name="Use personal connection").click()
+            expect(google).to_contain_text("Personal ChatGPT · unavailable")
             page.evaluate("window.scrollTo(0, 0)")
             page.evaluate(
                 "path => window.localStorage.setItem('sigma.currentProject', path)",
@@ -371,11 +438,11 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             ).to_be_visible()
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
             expect(page).to_have_url(ui_url + "/")
-            expect(page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
+            expect(page.get_by_role("link", name="Continue with Google")).to_be_visible()
             assert page.evaluate("window.localStorage.getItem('sigma.currentProject')") is None
             assert api_request("GET", "/api/projects/recent").status_code == 401
 
-            page.get_by_role("link", name="Sign in with Google").click()
+            page.get_by_role("link", name="Continue with Google").click()
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             assert login_attempts == ["A", "B"]
             page.reload(wait_until="networkidle")
@@ -410,10 +477,17 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             page.locator(".account-model-status > summary").click()
             account = page.get_by_role("dialog", name="AI connection settings")
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
-            page.get_by_role("link", name="Sign in with Google").click()
-            expect(page.get_by_role("heading", name="Access not yet granted")).to_be_visible()
+            page.get_by_role("link", name="Continue with Google").click()
+            expect(
+                page.get_by_text("Your Google account is not yet invited to SIGMA.")
+            ).to_be_visible()
             expect(page.get_by_text(ACCOUNTS["denied"]["email"], exact=True)).to_be_visible()
             assert api_request("GET", "/api/projects/recent").status_code == 401
+            page.get_by_role("button", name="Invite Me", exact=True).click()
+            expect(
+                page.get_by_text("Glad you're interested! We'll get back to you!", exact=True)
+            ).to_be_visible()
+            assert invitation_requests == [{"method": "POST", "body": "{}"}]
             assert login_attempts == ["A", "B", "denied"]
             assert not errors, errors
         finally:
@@ -422,7 +496,8 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
 
     print(
         "PASS real Chrome guest Explore, Google identity A/member and B/admin transitions, "
-        "two-line status/dialog, sponsored connectivity failure/retry, exhausted budget display, "
+        "two-line status/dialog, explicit personal/sponsor switching, sponsored connectivity "
+        "failure/retry, allowance exhaustion and hidden sponsor choice, "
         "sign-out, denied access and isolated workspaces; only external identity/provider boundaries mocked"
     )
 

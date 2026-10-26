@@ -64,8 +64,11 @@ class SponsorTests(IsolatedAsyncioTestCase):
         )
         return path
 
+    async def sponsor_context(self):
+        return await openai_connection.sponsored_auth_context("a" * 64)
+
     async def test_missing_session_never_uses_local_or_service_credentials(self):
-        context = await openai_connection.auth_context()
+        context = await self.sponsor_context()
         self.assertEqual(context["mode"], "chatgpt")
         self.assertEqual(context["status"], "disconnected")
         self.assertEqual(context["token"], "")
@@ -80,7 +83,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             self.assertEqual(state["ext_agent_host_id"], host)
             self.assertEqual(len(state["accounts"]), 1)
             self.assertEqual(state["accounts"][state["active"]]["ext_agent_host_id"], host)
-        context = await openai_connection.auth_context()
+        context = await self.sponsor_context()
         self.assertEqual(context["token"], "fixture-access")
         self.assertEqual(context["status"], "connected")
         self.assertNotIn("fixture-access", repr(context))
@@ -116,7 +119,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             state["active"] = "wrong"
             state["accounts"] = {"wrong": self.account | {"email": "other@example.test"}}
         with patch.object(chatgpt_auth, "session", AsyncMock()) as session:
-            context = await openai_connection.auth_context()
+            context = await self.sponsor_context()
             session.assert_not_called()
         self.assertEqual(context["token"], "")
 
@@ -152,7 +155,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
                 transport=httpx.MockTransport(handler), **kwargs
             ),
         ):
-            result = await openai_connection.models()
+            result = await openai_connection.models(context=await self.sponsor_context())
         self.assertEqual(calls, ["/v1/models"])
         self.assertTrue(result["default_verified"])
         self.assertEqual(result["connection"]["accounts"], [])
@@ -173,7 +176,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             patch.object(chatgpt_auth, "http", AsyncMock(return_value=(200, {}))),
             patch.object(chatgpt_auth, "validate_tokens", AsyncMock(return_value=replacement)),
         ):
-            context = await openai_connection.auth_context()
+            context = await self.sponsor_context()
         self.assertEqual(context["token"], "rotated-access")
         async with ai_store.transaction() as state:
             self.assertEqual(state["accounts"]["sponsor"]["refresh_token"], "rotated-refresh")
@@ -184,7 +187,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
                 chatgpt_auth, "http", AsyncMock(return_value=(400, {"error": "invalid_grant"}))
             ),
         ):
-            context = await openai_connection.auth_context()
+            context = await self.sponsor_context()
         self.assertEqual(context["status"], "reauth_required")
         self.assertEqual(context["token"], "")
 

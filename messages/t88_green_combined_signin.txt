@@ -1,0 +1,68 @@
+# T88 Green R4R handoff
+
+## Scope and implementation
+
+Continued the preserved combined entry and invitation flow on branch
+`green/t88-combined-sign-in`, based on current `main` after T200 merge
+`48fe9a1fee87a23c1af1665f1f30723ef39d9e97`. The hosted dialog offers Google,
+Invite Me, and Guest at entry; invited users can explicitly select personal or
+sponsored access. It displays remaining sponsor allowance and hides the sponsor
+choice when exhausted. The existing local ChatGPT sign-in and Guest sample
+access remain intact.
+
+Hosted model selection and connection state are stored by verified Google
+subject. User stores use private hashed-subject directories, separate from the
+SIGMA sponsor store. No personal credential is shared across users, and
+sponsored inference uses only the designated sponsor connection with T200/T99
+allowance, budget, concurrency, reservation, and failure safeguards. Switching
+between connection choices preserves personal authentication state. No silent
+fallback exists.
+
+## Hosted personal limitation and adapter boundary
+
+The hosted personal adapter at `src/sigma/cloud_personal.py` deliberately
+returns unavailable with no credential. `src/sigma/openai_connection.py`
+selects this adapter for a user's explicit personal mode; sponsored mode
+separately selects SIGMA's sponsor connection. `POST /api/ai/mode` persists the
+choice for the verified subject and checks sponsor eligibility/remaining
+allowance before accepting sponsored selection. No browser-supplied identity
+or credential enters this path. Detailed store and routing boundary:
+`docs/T88_HOSTED_PERSONAL_CONNECTION.md`.
+
+The remaining external dependency is a confirmed supported OpenAI
+authorization path that permits hosted use of each user's ChatGPT plan. A
+website OAuth client is not assumed to confer plan-inference rights. No local
+helper transfer workaround was implemented. The hosted personal connection
+therefore remains unavailable until that dependency is resolved. No production
+configuration change, credential transfer, live OAuth, or paid provider call
+was made.
+
+## Evidence and verification
+
+- `tests/cloud_personal.py`: 3 deterministic tests for subject isolation,
+  distinct sponsor store, credential selection, per-user token refresh, and
+  switching.
+- `tests/cloud_auth.py`: 29 tests, including connection preference and
+  allowance-rejection behavior.
+- `tests/cloud_sponsor.py`: 8 tests.
+- Hosted research/API and funding tests passed with deterministic provider
+  mocks, including exhaustion, uncertain failure holds, and user isolation.
+- `browser_checks/t23_1_google_signin.py` passed in real Chrome with mocked
+  Google/provider boundaries: entry, invited/uninvited, Guest, personal
+  unavailable state, explicit sponsor selection, switching, connectivity
+  failure/retry, exhaustion, and isolated Google identities.
+- `./sigma test` passed all scenarios, Ruff, Pyright (0 diagnostics), frontend
+  typecheck/build, and deployment checks. Existing Vite advisory: one JS chunk
+  exceeds 500 kB.
+- No remaining baseline failures. An initial run before test setup was aligned
+  with explicit sponsored selection failed two stale implicit-sponsor
+  expectations; updated targeted suites and final full suite pass.
+
+## Delivery
+
+- Branch: `green/t88-combined-sign-in`
+- Base: current `main` at T200 `48fe9a1fee87a23c1af1665f1f30723ef39d9e97`
+- Head: pending commit
+- PR: pending
+
+No self-merge or deployment performed.

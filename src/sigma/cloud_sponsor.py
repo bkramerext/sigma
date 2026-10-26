@@ -11,7 +11,7 @@ import httpx
 import jwt
 
 from sigma import chatgpt_auth
-from sigma.ai_store import read, transaction
+from sigma.ai_store import read, sponsor_directory, sponsor_transaction, use_directory
 from sigma.projects import ProjectError
 
 
@@ -26,11 +26,12 @@ async def sponsor_session() -> dict:
     """Never use API keys or another saved account when sponsor validation fails."""
     try:
         email = expected_email()
-        async with transaction() as state:
+        async with sponsor_transaction() as state:
             account = state["accounts"].get(state["active"]) or {}
             if state["mode"] != "chatgpt" or account.get("email", "").casefold() != email:
                 return {"status": "disconnected"}
-        selected = await chatgpt_auth.session()
+        with use_directory(sponsor_directory()):
+            selected = await chatgpt_auth.session()
         if (selected.get("account") or {}).get("email", "").casefold() != email:
             return {"status": "forbidden"}
         return selected
@@ -75,7 +76,7 @@ async def import_session(source: Path) -> None:
             )
         ):
             raise ValueError()
-        async with transaction() as state:
+        async with sponsor_transaction() as state:
             # Store only the selected sponsor, not other laptop registrations.
             account = dict(account, ext_agent_host_id=state["ext_agent_host_id"])
             identifier = secrets.token_urlsafe(18)
