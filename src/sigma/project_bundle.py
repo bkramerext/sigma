@@ -207,29 +207,34 @@ def write_file(bundle_path: str | Path, relative_path: str, contents: bytes) -> 
             raise BundleError("Project JSON is no longer a regular file")
         members = _decode(json.loads(path.read_text(encoding="utf-8")))
         members[relative_path] = contents
-        payload = {
-            "format": FORMAT,
-            "version": VERSION,
-            "files": {
-                name: base64.b64encode(data).decode("ascii")
-                for name, data in sorted(members.items())
-            },
-        }
-        fd, name = tempfile.mkstemp(prefix=".sigma-update-", dir=path.parent)
-        staged = Path(name)
+        _publish_members(path, members, ".sigma-update-")
+
+
+def _publish_members(path: Path, members: dict[str, bytes], prefix: str) -> None:
+    """Replace a validated bundle with one fsynced atomic write."""
+    payload = {
+        "format": FORMAT,
+        "version": VERSION,
+        "files": {
+            name: base64.b64encode(data).decode("ascii")
+            for name, data in sorted(members.items())
+        },
+    }
+    fd, name = tempfile.mkstemp(prefix=prefix, dir=path.parent)
+    staged = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as output:
+            output.write((json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(staged, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
         try:
-            with os.fdopen(fd, "wb") as output:
-                output.write((json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8"))
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(staged, path)
-            directory_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+            os.fsync(directory_fd)
         finally:
-            staged.unlink(missing_ok=True)
+            os.close(directory_fd)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def list_files(bundle_path: str | Path) -> tuple[str, ...]:
@@ -273,23 +278,4 @@ def delete_file(bundle_path: str | Path, relative_path: str) -> None:
         if relative_path not in members:
             raise BundleError("Project member does not exist")
         del members[relative_path]
-        payload = {
-            "format": FORMAT, "version": VERSION,
-            "files": {name: base64.b64encode(data).decode("ascii")
-                      for name, data in sorted(members.items())},
-        }
-        fd, name = tempfile.mkstemp(prefix=".sigma-delete-", dir=path.parent)
-        staged = Path(name)
-        try:
-            with os.fdopen(fd, "wb") as output:
-                output.write((json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8"))
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(staged, path)
-            directory_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        finally:
-            staged.unlink(missing_ok=True)
+        _publish_members(path, members, ".sigma-delete-")
