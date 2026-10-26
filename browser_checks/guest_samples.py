@@ -167,7 +167,7 @@ def exercise(ui_url: str, root: Path) -> None:
         page.on("response", capture)
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_be_visible()
+        expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
