@@ -3049,6 +3049,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -3079,6 +3080,11 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const introPane = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ pointer: number; y: number; height: number } | null>(null);
   const [introHeight, setIntroHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const openAbout = () => setAboutOpen(true);
+    window.addEventListener('sigma-open-about', openAbout);
+    return () => window.removeEventListener('sigma-open-about', openAbout);
+  }, []);
   useEffect(() => {
     setIntroHeight(null);
     const frame = requestAnimationFrame(() => { if (introPane.current) setIntroHeight(Math.round(introPane.current.getBoundingClientRect().height)); });
@@ -3156,6 +3162,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     if (modeOwner.current !== null || generating) return;
     expandStrategies(); setGenerating(true);
     requestAnimationFrame(() => document.getElementById('proposal-seed')?.focus());
+  }
+  function closeAbout() {
+    setAboutOpen(false);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.about-action')?.focus());
   }
   const strategies = useMemo(() => {
     if (!view) return [];
@@ -3352,6 +3362,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
+    {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
         setPaperOpen(false);

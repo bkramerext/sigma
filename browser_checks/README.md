@@ -24,6 +24,17 @@ provider fixture. They never call OpenAI or use real credentials. The fixture is
 not loaded by `sigma ui` and never belongs in a production launch. Test context
 and model names explicitly say TEST-FIXTURE.
 
+## Project About dialog
+
+With Vite running at `127.0.0.1:5173` and the isolated
+`browser_checks.provider_fixture:app` running at port 8026, run
+`SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8026 uv run --with playwright
+python browser_checks/project_about.py`. The real-Chrome check opens an
+independent copy of a curated sample and verifies that the Project header's
+About action opens the native modal at desktop and mobile widths, makes no API
+request, and restores focus after Escape. All API traffic is routed to the
+temporary fixture project root; no provider inference is made.
+
 Start the normal UI with `./sigma ui`, then in another terminal:
 
 ```sh
