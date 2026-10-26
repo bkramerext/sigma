@@ -2981,30 +2981,68 @@ def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: st
             "strategy_runs": [{
                 "strategy_id": strategy.id, "strategy_title": strategy.title,
                 "strategy_text": strategy.approach,
-                "status": "failed" if failed else "ended",
-                "current_action": "Simulation finished", "cycle": 1,
+                "status": "queued",
+                "current_action": "Queued", "cycle": 0,
                 "calls_used": 0, "artifacts": [], "reason": message,
             }],
             "strategy_snapshot": [{"id": strategy.id, "title": strategy.title, "eligibility": "eligible"}],
             "problem": view.project.problem, "investigation_type": view.project.investigation_type,
             "model": "mock-deterministic", "reasoning_effort": "none",
             "mode": "mock", "idempotency_key": idempotency_key,
-            "status": "failed" if failed else "ended",
+            "status": "queued",
             "created_at": now, "updated_at": now, "started_at": now,
             "calls_used": 0, "call_limit": 0, "cycle_limit": 1,
-            "cycle": 1, "steps": [], "artifacts": [], "strategy_assessments": [],
-            "interventions": [], "message": message, "current_action": "Simulation finished",
+            "cycle": 0, "steps": [], "artifacts": [], "strategy_assessments": [],
+            "interventions": [], "message": "Simulated research queued.", "current_action": "Queued",
             "events": [{"sequence": 1, "timestamp": now, "kind": "simulation.finished",
                         "role": None, "message": message}],
-            "mock_scenario": scenario, "simulated": True,
+            "mock_scenario": scenario, "mock_stage": 0, "simulated": True,
         }
         record["outcome"] = _outcome(record)
         _save(view.path, record)
         return _public(record)
 
 
+def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
+    """Advance one deterministic UI polling step without dispatching a worker."""
+    if not record.get("simulated") or record.get("status") not in {"queued", "running"}:
+        return record
+    stage = int(record.get("mock_stage", 0))
+    if stage == 0:
+        record["status"] = "running"
+        record["current_action"] = "Investigator: examining the strategy"
+        record["message"] = "Simulated Investigator is examining the proposed approach."
+        record["mock_stage"] = 1
+    elif stage == 1:
+        record["current_action"] = "Skeptic: challenging the claim"
+        record["message"] = "Simulated Skeptic is checking assumptions and counterexamples."
+        record["mock_stage"] = 2
+        record["cycle"] = 1
+    else:
+        scenario = record["mock_scenario"]
+        failed = scenario != "completed"
+        message = {
+            "completed": "Simulated research completed. No provider was called.",
+            "failed": "Simulated research failed. No provider was called.",
+            "provider-error": "Simulated AI provider unavailable. No provider was called.",
+            "exhausted": "Simulated sponsorship allowance exhausted. No provider was called.",
+        }[scenario]
+        record["status"] = "failed" if failed else "ended"
+        record["current_action"] = "Simulation finished"
+        record["message"] = message
+        record["strategy_runs"][0]["status"] = record["status"]
+        record["strategy_runs"][0]["current_action"] = record["current_action"]
+        record["strategy_runs"][0]["reason"] = message
+        record["mock_stage"] = 3
+        record["outcome"] = _outcome(record)
+    record["updated_at"] = _now()
+    _event(record, "simulation.progress", record["message"])
+    _save(record["project_path"], record)
+    return record
+
+
 def list_sessions(path: str) -> list[dict[str, Any]]:
-    return [_public(_recover(item)) for item in _all(path)]
+    return [_public(_advance_mock(item) if item.get("simulated") else _recover(item)) for item in _all(path)]
 
 
 def has_active_session(path: str) -> bool:
@@ -3060,7 +3098,7 @@ async def ensure_queued_workers(path: str) -> None:
 
 
 def get_session(path: str, session_id: str) -> dict[str, Any]:
-    return _public(_recover(_read(path, session_id)))
+    return _public(_advance_mock(record) if (record := _read(path, session_id)).get("simulated") else _recover(record))
 
 
 def _reject_intervention(
