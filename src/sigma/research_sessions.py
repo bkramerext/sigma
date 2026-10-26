@@ -613,6 +613,8 @@ def _directory(path: str | Path) -> Path:
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
     if target.is_relative_to(samples):
         raise ProjectError("Research sessions cannot be stored in sample projects")
+    if target.suffix == ".json":
+        raise ProjectError("JSON project research sessions are stored inside the project file")
     directory = target / "research-sessions"
     if directory.is_symlink():
         raise ProjectError("Research session directory must not be a symbolic link")
@@ -623,12 +625,12 @@ def _directory(path: str | Path) -> Path:
 
 def get_limits(path: str) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
-        from sigma.project_bundle import BundleError, read_file
+        from sigma.project_bundle import read_file, list_files
 
-        try:
-            data = read_file(path, "research-sessions/limits.json")
-        except BundleError:
+        if "research-sessions/limits.json" not in list_files(path):
             limits = dict(DEFAULT_LIMITS)
+        else:
+            data = read_file(path, "research-sessions/limits.json")
         else:
             if len(data) > 4096:
                 raise ProjectError("Research limits file is unsafe or too large")
@@ -2260,7 +2262,23 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
         allocated: list[int] = []
 
         def allocate(members: dict[str, bytes]) -> dict[str, bytes]:
-            current = max((item.get("session_number", 0) for item in records), default=0) + 1
+            current = max(
+                (item.get("session_number", 0) for item in records
+                 if type(item.get("session_number")) is int and item["session_number"] > 0),
+                default=0,
+            ) + 1
+            for name, data in members.items():
+                if not name.startswith("research-sessions/") or not name.endswith(".json"):
+                    continue
+                if name in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
+                    continue
+                try:
+                    stored_record = json.loads(data)
+                    number = stored_record.get("session_number") if isinstance(stored_record, dict) else None
+                    if type(number) is int and number > 0:
+                        current = max(current, number + 1)
+                except (ValueError, UnicodeDecodeError):
+                    continue
             counter = members.get("research-sessions/sequence.json")
             if counter is not None:
                 try:
@@ -2701,7 +2719,16 @@ def _save(path: str, record: dict[str, Any]) -> None:
         encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
         if len(encoded) > MAX_RECORD:
             raise ProjectError("Research session storage limit reached")
-        member = f"research-sessions/{record['id']}.json"
+        try:
+            session_id = str(UUID(record["id"]))
+        except (KeyError, ValueError, TypeError, AttributeError) as exc:
+            raise ProjectError("Invalid research session identifier") from exc
+        if session_id != record["id"]:
+            raise ProjectError("Research session identifier must be canonical")
+        view = inspect_project(path)
+        if record.get("project_id") != view.project.id or record.get("project_path") != view.path:
+            raise ProjectError("Research session does not belong to this project")
+        member = f"research-sessions/{session_id}.json"
 
         def update(members: dict[str, bytes]) -> dict[str, bytes]:
             total = sum(
@@ -2710,7 +2737,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
                 and name != member
             )
             if total + len(encoded) > MAX_TOTAL:
-                raise ProjectError("Research session storage limit reached")
+                raise ProjectError("Research session storage limit reached; session paused without dropping artifacts")
             return {member: encoded}
 
         transform_members(path, update)
@@ -2757,7 +2784,8 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
         from sigma.project_bundle import BundleError, read_file
 
         try:
-            UUID(session_id)
+            if str(UUID(session_id)) != session_id:
+                raise ValueError("Noncanonical session ID")
             raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
         except (ValueError, BundleError) as exc:
             raise ProjectError("Research session not found or unreadable") from exc
@@ -2838,7 +2866,8 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
                 if len(data) > MAX_RECORD:
                     raise ValueError("Session record exceeds limit")
                 raw = json.loads(data)
-                UUID(stem)
+                if str(UUID(stem)) != stem:
+                    raise ValueError("Noncanonical session ID")
                 if (not isinstance(raw, dict) or raw.get("id") != stem
                     or raw.get("project_id") != view.project.id
                     or raw.get("project_path") != view.path):
