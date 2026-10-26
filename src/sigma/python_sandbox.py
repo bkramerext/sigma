@@ -881,7 +881,8 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
                 or not isinstance(record.get("created_at"), str)):
                 continue
             try:
-                _metadata_id(record["id"], "execution")
+                if _metadata_id(record["id"], "execution") != record["id"]:
+                    continue
             except ProjectError:
                 continue
             records.append(_execution_state(record, directory))
