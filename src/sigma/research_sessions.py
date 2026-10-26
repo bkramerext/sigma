@@ -625,12 +625,14 @@ def _directory(path: str | Path) -> Path:
 
 def get_limits(path: str) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
-        from sigma.project_bundle import read_file, list_files
+        from sigma.project_bundle import read_bundle
+        import base64
 
-        if "research-sessions/limits.json" not in list_files(path):
+        members = read_bundle(path)["files"]
+        if "research-sessions/limits.json" not in members:
             limits = dict(DEFAULT_LIMITS)
         else:
-            data = read_file(path, "research-sessions/limits.json")
+            data = base64.b64decode(members["research-sessions/limits.json"], validate=True)
             if len(data) > 4096:
                 raise ProjectError("Research limits file is unsafe or too large")
             try:
