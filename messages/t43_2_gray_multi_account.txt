@@ -103,7 +103,7 @@ Please notify Gray through the human when PR #214 merges, with its merge SHA and
 
 **Integrated base:** T88 / PR #214 merged to `main` at `e82152010c81c53a84753fdbcc323628e16dfeae`.
 **Acceptance branch:** `gray/t43.2-release-acceptance` (contains the merge SHA and this ticket's earlier preparation commits).
-**Disposition:** deterministic local acceptance passed; live hosted gates remain UNVERIFIED. No self-merge.
+**Disposition:** R4R in [PR #222](https://github.com/bkramerext/sigma/pull/222); deterministic local acceptance passed; live hosted gates remain UNVERIFIED. No self-merge.
 
 ## Results
 
