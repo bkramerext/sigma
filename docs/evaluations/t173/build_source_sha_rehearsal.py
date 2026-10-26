@@ -35,6 +35,11 @@ def main() -> None:
 
         def runner(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             nonlocal checked_out_sha, source_sha_at_build, image_sha_at_build
+            if argv[:2] == ["python3", str(checkout / "deploy/release_image.py")]:
+                if argv[2] == "build":
+                    source_sha_at_build = argv[-1]
+                    image_sha_at_build = argv[-1]
+                return subprocess.CompletedProcess(argv, 0, "fixture", "")
             if argv[:1] == ["python3"]:
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
             if argv[:3] == ["git", "-C", str(checkout)]:
@@ -48,16 +53,6 @@ def main() -> None:
                 if operation == "checkout":
                     checked_out_sha = argv[-1]
                     return subprocess.CompletedProcess(argv, 0, "", "")
-            if argv[:3] == ["docker", "compose", "--project-name"] and argv[-3:] == [
-                "build",
-                "backend",
-                "frontend",
-            ]:
-                source_sha_at_build = checked_out_sha
-                environment = kwargs.get("env")
-                assert isinstance(environment, dict)
-                image_sha_at_build = environment["SIGMA_RELEASE"]
-                return subprocess.CompletedProcess(argv, 0, "", "")
             if argv[:2] == ["systemctl", "start"] or argv[:2] == ["systemctl", "stop"]:
                 return subprocess.CompletedProcess(argv, 0, "", "")
             if argv[-3:] in (
@@ -69,6 +64,8 @@ def main() -> None:
             if argv[:3] == ["docker", "inspect", "--format"]:
                 if "Health.Status" in argv[3]:
                     return subprocess.CompletedProcess(argv, 0, "healthy", "")
+                if "org.opencontainers.image.revision" in argv[3]:
+                    return subprocess.CompletedProcess(argv, 0, candidate_sha, "")
                 image = argv[-1].removeprefix("fixture-")
                 suffix = candidate_sha if image in {"backend", "frontend"} else ""
                 return subprocess.CompletedProcess(
@@ -83,15 +80,12 @@ def main() -> None:
         deployment = module.Deployment(checkout, deploy_env, root / "preflight.py", runner, False)
         deployment.deploy(candidate_sha, backup_verified=True, schema_compatible=True)
         assert image_sha_at_build == candidate_sha
-        assert source_sha_at_build == old_sha
+        assert source_sha_at_build == candidate_sha
         assert checked_out_sha == candidate_sha
-        print(
-            "FAIL: candidate image tag was assigned while the build checkout still pointed to the previous SHA"
-        )
+        print("PASS: requested SHA is passed to the isolated archive-based image builder")
         print(f"selected_image_sha={image_sha_at_build}")
-        print(f"build_context_checkout_sha={source_sha_at_build}")
-        print(f"post-build_checkout_sha={checked_out_sha}")
-        raise SystemExit(1)
+        print(f"build_source_sha={source_sha_at_build}")
+        print(f"post-deploy_checkout_sha={checked_out_sha}")
 
 
 if __name__ == "__main__":
