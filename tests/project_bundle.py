@@ -245,6 +245,28 @@ def main() -> None:
             ] == 3
             assert save_limits(created.path, dict(DEFAULT_LIMITS)) == dict(DEFAULT_LIMITS)
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
+            from sigma.research_sessions import _snapshot
+            from sigma.project_bundle import transform_members
+
+            view, guard = _snapshot(created.path)
+            assert view.project.id == created.project.id
+            assert isinstance(guard, str) and guard
+            transform_members(created.path, lambda members: {
+                "artifacts/proof.bin": bytes(range(256)),
+                "evidence/notes.txt": b"independent evidence",
+            })
+            assert read_file(created.path, "artifacts/proof.bin") == bytes(range(256))
+            assert read_file(created.path, "evidence/notes.txt") == b"independent evidence"
+            try:
+                transform_members(created.path, lambda members: {
+                    "artifacts/should-not-exist.bin": b"bad",
+                    "project.json": None,
+                })
+            except BundleError:
+                pass
+            else:
+                raise AssertionError("Invalid bundle transaction succeeded")
+            assert "artifacts/should-not-exist.bin" not in list_files(created.path)
             assert read_file(created.path, f"research-sessions/{session_id}.json")
             assert json.loads(export_complete_project(created.path))["files"][
                 f"research-sessions/{session_id}.json"
@@ -258,6 +280,7 @@ def main() -> None:
             })
             assert set(list_files(created.path)) == {
                 "project.json", f"research-sessions/{session_id}.json", "research-sessions/one.json",
+                "artifacts/proof.bin", "evidence/notes.txt",
                 "artifacts/trace.bin", "evidence/source.txt",
             }
             exported = json.loads(export_complete_project(created.path))
