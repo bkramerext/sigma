@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma import cloud_research, cloud_workspaces
 from sigma.model_catalog import DEFAULT_MODEL, validate_pair
-from sigma.openai_connection import auth_context, models
+from sigma.openai_connection import auth_context, cloud_credential, models
 from sigma.plan_stream import completed, failure
 from sigma.projects import (
     MAX_STRATEGY_APPROACH,
@@ -402,11 +402,7 @@ async def generate_proposal(
                 "AI account/billing mode changed. Retry explicitly with the selected account; no request was sent."
             )
         if cloud_workspaces.enabled():
-            if (
-                credential["identity"] != "cloud_service_api_key"
-                or credential["mode"] != "api_key"
-                or not credential["token"]
-            ):
+            if not cloud_credential(credential):
                 raise ProjectError("Sponsored cloud inference is not configured.")
             cloud_attempt = cloud_research.start_provider_attempt(
                 project_id, path, config["model"], payload, 8000

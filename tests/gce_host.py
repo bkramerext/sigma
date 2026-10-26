@@ -450,6 +450,21 @@ class GceHostToolingTests(unittest.TestCase):
                 encoding="utf-8",
             )
             parsed, detail = gce_preflight._parse_env(path)
+            self.assertEqual(parsed, {**values, "SIGMA_CADDY_SCHEME": "https"})
+            for provider, email, valid in (
+                ("chatgpt", "zetacontinuation@gmail.com", True),
+                ("chatgpt", "", False),
+                ("unexpected", "sponsor@example.org", False),
+            ):
+                candidate = values | {
+                    "SIGMA_CLOUD_INFERENCE_PROVIDER": provider,
+                    "SIGMA_CLOUD_SPONSOR_EMAIL": email,
+                }
+                path.write_text(
+                    "\n".join(f"{key}={value}" for key, value in candidate.items()) + "\n"
+                )
+                sponsor_values, _ = gce_preflight._parse_env(path)
+                self.assertEqual(sponsor_values is not None, valid)
         self.assertEqual(parsed, {**values, "SIGMA_CADDY_SCHEME": "https"})
         self.assertIn("valid", detail)
 

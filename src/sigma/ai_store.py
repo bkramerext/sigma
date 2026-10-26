@@ -16,7 +16,15 @@ from sigma.ui_instance import private_directory
 
 
 def directory() -> Path:
-    override = os.environ.get("SIGMA_AUTH_HOME")
+    from sigma import cloud_workspaces
+
+    if cloud_workspaces.enabled():
+        # Hosted sponsor storage is explicit and never uses the local operator's store.
+        override = os.environ.get("SIGMA_CLOUD_CHATGPT_AUTH_HOME", "")
+        if not override:
+            raise ProjectError("Hosted ChatGPT sponsor storage is not configured.")
+    else:
+        override = os.environ.get("SIGMA_AUTH_HOME")
     if override:
         path = Path(override)
         if (

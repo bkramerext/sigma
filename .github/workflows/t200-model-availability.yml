@@ -1,0 +1,60 @@
+name: T200 Model availability browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "src/sigma/cloud_auth.py"
+      - "src/sigma/openai_connection.py"
+      - "browser_checks/model_availability.py"
+      - ".github/workflows/t200-model-availability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  model-availability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SIGMA_CLOUD_AUTH_ENABLED: "false"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies and browser
+        run: |
+          ./sigma setup
+          uv run --with playwright python -m playwright install chromium
+      - name: Run real Chromium model availability acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8001 > /tmp/t200-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort > /tmp/t200-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5173/ >/dev/null
+          curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/model_availability.py

@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sigma import cloud_research, cloud_workspaces, research_sessions
 from sigma.agentic_evidence import now as evidence_now
 from sigma.agentic_evidence import save as save_evidence
-from sigma.openai_connection import auth_context
+from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import completed, failure
 from sigma.projects import (
     MAX_STRATEGY_APPROACH,
@@ -313,11 +313,7 @@ async def _invoke(
     attempt = None
     try:
         if cloud_workspaces.enabled():
-            if (
-                binding["identity"] != "cloud_service_api_key"
-                or binding["mode"] != "api_key"
-                or not binding["token"]
-            ):
+            if not cloud_credential(binding):
                 raise ProjectError("Sponsored cloud inference is not configured.")
             attempt = cloud_research.start_provider_attempt(
                 view.project.id,

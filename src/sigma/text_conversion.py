@@ -9,7 +9,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma import cloud_research, cloud_workspaces
-from sigma.openai_connection import auth_context
+from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
 from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
@@ -190,11 +190,7 @@ async def _convert_text(
             attempt = None
             try:
                 if cloud_workspaces.enabled():
-                    if (
-                        binding["identity"] != "cloud_service_api_key"
-                        or binding["mode"] != "api_key"
-                        or not binding["token"]
-                    ):
+                    if not cloud_credential(binding):
                         raise ProjectError("Sponsored cloud inference is not configured.")
                     attempt = cloud_research.start_provider_attempt(
                         view.project.id,

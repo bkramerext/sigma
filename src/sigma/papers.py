@@ -18,7 +18,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from sigma import cloud_research, cloud_workspaces
-from sigma.openai_connection import auth_context
+from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import completed, failure
 from sigma.project_reports import _compile_pdf, _latex
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
@@ -1394,13 +1394,7 @@ async def _provider(
     attempt = None
     try:
         if cloud_workspaces.enabled():
-            if (
-                binding["identity"] != "cloud_service_api_key"
-                or binding["mode"] != "api_key"
-                or not binding["token"]
-                or not project_id
-                or not project_path_value
-            ):
+            if not cloud_credential(binding) or not project_id or not project_path_value:
                 raise ProjectError("Sponsored cloud inference is not configured.")
             attempt = cloud_research.start_provider_attempt(
                 project_id,
@@ -1524,13 +1518,7 @@ async def _provider_structured(
     attempt = None
     try:
         if cloud_workspaces.enabled():
-            if (
-                binding["identity"] != "cloud_service_api_key"
-                or binding["mode"] != "api_key"
-                or not binding["token"]
-                or not project_id
-                or not project_path_value
-            ):
+            if not cloud_credential(binding) or not project_id or not project_path_value:
                 raise ProjectError("Sponsored cloud inference is not configured.")
             attempt = cloud_research.start_provider_attempt(
                 project_id,
