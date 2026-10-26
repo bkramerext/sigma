@@ -42,44 +42,48 @@ inspection before retry.
 ## T173 — Pre-deployment release smoke test and rollback rehearsal (2026-10-26)
 
 Started from current `main` at `b33e9945ec2c18d149ad5e8a45b2da6fa70849b9`
-in an isolated worktree. Reviewed T129/T130/T135/T136 and their deployment,
-public-endpoint, backup/restore, rollback and monitoring implementations. No
-coordinator-owned T129 integration or T163 conflict work was changed.
 
-Found that Compose had release-tagged images and build contexts together, so
-missing target images could be built implicitly from the currently staged
-checkout. Added `deploy/build-release-images.sh`: requires exact full SHA and a
-clean tree, builds both backend/frontend staging tags before promoting final
-release tags, and labels each image with its source revision. Production
-startup now uses `--no-build`. Docker base images remain digest-pinned and
-application inputs lockfile-pinned; bit-for-bit image identity across builders
-is not claimed.
-Runbook now gives a first-deployment checklist, explicit go/no-go gates, DNS/
-HTTPS requirements and rollback triggers. Full evidence and limits are in
-[`T173 release rehearsal`](T173_RELEASE_REHEARSAL.md).
+Reviewed T129/T130/T135/T136 plans. T129's exact-SHA release command is in
+coordinator-owned PR #161, so T173 does not duplicate deployment implementation
+or modify T129/T163-owned source files. A separate, isolated worktree of T129
+head `c19e1d654f27be6f736f1aea382033e9d79080da` was used for the release
+rehearsal. Its existing `tests/deployment_automation.py` passed idempotency,
+missing configuration, startup failure recovery, sanitized diagnostics and
+fixture state preservation. Added a standalone fixture runner at
+[`docs/evaluations/t173/build_failure_rehearsal.py`](evaluations/t173/build_failure_rehearsal.py):
+simulated Compose build exit 17 leaves exact deploy.env bytes, service state,
+checkout and persistent fixture unchanged. No GCE, live DNS,
+production credential, public endpoint or provider was contacted.
 
-The temporary Git/fake-Docker rehearsal passed: simulated frontend build exit
-17 caused the build gate to fail without announcing an activatable release;
-dirty source was rejected before Docker. No GCE, live DNS, production
-credential, public endpoint, or paid provider was contacted. Existing rollback
-guard tests and state backup/restore fixture coverage were included in
-validation. Live host image build, health failure, rollback, before/after data
-comparison, actual snapshot/restore, and DNS/TLS remain **BLOCKED** pending the
-provisioned VM and owner-authorized live evidence.
+The source-to-tag fixture at
+[`docs/evaluations/t173/build_source_sha_rehearsal.py`](evaluations/t173/build_source_sha_rehearsal.py)
+reproduced a **FAIL** in the T129 candidate: the candidate SHA was set as the
+image tag while the build checkout still pointed at the old SHA; checkout
+changes only after the build. T129 PR #161's existing tests do not assert
+build-context identity. Require a target-SHA worktree/archive and regression
+before release pinning can pass. The local release flow is therefore **not
+GO**, despite the separate build-failure and startup rollback fixtures passing.
 
-`bash deploy/validate-local.sh` also passed against packaged containers with
-real Chrome: saved project/strategy, 5 sessions, Outcome and report downloads,
-Tectonic/PDF output, backend recreation, fresh-volume restore with preserved
-IDs/hashes, and user isolation all passed. OAuth and inference were skipped;
-temporary Compose resources were cleaned up. This does not test GCE, live
-persistent-disk mounts, rollback helper execution, GCE snapshots or public TLS.
+`bash deploy/validate-local.sh` passed in a T173 worktree with real Chrome
+against disposable packaged Compose: saved project/strategy, five sessions,
+Outcome/reports, Tectonic/PDF, backend recreation, fresh-volume restore and
+workspace isolation passed. OAuth/inference were skipped; temporary resources
+were cleaned up. This is fixture evidence, not VM, disk mount, GCE snapshot,
+rollback-helper-on-host or public DNS/TLS evidence. Live data comparison,
+actual snapshot/separate-disk restore, target health failure and prior-release
+recovery, and DNS/TLS remain **BLOCKED** pending live VM work.
 
-Final `./sigma test` exits 1 only at the three stale systemd mount expectations
-in deployment package, GCE host and monitor tests; coordinator T163 integration
-owns those. The storage scenario and new release rehearsal pass. Ruff check/
-format, Pyright and frontend typecheck pass. Frontend build passes separately
-after the runner skips it due to those earlier test failures. Full details are
-in the T173 rehearsal assessment.
+The final `./sigma test` run after this branch rebased to `main` reports three
+stale systemd mount assertions in `tests/deployment_package.py`,
+`tests/gce_host.py`, and `tests/host_monitor.py`; they require the old explicit
+mount dependency while current unit uses `RequiresMountsFor=/srv/sigma-state`.
+Coordinator T163 integration owns those expectations. Ruff, formatting,
+Pyright, frontend typecheck and separate frontend production build passed.
+Focused `tests/state_backup.py` (8 tests) and `tests/public_endpoint.py` (7
+tests) also passed with local fixtures. The image source/tag mismatch means the
+T129 candidate is not release-ready regardless of these local PASS results.
+See [`T173 release rehearsal`](T173_RELEASE_REHEARSAL.md) for exact commands,
+first-deployment checklist and stop/go criteria.
 
 ## T43.2 / issue #66 multi-account sign-in acceptance (2026-10-25)
 

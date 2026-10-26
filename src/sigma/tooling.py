@@ -122,7 +122,6 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/gce_host.py"],
             [*python, "python", "tests/state_backup.py"],
             [*python, "python", "tests/host_monitor.py"],
-            [*python, "python", "tests/release_rehearsal.py"],
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_registry.py"],
             [*python, "python", "tests/ui_orphans.py"],
