@@ -1,10 +1,15 @@
 # Blue T114 R4R — cumulative comparison preregistration
 
-**Branch:** `blue/t114-preregistration`  
-**Base:** current `main` `429b4d7` (branch started from `58b360e`, then rebased)  
-**Current implementation commit:** `40ccb7c`  
-**PR:** to be recorded after publication  
-**Provider calls / spend / cloud operations:** 0 / $0 / none  
+**Branch:** `blue/t114-preregistration`
+
+**Base:** current `main` `429b4d7` (branch started from `58b360e`, then rebased)
+
+**Current implementation commit:** `a89edf0d894bb4357b1308f71207d69ca5c1e832`
+
+**PR:** [#216](https://github.com/bkramerext/sigma/pull/216), open, not merged
+
+**Provider calls / spend / cloud operations:** 0 / $0 / none
+
 **Elapsed time:** not captured by the command log; do not infer from test runtime.
 
 ## Delivered
