@@ -1,5 +1,29 @@
 # SIGMA status
 
+## T86 — README integration preparation (2026-10-26)
+
+Reconciled the recovered README draft against current `main`. The README now
+describes current local product behavior and limitations, setup, optional AI
+configuration, the current `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` local Google
+administrator bootstrap, and links to the existing Product Rationale and
+primary product/engineering documentation. Setup and OAuth details were
+checked against `src/sigma/cli.py`, `src/sigma/ui.py`,
+`docs/CLOUD_DEPLOYMENT.md`, and `deploy/env.example`. WOLF was not modified.
+
+Two separate placements identify the pending owner-provided screenshots:
+SIGMA Home and a Riemann Hypothesis investigation. Neither image was generated
+or substituted. Brian's delivery of those two screenshots remains a documented
+follow-up dependency; no credentialed Google sign-in was exercised.
+
+Verification on the T86 branch: `./sigma setup` passed; `./sigma start` with
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` unset reached ready state, frontend and API
+health URLs returned HTTP 200, and `./sigma shutdown` completed. A local README
+link scan found 14 Markdown links and no missing local targets; `git diff
+--check` passed. `./sigma test` passed all scenarios, Ruff, formatting, Pyright
+(0 diagnostics), frontend typecheck, and production build (with the existing
+chunk-size advisory). No paid provider calls or live OAuth operations were
+performed.
+
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
 Replaced the “Continue from Saved Evidence” control with an explicitly
