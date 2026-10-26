@@ -16,11 +16,13 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    venv_python = root / ".venv" / "bin" / "python"
+    interpreter = str(venv_python) if venv_python.is_file() else sys.executable
     suites = (("tests/project_bundle.py", 90), ("tests/t249_docker_lifecycle.py", 90))
     for suite, timeout in suites:
         print(f"Running {suite} (timeout {timeout}s)", flush=True)
         try:
-            result = subprocess.run([sys.executable, "-u", str(root / suite)], cwd=root,
+            result = subprocess.run([interpreter, "-u", str(root / suite)], cwd=root,
                                     env=env, check=False, timeout=timeout)
         except subprocess.TimeoutExpired:
             print(f"TIMEOUT {suite} after {timeout}s", file=sys.stderr, flush=True)
