@@ -126,6 +126,10 @@ def main() -> None:
 
             # If another local process inserts research into a reserved directory, never remove it.
             def inserted_research(path, *args):
+                # Simulate another writer publishing research during initialization.
+                # The mocked initializer must create its own destination because
+                # create_project delegates directory creation to initialize_project.
+                Path(path).mkdir(exist_ok=True)
                 (Path(path) / "notes.txt").write_text("Concurrent research")
                 raise ProjectError("Initialization failed")
 
