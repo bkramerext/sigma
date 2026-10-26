@@ -117,6 +117,62 @@ or restore drill was performed. The recurring backup scheduler is not
 configured; the one-off snapshot is the current recovery point. No tests were
 run as part of this deployment operation.
 
+## T88 Google account and sponsored model access (2026-10-26)
+
+Implemented on ticket branch red/t88-google-sponsored-auth from current
+main (2c409e6). The canonical scope is [issue #88](https://github.com/bkramerext/sigma/issues/88).
+
+Hosted guests now land on a distinct Explore-only entry and can browse the
+public saved Demo without mounting the inference UI. Protected APIs still
+require the verified Google session. Invited accounts persist a subject-keyed
+account record containing verified email, current role/access, the existing
+subject-derived workspace ID, model access mode and latest server-checked model
+connection state. Sponsorship eligibility is a separate revocable flag; spend
+and held/unknown usage remain in T99's persistent ledger. Grant role/revocation
+changes synchronize account authorization without resetting usage. Admins use
+the same budget admission as regular users.
+
+The existing account/model controls are combined into a two-line pill and one
+dialog. In local Google-auth mode, mounting the authorized app automatically
+checks its existing personal model connection. Hosted mode checks the server's
+sponsored credential against the provider model catalog (no research prompt)
+and shows checking, reachable, unconfigured, rejected, unavailable, retry and
+exhausted-budget states. It does not silently fall back to personal credentials.
+Sign-out clears the browser's remembered project pointer. Existing visual
+tokens and dialog conventions are reused.
+
+Integration findings: T22.2's verified OIDC, invitation/admin grant, session,
+and denied-account paths remain authoritative and are reused. T174's existing
+subject-keyed durable workspaces and path checks remain authoritative and are
+reused. T99/T99.1's server credential selection, persistent admission ledger,
+usage reconciliation, and budgets remain authoritative and are reused. T43.2's
+multi-account browser acceptance now asserts the integrated account/model
+control. One pre-existing design boundary remains explicit: T22.2's opt-in
+local-auth mode deliberately keeps the traditional shared local project root;
+private per-subject workspaces are provided by hosted mode. Changing that local
+data model would conflict with T22.2's promise to preserve local projects, so
+the hosted isolation path is what the two-user acceptance exercises. Hosted
+personal ChatGPT OAuth remains forbidden per T172; hosted model use is the
+sponsored server credential only.
+
+Verification on this branch: tests/cloud_auth.py (17 tests),
+tests/cloud_research_sponsored_api.py, tests/cloud_research_api.py,
+tests/cloud_workspaces.py, real Chrome browser_checks/t23_1_google_signin.py
+(guest Demo, member/admin switch, isolated workspaces, two-line status, sponsor
+connection success/provider outage and auth rejection/retry, budget exhaustion,
+sign-out and denied account), frontend typecheck/build, Ruff and Pyright. The
+The final `./sigma test` passed every repository scenario, static analysis,
+frontend typecheck and production build. The initial full-suite attempt found
+an existing Ruff B023/format defect in browser_checks/model_availability.py;
+its test lambda now binds the response status explicitly. No external OAuth,
+GCP changes, paid inference, secrets, or live provider requests were used;
+Google and provider boundaries were deterministically mocked. Live hosted
+OAuth, real two-account deployment isolation, and production provider
+connectivity remain unverified.
+
+See [T88 worker handoff](../messages/t88_red_google_sponsored_auth.txt) for the
+requirement evidence and exact final verification results.
+
 ## Issue #98 integrated local browser acceptance (2026-10-25)
 
 Accepted the current integrated local browser workflows against `origin/main`

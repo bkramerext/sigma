@@ -175,6 +175,16 @@ class CloudAuthTests(TestCase):
             status["user"],
             {"email": "admin@example.org", "role": "admin"},
         )
+        self.assertEqual(
+            status["account"]["identity"], {"email": "admin@example.org", "verified": True}
+        )
+        self.assertEqual(status["account"]["access"], {"status": "invited", "role": "admin"})
+        self.assertTrue(status["account"]["workspace"]["available"])
+        self.assertEqual(
+            status["account"]["model_access"],
+            {"mode": "sponsored", "connection": "checking"},
+        )
+        self.assertTrue(status["account"]["sponsorship"]["eligible"])
         self.assertEqual(status["admin_contact_email"], "admin@example.org")
         self.assertNotIn("grants", status)
         self.assertNotIn("denied_email", status)
@@ -197,6 +207,23 @@ class CloudAuthTests(TestCase):
         with sqlite3.connect(workspace_database) as db:
             entries = db.execute("SELECT subject_hash,workspace_id FROM workspaces").fetchall()
         self.assertEqual(len(entries), 1)
+        with sqlite3.connect(self.root / "access.sqlite3") as db:
+            persisted = db.execute(
+                "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status FROM user_state WHERE subject=?",
+                ("google-sub-1",),
+            ).fetchone()
+        self.assertEqual(
+            persisted,
+            (
+                "admin@example.org",
+                "admin",
+                1,
+                status["account"]["workspace"]["id"],
+                1,
+                "sponsored",
+                "checking",
+            ),
+        )
         self.assertNotIn(b"forged-browser-subject", workspace_database.read_bytes())
         self.assertNotIn(b"victim@example.org", workspace_database.read_bytes())
         invite = self.client.post(
@@ -206,10 +233,24 @@ class CloudAuthTests(TestCase):
         )
         self.assertEqual(invite.status_code, 200)
         self.assertEqual(invite.json()["value"], "person@example.org")
+        member_context = TestClient(app)
+        member = member_context.__enter__()
+        self.addCleanup(member_context.__exit__, None, None, None)
+        member_login = self.finish(
+            email="person@example.org", subject="google-sub-member", client=member
+        )
+        self.assertEqual(member_login.status_code, 303)
         revoked = self.client.delete(
             "/api/cloud-auth/admin/grants/email/person%40example.org", headers={"Origin": ORIGIN}
         )
         self.assertEqual(revoked.status_code, 200)
+        with sqlite3.connect(self.root / "access.sqlite3") as db:
+            member_state = db.execute(
+                "SELECT access_active,sponsorship_eligible FROM user_state WHERE subject=?",
+                ("google-sub-member",),
+            ).fetchone()
+        self.assertEqual(member_state, (0, 0))
+        self.assertEqual(member.get("/api/projects/recent").status_code, 401)
         self.assertEqual(
             self.client.get("/api/cloud-auth/admin/grants").json()["grants"][0]["active"], 0
         )
@@ -570,7 +611,11 @@ class CloudAuthTests(TestCase):
         local_origin = "http://127.0.0.1:5173"
         with patch.dict(
             os.environ,
-            {"SIGMA_CLOUD_AUTH_LOCAL": "true", "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin},
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "OPENAI_API_KEY": "",
+            },
         ):
             cfg = cloud_auth.config()
             self.assertTrue(cfg.local)
@@ -603,12 +648,25 @@ class CloudAuthTests(TestCase):
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["target"], "local")
             self.assertEqual(status["user"]["role"], "admin")
-            provider_status = self.client.get("/api/ai/connection")
+            self.assertEqual(status["account"]["model_access"]["connection"], "checking")
+            with patch(
+                "sigma.api.connection",
+                return_value={
+                    "mode": "api_key",
+                    "status": "unconfigured",
+                    "label": "OpenAI API key is not configured",
+                    "guidance": "No provider request was made.",
+                    "checked_at": None,
+                },
+            ):
+                provider_status = self.client.get("/api/ai/connection")
             self.assertEqual(provider_status.status_code, 200, provider_status.text)
             self.assertNotEqual(
                 provider_status.json().get("guidance"),
                 "AI provider authorization is unavailable in cloud mode.",
             )
+            refreshed = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(refreshed["account"]["model_access"]["connection"], "unconfigured")
             self.assertFalse((self.root / "workspaces" / "workspaces.sqlite3").exists())
             self.assertEqual(self.client.get("/api/projects/recent").status_code, 200)
         with patch.dict(
