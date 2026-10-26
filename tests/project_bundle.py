@@ -283,6 +283,7 @@ def main() -> None:
             else:
                 raise AssertionError("Duplicate output filenames were accepted")
             assert get_execution(created.path, extra_id)["status"] == "interrupted"
+            assert {item["id"] for item in list_executions(created.path)} == {execution_id, extra_id}
             assert not any(
                 name.startswith(f"research-executions/{extra_id}.artifacts/")
                 for name in list_files(created.path)
