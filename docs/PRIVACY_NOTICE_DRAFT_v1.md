@@ -3,8 +3,9 @@
 **Status:** Draft for Brian's approval. Do not treat or publish this text as
 approved policy until the owner resolves the questions at the end.
 
-**Prepared:** 2026-10-26  
-**Proposed version:** 1.0  
+**Prepared:** 2026-10-26
+
+**Proposed version:** 1.0
 **Proposed public route:** `/privacy`
 
 The unauthenticated `/privacy` page uses the following proposed wording and is
