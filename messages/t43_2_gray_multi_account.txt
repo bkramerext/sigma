@@ -1,4 +1,79 @@
-# T43.2 / issue #66 — independent acceptance preparation
+# T43.2 / GitHub issue #66 — multi-account sign-in acceptance
+
+Branch: `gray/t43.2-multi-account`
+Started from current `main` at `13a63c4` (T129 branch not used)
+Synchronized with current `main` at `537c198` before handoff.
+PR: [#166](https://github.com/bkramerext/sigma/pull/166), targeting `main`
+
+## Findings and implementation
+
+- Reviewed issue #66, current Google OIDC/cloud-auth and ChatGPT SIWC flows,
+  existing API/browser tests, and the local persistent-disk acceptance contract.
+- Existing tests already cover Google authorized A→B switching, denied
+  identities, session revocation/restart, and workspace isolation. ChatGPT
+  service tests covered adding/selecting two registrations, but did not assert
+  that disconnecting one selected identity preserves the other one's tokens.
+- Added a two-subject ChatGPT regression. It verifies independent subject,
+  email, and token records; disconnects account A; selects still-connected B;
+  then reconnects A into the same record and confirms B's credentials remain
+  unchanged.
+- Extended the isolated Chrome SIWC scenario to connect account B after A,
+  assert B remains active after page reload, and switch back to A through the
+  existing account selection endpoint. Added a fixture Google A principal so
+  the local UI permits ChatGPT actions.
+- Added deterministic HTTP coverage for the AI auth begin/cancel endpoints and
+  cancelled attempt state. Browser-level Cancel button completion remains
+  unverified: the control detached during Playwright interaction, so this
+  Chrome script focuses on successful/declined sign-in and account switching.
+- Kept the hosted-mode 403 guard intact. The Google browser test uses its
+  existing deterministic test-only identity adapter; neither test enables
+  personal ChatGPT OAuth in hosted mode.
+
+## Checks and evidence
+
+- `uv run --locked --no-sync python tests/chatgpt.py` — PASS, including the new
+  two-account disconnect/reconnect isolation assertions and HTTP auth cancel.
+- `uv run --locked --no-sync python tests/cloud_auth.py` — PASS (16 tests); no
+  cloud-auth source was changed.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173`
+  `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8022`
+  `uv run --locked --with playwright python browser_checks/chatgpt.py` — PASS in
+  installed Google Chrome with isolated OAuth/provider fixtures and zero
+  inference calls.
+- `SIGMA_PYTHON=/Users/admin/sigma_gray/.venv/bin/python`
+  `uv run --locked --with playwright python browser_checks/t23_1_google_signin.py`
+  — PASS in installed Google Chrome: fixture A→B, reload, logout, denied
+  identity, and project workspace isolation.
+- `./sigma test` — ran against current main before changes and after the core
+  account isolation/browser changes. Both runs report the same three existing
+  deployment assertions failing in
+  `tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`;
+  each expects the prior `srv-sigma\\x2dstate.mount` `Requires` dependency, while
+  the current unit declares `RequiresMountsFor=/srv/sigma-state`. Authentication
+  tests pass. Ruff, Pyright (0 diagnostics), and frontend typecheck passed. The
+  full suite skips the frontend production build after those failures;
+  `npm --prefix frontend run build` passed separately with the existing
+  greater-than-500-kB chunk advisory.
+- After adding the HTTP cancellation assertion, the focused
+  `tests/chatgpt.py` and Ruff checks passed again; the full suite was not rerun
+  after this test-only follow-up.
+
+## Acceptance boundary
+
+Actual real Google OAuth, real ChatGPT OAuth, distinct approved live identities,
+hosted callback, and the complete Google A/B × ChatGPT A/B cross-product were
+not exercised. No tokens or callback secrets were logged. No paid calls or
+external identity/provider requests were made. Hosted personal ChatGPT auth
+remains prohibited by the current security boundary. This is deterministic
+local fixture evidence, not live or hosted acceptance.
+
+The PR branch was synchronized with `main` after it advanced to T147. The
+working tree is clean; PR #166 is open and GitHub reports it mergeable. No merge
+was performed.
+
+Elapsed time: approximately 40 minutes at handoff.
+
+# Independent release acceptance preparation (2026-10-26)
 
 **Owner:** Gray
 **Branch:** `gray/t43.2-release-acceptance`
