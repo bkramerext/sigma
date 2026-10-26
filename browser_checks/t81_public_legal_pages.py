@@ -47,7 +47,7 @@ def main() -> None:
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
             expect(dialog).to_be_visible()
-            expect(dialog.get_by_role("link", name="Privacy", exact=True)).to_have_attribute(
+            expect(dialog.get_by_role("link", name="Privacy Policy", exact=True)).to_have_attribute(
                 "href", "/privacy"
             )
             assert page.locator('a[href="/tos"]').count() == 0

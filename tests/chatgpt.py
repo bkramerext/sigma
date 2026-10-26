@@ -84,6 +84,7 @@ async def checks(root):
         assert (
             state["status"] == "disconnected"
             and state["label"] == "Connect AI"
+            and state["guidance"] == "Research requires a ChatGPT connection. Sign in to continue."
             and not fixture.requests
         )
         before_prefs = await auth.preferences()
@@ -363,6 +364,13 @@ async def checks(root):
         async with transaction() as stored:
             assert "refresh_token" not in stored["accounts"][first_id]
         assert (await auth.preferences())["mode"] == "chatgpt"
+        reset_connection()
+        expired = await connection.connection()
+        assert expired["status"] == "reauth_required"
+        assert expired["active_account"] == first_id
+        assert expired["guidance"] == (
+            "Your ChatGPT session has expired. Please sign in again to continue."
+        )
         fixture.refresh_error = None
         fixture.subject = first_record["subject"]
         await sign_in(fixture, first_id)
