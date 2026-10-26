@@ -594,6 +594,8 @@ def _save_record(
         if len(filenames) != len(set(filenames)):
             raise ProjectError("Research output artifact filenames must be unique")
         member = _bundle_execution_member(identifier)
+        if finalizing and record.get("status") == "running":
+            raise ProjectError("Finalized research execution must have a terminal status")
 
         def update(members: dict[str, bytes]) -> dict[str, bytes | None]:
             if not isinstance(members.get("project.json"), bytes):
@@ -615,6 +617,8 @@ def _save_record(
                             "This research proposal is already reserved; no second run was started"
                         )
             previous = members.get(member)
+            if not finalizing and previous is not None:
+                raise ProjectError("Research execution identifier is already reserved")
             if finalizing:
                 try:
                     reserved = json.loads(previous) if previous is not None else None
