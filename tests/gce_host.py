@@ -27,6 +27,34 @@ class GceHostToolingTests(unittest.TestCase):
             self.assertEqual(preflight._sandbox_socket(), "/run/user/1001/docker.sock")
         self.assertEqual(preflight.values, {})
 
+    def test_rootless_checks_ignore_inherited_docker_context(self) -> None:
+        calls: list[tuple[list[str], dict[str, str]]] = []
+        preflight = gce_preflight.Preflight(host_readiness=True)
+
+        def command(argv, **kwargs):
+            calls.append((argv, kwargs["environment"]))
+            output = (
+                '["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]'
+                if "info" in argv
+                else "{}"
+            )
+            return subprocess.CompletedProcess(argv, 0, output, "")
+
+        with (
+            patch("gce_preflight._sandbox_uid", return_value=1001),
+            patch.object(preflight, "command", side_effect=command),
+        ):
+            preflight.check_rootless_daemon()
+            preflight.check_runtime_images()
+
+        self.assertEqual([result.status for result in preflight.results], ["PASS", "PASS", "PASS"])
+        self.assertEqual(len(calls), 3)
+        for _, environment in calls:
+            self.assertEqual(environment["DOCKER_CONFIG"], "/etc/docker")
+            self.assertEqual(environment["DOCKER_HOST"], "")
+            self.assertEqual(environment["DOCKER_CONTEXT"], "")
+            self.assertEqual(environment["HOME"], "/root")
+
     def test_host_readiness_reboot_gate_requires_enabled_daemons_but_not_app(self) -> None:
         calls: list[list[str]] = []
         preflight = gce_preflight.Preflight(host_readiness=True, after_reboot=True)
