@@ -4,7 +4,7 @@
 
 Audited rendered Home, Project, Strategies, Sessions, Settings, New Project, Export, LaTeX paper preflight, About, and request notification UI against `docs/UI_GUIDELINES.md`. Implemented one confirmed minor defect: Project About did not receive its existing Home About styles because it lacked the `.home-page` ancestor. A non-layout `display: contents` styling scope now reuses the established styling. Added focused browser assertions for appearance, viewport bounds, no API call on open, and Escape focus restoration.
 
-No other candidate changes were justified. Audit dispositions and rendered screenshot evidence are in [the T226 audit](../docs/evaluations/t226/README.md). No T200/T201/T202/T215 behavior was changed. The notification check was visual only; lifecycle acceptance remains with T215.
+No other styling change was justified. Audit dispositions and rendered screenshot evidence are in [the T226 audit](../docs/evaluations/t226/README.md). The audit also records that About has no repository link despite the guideline; adding About navigation content is left for owner review. No T200/T201/T202/T215 behavior was changed. The notification check was visual only; lifecycle acceptance remains with T215.
 
 ## Verification
 

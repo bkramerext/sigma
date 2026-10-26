@@ -13,12 +13,13 @@ Audit performed on `gray/t226-ui-consistency`, based on current `main` `90fab8c`
 | Header responsiveness | Home, Project and Sessions screenshots. Source: `frontend/src/workspace.css`. Home checked at 1440, 390 and 320 CSS px; Project About checked at 1440 and 390 CSS px. | Header pills and actions should stay within viewport and retain readable separation. No clipping/overlap reproduced at checked widths. No change. |
 | Forms, actions and dialogs | New Project, Settings, Export and paper preflight screenshots. Source: `frontend/src/project-entry.css`, `frontend/src/project-settings.css`, `frontend/src/workspace.css`. | Maintain button hierarchy, labels, focus visibility, selected/disabled states, border radii and spacing. Screens were visually coherent; focus was visible on the Export filename input. No unrelated style differences were changed. |
 | Project About dialog | Before/after screenshots. Component: `AboutDialog` in `frontend/src/main.tsx`; rules in `frontend/src/project-entry.css`. | Guidelines call for the established dark panel, copper border, padding and typography. Before: in the workspace, the dialog lacked the `.home-page` styling ancestor and rendered browser fallback appearance (dark default background, 3px white border, square corners, white text). Confirmed defect. Added a `display: contents` styling scope around the existing dialog so the existing Home About rules apply without adding a layout box. After: same navy/copper About panel and typography as Home; no content or interaction changed. |
+| About content and repository link | Expanded About screenshot. Component: `AboutDialog` / `AboutArchitecture` in `frontend/src/main.tsx`. | Guidelines call for version/build details, the multi-agent diagram and a collapsible repository link. Version/build and diagram rendered as expected. After opening both disclosures, no repository link was present in the dialog or its rendered DOM. Adding one changes About content and navigation; recorded for owner review and left unchanged under the fit-and-finish scope. |
 | Sessions / Current Understanding | Sessions screenshot. Source: `frontend/src/main.tsx`, `frontend/src/workspace.css`, `frontend/src/strategies.css`. | Preserve readable session grouping and the existing expanded Current Understanding pattern. Visual inspection found no spacing, alignment, or overflow defect. No change. |
 | Notifications | Toast screenshot from a synthetic 503 on `/api/projects/recent`. Source: `frontend/src/request-toast.tsx`, `frontend/src/request-toast.css`. | Toast should be legible, dismissible, and use the established UI. Rendered toast uses a dark panel, copper border and visible Dismiss control. Expiry, exit animation, reflow and reduced-motion timing are tracked under T215 and were not changed. The existing T215 lifecycle checks ran and passed as part of `./sigma test`. |
 
 ## Browser verification
 
-`browser_checks/project_about.py` checks actual Project About appearance at 1440 and 390 CSS px, dialog bounds, no API request on open, and Escape focus restoration. It passed after the correction. A separate Home About run confirmed the existing dialog remains styled and within bounds at 1440, 390 and 320 CSS px. Screenshots were taken from the rendered browser for the screens listed above. No issue was reproduced in Home artwork, strategies split action, session layout, settings, export or paper preflight.
+`browser_checks/project_about.py` checks actual Project About appearance at 1440 and 390 CSS px, dialog bounds, no API request on open, and Escape focus restoration. It passed after the correction. A separate Home About run confirmed the existing dialog remains styled and within bounds at 1440, 390 and 320 CSS px. Both About disclosures were expanded to inspect the diagram and repository link. Screenshots were taken from the rendered browser for the screens listed above. No issue was reproduced in Home artwork, strategies split action, session layout, settings, export or paper preflight.
 
 The pre-existing `browser_checks/header.py`, `recents.py`, `strategies.py`, `settings.py`, and `about_dialog_acceptance.py` checks were also attempted during exploration; they stopped on stale selectors/text expectations or a fixture mismatch before exercising the applicable visual acceptance. They were not modified for T226. These are not used as evidence of UI defects.
 
@@ -30,10 +31,14 @@ All images are browser screenshots from this audit. “Before” and “after”
 - [Project](evidence/project.png)
 - [Sessions](evidence/sessions.png)
 - [Settings](evidence/settings.png)
+- [Settings Main](evidence/settings-main.png)
+- [Settings Limits](evidence/settings-limits.png)
+- [Settings Preferences](evidence/settings-preferences.png)
 - [New Project](evidence/new-project.png)
 - [Export](evidence/export.png)
 - [Paper preflight](evidence/paper-preflight.png)
 - [Project About before](evidence/about-project-before.png)
 - [Project About after](evidence/about-project-after.png)
 - [Home About mobile](evidence/about-home-mobile.png)
+- [About expanded](evidence/about-expanded.png)
 - [Request failure toast](evidence/toast.png)
