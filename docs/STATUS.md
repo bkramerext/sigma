@@ -13,7 +13,7 @@ simultaneous dismissal, burst/cleanup behavior, reduced motion, and the CSS
 exit contract. A real-Chrome check verified the downward transform, stack
 reflow, reduced-motion mode, and 390px layout. The complete `./sigma test`
 passed, including Ruff, Pyright, frontend typecheck, and production build. No
-provider calls or research projects were involved. See [PR #221](https://github.com/bkramerext/sigma/pull/221)
+provider calls or research projects were involved. See [PR #221 (T215)](https://github.com/bkramerext/sigma/pull/221)
 and the [Blue handoff](../messages/blue_t215_r4r.md).
 
 ## Issue #217 administrator contact (2026-10-26)
