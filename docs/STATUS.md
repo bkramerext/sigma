@@ -6143,15 +6143,17 @@ open and not merged.
 
 Guest Play now opens an accessible “Ready to investigate?” dialog with the
 message “Sign in to run a research session. You can explore sample projects as a
-guest.” Sign In uses the existing `/api/cloud-auth/login` route; Not Now and
-Escape dismiss the dialog and restore focus to Play. Guests can activate Play
+guest.” The “Sign in now.” action opens the existing Google sign-in pill, whose
+Google link starts the established login workflow. “Cancel” and Escape dismiss
+the dialog and restore focus to Play. Guests can activate Play
 even when normal session-start preconditions would disable it, but that path only
 changes dialog UI state. It does not call the research start handler, read
 provider configuration/limits, reserve budget, or mutate the project. Signed-in
 Play continues to use the existing handler.
 
 Verification: `uv run --with playwright python browser_checks/guest_samples.py`
-passed in real Chrome, including assertions that Play and Not Now issue no
+passed in real Chrome, including assertions that Play, opening the Google
+sign-in pill, and Cancel issue no
 research/configuration/limits requests or write requests, and that focus returns
 to Play. Frontend typecheck and production build passed. `./sigma test` ran to
 completion; all reached tests including ChatGPT and cloud auth passed, while

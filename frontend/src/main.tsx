@@ -2934,9 +2934,9 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
   </span>;
 }
 
-function GuestPlayDialog({ onClose, playButtonRef }: { onClose: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null> }) {
+function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => void; onSignIn: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null> }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const signIn = useRef<HTMLAnchorElement>(null);
+  const signIn = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     dialog.current?.showModal();
     signIn.current?.focus();
@@ -2946,13 +2946,17 @@ function GuestPlayDialog({ onClose, playButtonRef }: { onClose: () => void; play
     onClose();
     requestAnimationFrame(() => playButtonRef.current?.focus());
   }
+  function startSignIn() {
+    if (dialog.current?.open) dialog.current.close();
+    onSignIn();
+  }
   return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
     <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
     <div className="settings-body">
       <p id="guest-research-message">Sign in to run a research session. You can explore sample projects as a guest.</p>
       <div className="settings-actions">
-        <a ref={signIn} className="cloud-auth-button guest-play-signin" href="/api/cloud-auth/login">Sign In</a>
-        <button type="button" className="settings-cancel" onClick={dismiss}>Not Now</button>
+        <button ref={signIn} type="button" className="settings-submit guest-play-signin" onClick={startSignIn}>Sign in now.</button>
+        <button type="button" className="settings-cancel" onClick={dismiss}>Cancel</button>
       </div>
     </div>
   </dialog>;
@@ -3451,7 +3455,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
-    {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} playButtonRef={playButton}/>}
+    {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} onSignIn={() => {
+      setGuestPlayOpen(false);
+      requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
+    }} playButtonRef={playButton}/>}
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
       const current = settingsOf(view);
       if (current.show_advanced_outcome_details) return;
@@ -3576,6 +3583,11 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const panel = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const [error, setError] = useState('');
+  useEffect(() => {
+    const openFromGuestPrompt = () => { setError(''); setPosition(null); setOpen(true); };
+    window.addEventListener('sigma-open-google-signin', openFromGuestPrompt);
+    return () => window.removeEventListener('sigma-open-google-signin', openFromGuestPrompt);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const place = () => {

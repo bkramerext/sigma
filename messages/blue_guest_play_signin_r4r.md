@@ -10,8 +10,9 @@ Guest Play now opens the “Ready to investigate?” dialog:
 
 - “Sign in to run a research session. You can explore sample projects as a
   guest.”
-- Sign In links to the existing SIGMA `/api/cloud-auth/login` workflow.
-- Not Now and Escape dismiss the dialog and restore focus to Play.
+- “Sign in now.” opens the existing Google sign-in pill; its Google link starts
+  the established SIGMA login workflow.
+- “Cancel” and Escape dismiss the dialog and restore focus to Play.
 
 The Guest Play control opens only the dialog. It does not invoke the normal
 session start handler, read provider configuration or limits, reserve budget,
@@ -22,9 +23,9 @@ action styles.
 Verification:
 
 - `uv run --with playwright python browser_checks/guest_samples.py` — PASS in
-  real Chrome. The focused test checks exact dialog copy, login route, Not Now,
-  restored focus, no research/configuration/limits requests, and no write
-  requests when Guest Play is clicked or dismissed.
+real Chrome. The focused test checks exact dialog copy, the existing Google
+pill and login route, Cancel/Escape, restored focus, no research/configuration/
+limits requests, and no write requests when Guest Play is clicked or dismissed.
 - `npm --prefix frontend run typecheck` — PASS.
 - `npm --prefix frontend run build` — PASS; existing >500 kB chunk-size advisory.
 - `uv run ruff check browser_checks/guest_samples.py` — PASS.

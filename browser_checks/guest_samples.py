@@ -225,19 +225,25 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(play_dialog).to_contain_text(
             "Sign in to run a research session. You can explore sample projects as a guest."
         )
-        expect(play_dialog.get_by_role("link", name="Sign In")).to_have_attribute(
+        expect(play_dialog.get_by_role("button", name="Sign in now.")).to_be_visible()
+        expect(play_dialog.get_by_role("button", name="Cancel")).to_be_visible()
+        assert len(mutation_requests) == mutations_before_play, mutation_requests
+        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        play_dialog.get_by_role("button", name="Sign in now.").click()
+        expect(play_dialog).to_have_count(0)
+        google_dialog = page.get_by_role("dialog", name="Connect your Google account")
+        expect(google_dialog).to_be_visible()
+        expect(google_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
         )
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         page.keyboard.press("Escape")
-        expect(play_dialog).to_have_count(0)
-        expect(play).to_be_focused()
-        assert len(mutation_requests) == mutations_before_play, mutation_requests
-        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        expect(google_dialog).to_have_count(0)
+        expect(page.get_by_role("button", name="Sign in with Google")).to_be_focused()
         play.click()
         expect(play_dialog).to_be_visible()
-        play_dialog.get_by_role("button", name="Not Now").click()
+        play_dialog.get_by_role("button", name="Cancel").click()
         expect(play_dialog).to_have_count(0)
         expect(play).to_be_focused()
         assert len(mutation_requests) == mutations_before_play, mutation_requests
