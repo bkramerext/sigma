@@ -14,7 +14,7 @@ import os
 import stat
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 FORMAT = "sigma.project.bundle"
 VERSION = 1
@@ -349,7 +349,7 @@ def update_files(
 def transform_file(
     bundle_path: str | Path,
     relative_path: str,
-    transform: Any,
+    transform: Callable[[bytes], bytes],
 ) -> bytes:
     """Apply a read-modify-write transaction to one bundle member.
 
@@ -385,3 +385,57 @@ def transform_file(
             members[relative_path] = updated
             _publish_members(path, members, ".sigma-transform-")
         return updated
+
+
+def read_bundle(bundle_path: str | Path) -> dict[str, Any]:
+    """Read and validate a complete single-file project."""
+    path = Path(bundle_path)
+    if path.suffix != ".json" or path.is_symlink() or not path.is_file():
+        raise BundleError("Project JSON must be a regular file")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        _decode(payload)
+        return payload
+    except (OSError, UnicodeDecodeError, ValueError, TypeError) as exc:
+        raise BundleError("Cannot read project JSON") from exc
+
+
+def download_bytes(bundle_path: str | Path) -> bytes:
+    """Serialize every project member, including binary artifacts."""
+    payload = read_bundle(bundle_path)
+    return (json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
+
+def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
+    """Import a complete JSON project with atomic no-replace publication."""
+    members = _decode(payload)
+    path = Path(destination)
+    if path.suffix != ".json" or path.parent.is_symlink() or not path.parent.is_dir():
+        raise BundleError("Invalid JSON project destination")
+    if os.path.lexists(path):
+        raise BundleError("Project destination already exists")
+    canonical = {
+        "format": FORMAT,
+        "version": VERSION,
+        "files": {name: base64.b64encode(data).decode("ascii")
+                  for name, data in sorted(members.items())},
+    }
+    fd, name = tempfile.mkstemp(prefix=".sigma-import-", dir=path.parent)
+    staged = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as output:
+            output.write((json.dumps(canonical, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+            output.flush()
+            os.fsync(output.fileno())
+        try:
+            os.link(staged, path)
+        except FileExistsError as exc:
+            raise BundleError("Project destination already exists") from exc
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        staged.unlink(missing_ok=True)
+    return path
