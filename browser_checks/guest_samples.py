@@ -185,8 +185,8 @@ def exercise(ui_url: str, root: Path) -> None:
         assert recent_responses == [], recent_responses
         page.get_by_role("tab", name="Samples").click()
         page.get_by_role("button", name="Sign in with Google").click()
-        expect(page.get_by_role("dialog")).to_contain_text("Connect your Google account")
-        expect(page.get_by_role("dialog").get_by_role("link", name="Invite Me")).to_be_visible()
+        expect(page.get_by_role("dialog")).to_contain_text("Welcome to SIGMA")
+        expect(page.get_by_role("dialog").get_by_role("link", name="Request an invitation")).to_be_visible()
         expect(page.get_by_role("dialog").get_by_role("button", name="Continue as Guest")).to_be_visible()
         sign_in = page.get_by_role("link", name="Continue with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
@@ -241,7 +241,7 @@ def exercise(ui_url: str, root: Path) -> None:
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         play_dialog.get_by_role("button", name="Sign in now").click()
         expect(play_dialog).to_have_count(0)
-        google_dialog = page.get_by_role("dialog", name="Connect your Google account")
+        google_dialog = page.get_by_role("dialog", name="Welcome to SIGMA")
         expect(google_dialog).to_be_visible()
         expect(google_dialog.get_by_role("link", name="Continue with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
