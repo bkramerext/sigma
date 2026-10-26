@@ -826,6 +826,8 @@ def _execution_state(record: dict[str, Any], directory: Path) -> dict[str, Any]:
 def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
     identifier = _metadata_id(execution_id, "execution")
     assert identifier
+    if execution_id != identifier:
+        raise ProjectError("Execution identifier must be canonical")
     directory = _execution_directory(path)
     bundle_path = _execution_bundle_path(directory)
     if bundle_path is not None:
