@@ -121,6 +121,36 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_members_receive_distinct_stable_workspaces(self):
+        from sigma.cloud_workspaces import workspace_for_subject
+
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+        }):
+            cfg = cloud_auth.config()
+            self.assertIsNone(cfg.error)
+            first = cloud_auth._persist_user_state(
+                cfg, cloud_auth.Principal("mock:member-a", "mock-member-a@localhost.invalid", "member")
+            )
+            second = cloud_auth._persist_user_state(
+                cfg, cloud_auth.Principal("mock:member-b", "mock-member-b@localhost.invalid", "member")
+            )
+            first_again = cloud_auth._persist_user_state(
+                cfg, cloud_auth.Principal("mock:member-a", "mock-member-a@localhost.invalid", "member")
+            )
+        self.assertTrue(first["workspace"]["available"])
+        self.assertTrue(second["workspace"]["available"])
+        self.assertNotEqual(first["workspace"]["id"], second["workspace"]["id"])
+        self.assertEqual(first["workspace"]["id"], first_again["workspace"]["id"])
+        self.assertEqual(
+            workspace_for_subject("mock:member-a").workspace_id,
+            first["workspace"]["id"],
+        )
+
     def test_mock_auth_requires_explicit_loopback_local_configuration(self):
         with patch.dict(os.environ, {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
