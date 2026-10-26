@@ -2601,6 +2601,27 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import list_files, read_file, write_file
+
+        encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\\n").encode()
+        if len(encoded) > MAX_RECORD:
+            raise ProjectError("Research session storage limit reached")
+        members = [name for name in list_files(path) if name.startswith("research-sessions/") and name.endswith(".json")]
+        total = 0
+        for name in members:
+            data = read_file(path, name)
+            if name != f"research-sessions/{record['id']}.json":
+                total += len(data)
+        if total + len(encoded) > MAX_TOTAL:
+            raise ProjectError("Research session storage limit reached")
+        write_file(path, f"research-sessions/{record['id']}.json", encoded)
+        if cloud_workspaces.enabled():
+            try:
+                cloud_research.sync_job(record)
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise ProjectError(str(exc)) from exc
+        return
     directory = _directory(path)
     encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_RECORD:
@@ -2634,6 +2655,17 @@ def _save(path: str, record: dict[str, Any]) -> None:
 
 
 def _read(path: str, session_id: str) -> dict[str, Any]:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import BundleError, read_file
+
+        try:
+            UUID(session_id)
+            raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
+        except (ValueError, BundleError) as exc:
+            raise ProjectError("Research session not found or unreadable") from exc
+        if not isinstance(raw, dict) or raw.get("id") != session_id or raw.get("project_path") != str(project_path(path)):
+            raise ProjectError("Research session record does not match this project")
+        return raw
     try:
         UUID(session_id)
     except ValueError as exc:
@@ -2656,6 +2688,10 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
 
 
 def _all(path: str) -> list[dict[str, Any]]:
+    if project_path(path).suffix == ".json":
+        records, _ = read_session_snapshot(path)
+        records.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+        return records
     directory = _directory(path)
     records = []
     for file in sorted(directory.glob("*.json")):
@@ -2684,6 +2720,31 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     """
     view = inspect_project(path)
     directory = Path(view.path) / "research-sessions"
+    if Path(view.path).suffix == ".json":
+        from sigma.project_bundle import list_files, read_file
+
+        records: list[dict[str, Any]] = []
+        unavailable = 0
+        for name in list_files(view.path):
+            if not name.startswith("research-sessions/") or not name.endswith(".json"):
+                continue
+            stem = name.removeprefix("research-sessions/").removesuffix(".json")
+            if stem in {"limits", "sequence"} or "/" in stem:
+                continue
+            try:
+                data = read_file(view.path, name)
+                if len(data) > MAX_RECORD:
+                    raise ValueError("Session record exceeds limit")
+                raw = json.loads(data)
+                UUID(stem)
+                if (not isinstance(raw, dict) or raw.get("id") != stem
+                    or raw.get("project_id") != view.project.id
+                    or raw.get("project_path") != view.path):
+                    raise ValueError("Session does not match project")
+                records.append(raw)
+            except (ValueError, OSError):
+                unavailable += 1
+        return records, unavailable
     if directory.is_symlink():
         raise ProjectError("Research session directory must not be a symbolic link")
     if not directory.exists():
