@@ -2278,7 +2278,7 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
                     number = stored_record.get("session_number") if isinstance(stored_record, dict) else None
                     if type(number) is int and number > 0:
                         current = max(current, number + 1)
-                except (ValueError, UnicodeDecodeError):
+                except (ValueError, UnicodeDecodeError, TypeError):
                     continue
             counter = members.get("research-sessions/sequence.json")
             if counter is not None:
@@ -2290,7 +2290,7 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
                         or stored["next_session_number"] < 1):
                         raise ValueError("Invalid session sequence")
                     current = max(current, stored["next_session_number"])
-                except (ValueError, TypeError) as exc:
+                except (ValueError, TypeError, UnicodeDecodeError) as exc:
                     raise ProjectError("Research session sequence file is unreadable") from exc
             allocated.append(current)
             payload = {
@@ -2717,7 +2717,10 @@ def _save(path: str, record: dict[str, Any]) -> None:
     if project_path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
-        encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        try:
+            encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        except (TypeError, ValueError) as exc:
+            raise ProjectError("Research session record cannot be serialized") from exc
         if len(encoded) > MAX_RECORD:
             raise ProjectError("Research session storage limit reached")
         try:
@@ -2729,9 +2732,22 @@ def _save(path: str, record: dict[str, Any]) -> None:
         view = inspect_project(path)
         if record.get("project_id") != view.project.id or record.get("project_path") != view.path:
             raise ProjectError("Research session does not belong to this project")
+        if type(record.get("session_number")) is not int or record["session_number"] < 1:
+            raise ProjectError("Research session number must be a positive integer")
         member = f"research-sessions/{session_id}.json"
 
         def update(members: dict[str, bytes]) -> dict[str, bytes]:
+            existing = members.get(member)
+            if existing is not None:
+                try:
+                    previous = json.loads(existing)
+                except (ValueError, UnicodeDecodeError) as exc:
+                    raise ProjectError("Existing research session record is unreadable") from exc
+                if (not isinstance(previous, dict)
+                    or previous.get("project_id") != view.project.id
+                    or previous.get("id") != session_id
+                    or previous.get("session_number") != record["session_number"]):
+                    raise ProjectError("Research session identity cannot change")
             total = sum(
                 len(data) for name, data in members.items()
                 if name.startswith("research-sessions/") and name.endswith(".json")
@@ -2788,7 +2804,7 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
             if str(UUID(session_id)) != session_id:
                 raise ValueError("Noncanonical session ID")
             raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
-        except (ValueError, BundleError) as exc:
+        except (ValueError, BundleError, TypeError) as exc:
             raise ProjectError("Research session not found or unreadable") from exc
         if (not isinstance(raw, dict)
             or raw.get("id") != session_id
@@ -2874,7 +2890,7 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
                     or raw.get("project_path") != view.path):
                     raise ValueError("Session does not match project")
                 records.append(raw)
-            except (ValueError, OSError):
+            except (ValueError, OSError, TypeError, UnicodeDecodeError):
                 unavailable += 1
         return records, unavailable
     directory = Path(view.path) / "research-sessions"
