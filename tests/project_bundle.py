@@ -385,6 +385,25 @@ def main() -> None:
             assert removed["removed"] and removed["session_number"] == 27
             assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
             assert _allocate_session_number(created.path, []) == 27
+            # A nonterminal session must not be deleted, and a completed
+            # session must reject stale optimistic-concurrency timestamps.
+            lifecycle["status"] = "paused"
+            _save(created.path, lifecycle)
+            try:
+                remove_session(created.path, lifecycle_id, lifecycle["updated_at"])
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Paused session was removed")
+            lifecycle["status"] = "completed"
+            _save(created.path, lifecycle)
+            try:
+                remove_session(created.path, lifecycle_id, "stale-timestamp")
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Stale session removal succeeded")
+            assert _read(created.path, lifecycle_id)["status"] == "completed"
             # Creation uses the normal project schema and preserves options.
             customized = create_json_project(
                 "Custom JSON", "Research with options",
