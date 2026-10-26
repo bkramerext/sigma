@@ -332,3 +332,16 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .sigma-signin-identity > p:last-child { margin-bottom: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .google-connection-details.sigma-signin-dialog { scroll-behavior: auto; } }
+
+
+.sigma-invitation-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 12px; box-sizing: border-box; background: #03070ed9; }
+.sigma-invitation-dialog { box-sizing: border-box; width: min(440px, 100%); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 26px 30px; border: 1px solid #9a684c; border-radius: 8px; background: linear-gradient(135deg, #09111d, #17130f); box-shadow: 0 24px 80px #000b; text-align: center; color: #c1b9ad; font: 13px/1.6 Inter, sans-serif; }
+.sigma-invitation-art { display: block; width: min(230px, 80%); max-height: 92px; object-fit: contain; margin: 0 auto 20px; }
+.sigma-invitation-dialog h1 { margin: 8px 0 10px; color: #edc39c; font: 400 27px/1.25 Georgia, serif; }
+.sigma-invitation-email { color: #edc39c; overflow-wrap: anywhere; }
+.sigma-invitation-dialog [role="status"] { color: #e7d2b9; }
+.sigma-invitation-dialog [role="alert"] { color: #f0a89b; }
+.sigma-invitation-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; margin-top: 22px; padding-top: 14px; border-top: 1px solid #76583d70; }
+.sigma-invitation-footer a { color: #d9b28d; font: 12px/1.5 Inter, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
+.sigma-invitation-dialog :is(a, button):focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+@media (max-width: 480px) { .sigma-invitation-dialog { padding: 20px 18px; } .sigma-invitation-art { max-height: 70px; margin-bottom: 14px; } .sigma-invitation-dialog h1 { font-size: 23px; } }
