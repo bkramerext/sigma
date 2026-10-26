@@ -3,6 +3,8 @@
 Branch: `red/t128-host-reproducibility`
 Base: `main` at `803a62d` (PR #156 merge)
 Ticket: T128
+PR: [#159](https://github.com/bkramerext/sigma/pull/159) (open, ready for review)
+Implementation commit: `8538b6e`
 
 ## Implemented
 
@@ -61,4 +63,4 @@ and repeats `--after-reboot` after an actual reboot; Gray/T129 separately
 installs protected application configuration and credentials before the
 production preflight and service start.
 
-Elapsed focused implementation time: approximately 40 minutes.
+Elapsed focused implementation time: approximately 35 minutes.

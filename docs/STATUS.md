@@ -34,7 +34,8 @@ that VM or claim hosted acceptance. The operator still needs to run the host
 gate and `--after-reboot` after an actual reboot; T129 remains blocked on
 protected production configuration and credentials. See
 [T128 host readiness](T128_HOST_READINESS.md) and the repository handoff in
-`messages/t128_red_host_reproducibility.txt`.
+[`messages/t128_red_host_reproducibility.txt`](../messages/t128_red_host_reproducibility.txt).
+Implementation is open for review in [PR #159](https://github.com/bkramerext/sigma/pull/159).
 
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
