@@ -121,6 +121,36 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_queue_recovery_never_contacts_hosted_research(self):
+        import asyncio
+        from sigma import cloud_research, cloud_workspaces, research_sessions
+
+        with patch.object(cloud_workspaces, "enabled", return_value=True), patch.object(
+            research_sessions, "_all", return_value=[
+                {"id": "mock-1", "status": "queued", "simulated": True}
+            ]
+        ), patch.object(
+            cloud_research, "reconcile_orphaned_jobs",
+            side_effect=AssertionError("Mock queue contacted hosted jobs"),
+        ), patch.object(
+            research_sessions, "_worker",
+            side_effect=AssertionError("Mock queue dispatched a provider worker"),
+        ):
+            asyncio.run(research_sessions.ensure_queued_workers("/mock/private-a"))
+
+    def test_mock_save_skips_cloud_job_sync(self):
+        from sigma import cloud_research, cloud_workspaces, research_sessions
+        with patch.object(cloud_workspaces, "enabled", return_value=True), patch.object(
+            research_sessions, "_directory", return_value=Path(self.temp.name)
+        ), patch.object(
+            cloud_research, "sync_job",
+            side_effect=AssertionError("Mock session synced a hosted job"),
+        ):
+            research_sessions._save("/mock/private-a", {
+                "id": "11111111-1111-4111-8111-111111111111",
+                "status": "queued", "simulated": True,
+            })
+
     def test_mock_session_lifecycle_is_deterministic_and_provider_free(self):
         from sigma import research_sessions
         record = {
