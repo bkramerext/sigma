@@ -68,8 +68,9 @@ def main() -> None:
     assert "wget -q -O /dev/null http://127.0.0.1:8080/" in frontend
     assert "wget -q -O /dev/null http://127.0.0.1:2019/config/" in compose
     assert "depends_on:" in compose and "condition: service_healthy" in compose
-    assert "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
-    assert "After=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
+    assert "Requires=docker.service sigma-sandbox.service" in systemd
+    assert "After=docker.service sigma-sandbox.service" in systemd
+    assert "RequiresMountsFor=/srv/sigma-state" in systemd
     assert 'mountpoint -q "$disk"' in startup
     assert "release_image.py verify" in startup and "up -d --no-build" in startup
     assert "org.opencontainers.image.revision" in release
