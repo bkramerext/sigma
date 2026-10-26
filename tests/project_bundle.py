@@ -218,6 +218,39 @@ def main() -> None:
             else:
                 raise AssertionError("Migration overwrote existing destination")
             assert Path(migrated.path).is_file()
+            # Complete format: edits, deletion and atomic multi-member changes
+            # survive export and re-import with exact binary bytes.
+            update_files(created.path, {
+                "research-sessions/one.json": b'{"turn":1}',
+                "artifacts/trace.bin": bytes(range(256)),
+                "evidence/source.txt": b"source evidence",
+            })
+            assert set(list_files(created.path)) == {
+                "project.json", "research-sessions/one.json",
+                "artifacts/trace.bin", "evidence/source.txt",
+            }
+            exported = json.loads(export_complete_project(created.path))
+            assert exported["format"] == "sigma.project.bundle"
+            assert exported["version"] == 1
+            imported_path = root / "copy.json"
+            import_bundle(exported, imported_path)
+            assert read_bundle(imported_path) == exported
+            assert read_file(imported_path, "artifacts/trace.bin") == bytes(range(256))
+            assert read_file(imported_path, "evidence/source.txt") == b"source evidence"
+            delete_file(created.path, "evidence/source.txt")
+            assert "evidence/source.txt" not in list_files(created.path)
+            assert "evidence/source.txt" in list_files(imported_path)
+            # Creation uses the normal project schema and preserves options.
+            customized = create_json_project(
+                "Custom JSON", "Research with options",
+                difficulty="hard", show_advanced_outcome_details=True,
+            )
+            assert customized.project.difficulty.value == "hard"
+            assert customized.project.show_advanced_outcome_details is True
+            assert read_bundle(customized.path)["files"]["project.json"]
+            assert {item.project.id for item in list_json_projects()} >= {
+                created.project.id, customized.project.id,
+            }
     print("Project bundle round-trip and safety checks passed")
 
 
