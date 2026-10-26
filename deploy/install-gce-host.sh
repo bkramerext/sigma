@@ -28,10 +28,14 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install --yes ca-certificates curl gnupg uidmap dbus-user-session slirp4netns fuse-overlayfs
 install -d -m 0755 /etc/apt/keyrings
+docker_key_tmp=$(mktemp /etc/apt/keyrings/docker.asc.XXXXXX)
+trap 'rm -f "$docker_key_tmp"' EXIT
 curl --fail --silent --show-error --location \
   https://download.docker.com/linux/ubuntu/gpg \
-  --output /etc/apt/keyrings/docker.asc
-chmod a+r /etc/apt/keyrings/docker.asc
+  --output "$docker_key_tmp"
+chmod 0644 "$docker_key_tmp"
+mv -f "$docker_key_tmp" /etc/apt/keyrings/docker.asc
+trap - EXIT
 architecture=$(dpkg --print-architecture)
 # shellcheck disable=SC1091
 . /etc/os-release
@@ -79,9 +83,17 @@ install -o sigma-sandbox -g sigma-sandbox -m 0600 \
   "$(dirname "$0")/systemd/docker.service.d/sigma-socket.conf" \
   "/home/sigma-sandbox/.config/systemd/user/docker.service.d/sigma-socket.conf"
 
-# The target can already be a mounted persistent filesystem. Keep its root
-# private if the installer is run after the documented disk-mount step.
-install -d -o root -g root -m 0700 /srv/sigma-state
+state_mount=/srv/sigma-state
+[[ ! -L $state_mount ]] || failed 'state mount path is a symlink; installer will not follow it'
+if mountpoint --quiet "$state_mount"; then
+  [[ $(stat -c '%u:%a' "$state_mount") == '0:700' ]] || \
+    failed 'mounted state disk root must already be root-owned mode 0700; installer will not change it'
+else
+  if [[ -e $state_mount ]] && find "$state_mount" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+    failed 'state mount path contains data but is not mounted; refusing to hide or alter it'
+  fi
+  install -d -o root -g root -m 0700 "$state_mount"
+fi
 install -d -o root -g root -m 0755 /opt/sigma
 install -d -o root -g root -m 0755 /usr/local/libexec/sigma
 install -m 0755 "$(dirname "$0")/gce_preflight.py" /usr/local/libexec/sigma/gce_preflight.py
