@@ -33,10 +33,26 @@ async def verify():
             assert "research-executions/" + first["id"] + ".json" in read_bundle(path)["files"]
             print("PASS real Docker execution and JSON-backed record persistence")
 
+            # Capture actual bytes written by the sandbox into /artifacts.
+            artifact_source = (
+                "from pathlib import Path\n"
+                "Path('/artifacts/proof.bin').write_bytes(bytes(range(256)))\n"
+                "print('T249_ARTIFACT_OK')"
+            )
+            artifact_run = await execute_research_code(path, artifact_source)
+            assert artifact_run["status"] == "completed", artifact_run
+            assert artifact_run["exit_code"] == 0, artifact_run
+            assert any(item["filename"] == "proof.bin" for item in artifact_run["artifacts"]), artifact_run
+            artifact_bytes, media_type = get_execution_artifact(path, artifact_run["id"], "proof.bin")
+            assert artifact_bytes == bytes(range(256)), (len(artifact_bytes), media_type)
+            assert get_execution(path, artifact_run["id"])["artifacts"] == artifact_run["artifacts"]
+            print("PASS real Docker binary artifact capture and integrity")
+
             exported = json.loads(export_complete_project(path))
             imported = root / "imported.json"
             import_bundle(exported, imported)
             assert get_execution(imported, first["id"])["stdout"] == first["stdout"]
+            assert get_execution_artifact(imported, artifact_run["id"], "proof.bin")[0] == bytes(range(256))
             assert any(item["id"] == first["id"] for item in list_executions(imported))
             print("PASS export/import execution persistence")
 
