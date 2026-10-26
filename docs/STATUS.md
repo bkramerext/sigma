@@ -5062,3 +5062,44 @@ The existing production-path offline tests demonstrate durable context assembly,
 Added [issue #119 longitudinal design](evaluations/issue_119/longitudinal-design.md): a proposed six-task-family, three-session, branching-evidence 2×2 factorial separating role organization from history availability, with a full-history single-role comparator receiving equivalent persistent evidence and tools. It specifies continuity, evidence use, branching, negative-result retention, repetition, final-quality, calibration, cost, blinding, and integrity measures. At two repeats/task/condition and two calls/session, the draft would require up to 288 call attempts. This is a small exploratory design (`n=6` task clusters), not frozen or authorized. Tasks, keys, provider/model settings, caps, independent curation/grading, information-equivalence review, and approval remain open.
 
 This was a protocol/design review only: no actual project was exercised, so no project export or browser acceptance artifact applies. No Cloud changes, product changes, or provider calls occurred. `./sigma test` ran through all research continuity, continuation, and feedback scenarios, plus Ruff, formatting, Pyright (0 diagnostics), and frontend typecheck. It exited 1 on the same three T128 mount assertions in `tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`; the frontend production build was skipped after failures. The three focused commands also passed independently: `uv run --locked --no-sync python tests/epistemic_continuity.py`, `tests/continuations.py`, and `tests/research_feedback.py`. `git diff --check` passed. No browser path changed.
+# T172 — Pre-deployment authentication and account-isolation gate (2026-10-26)
+
+**Readiness: BLOCKED for production launch.** Reviewed integrated T66/PR #169,
+T131 and T134 implementation, tests and evidence. These tickets were closed as
+offline implementation/preparation only; hosted OAuth and real two-identity
+privacy acceptance were explicitly deferred. The full findings, exact required
+OAuth settings, first-live-sign-in checklist and remaining real-identity gaps
+are in [T172 assessment](T172_AUTH_READINESS.md).
+
+No new launch-blocking code defect was identified in this offline review.
+Server-side Google OAuth state/nonce/claim checks, origin protection, session
+expiry/revocation, owner-bound persistent workspaces and hosted personal
+ChatGPT-auth rejection have deterministic coverage. Production launch is still
+blocked until an owner-authorized hosted run verifies the production OAuth
+client/secret delivery, real admin/member/denied identities, HTTPS callback,
+deployed session behavior, T131 sign-in/denial matrix, T134 two-user privacy
+matrix, and hosted persistence/recovery. Any disclosure, stale access, or
+cross-owner mutation during that run blocks launch. No live OAuth, provider
+calls, production credential changes, infrastructure provisioning or policy
+changes occurred.
+
+Assessment checks:
+
+- `tests/cloud_auth.py`: PASS (16 tests); `tests/cloud_workspaces.py`,
+  `tests/cloud_research.py`, `tests/cloud_research_api.py`,
+  `tests/cloud_research_sponsored_api.py` and `tests/storage.py`: PASS under
+  `./sigma test`.
+- `uv run --locked --with playwright python
+  browser_checks/t23_1_google_signin.py`: PASS in real Chrome against local
+  fixture identities and temporary storage; no external Google request.
+- `./sigma test`: FAIL overall. The first run passed the authentication, storage
+  and owner-isolation scenarios but hit three existing deployment assertions in
+  `tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
+  tests expect `srv-sigma\\x2dstate.mount`, while the current unit uses
+  `RequiresMountsFor=/srv/sigma-state`. Frontend `tsc` was initially absent;
+  after `npm ci --prefix frontend`, frontend typecheck and production build
+  passed independently. Build was skipped by `./sigma test` after earlier
+  failures. A second run with other checkouts executing broad tests concurrently
+  additionally hit a `tests/research_sessions.py` shared worker-active lock;
+  the focused auth/workspace/storage scenarios still passed.
+- `git diff --check`: PASS. No authentication source or T163 files changed.
