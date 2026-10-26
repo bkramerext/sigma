@@ -320,6 +320,7 @@ def main() -> None:
                 "artifacts/proof.bin", "evidence/notes.txt",
                 "artifacts/report.html", "evidence/raw.bin",
                 "artifacts/trace.bin", "evidence/source.txt",
+                "research-sessions/sequence.json", "research-sessions/limits.json",
             }
             exported = json.loads(export_complete_project(created.path))
             assert exported["format"] == "sigma.project.bundle"
