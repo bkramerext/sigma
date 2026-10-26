@@ -73,7 +73,7 @@ def main() -> None:
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
                 )
-                assert (Path(created.path) / STATE).read_bytes() == snapshot
+                assert Path(created.path).read_bytes() == snapshot
             print(
                 "PASS all research types serialized/reopened, destination preview, collision and strategy integrity"
             )
