@@ -119,10 +119,10 @@ async def verify():
             import sys
             import time
             child_code = (
-                "import asyncio,sys\\n"
-                "from sigma.python_sandbox import execute_research_code\\n"
+                "import asyncio,sys\n"
+                "from sigma.python_sandbox import execute_research_code\n"
                 "asyncio.run(execute_research_code(sys.argv[1], "
-                "'import time; time.sleep(6); print(42)'))\\n"
+                "'import time; time.sleep(6); print(42)'))\n"
             )
             prior_ids = {item["id"] for item in list_executions(path)}
             child = subprocess.Popen(
