@@ -186,9 +186,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             clarity = row.locator(".stopped-session-guidance")
             expect(clarity).to_contain_text("session was interrupted when its backend work stopped")
             expect(clarity).to_contain_text("Saved research is preserved.")
-            expect(
-                clarity
-            ).to_contain_text("previously dispatched provider request may already have used allowance")
+            expect(clarity).to_contain_text(
+                "previously dispatched provider request may already have used allowance"
+            )
             expect(clarity).to_contain_text("Resume when you are ready")
             expect(row.locator('button[title="Resume Session 1"]')).to_be_visible()
             expected_guidance = {
@@ -222,9 +222,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             page.goto(target)
             row = page.locator(f'li[data-session-id="{session["id"]}"]')
             expect(row.locator(".session-status")).to_have_text("stopped")
-            expect(
-                row.locator(".stopped-session-guidance")
-            ).to_contain_text("session was interrupted when its backend work stopped")
+            expect(row.locator(".stopped-session-guidance")).to_contain_text(
+                "session was interrupted when its backend work stopped"
+            )
             page.locator('button[title="Resume Session 1"]').click()
             expect(page.get_by_role("alert")).to_be_visible(timeout=10000)
             expect(page.get_by_role("alert")).to_contain_text("AI connection changed")
