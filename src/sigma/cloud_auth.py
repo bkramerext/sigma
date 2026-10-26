@@ -552,6 +552,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
+    public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
     demo_public = path in {"/api/cloud-demo/", "/api/cloud-demo/report"} and request.method in {
@@ -679,6 +680,67 @@ async def middleware(request: Request, call_next):
     return response
 
 
+
+
+# Mock identities are available only on the loopback-only local auth server.
+_MOCK_IDENTITIES = {
+    "member-a": ("mock-member-a@localhost.invalid", "member"),
+    "member-b": ("mock-member-b@localhost.invalid", "member"),
+    "admin": ("mock-admin@localhost.invalid", "admin"),
+    "uninvited": ("mock-uninvited@localhost.invalid", None),
+}
+
+
+def _mock_enabled(cfg: Config) -> bool:
+    return (
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
+        and cfg.origin in {"http://127.0.0.1:5173", "http://localhost:5173"}
+        and os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().lower() in {"1", "true", "yes"}
+    )
+
+
+@router.post("/mock/select")
+def mock_select(request: Request, identity: str):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if identity not in (*_MOCK_IDENTITIES, "guest"):
+        raise HTTPException(400, "Unknown mock identity")
+    old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    with _db(cfg) as db:
+        if old:
+            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(old),))
+        response = Response(status_code=204)
+        _clear_cookie(response, cfg, SESSION_COOKIE)
+        if identity != "guest":
+            email, role = _MOCK_IDENTITIES[identity]
+            if role is not None:
+                subject = "mock:" + identity
+                raw = secrets.token_urlsafe(32)
+                db.execute(
+                    "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
+                    "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+                    (subject, email, _now()),
+                )
+                db.execute(
+                    "INSERT INTO grants(kind,value,role,active) VALUES('email',?,?,1) "
+                    "ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1",
+                    (email, role),
+                )
+                _upsert_user_state(db, subject, email, role, None, 0, "personal")
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (_hash(raw), subject, email, _now() + SESSION_SECONDS),
+                )
+                response.set_cookie(
+                    _cookie_name(SESSION_COOKIE, cfg), raw,
+                    **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+                )
+    return response
+
 @router.get("/status")
 def status(request: Request):
     cfg = config()
@@ -724,6 +786,7 @@ def status(request: Request):
             }
     return {
         "enabled": cfg.enabled,
+        "mock_auth": _mock_enabled(cfg),
         "ready": not cfg.error if cfg.enabled else True,
         # Names only: the setup panel can explain missing local prerequisites
         # without ever returning OAuth secrets or the configured admin email.
