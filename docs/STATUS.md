@@ -5244,6 +5244,37 @@ real-browser check was run because no browser workflow changed; fixture and
 Chrome evidence remains the previously recorded T172 result, not this hosted
 configuration review. `git diff --check` is recorded in the handoff.
 
+## T163 — Integrate local UI regressions on current main (2026-10-26)
+
+Integrated the missing T163 create-request and default local ChatGPT corrections
+onto `main` at `8e8d979`. Current `main` already contained the strategy-derived
+state memoization from PR #168, so that fix was retained without duplicating a
+change. Project creation now sends the default `show_advanced_outcome_details`
+value, the strict API accepts it, and the shared creation service persists it.
+The local ChatGPT sign-in gate now applies only when local authentication is
+enabled; hosted service-funded connection behavior remains separate.
+
+Verification: `tests/project_creation.py` and all 16 `tests/cloud_auth.py`
+scenarios passed. Real Chrome checks passed for project creation/default local
+connection, configured local OAuth sign-in and identity isolation, local versus
+hosted connection UI, and strategy/session controls without a React render
+loop. The strategy browser uses deterministic AI configuration fixtures and
+intercepts session start; no provider call is made. `npm --prefix frontend run
+build` passed (existing Vite chunk-size advisory). The first `./sigma test`
+run on base `8e8d979` failed three deployment mount assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`.
+After merging PR #181's test reconciliation with current `main` (`8acb54a`),
+`./sigma test` passed all scenarios, deployment checks, Ruff, format, Pyright
+(0 diagnostics), frontend typecheck, and frontend build. The four real-Chrome
+checks were rerun on the updated base and passed. No cloud, OAuth-provider, or
+AI-provider operation was performed.
+
+PR #168 supplied these changes against its old base but is no longer suitable
+for integration because its changes conflicted with current `main`. Its render
+loop fix is already in `main`; the remaining corrections are carried by the
+fresh-base T163 PR. Close #168 after the replacement PR is merged so its
+discussion and verification record remain available through that interval.
+
 ## T129 — Release-image SHA correctness and reproducibility (2026-10-26)
 
 Confirmed the release mismatch: production Compose selected image tags from

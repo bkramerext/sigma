@@ -61,37 +61,30 @@ def api_fixture(route):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     elif path == "/api/projects/create":
         create_payloads.append(json.loads(route.request.post_data or "{}"))
-        if len(create_payloads) == 1:
-            route.fulfill(
-                status=422,
-                content_type="application/json",
-                body=json.dumps({"error": "Captured request; no project was created."}),
-            )
-        else:
-            request = create_payloads[-1]
-            route.fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps(
-                    {
-                        "path": "/tmp/sigma-project-create-contract/create-contract.sigma",
-                        "project": {
-                            "id": "create-contract",
-                            "title": request["title"],
-                            "problem": request["problem"],
-                            "schema_version": 1,
-                            "ai_model": request["ai_model"],
-                            "reasoning_effort": request["reasoning_effort"],
-                            "difficulty": request["difficulty"],
-                            "show_advanced_outcome_details": False,
-                            "investigation_type": request["investigation_type"],
-                            "events": [],
-                            "strategies": [],
-                            "active_order": [],
-                        },
-                    }
-                ),
-            )
+        request = create_payloads[-1]
+        route.fulfill(
+            status=201,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "path": "/tmp/sigma-project-create-contract/create-contract.sigma",
+                    "project": {
+                        "id": "create-contract",
+                        "title": request["title"],
+                        "problem": request["problem"],
+                        "schema_version": 9,
+                        "ai_model": request["ai_model"],
+                        "reasoning_effort": request["reasoning_effort"],
+                        "difficulty": request["difficulty"],
+                        "show_advanced_outcome_details": request["show_advanced_outcome_details"],
+                        "investigation_type": request["investigation_type"],
+                        "events": [],
+                        "strategies": [],
+                        "active_order": [],
+                    },
+                }
+            ),
+        )
     else:
         route.fulfill(status=200, content_type="application/json", body="{}")
 
@@ -107,6 +100,8 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     page.route("**/api/**", api_fixture)
     page.goto(UI_URL)
+    connection = page.locator(".project-chatgpt-signin > summary")
+    expect(connection).to_have_attribute("aria-disabled", "false")
     credits = page.locator(".home-art-credit > span")
     expect(credits.nth(0)).to_have_text("Brian Kramer &")
     expect(credits.nth(1)).to_have_text("OpenAI Models")
@@ -132,10 +127,12 @@ with sync_playwright() as playwright:
     expect(dialog).to_be_visible()
     dialog.get_by_label("Project name").fill("Create Contract Regression")
     dialog.get_by_label("Research problem").fill("Check the project creation API contract.")
+    dialog.get_by_role("combobox", name="Research category").click()
+    dialog.get_by_role("option", name="Mathematics").click()
+    dialog.get_by_label("Difficulty").select_option("hard")
     create = dialog.get_by_role("button", name="Create", exact=True)
     expect(create).to_be_enabled()
     create.click()
-    expect(dialog.get_by_role("alert")).to_have_text("Captured request; no project was created.")
     assert len(create_payloads) == 1, create_payloads
     payload = create_payloads[0]
     assert set(payload) == {
@@ -145,12 +142,9 @@ with sync_playwright() as playwright:
         "ai_model",
         "reasoning_effort",
         "difficulty",
+        "show_advanced_outcome_details",
     }, payload
-    assert "show_advanced_outcome_details" not in payload, payload
-    dialog.get_by_role("combobox", name="Research category").click()
-    dialog.get_by_role("option", name="Mathematics").click()
-    dialog.get_by_label("Difficulty").select_option("hard")
-    create.click()
+    assert payload["show_advanced_outcome_details"] is False, payload
     page.wait_for_function(
         "JSON.parse(localStorage.getItem('sigma.newProjectValues') || '{}').title === 'Create Contract Regression'"
     )
@@ -170,4 +164,4 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_label("Difficulty")).to_have_value("hard")
     browser.close()
 
-print("PASS real Chrome project creation sends only fields accepted by the create API.")
+print("PASS real Chrome default local AI connection and project creation Outcome preference.")

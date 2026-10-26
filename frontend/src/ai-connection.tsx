@@ -227,7 +227,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean } } = {}) {
+export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean } } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -267,7 +267,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
   const serviceFunded = cloudFunding?.target === 'hosted';
-  const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && !cloudFunding.authorized;
+  const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && cloudFunding.authenticationEnabled && !cloudFunding.authorized;
   const projectHeaderLabel = serviceFunded
     ? 'ChatGPT · SIGMA service'
     : localGoogleRequired
