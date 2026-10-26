@@ -138,6 +138,7 @@ def run_tooling(command: str) -> int:
                 "deploy/deploy-gce-release.py",
             ],
             [*python, "python", "tests/release_image.py"],
+            [*python, "python", "tests/cloud_acceptance.py"],
             [*python, "python", "tests/public_endpoint.py"],
             [*python, "python", "tests/gce_host.py"],
             [*python, "python", "tests/state_backup.py"],
