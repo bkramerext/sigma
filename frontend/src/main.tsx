@@ -4056,28 +4056,41 @@ function TermsOfServicePage() {
 }
 
 function AccessNotGranted({ email }: { email: string }) {
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<'sending' | 'sent' | 'error'>('sending');
   const [error, setError] = useState('');
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('invite') === '1') {
-      window.history.replaceState(null, '', '/?access=denied');
-      void submit();
-    }
-  }, []);
-  async function submit() {
-    setBusy(true); setError('');
+  const attempted = useRef(false);
+  const submit = useCallback(async () => {
+    setState('sending'); setError('');
     try {
       const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!response.ok) {
         const result = await response.json().catch(() => ({})) as { detail?: string; error?: string };
         throw new Error(result.detail || result.error || 'Your request could not be sent. Please try again later.');
       }
-      setSent(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.'); }
-    finally { setBusy(false); }
-  }
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Welcome to SIGMA</h1><p role="status">Your Google account is not yet invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! We'll get back to you!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Invite Me'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Continue as Guest</a><a className="cloud-text-button" href="/privacy">Proposed privacy notice · v1</a></div>{error && <p role="alert">{error}</p>}</section>;
+      setState('sent');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.');
+      setState('error');
+    }
+  }, []);
+  useEffect(() => {
+    if (attempted.current) return;
+    attempted.current = true;
+    if (new URLSearchParams(window.location.search).has('invite')) window.history.replaceState(null, '', '/?access=denied');
+    void submit();
+  }, [submit]);
+  return <div className="sigma-invitation-backdrop">
+    <section className="sigma-invitation-dialog" role="dialog" aria-modal="true" aria-labelledby="sigma-invitation-title" tabIndex={-1}>
+      <img className="sigma-invitation-art" src="/sigma-slogan-copper-approved.png" alt="SIGMA" />
+      <p className="cloud-auth-kicker">Google account verified</p>
+      <h1 id="sigma-invitation-title">Welcome to SIGMA</h1>
+      <p className="sigma-invitation-email">{email}</p>
+      {state === 'sending' && <p role="status">Requesting your invitation…</p>}
+      {state === 'sent' && <p role="status">Glad you're interested! We'll get back to you!</p>}
+      {state === 'error' && <><p role="alert">{error}</p><button type="button" className="cloud-auth-button" onClick={() => void submit()}>Try again</button></>}
+      <div className="sigma-invitation-footer"><a href="/api/cloud-auth/login">Use Another Account</a><a href="/demo">Continue as Guest</a><a href="/privacy">Privacy notice</a></div>
+    </section>
+  </div>;
 }
 
 installRequestErrorToasts();
