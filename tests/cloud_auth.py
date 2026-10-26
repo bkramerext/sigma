@@ -117,7 +117,7 @@ class CloudAuthTests(TestCase):
         )
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.context = TestClient(app)
+        self.context = TestClient(app, base_url="http://127.0.0.1")
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
@@ -452,7 +452,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/mock/select?identity=admin",
                 headers={"Origin": ORIGIN},
             )
-            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.status_code, 401)  # Protected by auth middleware when mock mode is off.
         with patch.dict(os.environ, {
             "SIGMA_MOCK_AUTH": "1",
             "SIGMA_CLOUD_AUTH_LOCAL": "true",
