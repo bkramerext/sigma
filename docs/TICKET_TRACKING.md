@@ -4,6 +4,7 @@
 
 | Issue | Owner | Status | Branch / handoff |
 |---|---|---|---|
+| T81 — Invitation Requests, Feedback, and Privacy | Green | Implemented; R4R; PR open and mergeable · validated SHA `6f90d3f49bbb324b3e8d953bfe1b92ed293c12d3` · [PR #225](https://github.com/bkramerext/sigma/pull/225) | `green/t81-invitation-workflow` · [ticket](../tickets/t81.md) · [handoff](../messages/t81_green_invitation_workflow.txt) |
 | #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R · [PR #213](https://github.com/bkramerext/sigma/pull/213) | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |
 | T192 — Per-User Project Isolation | Codex | Implemented; R4R · [PR #223](https://github.com/bkramerext/sigma/pull/223) | `t192-per-user-project-isolation` · [ticket](../tickets/t192.md) · [handoff](../messages/t192_codex_handoff.txt) |
 

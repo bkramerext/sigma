@@ -23,11 +23,11 @@ handoff](../messages/blue_t215_r4r.md).
 ## Issue #217 administrator contact (2026-10-26)
 
 Updated the public administrator contact example to
-`zetacontinuation@gmail.com`. The application already centralizes invitation
-requests through `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`; the denied-access link
-continues to build a `mailto:` draft from the API's configured contact. The
+`zetacontinuation@gmail.com`. At this Issue #217 snapshot, the denied-access
+link built a `mailto:` draft from the configured contact; T81 supersedes it
+with the server invitation workflow described below. The
 About dialog and privacy copy contain no administrator contact address, and
-there are no administrator-address email templates or static contact links to
+there were no administrator-address email templates or static contact links to
 update. Generic example addresses in deterministic auth/deployment fixtures and
 the unrelated Caddy TLS operator contact remain unchanged.
 
@@ -40,7 +40,7 @@ confirms the original admin session/role and management identity remain intact,
 and confirms the new contact cannot claim admin. No OAuth settings, account
 grants, secrets, or stored identity data were changed.
 
-Verification: `tests/cloud_auth.py` passed (18 tests). Real Chrome confirmed the
+Verification at the Issue #217 snapshot: `tests/cloud_auth.py` passed (18 tests). Real Chrome confirmed the
 configured contact in the invitation `mailto:` link and no horizontal overflow
 at 1280px and 390px. `npm --prefix frontend run typecheck` and
 `npm --prefix frontend run build` passed (the build retains its existing large
@@ -5935,6 +5935,48 @@ navigation/export portion did not complete. `./sigma test` ran all scenarios,
 then exited 1 at repository Ruff B023/formatting findings in unchanged
 `browser_checks/model_availability.py` (same file as current main). The separate
 frontend build passed. See [Issue #209 handoff](../messages/issue_209_green.txt).
+
+## T81 — Invitation Requests, Feedback, and Privacy (2026-10-26)
+
+Replaced the denied-access screen's mail draft with a POST to the hosted auth
+backend. The request is keyed to the Google subject from the server's
+short-lived verified-denial record; a caller-supplied email is ignored. The
+durable auth database stores Google subject, verified email, request timestamp,
+notification status, and a non-sensitive delivery-failure marker. Repeated
+requests for one Google subject are idempotent, including concurrent
+submissions through a persisted delivery claim; a verified email is limited to
+three new requests per 24 hours. Non-admin users cannot read or update the
+administrator request list. Admins can mark requests reviewed or declined in
+Administrator Settings.
+
+Successful delivery replaces the button with the exact requested static
+message. Backend errors retain the button and display an error. Email is sent
+over TLS SMTP with authenticated login, a sender derived from the authenticated
+mailbox account, and fixed recipient `zetacontinuation@gmail.com`. Deployment
+composition and Secret Manager fetch/preflight handling now include the
+protected SMTP credential.
+
+`tests/cloud_auth.py` passed (23 cases), including spoofed-body identity,
+unauthorized admin access, idempotency, per-email rate limiting, retryable
+delivery failure, concurrent duplicate suppression, admin review, and SMTP authentication/sender/recipient
+checks. Real Chrome accepted the denied-screen POST, exact static success
+message, desktop/mobile layouts, and administrator review list. `./sigma test`,
+Ruff, formatting, Pyright, frontend typecheck/build, `tests/gce_host.py`,
+`tests/deployment_package.py`, Python compilation of the browser check, and
+`git diff --check` passed.
+
+No authenticated SMTP credential is provisioned in this checkout and no live
+email or hosted deployment was performed. Production notification delivery
+remains dependent on creating the approved SMTP Secret Manager resource and
+configuring the account identity in deployment settings. No mail credential
+was added to source control. Reconciled with current main
+(`90fab8cbd5293d4cf4e0bad07b161a8c5d409f86`) at validated integration commit
+`6f90d3f49bbb324b3e8d953bfe1b92ed293c12d3`; GitHub reports PR #225 open,
+non-draft, and mergeable. The post-reconciliation `./sigma test`, Ruff check and
+format, Pyright, frontend typecheck/build, and real Chrome invitation/auth check
+all passed. The Chrome scenario exercised verified-denial submission, success,
+account switch, Demo handoff, local Home, and administrator review. No live SMTP
+credential or delivery was available. See the updated T81 handoff.
 
 ## T192 — Per-User Project Isolation (2026-10-26)
 

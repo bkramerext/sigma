@@ -437,6 +437,8 @@ class GceHostToolingTests(unittest.TestCase):
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE": "/run/sigma-secrets/google-oauth-client-secret",
             "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/run/sigma-secrets/openai-api-key",
+            "SIGMA_INVITATION_SMTP_USERNAME": "notify@example.org",
+            "SIGMA_INVITATION_SMTP_PASSWORD_FILE": "/run/sigma-secrets/invitation-smtp-password",
             "SIGMA_SANDBOX_DOCKER_SOCKET": "/run/user/1002/docker.sock",
             "SIGMA_SANDBOX_DOCKER_GID": "1002",
             "SIGMA_STATE_DISK_MOUNT": "/srv/sigma-state",

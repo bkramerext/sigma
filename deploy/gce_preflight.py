@@ -34,6 +34,8 @@ ALLOWED_ENV_KEYS = {
     "GOOGLE_OIDC_CLIENT_ID",
     "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
     "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
+    "SIGMA_INVITATION_SMTP_USERNAME",
+    "SIGMA_INVITATION_SMTP_PASSWORD_FILE",
     "SIGMA_CLOUD_USER_SPEND_CEILING_USD",
     "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
     "SIGMA_CLOUD_USER_MAX_CONCURRENT",
@@ -101,6 +103,8 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         "GOOGLE_OIDC_CLIENT_ID",
         "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
         "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
+        "SIGMA_INVITATION_SMTP_USERNAME",
+        "SIGMA_INVITATION_SMTP_PASSWORD_FILE",
         "SIGMA_SANDBOX_DOCKER_SOCKET",
         "SIGMA_SANDBOX_DOCKER_GID",
         "SIGMA_STATE_DISK_MOUNT",
@@ -117,6 +121,7 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
     for key in (
         "SIGMA_TLS_EMAIL",
         "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+        "SIGMA_INVITATION_SMTP_USERNAME",
     ):
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", values[key]):
             return None, "an email setting is invalid"
@@ -324,7 +329,11 @@ class Preflight:
             "PASS",
             "sandbox account cannot read the runtime secret directory",
         )
-        for key in ("SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE", "SIGMA_CLOUD_OPENAI_API_KEY_FILE"):
+        for key in (
+            "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
+            "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
+            "SIGMA_INVITATION_SMTP_PASSWORD_FILE",
+        ):
             configured = Path(self.values[key])
             if not configured.is_absolute() or configured.parent != Path("/run/sigma-secrets"):
                 self.add(

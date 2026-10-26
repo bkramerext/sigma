@@ -3,7 +3,6 @@
 import json
 import os
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -48,8 +47,8 @@ with sync_playwright() as playwright:
     guest_page = browser.new_page(viewport={"width": 1280, "height": 850})
     guest_page.route("**/api/cloud-auth/status", status)
     guest_page.goto(BASE_URL, wait_until="networkidle")
-    expect(guest_page.get_by_role("link", name="Explore Demo")).to_have_attribute("href", "/demo")
-    expect(guest_page.get_by_role("heading", name="Sign in to access projects")).to_be_visible()
+    expect(guest_page.get_by_role("link", name="Explore SIGMA")).to_have_attribute("href", "/demo")
+    expect(guest_page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
     page.route(
         "**/api/cloud-auth/denied",
         lambda route: route.fulfill(
@@ -68,14 +67,29 @@ with sync_playwright() as playwright:
     expect(page.get_by_text("visitor@example.org")).to_be_visible()
     expect(page.get_by_role("heading", name="Projects")).to_have_count(0)
 
-    demo = page.get_by_role("link", name="Explore Demo")
-    expect(demo).to_have_attribute("href", "/demo?access=denied")
-    invite = page.get_by_role("link", name="Request Invitation")
-    parts = urlsplit(invite.get_attribute("href") or "")
-    assert parts.scheme == "mailto" and parts.path == "zetacontinuation@gmail.com"
-    request_fields = parse_qs(parts.query)
-    assert request_fields["subject"] == ["SIGMA invitation request"]
-    assert "visitor@example.org" in request_fields["body"][0]
+    demo = page.get_by_role("link", name="Explore SIGMA")
+    expect(demo).to_have_attribute("href", "/demo")
+    invitation_posts: list[dict] = []
+    page.route(
+        "**/api/cloud-auth/invitation-request",
+        lambda route: (
+            invitation_posts.append(
+                {"method": route.request.method, "body": route.request.post_data_json}
+            ),
+            route.fulfill(
+                status=200, content_type="application/json", body='{"status":"notified"}'
+            ),
+        ),
+    )
+    expect(page.get_by_role("button", name="Request Invitation")).to_be_visible()
+    page.get_by_role("button", name="Request Invitation").click()
+    expect(
+        page.get_by_text(
+            "Glad you're interested! Your request has been sent along to the right person!",
+            exact=True,
+        )
+    ).to_be_visible()
+    assert invitation_posts == [{"method": "POST", "body": {}}]
     switch = page.get_by_role("link", name="Use Another Account")
     expect(switch).to_have_attribute("href", "/api/cloud-auth/login")
     for width, height in ((1280, 850), (390, 844)):
@@ -100,8 +114,8 @@ with sync_playwright() as playwright:
         ),
     )
     demo_page.goto(f"{BASE_URL}/?access=denied", wait_until="networkidle")
-    demo_page.get_by_role("link", name="Explore Demo").click()
-    demo_page.wait_for_url("**/demo?access=denied")
+    demo_page.get_by_role("link", name="Explore SIGMA").click()
+    demo_page.wait_for_url("**/demo")
     expect(
         demo_page.get_by_role("heading", name="Explore a SIGMA research project")
     ).to_be_visible()
@@ -169,17 +183,35 @@ with sync_playwright() as playwright:
             ),
         ),
     )
+    admin_page.route(
+        "**/api/cloud-auth/admin/invitation-requests",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "requests": [
+                        {
+                            "subject": "fixture-sub",
+                            "email": "visitor@example.org",
+                            "requested_at": 1_800_000_000,
+                            "status": "notified",
+                        }
+                    ]
+                }
+            ),
+        ),
+    )
     admin_page.goto(BASE_URL, wait_until="networkidle")
-    expect(admin_page.locator(".home-topline .cloud-home-user")).to_be_visible()
-    expect(admin_page.get_by_text("admin@example.org", exact=True).first).to_be_visible()
-    expect(admin_page.locator(".project-google-placeholder")).to_have_count(0)
-    admin_page.get_by_role("button", name="Access Management").click()
-    expect(admin_page.get_by_role("heading", name="Accounts and sessions")).to_be_visible()
-    expect(admin_page.get_by_text("admin@example.org", exact=True).last).to_be_visible()
-    expect(admin_page.get_by_text("admin · session expires")).to_be_visible()
+    expect(admin_page.get_by_role("link", name="Administrator settings")).to_be_visible()
+    admin_page.get_by_role("link", name="Administrator settings").click()
+    expect(admin_page.get_by_role("heading", name="Administrator Settings")).to_be_visible()
+    expect(admin_page.get_by_role("heading", name="Invitation requests")).to_be_visible()
+    expect(admin_page.get_by_text("visitor@example.org")).to_be_visible()
+    expect(admin_page.get_by_role("tab", name="Account usage")).to_be_visible()
 
     browser.close()
 
 print(
-    "PASS real Chrome denied account Home, verified-email invitation draft, account switch, Demo handoff, unrestricted local Home, and administrator session summary"
+    "PASS real Chrome denied account Home, server invitation success, account switch, Demo handoff, unrestricted local Home, and administrator invitation review"
 )

@@ -1,0 +1,35 @@
+T81 — Green handoff / R4R
+
+PR: #225 (T81), https://github.com/bkramerext/sigma/pull/225
+State: open, non-draft, mergeable against main.
+Branch: green/t81-invitation-workflow
+Validated integration commit: 6f90d3f49bbb324b3e8d953bfe1b92ed293c12d3
+
+Reconciled the branch with current main at 90fab8cbd5293d4cf4e0bad07b161a8c5d409f86.
+The only conflict was the append-only docs/STATUS.md entry; preserved both T81
+and T192 content. T81 remains in the existing hosted Access Not Granted flow,
+not About. No unrelated current-main functionality or deployment settings were
+reworked.
+
+The hosted denied-access action submits to the backend using the server-issued
+short-lived verified Google identity, ignoring caller-supplied identity. The
+SQLite request record stores identity, timestamp, and status. Duplicate
+submissions are idempotent, concurrent delivery is claimed durably, and new
+requests are rate limited. Administrators can review/update requests; ordinary
+users cannot access that API. Notification uses authenticated STARTTLS SMTP,
+with sender derived from the authenticated mailbox and a fixed recipient of
+zetacontinuation@gmail.com. On success, the button is replaced with the exact
+static confirmation message; on failure it remains available with an error.
+
+Checks on the validated integration commit:
+- `./sigma test` passed, including 23 `tests/cloud_auth.py` cases.
+- Ruff check and format passed; Pyright reported 0 errors/warnings/information.
+- Frontend typecheck and production build passed (existing >500 kB chunk advisory).
+- `tests/deployment_package.py` and `tests/gce_host.py` passed within the suite.
+- Real Chrome: `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright python browser_checks/t22_access_denied.py` passed denied account Home, invitation submission/success, account switching, Demo handoff, local Home, and admin invitation review.
+- The integration diff was reviewed and limited to the 16 T81 files. `git diff --check` on the complete merge diff reports inherited trailing whitespace in imported main files `messages/t192_codex_handoff.txt` and `tickets/t192.md`; no T81 file has that issue.
+
+No provider calls, production changes, SMTP credentials, or live email delivery
+were used. Live authenticated delivery remains unverified pending owner
+provisioning of the approved credential. The latest GitHub snapshot reports
+PR #225 open, non-draft, and mergeable.

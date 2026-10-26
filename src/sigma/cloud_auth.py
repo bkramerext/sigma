@@ -12,9 +12,12 @@ import hmac
 import os
 import re
 import secrets
+import smtplib
 import sqlite3
+import ssl
 import time
 from dataclasses import dataclass
+from email.message import EmailMessage
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -41,6 +44,7 @@ _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
 _DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _SCHEMA_LOCK = Lock()
 _SCHEMA_READY: set[tuple[str, int, int]] = set()
+INVITATION_RECIPIENT = "zetacontinuation@gmail.com"
 
 
 @dataclass(frozen=True)
@@ -255,7 +259,16 @@ def _initialize(path: Path) -> None:
             CREATE TABLE IF NOT EXISTS denied_access (
                 token_hash TEXT PRIMARY KEY,
                 email TEXT NOT NULL,
+                subject TEXT,
                 expires_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS invitation_requests (
+                subject TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                requested_at INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('pending','sending','notified','reviewed','declined')),
+                notification_error TEXT,
+                notification_started_at INTEGER
             );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY,
@@ -269,6 +282,14 @@ def _initialize(path: Path) -> None:
         columns = {row["name"] for row in db.execute("PRAGMA table_info(grants)")}
         if "allowance_usd" not in columns:
             db.execute("ALTER TABLE grants ADD COLUMN allowance_usd REAL")
+        denied_columns = {row["name"] for row in db.execute("PRAGMA table_info(denied_access)")}
+        if "subject" not in denied_columns:
+            db.execute("ALTER TABLE denied_access ADD COLUMN subject TEXT")
+        request_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(invitation_requests)")
+        }
+        if "notification_started_at" not in request_columns:
+            db.execute("ALTER TABLE invitation_requests ADD COLUMN notification_started_at INTEGER")
     if not existed:
         path.chmod(0o600)
 
@@ -469,6 +490,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
+    public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     demo_public = path in {"/api/cloud-demo/", "/api/cloud-demo/report"} and request.method in {
         "GET",
         "HEAD",
@@ -729,8 +751,8 @@ async def callback(
             if denied_cookie:
                 db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
             db.execute(
-                "INSERT INTO denied_access(token_hash,email,expires_at) VALUES(?,?,?)",
-                (_hash(denied_token), email, _now() + DENIED_SECONDS),
+                "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
+                (_hash(denied_token), email, subject, _now() + DENIED_SECONDS),
             )
         response = RedirectResponse("/?access=denied", status_code=303)
         _clear_cookie(response, cfg, FLOW_COOKIE)
@@ -797,7 +819,8 @@ def denied_identity(request: Request):
         raise HTTPException(404, "No denied sign-in is available.")
     with _db(cfg) as db:
         row = db.execute(
-            "SELECT email,expires_at FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),)
+            "SELECT email,subject,expires_at FROM denied_access WHERE token_hash=?",
+            (_hash(denied_cookie),),
         ).fetchone()
         if not row or row["expires_at"] <= _now():
             if row:
@@ -808,6 +831,148 @@ def denied_identity(request: Request):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+def _deliver_invitation(email: str, requested_at: int) -> None:
+    """Send through an authenticated TLS SMTP account; sender is its login identity."""
+    raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
+    try:
+        username = _normalize_email(raw_username)
+    except ValueError as exc:
+        raise RuntimeError("Invitation delivery is not configured.") from exc
+    try:
+        password = secret_value("SIGMA_INVITATION_SMTP_PASSWORD")
+    except SecretConfigurationError as exc:
+        raise RuntimeError("Invitation delivery is not configured.") from exc
+    if not password:
+        raise RuntimeError("Invitation delivery is not configured.")
+    host = os.environ.get("SIGMA_INVITATION_SMTP_HOST", "smtp.gmail.com").strip()
+    try:
+        port = int(os.environ.get("SIGMA_INVITATION_SMTP_PORT", "587"))
+        if not host or not 1 <= port <= 65535:
+            raise ValueError
+        message = EmailMessage()
+        message["Subject"] = "SIGMA invitation request"
+        message["From"] = username
+        message["To"] = INVITATION_RECIPIENT
+        message.set_content(
+            f"A verified Google account requested SIGMA access.\n\n"
+            f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
+        )
+        with smtplib.SMTP(host, port, timeout=10) as client:
+            client.ehlo()
+            client.starttls(context=ssl.create_default_context())
+            client.ehlo()
+            client.login(username, password)
+            client.send_message(message, from_addr=username, to_addrs=[INVITATION_RECIPIENT])
+    except (OSError, ValueError, smtplib.SMTPException) as exc:
+        raise RuntimeError("Invitation notification could not be delivered.") from exc
+
+
+@router.post("/invitation-request")
+def request_invitation(request: Request):
+    """Use the short-lived, server-issued verified denied-login cookie only."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.database:
+        raise HTTPException(503, "Invitation requests are temporarily unavailable.")
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+    if not denied_cookie or len(denied_cookie) > 128:
+        raise HTTPException(401, "Sign in with Google before requesting an invitation.")
+    now = _now()
+    with _db(cfg) as db:
+        identity = db.execute(
+            "SELECT email,subject,expires_at FROM denied_access WHERE token_hash=?",
+            (_hash(denied_cookie),),
+        ).fetchone()
+        if not identity or identity["expires_at"] <= now:
+            raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
+        # Bind to the verified Google subject without relying on browser-supplied identity.
+        subject = identity["subject"] or f"legacy-denied:{_hash(denied_cookie)}"
+        existing = db.execute(
+            "SELECT status,requested_at,notification_started_at FROM invitation_requests WHERE subject=?",
+            (subject,),
+        ).fetchone()
+        if existing and existing["status"] != "pending":
+            if existing["status"] == "sending":
+                if (
+                    existing["notification_started_at"]
+                    and existing["notification_started_at"] > now - 60
+                ):
+                    raise HTTPException(
+                        409, "Your request is already being sent. Please wait and retry."
+                    )
+                db.execute(
+                    "UPDATE invitation_requests SET status='pending',notification_started_at=NULL WHERE subject=?",
+                    (subject,),
+                )
+                existing = {"status": "pending", "requested_at": existing["requested_at"]}
+            else:
+                return {"status": existing["status"], "duplicate": True}
+        recent = db.execute(
+            "SELECT COUNT(*) AS n FROM invitation_requests WHERE email=? AND requested_at>?",
+            (identity["email"], now - 86400),
+        ).fetchone()["n"]
+        if not existing and recent >= 3:
+            raise HTTPException(429, "Too many requests. Please try again later.")
+        requested_at = int(existing["requested_at"]) if existing else now
+        if not existing:
+            db.execute(
+                "INSERT INTO invitation_requests(subject,email,requested_at,status) VALUES(?,?,?,'pending')",
+                (subject, identity["email"], requested_at),
+            )
+        db.execute(
+            "UPDATE invitation_requests SET status='sending',notification_started_at=?,notification_error=NULL WHERE subject=?",
+            (now, subject),
+        )
+    try:
+        _deliver_invitation(identity["email"], requested_at)
+    except RuntimeError as exc:
+        with _db(cfg) as db:
+            db.execute(
+                "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? WHERE subject=?",
+                ("delivery failed", subject),
+            )
+        raise HTTPException(503, "Your request could not be sent. Please try again later.") from exc
+    with _db(cfg) as db:
+        db.execute(
+            "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL WHERE subject=?",
+            (subject,),
+        )
+    return {"status": "notified", "duplicate": bool(existing)}
+
+
+class InvitationStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(reviewed|declined)$")
+
+
+@router.get("/admin/invitation-requests")
+def list_invitation_requests():
+    cfg = config()
+    with _db(cfg) as db:
+        rows = db.execute(
+            "SELECT subject,email,requested_at,status FROM invitation_requests ORDER BY requested_at DESC LIMIT 500"
+        ).fetchall()
+    return {"requests": [dict(row) for row in rows]}
+
+
+@router.put("/admin/invitation-requests/{subject:path}")
+def update_invitation_request(subject: str, body: InvitationStatusUpdate, request: Request):
+    cfg = config()
+    actor: Principal = request.state.cloud_principal
+    if not subject or len(subject) > 255:
+        raise HTTPException(404, "Invitation request not found.")
+    with _db(cfg) as db:
+        result = db.execute(
+            "UPDATE invitation_requests SET status=?,notification_error=NULL WHERE subject=?",
+            (body.status, subject),
+        )
+        if not result.rowcount:
+            raise HTTPException(404, "Invitation request not found.")
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "invitation_" + body.status, "invitation", subject, _now()),
+        )
+    return {"status": body.status}
 
 
 @router.post("/logout")

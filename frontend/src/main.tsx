@@ -2736,7 +2736,7 @@ function Home({ initialPath, onOpen }: {
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
       <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
-      {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
+      {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
@@ -3564,12 +3564,15 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   </>;
 }
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
-function AccessManagementDialog({ bootstrapAdmin, grants, sessions, error, busy, onClose, onAdd, onSave, onRevoke }: {
+type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string };
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, error, busy, onClose, onAdd, onSave, onRevoke, onUpdateInvitation }: {
   bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
+  invitationRequests: CloudInvitationRequest[];
   error: string; busy: boolean; onClose: () => void;
   onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
   onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
   onRevoke: (grant: CloudGrant) => Promise<void>;
+  onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
@@ -3721,6 +3724,8 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, error, busy,
     <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
+      <div className="admin-table-heading"><h3>Invitation requests</h3></div>
+      {invitationRequests.length ? <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{invitationRequests.map(item => <tr key={item.subject}><th scope="row">{item.email}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td>{item.status}</td><td>{item.status === 'notified' && <><button type="button" className="admin-text-action" disabled={busy} onClick={() => void onUpdateInvitation(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateInvitation(item, 'declined')}>Decline</button></>}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
       <div className="admin-table-heading"><h3>Authorized users</h3></div>
       <div className="admin-table-scroll"><table className="admin-grants-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
@@ -3769,6 +3774,7 @@ function CloudAuthGate() {
   const [accessOpen, setAccessOpen] = useState(false);
   const [grants, setGrants] = useState<CloudGrant[]>([]);
   const [accountSessions, setAccountSessions] = useState<CloudAccountSession[]>([]);
+  const [invitationRequests, setInvitationRequests] = useState<CloudInvitationRequest[]>([]);
   const [bootstrapAdmin, setBootstrapAdmin] = useState('');
   const [busy, setBusy] = useState(false);
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
@@ -3798,10 +3804,15 @@ function CloudAuthGate() {
     return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh); };
   }, [refresh]);
   const loadGrants = useCallback(async () => {
-    const response = await fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' });
+    const [response, requestsResponse] = await Promise.all([
+      fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' }),
+      fetch('/api/cloud-auth/admin/invitation-requests', { credentials: 'same-origin', cache: 'no-store' }),
+    ]);
     if (!response.ok) throw await cloudFailure(response, 'Access rules could not be loaded.');
+    if (!requestsResponse.ok) throw await cloudFailure(requestsResponse, 'Invitation requests could not be loaded.');
     const result = await response.json() as { grants: CloudGrant[]; sessions: CloudAccountSession[]; bootstrap_admin: string };
-    setGrants(result.grants); setAccountSessions(result.sessions); setBootstrapAdmin(result.bootstrap_admin);
+    const requestResult = await requestsResponse.json() as { requests: CloudInvitationRequest[] };
+    setGrants(result.grants); setAccountSessions(result.sessions); setBootstrapAdmin(result.bootstrap_admin); setInvitationRequests(requestResult.requests);
   }, []);
   useEffect(() => {
     const target = status?.target ?? 'hosted';
@@ -3865,26 +3876,44 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
+  async function updateInvitation(item: CloudInvitationRequest, next: 'reviewed' | 'declined') {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/invitation-requests/${encodeURIComponent(item.subject)}`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next }) });
+      if (!response.ok) throw await cloudFailure(response, 'Invitation request could not be updated.');
+      await loadGrants();
+    } finally { setBusy(false); }
+  }
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   if (!status.ready) return <GuestExploreLanding canSignIn={false} setupError={failure || 'Google sign-in is not ready.'}/>;
-  return <CloudIdentityContext.Provider value={context}>{status.authenticated ? <AIProvider><App/></AIProvider> : deniedEmail ? <AccessNotGranted email={deniedEmail} contactEmail={status.admin_contact_email}/> : <GuestExploreLanding canSignIn={status.ready} />}{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}>{status.authenticated ? <AIProvider><App/></AIProvider> : deniedEmail ? <AccessNotGranted email={deniedEmail}/> : <GuestExploreLanding canSignIn={status.ready} />}{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation}/>}</CloudIdentityContext.Provider>;
 }
 
 function GuestExploreLanding({ canSignIn, setupError }: { canSignIn: boolean; setupError?: string }) {
   return <main className="cloud-auth-shell"><section className="cloud-auth-card guest-explore-card"><a className="cloud-demo-brand" href="/">SIGMA</a><p className="cloud-auth-kicker">Guest access</p><h1>Explore SIGMA</h1><p>Browse a published research example without signing in. Guest access is read-only and cannot create a private workspace, select a model, run research, or use inference.</p><p className="guest-account-state"><strong>Guest</strong><span>Explore only · no execution</span></p>{setupError && <p role="status">{setupError} The public research example remains available.</p>}<div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore SIGMA</a>{canSignIn && <a className="cloud-secondary-button" href="/api/cloud-auth/login">Sign in with Google</a>}</div></section></main>;
 }
 
-function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {
-  const subject = 'SIGMA invitation request';
-  const body = `Hello,\n\nI signed in to SIGMA with my Google account (${email}), but access has not yet been granted. Please consider inviting me.\n\nThank you.`;
-  const requestHref = contactEmail
-    ? `mailto:${contactEmail}?${new URLSearchParams({ subject, body })}`
-    : undefined;
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA. No account workspace was created.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Explore SIGMA</a></div></section>;
+function AccessNotGranted({ email }: { email: string }) {
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit() {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({})) as { detail?: string; error?: string };
+        throw new Error(result.detail || result.error || 'Your request could not be sent. Please try again later.');
+      }
+      setSent(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.'); }
+    finally { setBusy(false); }
+  }
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA. No account workspace was created.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! Your request has been sent along to the right person!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Request Invitation'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Explore SIGMA</a></div>{error && <p role="alert">{error}</p>}</section>;
 }
 
 installRequestErrorToasts();

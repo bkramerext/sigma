@@ -29,6 +29,7 @@ services:
     secrets:
       - google_oidc_client_secret
       - cloud_openai_api_key
+      - invitation_smtp_password
     environment:
       SIGMA_CLOUD_AUTH_ENABLED: "true"
       SIGMA_CLOUD_AUTH_HOME: /var/lib/sigma-auth
@@ -39,6 +40,8 @@ services:
       GOOGLE_OIDC_CLIENT_ID: ${GOOGLE_OIDC_CLIENT_ID:?set production OAuth client id}
       GOOGLE_OIDC_CLIENT_SECRET_FILE: /run/secrets/google_oidc_client_secret
       SIGMA_CLOUD_OPENAI_API_KEY_FILE: /run/secrets/cloud_openai_api_key
+      SIGMA_INVITATION_SMTP_USERNAME: ${SIGMA_INVITATION_SMTP_USERNAME:?set authenticated notification sender account}
+      SIGMA_INVITATION_SMTP_PASSWORD_FILE: /run/secrets/invitation_smtp_password
       SIGMA_CLOUD_USER_SPEND_CEILING_USD: ${SIGMA_CLOUD_USER_SPEND_CEILING_USD:-2.00}
       SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD: ${SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD:-15.00}
       SIGMA_CLOUD_USER_MAX_CONCURRENT: ${SIGMA_CLOUD_USER_MAX_CONCURRENT:-1}
@@ -133,6 +136,8 @@ secrets:
     file: ${SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE:?point to Google OAuth client secret file}
   cloud_openai_api_key:
     file: ${SIGMA_CLOUD_OPENAI_API_KEY_FILE:?point to sponsored OpenAI API key file}
+  invitation_smtp_password:
+    file: ${SIGMA_INVITATION_SMTP_PASSWORD_FILE:?point to authenticated notification SMTP password file}
 
 volumes:
   sigma-state:
