@@ -379,6 +379,25 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
         raise BundleError("Invalid JSON project destination")
     if os.path.lexists(path):
         raise BundleError("Project destination already exists")
+    # Session provenance includes the project path. Rebase only owned session
+    # records when importing a complete project to a new location.
+    project_document = json.loads(members["project.json"])
+    project_id = project_document.get("id")
+    for member, raw in list(members.items()):
+        if not (member.startswith("research-sessions/") and member.endswith(".json")):
+            continue
+        if member in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
+            continue
+        try:
+            session = json.loads(raw)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise BundleError("Cannot import unreadable research session") from exc
+        if not isinstance(session, dict) or session.get("project_id") != project_id:
+            raise BundleError("Cannot import foreign research session")
+        if not isinstance(session.get("project_path"), str):
+            raise BundleError("Research session is missing project provenance")
+        session["project_path"] = str(path.resolve())
+        members[member] = (json.dumps(session, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     canonical = {
         "format": FORMAT,
         "version": VERSION,
