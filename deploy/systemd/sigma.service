@@ -1,7 +1,7 @@
 [Unit]
 Description=SIGMA production Compose stack
-Requires=docker.service sigma-sandbox.service srv-sigma\x2dstate.mount
-After=docker.service sigma-sandbox.service srv-sigma\x2dstate.mount
+Requires=docker.service sigma-sandbox.service
+After=docker.service sigma-sandbox.service
 RequiresMountsFor=/srv/sigma-state
 
 [Service]
