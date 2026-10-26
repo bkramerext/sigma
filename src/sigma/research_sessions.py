@@ -2747,7 +2747,10 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
             raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
         except (ValueError, BundleError) as exc:
             raise ProjectError("Research session not found or unreadable") from exc
-        if not isinstance(raw, dict) or raw.get("id") != session_id or raw.get("project_path") != str(project_path(path)):
+        if (not isinstance(raw, dict)
+            or raw.get("id") != session_id
+            or raw.get("project_path") != str(project_path(path))
+            or raw.get("project_id") != inspect_project(path).project.id):
             raise ProjectError("Research session record does not match this project")
         return raw
     try:
