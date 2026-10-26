@@ -1,5 +1,79 @@
 # SIGMA status
 
+## T81 PR #242 reconciliation with current main (2026-10-26)
+
+Reconciled PR #242 with `origin/main` at
+`48fe9a1fee87a23c1af1665f1f30723ef39d9e97`, including merged PR #230. Kept
+the current-main Guest startup test and combined it with T81 coverage for the
+friendly missing-admin `--signin` error and configured `--signin` credential
+handling. Resolved the email-test overlap with the current-main typed bytes
+assertion. `src/sigma/cloud_auth.py` merged automatically; the formatter
+changes remain present with current-main #230 behavior intact.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and frontend build (existing >500 kB chunk advisory). Real
+Chrome passed `browser_checks/t81_public_legal_pages.py` for signed-out direct
+navigation and refresh of `/privacy` and `/tos`, draft labels, About Privacy,
+and no `/tos` app links. GitHub CI results are recorded in the updated PR and
+handoff. No deployment occurred.
+
+## T81 PR #242 CI unblock (2026-10-26)
+
+Updated the stale `tests/tooling.py` startup checks to match current `main`:
+ordinary launch without `--signin` works with a blank admin-contact setting
+as Guest (`SIGMA_LOCAL_AUTO_ADMIN=false`); `--signin` without the contact
+returns its friendly error before constructing the launcher or starting
+servers; and configured `--signin` continues to exercise server-only OAuth
+credentials and local admin setup. Applied Ruff's formatting-only changes to
+three expressions in `src/sigma/cloud_auth.py` without changing behavior.
+This file also overlaps Blue's PR #246; the overlap is limited to those
+formatting changes and is reported in the Gray handoff for coordinator
+reconciliation through Brian.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build (existing >500 kB chunk advisory).
+Real Chrome passed `browser_checks/t81_public_legal_pages.py` for signed-out
+direct navigation and refresh of `/privacy` and `/tos`, draft labels, the About
+Privacy link, and absence of app `/tos` links. No deployment occurred. See the
+[Gray handoff](../messages/t81_gray_public_legal_pages.txt).
+
+## T81 public legal pages follow-up (2026-10-26)
+
+On current `main` `623a9464fed585cf951b02be54e8e4ab683bb559`, the existing
+public `/privacy` route remains labeled as a proposed notice awaiting Brian's
+approval. The About dialog link is now clearly labeled **Privacy**. Added a
+public `/tos` route with concise proposed terms for experimental research
+features. It is visibly marked as a draft for Brian's review, and no `/tos`
+navigation link is added to the SIGMA app. The draft is recorded in
+[TOS_DRAFT_v1.md](TOS_DRAFT_v1.md); it must be reviewed before production
+publication.
+
+Local verification: real Chrome passed direct signed-out navigation and
+refresh at `/privacy` and `/tos`, both draft labels, the About Privacy link,
+and absence of `/tos` app links. Frontend typecheck and
+`npm --prefix frontend run build` passed (existing >500 kB chunk advisory).
+`./sigma test` ran the application scenarios and frontend typecheck but exited
+1 on current-main Ruff findings in `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, and `tests/gmail_delivery.py`, formatting findings
+in those files, and the existing Pyright error at
+`tests/gmail_delivery.py:56`; the build step was skipped by the suite and then
+passed when run directly. The new browser check passes targeted Ruff check and
+format. Hosted verification and production behavior are unverified because
+deployment was explicitly out of scope. See the [Gray
+handoff](../messages/t81_gray_public_legal_pages.txt).
+
+T81 CI-unblock follow-up: reconciled PR #242 with current `main` at
+`6a607a4` (merge commit `a98b2f0`). Corrected only the named inherited
+Ruff/format findings in `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, `src/sigma/cli.py`, and
+`tests/gmail_delivery.py`, plus the Pyright narrowing in the email test. The
+named-file Ruff check/format, Pyright, and focused email delivery tests pass;
+the legal-page Chrome check passes. On this reconciled tree, `./sigma test`
+still exits 1 on a startup-warning assertion in `tests/tooling.py` and
+formatting in current-main `src/sigma/cloud_auth.py`, both outside this
+follow-up's authorized fix scope. Hosted verification remains unverified.
+See the updated [handoff](../messages/t81_gray_public_legal_pages.txt).
+
 ## T81 remaining feedback and privacy increment (2026-10-26)
 
 Continues T81 after invitation PR #225 merged at

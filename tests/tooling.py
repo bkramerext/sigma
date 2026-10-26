@@ -260,7 +260,7 @@ def check_local_google_startup() -> None:
         patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
         patch("sigma.ui.stop_servers"),
     ):
-        assert run_ui(navigate=True) == 0
+        assert run_ui(navigate=True, signin=True) == 0
     backend_env = launch.call_args_list[0].kwargs["env"]
     frontend_env = launch.call_args_list[1].kwargs["env"]
     for key, value in {
@@ -271,6 +271,7 @@ def check_local_google_startup() -> None:
     }.items():
         assert backend_env[key] == value
     assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+    assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "true"
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
     assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
@@ -339,7 +340,28 @@ def check_partial_google_startup_remains_guest_without_admin() -> None:
     assert backend_env["SIGMA_CLOUD_AUTH_ENABLED"] == "true"
     assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
     assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
+    assert backend_env["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] == ""
     assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+    frontend_env = launch.call_args_list[1].kwargs["env"]
+    assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
+
+
+def check_signin_without_admin_contact_fails_before_launch() -> None:
+    error_output = StringIO()
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("sigma.ui.load_local_config"),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.Instance") as instance,
+        patch("sigma.ui.subprocess.Popen") as launch,
+        redirect_stderr(error_output),
+    ):
+        assert run_ui(signin=True) == 2
+    assert "Cannot start SIGMA with --signin." in error_output.getvalue()
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL is not configured." in error_output.getvalue()
+    instance.assert_not_called()
+    launch.assert_not_called()
 
 
 def check_shutdown_and_suspended() -> None:
@@ -419,6 +441,7 @@ def main() -> None:
         check_local_google_startup()
         check_local_google_setup_warning()
         check_partial_google_startup_remains_guest_without_admin()
+        check_signin_without_admin_contact_fails_before_launch()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()
