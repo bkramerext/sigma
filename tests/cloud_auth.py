@@ -121,6 +121,53 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_session_lifecycle_is_deterministic_and_provider_free(self):
+        from sigma import research_sessions
+        record = {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "project_path": "/mock/private-a", "project_id": "project-a",
+            "strategy_id": "strategy-a", "strategy_title": "Test strategy",
+            "strategy_runs": [{"strategy_id": "strategy-a", "artifacts": [],
+                               "status": "queued", "calls_used": 0}],
+            "status": "queued", "mock_stage": 0, "mock_scenario": "completed",
+            "simulated": True, "artifacts": [], "events": [],
+        }
+        with patch.object(research_sessions, "_save") as saved, patch.object(
+            research_sessions, "_outcome", return_value={"assessment": "mixed"}
+        ), patch.object(research_sessions, "_worker", side_effect=AssertionError(
+            "No provider worker may run"
+        )):
+            for expected in ("running", "running", "ended"):
+                research_sessions._advance_mock(record)
+                self.assertEqual(record["status"], expected)
+            self.assertEqual(len(record["artifacts"]), 1)
+            self.assertTrue(record["artifacts"][0]["simulated"])
+            self.assertEqual(record["strategy_runs"][0]["artifacts"],
+                             [record["artifacts"][0]["id"]])
+            self.assertEqual(record["strategy_runs"][0]["calls_used"], 0)
+            self.assertEqual([e["sequence"] for e in record["events"]], [1, 2, 3])
+            research_sessions._advance_mock(record)
+            self.assertEqual(saved.call_count, 3)
+            self.assertEqual(len(record["artifacts"]), 1)
+
+    def test_mock_failure_scenarios_never_create_fake_evidence(self):
+        from sigma import research_sessions
+        for scenario in ("failed", "provider-error", "exhausted"):
+            record = {
+                "project_path": "/mock/private-a", "project_id": "project-a",
+                "strategy_id": "strategy-a", "strategy_title": "Test strategy",
+                "strategy_runs": [{"artifacts": [], "status": "queued", "calls_used": 0}],
+                "status": "queued", "mock_stage": 2, "mock_scenario": scenario,
+                "simulated": True, "artifacts": [], "events": [],
+            }
+            with self.subTest(scenario=scenario), patch.object(
+                research_sessions, "_save"
+            ), patch.object(research_sessions, "_outcome", return_value={}):
+                research_sessions._advance_mock(record)
+                self.assertEqual(record["status"], "failed")
+                self.assertEqual(record["artifacts"], [])
+                self.assertIn("No provider was called", record["message"])
+
     def test_mock_research_route_never_invokes_live_start(self):
         from sigma import research_sessions
         origin = {"Origin": "http://127.0.0.1:5173"}
