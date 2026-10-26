@@ -3580,6 +3580,17 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 function MockAuthSelector() {
   const cloud = useCloudIdentity();
   const [busy, setBusy] = useState(false);
+  const [funding, setFunding] = useState<{ mode: string; allowance: { scenario: string; remaining_usd: number } } | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!cloud?.mock_auth || !cloud.authenticated) { setFunding(null); return; }
+    let cancelled = false;
+    fetch('/api/cloud-auth/mock/funding', { credentials: 'same-origin' })
+      .then(async response => { if (!response.ok) throw new Error('Mock funding unavailable'); return response.json(); })
+      .then(data => { if (!cancelled) setFunding(data); })
+      .catch(err => { if (!cancelled) setError(errorMessage(err)); });
+    return () => { cancelled = true; };
+  }, [cloud?.mock_auth, cloud?.authenticated, cloud?.user?.email]);
   if (!cloud?.mock_auth) return null;
   async function select(identity: string) {
     setBusy(true);
@@ -3590,12 +3601,25 @@ function MockAuthSelector() {
       if (!response.ok) throw new Error('Mock identity switch failed: ' + response.status);
       window.localStorage.removeItem('sigma.currentProject');
       window.location.assign(identity === 'uninvited' ? '/?access=denied' : '/');
-    } catch (error) {
-      window.alert(errorMessage(error));
-      setBusy(false);
+    } catch (err) {
+      setError(errorMessage(err)); setBusy(false);
     }
   }
-  return <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+  async function update(kind: 'model-access' | 'allowance', value: string) {
+    setBusy(true); setError('');
+    try {
+      const parameter = kind === 'model-access' ? 'mode' : 'scenario';
+      const response = await fetch('/api/cloud-auth/mock/' + kind + '?' + parameter + '=' + encodeURIComponent(value), {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error('Mock scenario update failed: ' + response.status);
+      const latest = await fetch('/api/cloud-auth/mock/funding', { credentials: 'same-origin' });
+      if (!latest.ok) throw new Error('Mock funding refresh failed');
+      setFunding(await latest.json());
+    } catch (err) { setError(errorMessage(err)); }
+    finally { setBusy(false); }
+  }
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}>
     <strong>MOCK AUTH · LOCAL ONLY</strong>
     <select aria-label="Mock authentication identity" disabled={busy} defaultValue="" onChange={event => void select(event.target.value)}>
       <option value="" disabled>Switch identity…</option>
@@ -3605,7 +3629,17 @@ function MockAuthSelector() {
       <option value="admin">Administrator</option>
       <option value="uninvited">Uninvited</option>
     </select>
-  </label>;
+    {funding && <>
+      <select aria-label="Mock funding mode" disabled={busy} value={funding.mode} onChange={event => void update('model-access', event.target.value)}>
+        <option value="personal">Personal</option><option value="sponsored">SIGMA-sponsored</option>
+      </select>
+      <select aria-label="Mock sponsorship allowance" disabled={busy} value={funding.allowance.scenario} onChange={event => void update('allowance', event.target.value)}>
+        <option value="available">Available</option><option value="low">Low</option><option value="exhausted">Exhausted</option>
+      </select>
+      <span aria-live="polite">Simulated allowance: ${funding.allowance.remaining_usd.toFixed(2)} remaining</span>
+    </>}
+    {error && <span role="alert">{error}</span>}
+  </span>;
 }
 
 function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
