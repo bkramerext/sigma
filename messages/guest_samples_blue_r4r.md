@@ -17,11 +17,13 @@ proposal generation, and AI text conversion are blocked for guests. The Guest
 UI no longer requests personal AI connection/model data that produced
 authentication-error toasts.
 
-Guest Home uses the same standard Projects layout and New/Open controls as a
-signed-in session, without the separate Welcome to SIGMA panel. The normal
+Guest Home uses the same standard Projects layout as a signed-in session, without
+the separate Welcome to SIGMA panel. Guest New/Open project actions are hidden.
+The normal
 Recent/Samples toggle is present, and Samples is selected by default. Selecting
-Recent shows only “When you are signed in, you can save your projects”; it does
-not request or save project history. Recent and sample groups start collapsed.
+Recent shows only the two-line message “When you are signed in, / you can save
+your projects”, styled in the Projects header font at a smaller size; it does not
+request or save project history. Recent and sample groups start collapsed.
 Browse Published Research is absent. The Guest sign-in pill uses the normal
 Google sign-in dialog and link. Attempts to generate a strategy receive a clear
 signed-in-account message without starting a provider request.
@@ -37,7 +39,8 @@ Verification:
   files — PASS.
 - `uv run pyright` on changed Python modules/tests — PASS, 0 diagnostics.
 - `uv run --with playwright python browser_checks/guest_samples.py` — PASS in
-  real Chrome: standard Projects Home, static Recent message without a Recent
+  real Chrome: standard Projects Home, hidden New/Open actions, two-line Recent
+  message in the header font without a Recent
   API request, default Samples selection and collapsed groups, normal Google
   sign-in action, Generate feedback, full sample project open, no authentication
   error, empty Recents, About Privacy Policy, and privacy-page Return to SIGMA.

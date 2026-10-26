@@ -6065,10 +6065,11 @@ open against `main`, current and mergeable, and not merged.
 
 ## Guest sample projects and About privacy actions (2026-10-26)
 
-Guest Home now uses the normal Projects layout with New/Open controls and the
-existing sample catalog. The normal Recent/Samples toggle is present, Recent is
+Guest Home now uses the normal Projects layout and existing sample catalog;
+New/Open project actions are hidden. The normal Recent/Samples toggle is present, Recent is
 selectable, and Samples is selected by default. Selecting Recent shows only the
-static message “When you are signed in, you can save your projects”; it does not
+static, two-line message “When you are signed in, / you can save your projects”
+styled with the Projects header font at a smaller size; it does not
 load or save project history. Recent and sample groups start collapsed. Opening
 or creating a guest project uses
 an opaque eight-hour, in-memory guest session and a private temporary workspace.
