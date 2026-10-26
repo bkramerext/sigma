@@ -2604,7 +2604,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new project.</p>}
-    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'} open={group.projects.some(entry => entry.path === window.localStorage.getItem('sigma.currentProject'))}>
+    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'}>
       <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
@@ -2659,7 +2659,7 @@ function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView)
   }, []);
   return <div className="empty home-empty home-samples">
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
-    {groups.map(group => <details className="sample-type-group" key={group.type} open>
+    {groups.map(group => <details className="sample-type-group" key={group.type}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
       <ul>{group.samples.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
@@ -2676,7 +2676,9 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
   const recentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
   useEffect(() => { if (guest) setTab('samples'); }, [guest]);
+  useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [guest, tab]);
   function switchTab(next: 'recent' | 'samples') {
+    if (guest && next === 'recent') return;
     if (next === tab) {
       const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
       if (panel) {
@@ -2689,14 +2691,14 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     }
     setTab(next); (next === 'recent' ? recent : samples).current?.focus();
   }
-  return <div className="home-catalog"><div className="catalog-tabs" role={guest ? 'group' : 'tablist'} aria-label="Project lists" onKeyDown={event => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
+  return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); if (!guest) switchTab(tab === 'samples' ? 'recent' : 'samples'); }
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
-    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
+    if (event.key === 'End') { event.preventDefault(); if (!guest) switchTab('recent'); }
   }}>
-    {!guest && <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>}
+    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
     {guest
-      ? <button ref={recent} id="recent-tab" disabled title="Recent projects are unavailable in Guest mode">Recent</button>
+      ? <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected="false" tabIndex={-1} disabled title="Recent projects are unavailable in Guest mode">Recent</button>
       : <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>}
   </div>
     {!guest && <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>}
@@ -2787,7 +2789,6 @@ function Home({ initialPath, onOpen }: {
     <div className="home-content">
       <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore sample projects while you’re here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login?invite=1" onClick={() => window.localStorage.removeItem('sigma.currentProject')}>Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}</div></section>}
       {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -3108,6 +3109,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   path: string; initialView?: ProjectView; onClose: () => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
+  const cloud = useCloudIdentity();
+  const guest = !!cloud?.enabled && !cloud.authenticated;
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
@@ -3134,6 +3137,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [dragId, setDragId] = useState<string | null>(null);
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [guestAiNotice, setGuestAiNotice] = useState('');
   const [focusStrategy, setFocusStrategy] = useState('');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
@@ -3358,11 +3362,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={startGeneration}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
           <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
         </div>
       </header>
+      {guestAiNotice && <p className="hint guest-ai-notice" role="status">{guestAiNotice}</p>}
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {

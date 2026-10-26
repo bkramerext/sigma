@@ -138,12 +138,21 @@ def exercise(ui_url: str, root: Path) -> None:
         page.on("response", capture)
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        expect(page.get_by_text("Explore sample projects while you’re here.")).to_be_visible()
+        expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
         expect(page.get_by_role("button", name="New")).to_be_visible()
         expect(page.get_by_role("button", name="Open", exact=True)).to_be_visible()
-        expect(page.get_by_role("button", name="Recent")).to_be_disabled()
-        expect(page.get_by_role("button", name="Samples")).to_have_count(0)
-        expect(page.get_by_role("button", name="Open Did Jesus Use Cannabis?")).to_be_visible()
+        expect(page.get_by_role("tab", name="Recent")).to_be_disabled()
+        expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
+        expect(page.locator("details.sample-type-group").first).to_be_visible()
+        assert page.locator("details.sample-type-group[open]").count() == 0
+        page.locator(".api-connection summary").first.click()
+        expect(page.get_by_role("dialog", name="AI connection settings")).to_contain_text(
+            "AI features require a signed-in account"
+        )
+        page.keyboard.press("Escape")
+        sample_group = page.locator("details.sample-type-group").filter(has_text="Did Jesus Use Cannabis?")
+        sample_group.evaluate("element => { element.open = true; }")
+        expect(sample_group.locator("button.sample-open")).to_be_visible()
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
 
         page.get_by_role("button", name="About", exact=True).click()
@@ -156,10 +165,12 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("link", name="Return to SIGMA")).to_be_visible()
         page.get_by_role("link", name="Return to SIGMA").click()
 
-        page.get_by_role("button", name="Open Did Jesus Use Cannabis?").click()
+        sample_group.locator("button.sample-open").evaluate("button => button.click()")
         expect(page.get_by_role("heading", name="Did Jesus Use Cannabis? v1")).to_be_visible(
             timeout=15000
         )
+        page.get_by_role("button", name="Generate", exact=True).click()
+        expect(page.get_by_role("status").filter(has_text="AI features require a signed-in account.")).to_be_visible()
         expect(page.get_by_role("button", name="Back to home").first).to_be_visible()
         assert opened_projects
         assert Path(opened_projects[-1]["path"]).is_dir()

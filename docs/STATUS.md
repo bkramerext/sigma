@@ -6066,27 +6066,33 @@ open against `main`, current and mergeable, and not merged.
 ## Guest sample projects and About privacy actions (2026-10-26)
 
 Guest Home now uses the normal Projects layout with New/Open controls and the
-existing sample catalog. Recent is disabled and the Samples control is removed;
-the sample catalog is shown by default. Opening or creating a guest project uses
+existing sample catalog. The normal Recent/Samples toggle is present, Recent is
+disabled, and Samples is selected by default. Recent and sample groups start
+collapsed. Opening or creating a guest project uses
 an opaque eight-hour, in-memory guest session and a private temporary workspace.
 The project path resolver confines access to that workspace, guest Recents are
 always empty, and expired workspaces are cleaned up on later guest requests.
 Guest sessions cannot run provider-backed research, paper/proposal generation,
-or AI text conversion. The guest UI no longer makes personal model or catalog
+or AI text conversion. Guest attempts to use AI from the connection pill or
+Generate action receive a clear signed-in-account message; the temporary project
+remains available. The guest UI no longer makes personal model or catalog
 requests that produced misleading authentication-error toasts.
 
-The Guest Home invitation copy now describes sample projects. The About dialog
-keeps Privacy Policy as a lower-left action button, the policy page has a
-Return to SIGMA action at the top, the Google pill copy is shorter, and artwork
-credit reads “Brian Kramer” / “& GPT Models”.
+The separate Guest welcome panel is removed; Projects appears in the same Home
+location as for signed-in users. Browse Published Research is absent for guests.
+The About dialog keeps Privacy Policy as a lower-left action button, the policy
+page has a Return to SIGMA action at the top, the Google pill copy is shorter,
+and artwork credit reads “Brian Kramer” / “& GPT Models”.
 
 Verification: `uv run python tests/cloud_auth.py` passed (29 tests), including
 guest sample opening with configured and unready Google Auth, temporary path
 containment, empty Recent, and blocked provider-backed routes. Changed-file
 Ruff check/format and Pyright passed. The
 real Chrome flow `uv run --with playwright python browser_checks/guest_samples.py`
-passed Home controls/copy, sample open into the full workspace, no 401 toast,
-empty Recent, and both privacy actions. Frontend typecheck and production build
+passed the standard Projects Home, disabled Recent and selected Samples tabs,
+collapsed groups, AI-unavailable feedback from both entry points, sample open
+into the full workspace, no 401 toast, empty Recent, and both privacy actions.
+Frontend typecheck and production build
 passed; build retains the existing >500 kB chunk advisory. No provider calls or
 costs occurred.
 

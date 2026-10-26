@@ -16,12 +16,15 @@ proposal generation, and AI text conversion are blocked for guests. The Guest
 UI no longer requests personal AI connection/model data that produced
 authentication-error toasts.
 
-Guest Home uses the standard Projects layout and New/Open controls, selects the
-sample catalog by default, hides the Samples control, and displays Recent as a
-disabled control. Guest invitation copy points to sample projects and the
-published-research link is absent. About retains Privacy Policy as a lower-left
-action button. The privacy notice provides a top Return to SIGMA action. Google
-pill labels are shorter. Artwork credit is “Brian Kramer” / “& GPT Models”.
+Guest Home uses the same standard Projects layout and New/Open controls as a
+signed-in session, without the separate Welcome to SIGMA panel. The normal
+Recent/Samples toggle is present, Samples is selected by default, and Recent is
+disabled. Recent and sample groups start collapsed. Browse Published Research
+is absent. Guest attempts to use AI from the connection pill or Generate action
+receive a clear signed-in-account message without starting a provider request.
+About retains Privacy Policy as a lower-left action button. The privacy notice
+provides a top Return to SIGMA action. Google pill labels are shorter. Artwork
+credit is “Brian Kramer” / “& GPT Models”.
 
 Verification:
 - `uv run python tests/cloud_auth.py` — PASS, 29 tests, including unready local
@@ -31,9 +34,10 @@ Verification:
   files — PASS.
 - `uv run pyright` on changed Python modules/tests — PASS, 0 diagnostics.
 - `uv run --with playwright python browser_checks/guest_samples.py` — PASS in
-  real Chrome: guest Home controls/copy, full sample project open, no
-  authentication error, empty Recents, About Privacy Policy, and privacy-page
-  Return to SIGMA.
+  real Chrome: standard Projects Home, toggle selection/disabled state and
+  collapsed groups, AI-unavailable feedback from both entry points, full sample
+  project open, no authentication error, empty Recents, About Privacy Policy,
+  and privacy-page Return to SIGMA.
 - `npm --prefix frontend run typecheck` and `npm --prefix frontend run build` —
   PASS; existing >500 kB chunk advisory remains.
 - `./sigma test` — completed with four unrelated repository failures:
