@@ -4,7 +4,7 @@
 
 | Issue | Owner | Status | Branch / handoff |
 |---|---|---|---|
-| T81 — Invitation Requests, Feedback, and Privacy | Green | Implemented; R4R; PR open and mergeable · validated SHA `6f90d3f49bbb324b3e8d953bfe1b92ed293c12d3` · [PR #225](https://github.com/bkramerext/sigma/pull/225) | `green/t81-invitation-workflow` · [ticket](../tickets/t81.md) · [handoff](../messages/t81_green_invitation_workflow.txt) |
+| T81 — Invitation Requests, Feedback, and Privacy | Green | Invitation PR #225 merged at `f45ada5`; feedback/privacy code R4R on `green/t81-feedback`, validated head `756ae45b866f353e307596f5770dcd37ad06aeaa`; PR creation pending refreshed GitHub auth | [ticket](../tickets/t81.md) · [handoff](../messages/t81_green_feedback_privacy.txt) · [proposed privacy notice v1](../docs/PRIVACY_NOTICE_DRAFT_v1.md) · issue #81 remains open |
 | #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R · [PR #213](https://github.com/bkramerext/sigma/pull/213) | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |
 | T192 — Per-User Project Isolation | Codex | Implemented; R4R · [PR #223](https://github.com/bkramerext/sigma/pull/223) | `t192-per-user-project-isolation` · [ticket](../tickets/t192.md) · [handoff](../messages/t192_codex_handoff.txt) |
 

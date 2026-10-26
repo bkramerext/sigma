@@ -1973,9 +1973,45 @@ function AboutArchitecture() {
     <p className="about-architecture-caption">SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find.</p>
   </section>;
 }
+function FeedbackForm() {
+  const [message, setMessage] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/cloud-auth/feedback', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, contact_email: contactEmail.trim() || null }),
+      });
+      if (!response.ok) throw await cloudFailure(response, 'Feedback could not be sent. Please try again.');
+      setSent(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Feedback could not be sent. Please try again.');
+    } finally { setBusy(false); }
+  }
+  return <details className="about-disclosure about-feedback-disclosure">
+    <summary>Send product feedback</summary>
+    <div className="about-disclosure-content">
+      {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
+        <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
+        <label>Contact email <span>(optional)</span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>
+        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href="/privacy">proposed privacy notice, version 1</a>.</p>
+        <button type="submit" className="cloud-secondary-button" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send feedback'}</button>
+        {error && <p role="alert">{error}</p>}
+      </form>}
+    </div>
+  </details>;
+}
+
 function AboutDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const cloud = useCloudIdentity();
   useEffect(() => {
     dialog.current?.showModal();
     closeButton.current?.focus();
@@ -2004,6 +2040,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <summary>How SIGMA Works: Multi-Agentic Research</summary>
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
+      {cloud?.enabled && cloud.ready && <FeedbackForm/>}
+      <p className="about-privacy-link"><a href="/privacy">Proposed privacy notice · version 1</a></p>
     </div>
     <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog></div>;
@@ -3565,14 +3603,17 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
 }
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string };
-function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, error, busy, onClose, onAdd, onSave, onRevoke, onUpdateInvitation }: {
+type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, onClose, onAdd, onSave, onRevoke, onUpdateInvitation, onUpdateFeedback }: {
   bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   invitationRequests: CloudInvitationRequest[];
+  feedbackRequests: CloudFeedbackRequest[];
   error: string; busy: boolean; onClose: () => void;
   onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
   onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
   onRevoke: (grant: CloudGrant) => Promise<void>;
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
+  onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
@@ -3726,6 +3767,8 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
       <div className="admin-table-heading"><h3>Invitation requests</h3></div>
       {invitationRequests.length ? <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{invitationRequests.map(item => <tr key={item.subject}><th scope="row">{item.email}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td>{item.status}</td><td>{item.status === 'notified' && <><button type="button" className="admin-text-action" disabled={busy} onClick={() => void onUpdateInvitation(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateInvitation(item, 'declined')}>Decline</button></>}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
+      <div className="admin-table-heading"><h3>Product feedback</h3></div>
+      {feedbackRequests.length ? <div className="admin-table-scroll"><table className="admin-grants-table admin-feedback-table"><thead><tr><th scope="col">Feedback</th><th scope="col">Contact</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}{item.account_email && <small>Signed-in account: {item.account_email}</small>}</th><td>{item.contact_email || 'Not provided'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td>{item.status !== 'closed' && <><button type="button" className="admin-text-action" disabled={busy || item.status === 'reviewed'} onClick={() => void onUpdateFeedback(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateFeedback(item, 'closed')}>Close</button></>}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
       <div className="admin-table-heading"><h3>Authorized users</h3></div>
       <div className="admin-table-scroll"><table className="admin-grants-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
@@ -3775,6 +3818,7 @@ function CloudAuthGate() {
   const [grants, setGrants] = useState<CloudGrant[]>([]);
   const [accountSessions, setAccountSessions] = useState<CloudAccountSession[]>([]);
   const [invitationRequests, setInvitationRequests] = useState<CloudInvitationRequest[]>([]);
+  const [feedbackRequests, setFeedbackRequests] = useState<CloudFeedbackRequest[]>([]);
   const [bootstrapAdmin, setBootstrapAdmin] = useState('');
   const [busy, setBusy] = useState(false);
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
@@ -3804,15 +3848,18 @@ function CloudAuthGate() {
     return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh); };
   }, [refresh]);
   const loadGrants = useCallback(async () => {
-    const [response, requestsResponse] = await Promise.all([
+    const [response, requestsResponse, feedbackResponse] = await Promise.all([
       fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' }),
       fetch('/api/cloud-auth/admin/invitation-requests', { credentials: 'same-origin', cache: 'no-store' }),
+      fetch('/api/cloud-auth/admin/feedback', { credentials: 'same-origin', cache: 'no-store' }),
     ]);
     if (!response.ok) throw await cloudFailure(response, 'Access rules could not be loaded.');
     if (!requestsResponse.ok) throw await cloudFailure(requestsResponse, 'Invitation requests could not be loaded.');
+    if (!feedbackResponse.ok) throw await cloudFailure(feedbackResponse, 'Product feedback could not be loaded.');
     const result = await response.json() as { grants: CloudGrant[]; sessions: CloudAccountSession[]; bootstrap_admin: string };
     const requestResult = await requestsResponse.json() as { requests: CloudInvitationRequest[] };
-    setGrants(result.grants); setAccountSessions(result.sessions); setBootstrapAdmin(result.bootstrap_admin); setInvitationRequests(requestResult.requests);
+    const feedbackResult = await feedbackResponse.json() as { feedback: CloudFeedbackRequest[] };
+    setGrants(result.grants); setAccountSessions(result.sessions); setBootstrapAdmin(result.bootstrap_admin); setInvitationRequests(requestResult.requests); setFeedbackRequests(feedbackResult.feedback);
   }, []);
   useEffect(() => {
     const target = status?.target ?? 'hosted';
@@ -3884,17 +3931,55 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
+  async function updateFeedback(item: CloudFeedbackRequest, next: 'reviewed' | 'closed') {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/feedback/${encodeURIComponent(item.id)}`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next }) });
+      if (!response.ok) throw await cloudFailure(response, 'Feedback could not be updated.');
+      await loadGrants();
+    } finally { setBusy(false); }
+  }
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   if (!status.ready) return <GuestExploreLanding canSignIn={false} setupError={failure || 'Google sign-in is not ready.'}/>;
-  return <CloudIdentityContext.Provider value={context}>{status.authenticated ? <AIProvider><App/></AIProvider> : deniedEmail ? <AccessNotGranted email={deniedEmail}/> : <GuestExploreLanding canSignIn={status.ready} />}{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}>{status.authenticated ? <AIProvider><App/></AIProvider> : deniedEmail ? <AccessNotGranted email={deniedEmail}/> : <GuestExploreLanding canSignIn={status.ready} />}{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
 }
 
 function GuestExploreLanding({ canSignIn, setupError }: { canSignIn: boolean; setupError?: string }) {
-  return <main className="cloud-auth-shell"><section className="cloud-auth-card guest-explore-card"><a className="cloud-demo-brand" href="/">SIGMA</a><p className="cloud-auth-kicker">Guest access</p><h1>Explore SIGMA</h1><p>Browse a published research example without signing in. Guest access is read-only and cannot create a private workspace, select a model, run research, or use inference.</p><p className="guest-account-state"><strong>Guest</strong><span>Explore only · no execution</span></p>{setupError && <p role="status">{setupError} The public research example remains available.</p>}<div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore SIGMA</a>{canSignIn && <a className="cloud-secondary-button" href="/api/cloud-auth/login">Sign in with Google</a>}</div></section></main>;
+  return <main className="cloud-auth-shell"><section className="cloud-auth-card guest-explore-card"><a className="cloud-demo-brand" href="/">SIGMA</a><p className="cloud-auth-kicker">Guest access</p><h1>Explore SIGMA</h1><p>Browse a published research example without signing in. Guest access is read-only and cannot create a private workspace, select a model, run research, or use inference.</p><p className="guest-account-state"><strong>Guest</strong><span>Explore only · no execution</span></p>{setupError && <p role="status">{setupError} The public research example remains available.</p>}<div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore SIGMA</a>{canSignIn && <a className="cloud-secondary-button" href="/api/cloud-auth/login">Sign in with Google</a>}</div>{canSignIn && <FeedbackForm/>}<p><a href="/privacy">Proposed privacy notice · version 1</a></p></section></main>;
+}
+
+function PrivacyNoticePage() {
+  useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
+  return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+    <a className="cloud-demo-brand" href="/">SIGMA</a>
+    <p className="cloud-auth-kicker">Version 1 · proposed draft</p>
+    <h1>SIGMA Privacy Notice</h1>
+    <p className="privacy-draft-alert" role="status">This proposed notice is awaiting owner approval. It is not approved public policy.</p>
+    <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
+    <h2>Information SIGMA handles</h2>
+    <p>If you sign in, SIGMA receives your Google account identifier and verified email from Google and stores account, access, and session records. SIGMA uses browser cookies for Google sign-in and your SIGMA session. A denied sign-in can also create a short-lived record used to support an invitation request.</p>
+    <p>If you send product feedback, SIGMA stores the feedback text, submission time, status, and any optional contact email. If you are signed in, it also associates the verified account identifier and email. Feedback rate limits use the signed-in Google subject or a random signed-out browser token; the database stores a hash of that key and a request counter, not the anonymous token itself. Feedback is not sent to AI or email providers by this workflow.</p>
+    <p>If you request an invitation, SIGMA stores the verified Google account identifier, verified email, request time, and review/notification status. The notification email containing the verified account email and request time is sent to zetacontinuation@gmail.com through authenticated SMTP.</p>
+    <p>For an authorized account, SIGMA stores project names and research questions, settings, strategies, session prompts and results, evidence, code and execution outputs, reports, and generated paper files. SIGMA also records account-level research usage and spending estimates for the sponsored service.</p>
+    <h2>How information is used and shared</h2>
+    <p>SIGMA uses account information to authenticate users, control access, isolate private workspaces, and administer invitations. Administrators can review invitation requests and feedback. Optional feedback contact details are shown to those administrators so they can follow up; SIGMA does not require an email address to submit feedback.</p>
+    <p>When a user chooses an AI research feature, SIGMA sends the request and relevant project context to OpenAI using either the selected ChatGPT account authorization or an explicitly selected API-key billing path. These are separate paths; SIGMA does not silently switch between them. OpenAI handles data under the terms and settings of the selected account. SIGMA cannot promise OpenAI retention, training, or other data-use practices in this notice.</p>
+    <p>Google processes sign-in requests. Invitation notifications contain the verified account email and request time and are sent through the configured authenticated SMTP account to zetacontinuation@gmail.com. Feedback content is not included in those emails.</p>
+    <h2>Storage, access, and retention</h2>
+    <p>In the hosted configuration, authentication and administrative records use a SQLite database, and authenticated users' projects and research records use owner-specific workspace storage. The repository's Compose configuration places persistent state on the SIGMA state volume and applies rotating local container logs. The code does not establish a fixed retention period for feedback, invitation records, account records, research content, or usage records, and it does not provide a complete account-and-data deletion workflow.</p>
+    <p>The repository includes optional state-disk snapshot tooling, but this notice cannot confirm whether snapshots are enabled for a particular deployment, the configured snapshot count, or how deletion applies to snapshots. SIGMA does not claim encryption at rest. The deployed host, region, infrastructure logging, and any additional operator retention settings require confirmation.</p>
+    <h2>Cookies and service logs</h2>
+    <p>Hosted Google sign-in uses short-lived flow and denied-access cookies and an eight-hour session cookie. The feedback form may set a random, HTTP-only browser cookie for rate limiting. The application also writes service logs; the exact data visible in infrastructure and provider logs and their retention depends on deployment and operator configuration and has not been fully established.</p>
+    <h2>Questions and requests</h2>
+    <p>A privacy contact and process for access, correction, or deletion requests have not yet been approved. No response time or deletion guarantee is established here. Please do not treat the invitation email address as a confirmed privacy-request contact until the owner approves it.</p>
+    <h2>Owner review required before public use</h2>
+    <p>This draft must be reviewed and approved before it is published as the operative notice. Open questions include: the privacy contact and request-handling process; applicable jurisdiction and entity identity; the production hosting region and operator log settings; whether backups are active and how long they are retained; the intended retention and deletion rules for feedback, invitations, account/audit, usage, and workspace data; and the exact applicable Google, OpenAI, and SMTP provider privacy terms.</p>
+    <p><a className="cloud-text-button" href="/">Return to SIGMA</a></p>
+  </article></main>;
 }
 
 function AccessNotGranted({ email }: { email: string }) {
@@ -3913,8 +3998,8 @@ function AccessNotGranted({ email }: { email: string }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.'); }
     finally { setBusy(false); }
   }
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA. No account workspace was created.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! Your request has been sent along to the right person!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Request Invitation'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Explore SIGMA</a></div>{error && <p role="alert">{error}</p>}</section>;
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA. No account workspace was created.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! Your request has been sent along to the right person!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Request Invitation'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Explore SIGMA</a><a className="cloud-text-button" href="/privacy">Proposed privacy notice · v1</a></div>{error && <p role="alert">{error}</p>}<FeedbackForm/></section>;
 }
 
 installRequestErrorToasts();
-createRoot(document.getElementById('root')!).render(<><CloudAuthGate/><RequestErrorToasts/></>);
+createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);

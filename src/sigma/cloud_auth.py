@@ -22,12 +22,13 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 from urllib.parse import urlencode, urlsplit
+from uuid import uuid4
 
 import httpx
 import jwt
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from sigma.config_secrets import SecretConfigurationError, secret_value
 
@@ -35,9 +36,11 @@ router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
 DENIED_COOKIE = "__Host-sigma_denied"
+FEEDBACK_RATE_COOKIE = "__Host-sigma_feedback_rate"
 SESSION_SECONDS = 8 * 60 * 60
 FLOW_SECONDS = 5 * 60
 DENIED_SECONDS = 10 * 60
+FEEDBACK_RATE_SECONDS = 24 * 60 * 60
 GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
@@ -270,6 +273,20 @@ def _initialize(path: Path) -> None:
                 notification_error TEXT,
                 notification_started_at INTEGER
             );
+            CREATE TABLE IF NOT EXISTS feedback_requests (
+                id TEXT PRIMARY KEY,
+                subject TEXT,
+                account_email TEXT,
+                contact_email TEXT,
+                message TEXT NOT NULL,
+                submitted_at INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('new','reviewed','closed'))
+            );
+            CREATE TABLE IF NOT EXISTS feedback_rate_limits (
+                key_hash TEXT PRIMARY KEY,
+                window_started_at INTEGER NOT NULL,
+                request_count INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY,
                 actor TEXT NOT NULL,
@@ -491,6 +508,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/denied",
     }
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
+    public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
     demo_public = path in {"/api/cloud-demo/", "/api/cloud-demo/report"} and request.method in {
         "GET",
         "HEAD",
@@ -971,6 +989,126 @@ def update_invitation_request(subject: str, body: InvitationStatusUpdate, reques
         db.execute(
             "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
             (actor.email, "invitation_" + body.status, "invitation", subject, _now()),
+        )
+    return {"status": body.status}
+
+
+class FeedbackSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=4000)
+    contact_email: str | None = Field(default=None, max_length=254)
+
+
+class FeedbackStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(reviewed|closed)$")
+
+
+@router.post("/feedback")
+def submit_feedback(body: FeedbackSubmission, request: Request, response: Response):
+    """Persist visitor feedback without sending it to a model or mail provider."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.database:
+        raise HTTPException(503, "Feedback is temporarily unavailable.")
+    message = body.message.strip()
+    if not 10 <= len(message) <= 4000 or any(
+        ord(character) < 32 and character not in "\n\r\t" for character in message
+    ):
+        raise HTTPException(422, "Feedback must be 10 to 4,000 characters.")
+    contact_email = None
+    if body.contact_email is not None:
+        try:
+            contact_email = _normalize_email(body.contact_email)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    try:
+        principal = resolve_session(raw_session)
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
+        raise HTTPException(503, "Feedback is temporarily unavailable.") from exc
+
+    rate_cookie = request.cookies.get(_cookie_name(FEEDBACK_RATE_COOKIE, cfg))
+    set_rate_cookie = not rate_cookie or not re.fullmatch(r"[A-Za-z0-9_-]{40,64}", rate_cookie)
+    if set_rate_cookie:
+        rate_cookie = secrets.token_urlsafe(32)
+    assert rate_cookie is not None
+    rate_identity = f"subject:{principal.subject}" if principal else f"visitor:{rate_cookie}"
+    rate_key = _hash("feedback-rate:" + rate_identity)
+    now = _now()
+    with _db(cfg) as db:
+        db.execute(
+            "DELETE FROM feedback_rate_limits WHERE window_started_at<=?",
+            (now - FEEDBACK_RATE_SECONDS,),
+        )
+        limit = db.execute(
+            "SELECT window_started_at,request_count FROM feedback_rate_limits WHERE key_hash=?",
+            (rate_key,),
+        ).fetchone()
+        if (
+            limit
+            and limit["request_count"] >= 5
+            and limit["window_started_at"] > now - FEEDBACK_RATE_SECONDS
+        ):
+            raise HTTPException(429, "Too many feedback submissions. Please try again later.")
+        if limit and limit["window_started_at"] > now - FEEDBACK_RATE_SECONDS:
+            db.execute(
+                "UPDATE feedback_rate_limits SET request_count=request_count+1 WHERE key_hash=?",
+                (rate_key,),
+            )
+        else:
+            db.execute(
+                "INSERT INTO feedback_rate_limits(key_hash,window_started_at,request_count) VALUES(?,?,1) ON CONFLICT(key_hash) DO UPDATE SET window_started_at=excluded.window_started_at,request_count=1",
+                (rate_key, now),
+            )
+        feedback_id = uuid4().hex
+        db.execute(
+            "INSERT INTO feedback_requests(id,subject,account_email,contact_email,message,submitted_at,status) VALUES(?,?,?,?,?,?,'new')",
+            (
+                feedback_id,
+                principal.subject if principal else None,
+                principal.email if principal else None,
+                contact_email,
+                message,
+                now,
+            ),
+        )
+    if set_rate_cookie:
+        response.set_cookie(
+            _cookie_name(FEEDBACK_RATE_COOKIE, cfg),
+            rate_cookie,
+            **_cookie_options(cfg, FEEDBACK_RATE_COOKIE, max_age=FEEDBACK_RATE_SECONDS),
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return {"status": "received", "id": feedback_id}
+
+
+@router.get("/admin/feedback")
+def list_feedback():
+    cfg = config()
+    with _db(cfg) as db:
+        rows = db.execute(
+            "SELECT id,account_email,contact_email,message,submitted_at,status FROM feedback_requests ORDER BY submitted_at DESC LIMIT 500"
+        ).fetchall()
+    return {"feedback": [dict(row) for row in rows]}
+
+
+@router.put("/admin/feedback/{feedback_id}")
+def update_feedback(feedback_id: str, body: FeedbackStatusUpdate, request: Request):
+    cfg = config()
+    if not re.fullmatch(r"[0-9a-f]{32}", feedback_id):
+        raise HTTPException(404, "Feedback not found.")
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        result = db.execute(
+            "UPDATE feedback_requests SET status=? WHERE id=?",
+            (body.status, feedback_id),
+        )
+        if not result.rowcount:
+            raise HTTPException(404, "Feedback not found.")
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "feedback_" + body.status, "feedback", feedback_id, _now()),
         )
     return {"status": body.status}
 
