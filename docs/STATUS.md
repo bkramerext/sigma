@@ -5390,3 +5390,10 @@ owner-authorized live acceptance. The runbook requires a verified recovery point
 and schema-compatibility assertion before code rollback; restore and code
 rollback are separate. No application was deployed and no T137 go/no-go was
 made.
+
+## Coordinator integration — cloud deployment PRs (2026-10-26)
+
+- PR #180 merged as `0fb0587`: the three deployment tests now assert the current `RequiresMountsFor=/srv/sigma-state` systemd contract. Blue's exact-main evidence remains in `docs/evaluations/increment_6/`.
+- T128 host-readiness implementation, T128 blocked-live assessment, and T173 release rehearsal are being consolidated on `coordinator/cloud-pr-integration` so the stale PR bases do not discard newer `main` work.
+- T129 deployment integration now calls `deploy/release_image.py build` for the exact requested SHA, checks image source labels, and records verified image IDs/digests after successful startup. This specifically addresses the T173 finding that a tag could otherwise misrepresent the source tree.
+- No live GCE operation, production secret access, OAuth operation, or provider call occurred during this integration. Hosted readiness remains blocked until the operator verifies GCE access, host/disk/firewall state, production OAuth configuration, and first-start acceptance.
