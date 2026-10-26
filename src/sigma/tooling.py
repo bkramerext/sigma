@@ -22,7 +22,11 @@ def _test_step_allowed(step: list[str]) -> bool:
             tool = step[3]
             args = step[4:]
         if tool == "python" and args:
-            return args[0].startswith("tests/") or args[0] == "scripts/increment15_offline_pairs.py"
+            return args[0].startswith("tests/") or args[0] in (
+                "scripts/increment15_offline_pairs.py",
+                "docs/evaluations/t173/build_failure_rehearsal.py",
+                "docs/evaluations/t173/build_source_sha_rehearsal.py",
+            )
         if tool == "ruff" and args[:1] in (["check"], ["format"]):
             return True
         if tool == "pyright" and not args:
@@ -118,6 +122,21 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/cloud_research_api.py"],
             [*python, "python", "tests/cloud_research_sponsored_api.py"],
             [*python, "python", "tests/deployment_package.py"],
+            [*python, "python", "tests/deployment_automation.py"],
+            [
+                *python,
+                "python",
+                "docs/evaluations/t173/build_failure_rehearsal.py",
+                "--deployment-script",
+                "deploy/deploy-gce-release.py",
+            ],
+            [
+                *python,
+                "python",
+                "docs/evaluations/t173/build_source_sha_rehearsal.py",
+                "--deployment-script",
+                "deploy/deploy-gce-release.py",
+            ],
             [*python, "python", "tests/release_image.py"],
             [*python, "python", "tests/public_endpoint.py"],
             [*python, "python", "tests/gce_host.py"],
