@@ -1,5 +1,39 @@
 # SIGMA status
 
+## Issue #217 administrator contact (2026-10-26)
+
+Updated the public administrator contact example to
+`zetacontinuation@gmail.com`. The application already centralizes invitation
+requests through `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`; the denied-access link
+continues to build a `mailto:` draft from the API's configured contact. The
+About dialog and privacy copy contain no administrator contact address, and
+there are no administrator-address email templates or static contact links to
+update. Generic example addresses in deterministic auth/deployment fixtures and
+the unrelated Caddy TLS operator contact remain unchanged.
+
+The current auth implementation had tied the public contact value to the
+non-revocable bootstrap identity. It now keeps an established administrator's
+email and Google subject binding from the auth database authoritative after a
+contact change. New installations still use the configured address to establish
+their first administrator. A regression test changes the contact after binding,
+confirms the original admin session/role and management identity remain intact,
+and confirms the new contact cannot claim admin. No OAuth settings, account
+grants, secrets, or stored identity data were changed.
+
+Verification: `tests/cloud_auth.py` passed (18 tests). Real Chrome confirmed the
+configured contact in the invitation `mailto:` link and no horizontal overflow
+at 1280px and 390px. `npm --prefix frontend run typecheck` and
+`npm --prefix frontend run build` passed (the build retains its existing large
+chunk advisory). The first `./sigma test` on the ticket's starting `main`
+reported the then-current unrelated Ruff B023/format findings in
+`browser_checks/model_availability.py`. After current `main` advanced and its
+Ruff repair was merged into this branch, `./sigma test` passed every scenario,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
+build. The broader `browser_checks/t22_access_denied.py` stops at its stale
+“Explore Demo” guest-link assertion; current guest Home says “Explore SIGMA”.
+The focused invitation Chrome check passes. No paid provider calls,
+production configuration changes, or live OAuth occurred.
+
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
 Replaced the “Continue from Saved Evidence” control with an explicitly

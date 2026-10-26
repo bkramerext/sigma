@@ -51,14 +51,14 @@ The usual local launch is single-user and does not require an administrator acco
    GOOGLE_OIDC_CLIENT_SECRET=your-client-secret
    ```
 
-3. In the same shell you will use to launch SIGMA, set `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to the designated administrator's actual Google account, then start SIGMA:
+3. In the same shell you will use to launch SIGMA, set `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to the public invitation contact, then start SIGMA:
 
    ```sh
    export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
    ./sigma start --navigate
    ```
 
-   If you keep this setting in a shell startup file, load that file in the launching shell first. The first successful verified Google sign-in binds that account as administrator for this local installation. The same setting supplies the invitation contact. Local auth data is stored under `~/.sigma/local-cloud-auth`; other users need an explicit access grant. This local setup does not administer a hosted SIGMA deployment.
+   If you keep this setting in a shell startup file, load that file in the launching shell first. On a fresh local auth database, the first successful verified Google sign-in matching this address binds that account as administrator. Later changes to the contact address update invitation requests and preserve the existing administrator email and Google subject binding. Local auth data is stored under `~/.sigma/local-cloud-auth`; other users need an explicit access grant. This local setup does not administer a hosted SIGMA deployment.
 
 For hosted setup, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md); do not reuse the local loopback OAuth settings for a hosted service.
 
