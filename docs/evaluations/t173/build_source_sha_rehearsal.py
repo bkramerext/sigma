@@ -65,7 +65,12 @@ def main() -> None:
                 if "Health.Status" in argv[3]:
                     return subprocess.CompletedProcess(argv, 0, "healthy", "")
                 if "org.opencontainers.image.revision" in argv[3]:
-                    return subprocess.CompletedProcess(argv, 0, candidate_sha, "")
+                    active_sha = next(
+                        line.split("=", 1)[1]
+                        for line in deploy_env.read_text(encoding="utf-8").splitlines()
+                        if line.startswith("SIGMA_RELEASE=")
+                    )
+                    return subprocess.CompletedProcess(argv, 0, active_sha, "")
                 image = argv[-1].removeprefix("fixture-")
                 suffix = candidate_sha if image in {"backend", "frontend"} else ""
                 return subprocess.CompletedProcess(
