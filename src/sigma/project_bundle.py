@@ -29,6 +29,8 @@ def _files(directory: Path) -> dict[str, str]:
         raise BundleError("Project source must be a real directory")
     entries: dict[str, str] = {}
     for root, dirs, files in os.walk(directory, followlinks=False):
+        dirs.sort()
+        files.sort()
         for name in dirs:
             child = Path(root) / name
             if child.is_symlink():
@@ -124,11 +126,15 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
     if not target.parent.is_dir() or target.parent.is_symlink():
         raise BundleError("Migration destination parent is unavailable")
     lock = target.with_name("." + target.name + ".migration.lock")
-    with lock.open("a+b") as stream:
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    lock_fd = os.open(lock, flags, 0o600)
+    with os.fdopen(lock_fd, "a+b") as stream:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
         if os.path.lexists(target):
             raise BundleError("Migration destination already exists")
         before = _files(source)
+        # A directory-based research writer must be stopped by the caller.
+        # Detect ordinary concurrent mutations before publishing.
         contents = (json.dumps({"format": FORMAT, "version": VERSION, "files": before},
                                sort_keys=True, indent=2) + "\n").encode("utf-8")
         fd, name = tempfile.mkstemp(prefix=".sigma-migrate-", dir=target.parent)
