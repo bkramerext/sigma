@@ -683,6 +683,8 @@ async def middleware(request: Request, call_next):
             "ai", "research", "research-sessions", "sessions",
             "runs", "execute", "execution", "generate", "explore",
             "challenge", "decide", "resume", "fork-run",
+            "research-executions", "proposals", "strategy-suggestions",
+            "papers", "convert", "agentic", "restart",
         }
         if (
             path.startswith("/api/ai/")
