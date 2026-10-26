@@ -1980,7 +1980,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     dialog.current?.showModal();
     closeButton.current?.focus();
   }, []);
-  return <dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="home-page about-dialog-style-scope"><dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
@@ -2006,7 +2006,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       </details>
     </div>
     <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
-  </dialog>;
+  </dialog></div>;
 }
 
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
