@@ -189,46 +189,21 @@ class Deployment:
         if not initial and previous != old_sha:
             raise DeployFailure("current checkout and configured release pin disagree")
 
-        # Export the exact requested commit to an isolated build worktree.
-        # Never build the candidate tag from the previously active checkout.
+        # Build from a git-archive of the exact requested commit and attach
+        # source-SHA labels; never build a requested tag from the active checkout.
         service_stopped = False
         candidate_started = False
         try:
-            with tempfile.TemporaryDirectory(prefix="sigma-release-build-") as build_dir:
-                build_tree = Path(build_dir) / "source"
-                _call(
-                    self.runner,
-                    ["git", "-C", str(self.repository), "worktree", "add", "--detach", str(build_tree), sha],
-                )
-                try:
-                    build_env = dict(os.environ)
-                    build_env["SIGMA_RELEASE"] = sha
-                    _call(
-                        self.runner,
-                        [
-                            "docker",
-                            "compose",
-                            "--project-name",
-                            "sigma",
-                            "--env-file",
-                            str(self.env_file),
-                            "-f",
-                            str(build_tree / "deploy/compose.yaml"),
-                            "-f",
-                            str(build_tree / "deploy/compose.gce.yaml"),
-                            "build",
-                            "--build-arg",
-                            f"SIGMA_RELEASE={sha}",
-                            "backend",
-                            "frontend",
-                        ],
-                        env=build_env,
-                    )
-                finally:
-                    _call(
-                        self.runner,
-                        ["git", "-C", str(self.repository), "worktree", "remove", "--force", str(build_tree)],
-                    )
+            _call(
+                self.runner,
+                [
+                    "python3",
+                    str(self.repository / "deploy/release_image.py"),
+                    "build",
+                    str(self.repository),
+                    sha,
+                ],
+            )
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True
