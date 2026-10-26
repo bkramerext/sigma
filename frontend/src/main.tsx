@@ -3944,6 +3944,7 @@ function CloudAuthGate() {
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
+  if (!status.authenticated && window.location.pathname === '/project') window.history.replaceState(null, '', '/');
   return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
 }
 
