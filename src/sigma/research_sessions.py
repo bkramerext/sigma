@@ -622,6 +622,34 @@ def _directory(path: str | Path) -> Path:
 
 
 def get_limits(path: str) -> dict[str, Any]:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import BundleError, read_file
+
+        try:
+            data = read_file(path, "research-sessions/limits.json")
+        except BundleError:
+            limits = dict(DEFAULT_LIMITS)
+        else:
+            if len(data) > 4096:
+                raise ProjectError("Research limits file is unsafe or too large")
+            try:
+                raw = json.loads(data)
+                if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
+                    raise ValueError("Invalid limits")
+                try:
+                    limits = _validate_limits(raw)
+                except ProjectError as current_error:
+                    try:
+                        limits = _validate_previous_limits(raw)
+                    except ProjectError:
+                        try:
+                            limits = _validate_legacy_limits(raw)
+                        except ProjectError:
+                            raise current_error
+            except ValueError as exc:
+                raise ProjectError("Research limits are invalid") from exc
+        return (cloud_research.evaluation_session_limits(limits)
+                if cloud_workspaces.enabled() else limits)
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
@@ -2218,6 +2246,29 @@ HUMAN_INTERVENTION_GUIDANCE = (
 
 
 def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import BundleError, read_file, write_file
+
+        current = max((item.get("session_number", 0) for item in records), default=0) + 1
+        try:
+            stored = json.loads(read_file(path, "research-sessions/sequence.json"))
+        except BundleError:
+            stored = None
+        if stored is not None:
+            if (not isinstance(stored, dict)
+                or stored.get("project_id") != inspect_project(path).project.id
+                or type(stored.get("next_session_number")) is not int
+                or stored["next_session_number"] < 1):
+                raise ProjectError("Research session sequence file is unreadable")
+            current = max(current, stored["next_session_number"])
+        payload = {
+            "schema_version": 1,
+            "project_id": inspect_project(path).project.id,
+            "next_session_number": current + 1,
+        }
+        write_file(path, "research-sessions/sequence.json",
+                   (json.dumps(payload, sort_keys=True) + "\n").encode())
+        return current
     directory = _directory(path)
     counter = directory / "sequence.json"
     if counter.is_symlink():
@@ -2562,6 +2613,16 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
 
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import write_file
+
+        limits = _validate_limits(raw)
+        if cloud_workspaces.enabled():
+            limits = cloud_research.evaluation_session_limits(limits)
+        with _project_manager_lock(path):
+            write_file(path, "research-sessions/limits.json",
+                       (json.dumps(limits, sort_keys=True) + "\n").encode())
+        return limits
     limits = _validate_limits(raw)
     if cloud_workspaces.enabled():
         limits = cloud_research.evaluation_session_limits(limits)
@@ -2588,6 +2649,17 @@ def _lock(directory: Path):
 @contextmanager
 def _project_manager_lock(path: str):
     """Serialize session admission/resume across SIGMA processes for one project."""
+    if project_path(path).suffix == ".json":
+        target = project_path(path)
+        lock_path = target.with_name("." + target.name + ".manager.lock")
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "r+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+        return
     directory = _directory(path)
     fd = os.open(
         directory / ".manager.lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
