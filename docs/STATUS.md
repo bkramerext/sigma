@@ -37,8 +37,9 @@ the subsequent complete suite passed. Legacy `browser_checks/recents.py`
 still asserts an obsolete manually injected Running shape, and
 `browser_checks/t17_8_saved_session.py` expects an older authored-claim Outcome
 projection; their current equivalents above passed. No live OAuth, paid model
-calls, hosted identity, or deployment infrastructure was used. Pull request
-link: pending.
+calls, hosted identity, or deployment infrastructure was used. Follow-up fix:
+[PR #197](https://github.com/bkramerext/sigma/pull/197), based on current
+`main` after merging PR #196.
 
 ## Issue #186 single administrator/contact setting follow-up (2026-10-26)
 
