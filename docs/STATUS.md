@@ -49,6 +49,12 @@ greater-than-500-kB chunk advisory. The frozen protocol hashes verify, the
 credential scan found zero artifact matches, and a SHA-256 manifest covers all
 67 evidence files. Final-head GitHub Actions status is pending publication.
 
+On final head `b9c1538958d37607a40cb6145d986a6cc117b26a`, GitHub Actions
+confirmed the local finding: SIGMA verification failed in the same deployment
+assertion, while Research Outcome browser acceptance and T92 Recent Projects
+browser acceptance passed. See the run links on PR #150. No Cloud source or
+deployment files were changed in this increment.
+
 T147 is recommended for a narrowly scoped diagnosis, but was not started.
 The saved Skeptic output combines `assessment=stop`, `stop_reason=unresolved`,
 and `strategy_contribution=solution`, while the coordinator records a
