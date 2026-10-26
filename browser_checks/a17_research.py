@@ -1122,8 +1122,17 @@ with sync_playwright() as playwright:
     )
     subsection_summaries = first_session.locator(".outcome-subsection > summary")
     labels = [item.strip() for item in subsection_summaries.all_inner_texts()]
-    assert labels[:4] == ["Conclusion", "Reasoning / proof", "Citations, evidence & obligations", "Metrics"], labels
-    assert "Status" in labels and "Strategy Assessments" in labels and "Session history and provenance" in labels
+    assert labels[:4] == [
+        "Conclusion",
+        "Reasoning / proof",
+        "Citations, evidence & obligations",
+        "Metrics",
+    ], labels
+    assert (
+        "Status" in labels
+        and "Strategy Assessments" in labels
+        and "Session history and provenance" in labels
+    )
     assert first_session.locator(".outcome-conclusion").get_attribute("open") is not None
     for section in first_session.locator(".outcome-subsection").all():
         if "Conclusion" not in section.locator(":scope > summary").inner_text():

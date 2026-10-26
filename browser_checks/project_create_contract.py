@@ -72,23 +72,25 @@ def api_fixture(route):
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps({
-                    "path": "/tmp/sigma-project-create-contract/create-contract.sigma",
-                    "project": {
-                        "id": "create-contract",
-                        "title": request["title"],
-                        "problem": request["problem"],
-                        "schema_version": 1,
-                        "ai_model": request["ai_model"],
-                        "reasoning_effort": request["reasoning_effort"],
-                        "difficulty": request["difficulty"],
-                        "show_advanced_outcome_details": False,
-                        "investigation_type": request["investigation_type"],
-                        "events": [],
-                        "strategies": [],
-                        "active_order": [],
-                    },
-                }),
+                body=json.dumps(
+                    {
+                        "path": "/tmp/sigma-project-create-contract/create-contract.sigma",
+                        "project": {
+                            "id": "create-contract",
+                            "title": request["title"],
+                            "problem": request["problem"],
+                            "schema_version": 1,
+                            "ai_model": request["ai_model"],
+                            "reasoning_effort": request["reasoning_effort"],
+                            "difficulty": request["difficulty"],
+                            "show_advanced_outcome_details": False,
+                            "investigation_type": request["investigation_type"],
+                            "events": [],
+                            "strategies": [],
+                            "active_order": [],
+                        },
+                    }
+                ),
             )
     else:
         route.fulfill(status=200, content_type="application/json", body="{}")
@@ -108,9 +110,10 @@ with sync_playwright() as playwright:
     credits = page.locator(".home-art-credit > span")
     expect(credits.nth(0)).to_have_text("Brian Kramer &")
     expect(credits.nth(1)).to_have_text("OpenAI Models")
-    assert page.locator(".home-art-credit").evaluate(
-        "el => getComputedStyle(el).textTransform"
-    ) == "uppercase"
+    assert (
+        page.locator(".home-art-credit").evaluate("el => getComputedStyle(el).textTransform")
+        == "uppercase"
+    )
     desktop_edges = page.locator(".home-projects").evaluate(
         "el => ({top: el.getBoundingClientRect().top, left: el.getBoundingClientRect().left})"
     )
@@ -132,9 +135,7 @@ with sync_playwright() as playwright:
     create = dialog.get_by_role("button", name="Create", exact=True)
     expect(create).to_be_enabled()
     create.click()
-    expect(dialog.get_by_role("alert")).to_have_text(
-        "Captured request; no project was created."
-    )
+    expect(dialog.get_by_role("alert")).to_have_text("Captured request; no project was created.")
     assert len(create_payloads) == 1, create_payloads
     payload = create_payloads[0]
     assert set(payload) == {
@@ -165,9 +166,7 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_label("Research problem")).to_have_value(
         "Check the project creation API contract."
     )
-    expect(dialog.get_by_role("combobox", name="Research category")).to_contain_text(
-        "Mathematics"
-    )
+    expect(dialog.get_by_role("combobox", name="Research category")).to_contain_text("Mathematics")
     expect(dialog.get_by_label("Difficulty")).to_have_value("hard")
     browser.close()
 

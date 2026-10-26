@@ -30,15 +30,24 @@ with sync_playwright() as p:
     models_streak = page.locator(".home-credit-streak--models")
     start = name_streak.evaluate("e => e.getAnimations()[0].currentTime")
     page.wait_for_timeout(120)
-    page.mouse.move(models_box["x"] + models_box["width"] / 2, models_box["y"] + models_box["height"] / 2)
+    page.mouse.move(
+        models_box["x"] + models_box["width"] / 2, models_box["y"] + models_box["height"] / 2
+    )
     page.wait_for_timeout(90)
     moving = name_streak.evaluate("e => e.getAnimations()[0].currentTime")
     assert moving > start + 70, (start, moving)
     name_streak_box = name_streak.bounding_box()
     models_streak_box = models_streak.bounding_box()
     assert name_streak_box and models_streak_box and -120 < name_streak_box["x"] < 1440
-    assert abs(name_streak_box["y"] + .5 - (name_box["y"] + name_box["height"] / 2)) <= 1
-    assert abs(models_streak_box["y"] + models_streak_box["height"] / 2 - (models_box["y"] + models_box["height"] / 2)) <= 1, (models_streak_box, models_box)
+    assert abs(name_streak_box["y"] + 0.5 - (name_box["y"] + name_box["height"] / 2)) <= 1
+    assert (
+        abs(
+            models_streak_box["y"]
+            + models_streak_box["height"] / 2
+            - (models_box["y"] + models_box["height"] / 2)
+        )
+        <= 1
+    ), (models_streak_box, models_box)
     assert models_streak.evaluate("e => e.getAnimations()[0].effect.getTiming().delay") == 200
 
     page.mouse.move(20, 20)
@@ -62,14 +71,25 @@ with sync_playwright() as p:
         models_box = models_line.bounding_box()
         assert name_box and models_box
         page.mouse.move(20, 20)
-        page.mouse.move(name_box["x"] + name_box["width"] / 2, name_box["y"] + name_box["height"] / 2)
+        page.mouse.move(
+            name_box["x"] + name_box["width"] / 2, name_box["y"] + name_box["height"] / 2
+        )
         expect(streak).to_have_count(2)
         page.wait_for_timeout(220)
         models_streak_box = models_streak.bounding_box()
         assert models_streak_box
-        assert abs(models_streak_box["y"] + models_streak_box["height"] / 2 - (models_box["y"] + models_box["height"] / 2)) <= 1, (width, models_streak_box, models_box)
+        assert (
+            abs(
+                models_streak_box["y"]
+                + models_streak_box["height"] / 2
+                - (models_box["y"] + models_box["height"] / 2)
+            )
+            <= 1
+        ), (width, models_streak_box, models_box)
         page.screenshot(path=f"/tmp/sigma-home-effects-{width}.png", full_page=True)
         page.wait_for_function("!document.querySelector('.home-credit-streak')", timeout=2000)
 
     browser.close()
-print("PASS real-Chrome credit hover runs delayed, line-aligned streaks once per hover on desktop and mobile; credit click action remains active")
+print(
+    "PASS real-Chrome credit hover runs delayed, line-aligned streaks once per hover on desktop and mobile; credit click action remains active"
+)

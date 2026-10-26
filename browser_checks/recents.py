@@ -291,7 +291,9 @@ with sync_playwright() as playwright:
     normal_recent_type = first_copy.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
-    normal_recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
+    normal_recent_meta = first_copy.locator("xpath=../..").locator(
+        ".recent-meta-row > small > span"
+    )
     normal_recent_meta_style = normal_recent_meta.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )

@@ -74,7 +74,15 @@ with sync_playwright() as playwright:
             assert "Negative · counterexample reported" not in summary
         for subsection in row.locator(".outcome-subsection").all():
             label = subsection.locator(":scope > summary").inner_text().strip()
-            if label in ("Status", "Strategy Assessments", "Metrics", "Session history and provenance", "Conclusion", "Reasoning / proof", "Citations, evidence & obligations"):
+            if label in (
+                "Status",
+                "Strategy Assessments",
+                "Metrics",
+                "Session history and provenance",
+                "Conclusion",
+                "Reasoning / proof",
+                "Citations, evidence & obligations",
+            ):
                 if subsection.get_attribute("open") is None:
                     subsection.locator(":scope > summary").click()
                 assert subsection.get_attribute("open") is not None, (index + 1, label)

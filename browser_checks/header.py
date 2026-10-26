@@ -102,8 +102,16 @@ with sync_playwright() as playwright:
         google_box = home_google.bounding_box()
         chatgpt_box = home_chatgpt.bounding_box()
         assert about_box and admin_box and google_box and chatgpt_box
-        assert about_box["x"] + about_box["width"] <= google_box["x"] + 1, (width, about_box, google_box)
-        assert admin_box["x"] + admin_box["width"] <= chatgpt_box["x"] + 1, (width, admin_box, chatgpt_box)
+        assert about_box["x"] + about_box["width"] <= google_box["x"] + 1, (
+            width,
+            about_box,
+            google_box,
+        )
+        assert admin_box["x"] + admin_box["width"] <= chatgpt_box["x"] + 1, (
+            width,
+            admin_box,
+            chatgpt_box,
+        )
         assert abs(about_box["y"] - google_box["y"]) <= 1, (width, about_box, google_box)
         assert abs(admin_box["y"] - chatgpt_box["y"]) <= 1, (width, admin_box, chatgpt_box)
         if width == 1280:
@@ -171,12 +179,18 @@ with sync_playwright() as playwright:
     expect(google_signin.locator(".connection-dot")).to_have_css(
         "background-color", "rgb(117, 177, 140)"
     )
-    assert google_signin.locator(".connection-dot").evaluate(
-        "e => getComputedStyle(e).animationName"
-    ) == "none"
+    assert (
+        google_signin.locator(".connection-dot").evaluate("e => getComputedStyle(e).animationName")
+        == "none"
+    )
     assert google_signin.evaluate("e => e.matches('button')")
     auth_requests: list[str] = []
-    page.on("request", lambda request: auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None)
+    page.on(
+        "request",
+        lambda request: (
+            auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None
+        ),
+    )
     google_signin.click(force=True)
     assert not auth_requests
     expect(page.get_by_role("dialog", name="Google account")).to_be_visible()
@@ -406,8 +420,16 @@ with sync_playwright() as playwright:
         if width > 700:
             difficulty_box = difficulty_control.bounding_box()
             assert difficulty_box
-            assert abs(about_box["x"] - difficulty_box["x"]) <= 1, (width, about_box, difficulty_box)
-            assert abs(about_box["width"] - home_about_box["width"]) <= 1, (width, about_box, home_about_box)
+            assert abs(about_box["x"] - difficulty_box["x"]) <= 1, (
+                width,
+                about_box,
+                difficulty_box,
+            )
+            assert abs(about_box["width"] - home_about_box["width"]) <= 1, (
+                width,
+                about_box,
+                home_about_box,
+            )
             assert about_box["y"] > difficulty_box["y"], (width, about_box, difficulty_box)
             assert abs(difficulty_box["y"] - model_box["y"]) <= 1, width
             assert abs(model_box["y"] - thinking_box["y"]) <= 1, width

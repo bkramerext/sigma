@@ -145,9 +145,9 @@ def main() -> None:
                 page.screenshot(path=f"/tmp/sigma-t43-1-google-setup-{width}.png", full_page=True)
                 page.keyboard.press("Escape")
                 credit = page.locator(".home-art-credit")
-                expect(credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")).to_have_text(
-                    ["Brian Kramer", "& OpenAI Models"]
-                )
+                expect(
+                    credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")
+                ).to_have_text(["Brian Kramer", "& OpenAI Models"])
                 expect(credit.locator("time")).to_have_count(0)
                 assert credit.evaluate("e => getComputedStyle(e).textAlign") == "right"
                 box = credit.bounding_box()
@@ -160,7 +160,10 @@ def main() -> None:
                 chatgpt_box = chatgpt.bounding_box()
                 assert google_box and chatgpt_box
                 expected_gap = 12 if width > 700 else 8
-                assert abs(chatgpt_box["x"] - google_box["x"] - google_box["width"] - expected_gap) <= 1
+                assert (
+                    abs(chatgpt_box["x"] - google_box["x"] - google_box["width"] - expected_gap)
+                    <= 1
+                )
                 google_style = google.evaluate(
                     "e => { const s = getComputedStyle(e); return [s.height, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight]; }"
                 )
@@ -231,7 +234,9 @@ def main() -> None:
             expect(trigger).to_have_attribute("data-tooltip-disabled", "")
             expect(trigger).not_to_have_attribute("title")
             expect(trigger).not_to_have_attribute("data-tooltip")
-            assert "connection-active" not in trigger.locator(".connection-dot").get_attribute("class")
+            assert "connection-active" not in trigger.locator(".connection-dot").get_attribute(
+                "class"
+            )
             trigger.hover()
             popup_page.wait_for_timeout(750)
             expect(popup_page.get_by_role("tooltip")).to_have_count(0)
@@ -280,7 +285,9 @@ def main() -> None:
                 chatgpt_email_style,
             )
             expect(google_dialog.get_by_role("heading", name="Google account")).to_have_count(0)
-            expect(google_dialog.get_by_role("button", name="Use another Google account")).to_have_count(0)
+            expect(
+                google_dialog.get_by_role("button", name="Use another Google account")
+            ).to_have_count(0)
             expect(google_dialog.get_by_role("button", name="Sign out", exact=True)).to_be_visible()
             popup_page.keyboard.press("Escape")
 

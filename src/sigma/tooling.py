@@ -147,6 +147,8 @@ def run_tooling(command: str) -> int:
                 "sigma",
                 "deploy",
                 "scripts",
+                "browser_checks",
+                "docs/evaluations",
             ],
             [*python, "pyright"],
             ["npm", "--prefix", "frontend", "run", "typecheck"],
