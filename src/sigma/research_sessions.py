@@ -2626,7 +2626,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
         finally:
             staged.unlink(missing_ok=True)
         fcntl.flock(lock, fcntl.LOCK_UN)
-    if cloud_workspaces.enabled():
+    if cloud_workspaces.enabled() and not record.get("simulated"):
         try:
             cloud_research.sync_job(record)
         except cloud_research.CloudResearchUnavailable as exc:
@@ -2940,7 +2940,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: str) -> dict[str, Any]:
-    """Persist a terminal UI fixture through the normal session storage layer.
+    """Persist a queued UI fixture through the normal session storage layer.
 
     This entry point performs no provider, auth-context, or worker calls.
     Only the authenticated local mock API may invoke it.
@@ -2994,8 +2994,8 @@ def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: st
             "calls_used": 0, "call_limit": 0, "cycle_limit": 1,
             "cycle": 0, "steps": [], "artifacts": [], "strategy_assessments": [],
             "interventions": [], "message": "Simulated research queued.", "current_action": "Queued",
-            "events": [{"sequence": 1, "timestamp": now, "kind": "simulation.finished",
-                        "role": None, "message": message}],
+            "events": [{"sequence": 1, "timestamp": now, "kind": "simulation.queued",
+                        "role": None, "message": "Simulated research queued."}],
             "mock_scenario": scenario, "mock_stage": 0, "simulated": True,
         }
         record["outcome"] = _outcome(record)
