@@ -304,6 +304,18 @@ def main() -> None:
             else:
                 raise AssertionError("Invalid bundle transaction succeeded")
             assert "artifacts/should-not-exist.bin" not in list_files(created.path)
+            # All-or-nothing evidence transaction: invalid second member
+            # must not publish the first member.
+            try:
+                update_files(created.path, {
+                    "evidence/partial.txt": b"must roll back",
+                    "../escape.txt": b"invalid",
+                })
+            except BundleError:
+                pass
+            else:
+                raise AssertionError("Unsafe evidence transaction succeeded")
+            assert "evidence/partial.txt" not in list_files(created.path)
             assert read_file(created.path, f"research-sessions/{session_id}.json")
             assert json.loads(export_complete_project(created.path))["files"][
                 f"research-sessions/{session_id}.json"
