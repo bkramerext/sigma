@@ -1,0 +1,28 @@
+{
+  "prepared_from_commit": "19e5bd7",
+  "capture_method": "Offline deterministic validation of the authored finite task and exhaustive checker; no project/session or provider workflow was run.",
+  "provider_calls": 0,
+  "spend_usd": 0,
+  "task_file": "docs/evaluations/increment_22/task.json",
+  "task_sha256": "edbd2757b743579ba53c380e3261640f3c9bc387d88c294acca480c7493ebaee",
+  "checker_file": "docs/evaluations/increment_22/checker.py",
+  "checker_sha256": "b38026d84f8a3c289fa86e560f461c9fc9ea0804883058d29128fc0c1f26c807",
+  "result_file": "docs/evaluations/increment_22/evidence/offline-check.json",
+  "result_sha256": "3d51fd7472c813a2f0a3bf8aeb1f14090bcf1ad37e4aef3e2ad0380ebacc2214",
+  "result": {
+    "enumerated_machine_assignment_order_cases": 2016,
+    "proposed_schedule_valid": true,
+    "proposed_makespan": 13,
+    "exact_minimum_makespan": 10,
+    "optimal_machine_orders": {
+      "M1": ["D", "F", "G"],
+      "M2": ["A", "B", "E", "C"]
+    },
+    "independent_lower_bound": "M1-only jobs D, F, and G require 3+2+5=10 time units on M1."
+  },
+  "limitations": [
+    "This is a custom finite scheduling instance, not a domain-novel result.",
+    "The oracle does not establish model correctness, collaboration, or research quality.",
+    "The answer/checker must not be sent in either model arm's task context."
+  ]
+}

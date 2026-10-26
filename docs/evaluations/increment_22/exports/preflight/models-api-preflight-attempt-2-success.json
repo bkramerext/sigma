@@ -1,0 +1,20 @@
+{
+  "check": "read-only-model-metadata",
+  "checked_at_utc": "2026-10-26T00:06:13.838344+00:00",
+  "method": "GET",
+  "endpoint": "/v1/models/gpt-6.1-sol",
+  "project_id": "proj_ZqoKimk90I8vLSFDM7FGeLVj",
+  "project_header_sent": true,
+  "key_classification": "project-scoped",
+  "http_status": 200,
+  "model_id": "gpt-6.1-sol",
+  "model_object": "model",
+  "response_headers": {
+    "x-request-id": "bec59238-23cd-4c52-8b8c-8af4f7f61af5",
+    "openai-version": "2020-10-01"
+  },
+  "elapsed_seconds": 0.611,
+  "authorization_header_recorded": false,
+  "response_body_recorded": false,
+  "ok": true
+}

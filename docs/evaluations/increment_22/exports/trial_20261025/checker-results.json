@@ -1,0 +1,20 @@
+{
+  "checker": "eligible-machine assignments \u00d7 machine permutations \u00d7 DAG longest paths",
+  "enumerated_machine_assignment_order_cases": 2016,
+  "exact_minimum_makespan": 10,
+  "optimal_machine_orders": {
+    "M1": [
+      "D",
+      "F",
+      "G"
+    ],
+    "M2": [
+      "A",
+      "B",
+      "E",
+      "C"
+    ]
+  },
+  "proposed_makespan": 13,
+  "proposed_schedule_valid": true
+}

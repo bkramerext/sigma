@@ -1,0 +1,427 @@
+"""Execute the already-frozen T146 comparison and preserve provider records."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import os
+import time
+from dataclasses import asdict
+from datetime import UTC, datetime
+from pathlib import Path
+from uuid import uuid4
+
+import httpx
+
+from sigma import chatgpt_auth, openai_connection, research_sessions
+from sigma.api import export_project_view
+from sigma.increment22_baseline import dispatch_turn, new_arm_budget
+from sigma.projects import inspect_project
+from sigma.python_sandbox import execute as sandbox_execute
+
+
+BASE = Path(__file__).resolve().parent
+PROTOCOL = Path(__file__).resolve().parents[2]
+SETUP = json.loads((BASE / "setup.json").read_text())
+TASK = json.loads((PROTOCOL / "task.json").read_text())
+SYSTEM = (PROTOCOL / "prompts/baseline-system.txt").read_text()
+TURNS = json.loads((PROTOCOL / "prompts/baseline-turns.json").read_text())
+PROJECT_PATH = SETUP["project_path"]
+SIGMA_PROJECT_ID = SETUP["project_id"]
+STRATEGY_ID = SETUP["strategy_id"]
+ARM_ORDER = SETUP["randomization"]["arm_order"]
+MODEL = "gpt-6.1-sol"
+EFFORT = "high"
+MAX_OUTPUT = 4096
+ARM_SECONDS = 15 * 60
+OVERALL_SECONDS = 45 * 60
+PRICE_INPUT_MAX = 2.5
+PRICE_OUTPUT = 10.0
+PRICE_CACHED = 0.1
+EXCHANGE_ROOT = BASE / "sigma" / "http-exchanges"
+
+
+def write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def usage_cost_upper(usage: dict) -> float | None:
+    inputs, outputs = usage.get("input_tokens"), usage.get("output_tokens")
+    if type(inputs) is not int or type(outputs) is not int:
+        return None
+    return round((inputs * PRICE_INPUT_MAX + outputs * PRICE_OUTPUT) / 1_000_000, 9)
+
+
+def current_total_elapsed(start: float) -> float:
+    return round(time.monotonic() - start, 3)
+
+
+def save_timing(arm_dir: Path, started_wall: str, started_mono: float, status: str) -> float:
+    elapsed = round(time.monotonic() - started_mono, 3)
+    write_json(
+        arm_dir / "timing.json",
+        {
+            "started_at_utc": started_wall,
+            "finished_at_utc": datetime.now(UTC).isoformat(),
+            "elapsed_seconds_monotonic": elapsed,
+            "status": status,
+        },
+    )
+    return elapsed
+
+
+def baseline_text(raw: dict) -> str:
+    pieces: list[str] = []
+    for item in raw.get("output", []):
+        if not isinstance(item, dict) or item.get("type") != "message":
+            continue
+        for part in item.get("content", []):
+            if isinstance(part, dict) and part.get("type") == "output_text":
+                if isinstance(part.get("text"), str):
+                    pieces.append(part["text"])
+    return "".join(pieces)
+
+
+async def run_baseline(overall_start: float) -> dict:
+    arm_dir = BASE / "baseline"
+    calls_dir = arm_dir / "calls"
+    calls_dir.mkdir(parents=True, exist_ok=True)
+    ledger = new_arm_budget()
+    write_json(arm_dir / "ledger.json", ledger)
+    started_wall = datetime.now(UTC).isoformat()
+    started_mono = time.monotonic()
+    history: list[dict[str, str]] = []
+    compute_count = 0
+    status = "completed"
+    outputs: list[dict] = []
+    (calls_dir / "arm_started.json").write_text(
+        json.dumps({"started_at_utc": started_wall, "model": MODEL, "reasoning_effort": EFFORT}) + "\n"
+    )
+
+    for spec in TURNS:
+        now = time.monotonic()
+        arm_left = ARM_SECONDS - (now - started_mono)
+        overall_left = OVERALL_SECONDS - (now - overall_start)
+        if arm_left <= 0 or overall_left <= 0:
+            status = "incomplete_time_limit_before_dispatch"
+            break
+        turn_num = spec["turn"]
+        user_text = (
+            "Frozen task data (JSON):\n"
+            + json.dumps(TASK, ensure_ascii=False, indent=2)
+            + "\n\nFrozen turn instruction:\n"
+            + spec["instruction"]
+            if turn_num == 1
+            else "Frozen turn instruction:\n" + spec["instruction"]
+        )
+        messages = [*history, {"role": "user", "content": user_text}]
+        schema = {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "maxLength": 4000},
+                "python_code": {"type": ["string", "null"], "maxLength": 4000},
+                "sage_code": {"type": ["string", "null"], "maxLength": 4000},
+            },
+            "required": ["message", "python_code", "sage_code"],
+            "additionalProperties": False,
+        }
+        body = {
+            "model": MODEL,
+            "store": False,
+            "max_output_tokens": MAX_OUTPUT,
+            "reasoning": {"effort": EFFORT},
+            "instructions": SYSTEM,
+            "input": messages,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "t146_baseline_turn",
+                    "strict": True,
+                    "schema": schema,
+                }
+            },
+        }
+        request_bytes = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode()
+        request_path = calls_dir / f"turn-{turn_num}-request.json"
+        request_path.write_bytes(request_bytes)
+        call_state: dict = {"turn": turn_num, "request_sha256": sha(request_bytes)}
+
+        def transport(exact_body: bytes) -> dict:
+            write_json(arm_dir / "ledger.json", ledger)
+            try:
+                timeout = max(1.0, min(arm_left, overall_left))
+                with httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False) as client:
+                    response = client.post(
+                        "https://api.openai.com/v1/responses",
+                        headers={
+                            "Authorization": "Bearer " + os.environ["OPENAI_API_KEY"],
+                            "Content-Type": "application/json",
+                        },
+                        content=exact_body,
+                    )
+                response_path = calls_dir / f"turn-{turn_num}-response.json"
+                response_path.write_bytes(response.content)
+                call_state["response_sha256"] = sha(response.content)
+                call_state["http_status"] = response.status_code
+                call_state["response_headers"] = {
+                    name: response.headers.get(name)
+                    for name in ("x-request-id", "openai-version")
+                    if response.headers.get(name)
+                }
+                call_state["authorization_header_recorded"] = False
+                if response.status_code != 200:
+                    write_json(calls_dir / f"turn-{turn_num}-transport.json", call_state)
+                    return {"_http_status": response.status_code}
+                raw = response.json()
+                if not isinstance(raw, dict):
+                    raise ValueError("Provider response was not a JSON object")
+                return raw
+            except Exception as exc:
+                call_state["transport_error_type"] = type(exc).__name__
+                write_json(calls_dir / f"turn-{turn_num}-transport.json", call_state)
+                raise
+
+        try:
+            raw = dispatch_turn(ledger, f"baseline-turn-{turn_num}", request_bytes, transport)
+        except Exception as exc:
+            write_json(arm_dir / "ledger.json", ledger)
+            call_state["dispatch_error_type"] = type(exc).__name__
+            call_state["outcome_unknown_or_failed"] = True
+            write_json(calls_dir / f"turn-{turn_num}-transport.json", call_state)
+            status = "incomplete_unknown_or_provider_error"
+            break
+        write_json(arm_dir / "ledger.json", ledger)
+        raw_path = calls_dir / f"turn-{turn_num}-response.json"
+        raw = json.loads(raw_path.read_text())
+        response_text = baseline_text(raw)
+        call_state.update(
+            {
+                "provider_response_id": raw.get("id"),
+                "provider_status": raw.get("status"),
+                "model_returned": raw.get("model"),
+                "service_tier_returned": raw.get("service_tier"),
+                "usage": raw.get("usage"),
+                "usage_cost_upper_usd": usage_cost_upper(raw.get("usage", {})),
+            }
+        )
+        write_json(calls_dir / f"turn-{turn_num}-transport.json", call_state)
+        if raw.get("model") != MODEL:
+            status = "incomplete_unexpected_model"
+            break
+        if raw.get("status") == "incomplete":
+            status = "incomplete_max_output_tokens"
+            outputs.append({"turn": turn_num, "response_text": response_text, "status": status})
+            break
+        if raw.get("status") != "completed" or not response_text:
+            status = "incomplete_unexpected_response_status"
+            outputs.append({"turn": turn_num, "response_text": response_text, "status": status})
+            break
+        try:
+            parsed = json.loads(response_text)
+        except json.JSONDecodeError:
+            status = "incomplete_non_json_response"
+            outputs.append({"turn": turn_num, "response_text": response_text, "status": status})
+            break
+        if not isinstance(parsed, dict) or set(parsed) != {"message", "python_code", "sage_code"}:
+            status = "incomplete_schema_mismatch"
+            outputs.append({"turn": turn_num, "response_text": response_text, "status": status})
+            break
+        outputs.append({"turn": turn_num, "response_text": response_text, "parsed": parsed, "status": "completed"})
+        history.extend(
+            [
+                {"role": "assistant", "content": response_text},
+            ]
+        )
+        code_fields = [name for name in ("python_code", "sage_code") if parsed.get(name) is not None]
+        if code_fields:
+            if turn_num not in (1, 3) or len(code_fields) != 1 or compute_count >= 2:
+                status = "incomplete_invalid_computation_proposal"
+                break
+            field = code_fields[0]
+            source = parsed[field]
+            if not isinstance(source, str) or len(source) > 4000:
+                status = "incomplete_invalid_computation_proposal"
+                break
+            compute_count += 1
+            source_path = arm_dir / "computations" / f"turn-{turn_num}-{field}.txt"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text(source)
+            try:
+                result = await sandbox_execute(source, "python" if field == "python_code" else "sagemath")
+                result_data = asdict(result)
+                for key in ("artifacts",):
+                    result_data.pop(key, None)
+                result_data["source_sha256"] = sha(source.encode())
+                write_json(arm_dir / "computations" / f"turn-{turn_num}-result.json", result_data)
+                history.append(
+                    {
+                        "role": "user",
+                        "content": "Your proposed local computation result (preserve its status and limits):\n"
+                        + json.dumps(result_data, ensure_ascii=False),
+                    }
+                )
+            except Exception as exc:
+                failure_record = {"source_sha256": sha(source.encode()), "status": "failed", "error_type": type(exc).__name__}
+                write_json(arm_dir / "computations" / f"turn-{turn_num}-result.json", failure_record)
+                history.append({"role": "user", "content": "Your proposed local computation did not complete: " + json.dumps(failure_record)})
+        write_json(arm_dir / "transcript-progress.json", outputs)
+    elapsed = save_timing(arm_dir, started_wall, started_mono, status)
+    write_json(arm_dir / "transcript.json", {"system": SYSTEM, "task": TASK, "turns": outputs, "status": status, "compute_count": compute_count})
+    return {"arm": "baseline", "status": status, "elapsed_seconds": elapsed, "calls": len(ledger["calls"]), "ledger": ledger}
+
+
+async def run_sigma(overall_start: float) -> dict:
+    arm_dir = BASE / "sigma"
+    arm_dir.mkdir(parents=True, exist_ok=True)
+    EXCHANGE_ROOT.mkdir(parents=True, exist_ok=True)
+    started_wall = datetime.now(UTC).isoformat()
+    started_mono = time.monotonic()
+    credential = await openai_connection.auth_context()
+    # Reuse the already successful authenticated Models lookup during this one
+    # bounded comparison; avoid redundant metadata probes as the session runs.
+    openai_connection._identity = hashlib.sha256(
+        (credential["mode"] + credential["token"]).encode()
+    ).hexdigest()
+    openai_connection._cached = {
+        "status": "connected",
+        "checked_at": json.loads((PROTOCOL / "exports/preflight/models-api-preflight-attempt-2-success.json").read_text())["checked_at_utc"],
+        "ttl_seconds": 2700,
+    }
+    openai_connection._at = time.monotonic()
+    openai_connection._known = {MODEL}
+    openai_connection._labels = {}
+    openai_connection._order = [MODEL]
+    openai_connection.TTL = 2700
+
+    original_init = httpx.AsyncClient.__init__
+    exchange_number = 0
+
+    def instrumented_init(client, *args, **kwargs):
+        nonlocal exchange_number
+        event_hooks = dict(kwargs.get("event_hooks") or {})
+        previous = list(event_hooks.get("response", []))
+
+        async def capture_and_continue(response):
+            nonlocal exchange_number
+            request = response.request
+            if request.url.host == "api.openai.com" and request.url.path == "/v1/responses":
+                raw_response = await response.aread()
+                exchange_number += 1
+                prefix = EXCHANGE_ROOT / f"exchange-{exchange_number:02d}"
+                request_body = request.content
+                (prefix.with_suffix(".request.json")).write_bytes(request_body)
+                (prefix.with_suffix(".response.json")).write_bytes(raw_response)
+                write_json(
+                    prefix.with_suffix(".meta.json"),
+                    {
+                        "method": request.method,
+                        "path": request.url.path,
+                        "http_status": response.status_code,
+                        "request_sha256": sha(request_body),
+                        "response_sha256": sha(raw_response),
+                        "request_id": response.headers.get("x-request-id"),
+                        "response_headers": {
+                            name: response.headers.get(name)
+                            for name in ("x-request-id", "openai-version")
+                            if response.headers.get(name)
+                        },
+                        "authorization_header_recorded": False,
+                    },
+                )
+            for hook in previous:
+                result = hook(response)
+                if asyncio.iscoroutine(result):
+                    await result
+
+        event_hooks["response"] = [capture_and_continue]
+        kwargs["event_hooks"] = event_hooks
+        original_init(client, *args, **kwargs)
+
+    httpx.AsyncClient.__init__ = instrumented_init
+    status = "completed"
+    session_id = None
+    try:
+        view = inspect_project(PROJECT_PATH)
+        limits = research_sessions.get_limits(PROJECT_PATH)
+        started = await research_sessions.start_session(
+            PROJECT_PATH,
+            STRATEGY_ID,
+            str(uuid4()),
+            view.project.id,
+            "api_key",
+            expected_limits=limits,
+            strategy_ids=[STRATEGY_ID],
+        )
+        session_id = started["id"]
+        session_task = research_sessions._tasks.get(session_id)
+        if session_task is None:
+            status = "incomplete_worker_missing"
+        else:
+            stop_requested = False
+            while not session_task.done():
+                now = time.monotonic()
+                if not stop_requested and (now - started_mono >= ARM_SECONDS or now - overall_start >= OVERALL_SECONDS):
+                    await research_sessions.control_session(PROJECT_PATH, session_id, "stop")
+                    status = "incomplete_time_limit"
+                    stop_requested = True
+                await asyncio.wait({session_task}, timeout=3)
+                record = research_sessions._read(PROJECT_PATH, session_id)
+                print(json.dumps({"arm":"sigma","status":record.get("status"),"calls":record.get("calls_used"),"action":record.get("current_action"),"elapsed":round(time.monotonic()-started_mono,1)}), flush=True)
+            try:
+                await session_task
+            except Exception as exc:
+                status = "incomplete_worker_error_" + type(exc).__name__
+            record = research_sessions._read(PROJECT_PATH, session_id)
+            if record.get("status") not in {"completed", "ended", "stopped", "failed"} and status == "completed":
+                status = "incomplete_nonterminal_session"
+            if record.get("hard_budget_ledger", {}).get("unknown_call_ids"):
+                status = "incomplete_unknown_provider_outcome"
+            write_json(arm_dir / "session.json", record)
+            write_json(arm_dir / "session-export.json", export_project_view(PROJECT_PATH))
+    except Exception as exc:
+        status = "incomplete_setup_or_session_" + type(exc).__name__
+        if session_id:
+            try:
+                write_json(arm_dir / "session.json", research_sessions._read(PROJECT_PATH, session_id))
+            except Exception:
+                pass
+    finally:
+        httpx.AsyncClient.__init__ = original_init
+    elapsed = save_timing(arm_dir, started_wall, started_mono, status)
+    return {"arm": "sigma", "status": status, "elapsed_seconds": elapsed, "session_id": session_id}
+
+
+async def main() -> None:
+    if not os.environ.get("OPENAI_API_KEY", "").startswith("sk-proj-"):
+        raise RuntimeError("Runtime credential is no longer classified as project-scoped")
+    if os.environ.get("OPENAI_PROJECT_ID") != json.loads(
+        (PROTOCOL / "exports/preflight/models-api-preflight-attempt-2-success.json").read_text()
+    )["project_id"]:
+        raise RuntimeError("Project context differs from successful Models API preflight")
+    preflight = json.loads((PROTOCOL / "exports/preflight/models-api-preflight-attempt-2-success.json").read_text())
+    if not preflight.get("ok") or preflight.get("model_id") != MODEL:
+        raise RuntimeError("Successful authenticated Models API evidence is required")
+    write_json(BASE / "trial-start.json", {"started_at_utc": datetime.now(UTC).isoformat(), "arm_order": ARM_ORDER, "provider": "OpenAI API", "model": MODEL, "reasoning_effort": EFFORT, "output_tokens_per_call": MAX_OUTPUT, "project_id": os.environ["OPENAI_PROJECT_ID"]})
+    overall_start = time.monotonic()
+    results = []
+    for arm in ARM_ORDER:
+        if current_total_elapsed(overall_start) >= OVERALL_SECONDS:
+            results.append({"arm": arm, "status": "incomplete_overall_time_limit_before_start"})
+            continue
+        if arm == "baseline":
+            result = await run_baseline(overall_start)
+        else:
+            result = await run_sigma(overall_start)
+        results.append(result)
+        write_json(BASE / "trial-progress.json", {"arms": results, "elapsed_seconds": current_total_elapsed(overall_start)})
+    write_json(BASE / "trial-result.json", {"arms": results, "total_elapsed_seconds": current_total_elapsed(overall_start), "finished_at_utc": datetime.now(UTC).isoformat()})
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
