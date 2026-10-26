@@ -99,12 +99,12 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
    `root:root 0700`. It does not format disks. The preflight confirms that the
    mounted UUID and fstab UUID match; `sigma.service` requires the generated
    mount unit and fails closed when the disk is absent.
-3. Stage reviewed code at `/opt/sigma/current` and run `sudo /opt/sigma/current/deploy/install-gce-host.sh`. Install/configure the dedicated `sigma-sandbox` rootless Docker daemon.
-4. Build Python and Sage runner images **under the rootless daemon** using `deploy/build-sandbox-images.sh`, as described in the Cloud Deployment host setup contract.
-5. Set `/etc/sigma/deploy.env` with release SHA, domain, OAuth client ID, approved limits and secret-file paths; protect it `root:root 0600`. Use `deploy/fetch-secrets.sh` for named secrets. Never print secret values.
-6. Run `sudo /usr/local/libexec/sigma/gce_preflight.py --json`; proceed only on PASS/exit 0. Run `python -m sigma.cloud_runtime_check` against the **actual rootless** daemon without development overrides.
-7. Configure DuckDNS A record to the reserved static IP; verify external DNS and HTTPS/Caddy certificate. Set Google OAuth allowed origin `https://sigma-research.duckdns.org` and callback `https://sigma-research.duckdns.org/api/cloud-auth/callback`.
-8. Start with `sudo systemctl enable --now sigma.service`. Check Caddy/API/frontend health, auth mode, private state mounts, logs and research sandbox isolation. Record actual endpoint results.
+3. Follow the scoped [T128 host readiness procedure](T128_HOST_READINESS.md). It runs the idempotent host installer, builds runner images only through the dedicated rootless daemon, and runs `gce_preflight.py --host-readiness`. This host check does not need OAuth or production secrets and does not enable `sigma.service`.
+4. Configure `/etc/sigma/deploy.env` and secret files as the separate T129 application deployment requires. Never print secret values. The production gate `gce_preflight.py --json` remains blocked until those T129 prerequisites exist.
+5. Run `sudo /usr/local/libexec/sigma/gce_preflight.py --json`; proceed only on PASS/exit 0. This production check validates T129 configuration and merged Compose in addition to host prerequisites.
+6. Configure DuckDNS A record to the reserved static IP; verify external DNS and HTTPS/Caddy certificate. Set Google OAuth allowed origin `https://sigma-research.duckdns.org` and callback `https://sigma-research.duckdns.org/api/cloud-auth/callback`.
+7. Start with `sudo systemctl enable --now sigma.service` only after production preflight passes. Check Caddy/API/frontend health, auth mode, private state mounts, and logs. Record actual endpoint results.
+8. Run `python -m sigma.cloud_runtime_check` inside the packaged backend using the **actual rootless** daemon, without development overrides. The host-only gate is not a substitute for this integrated runtime proof.
 9. Complete hosted acceptance before inviting users: two distinct Google identities, unauthorized access rejection, workspace isolation, bounded sponsored inference, Python/Sage, sessions/recovery, Markdown/TeX/PDF/report export, browser restart and data persistence. **Desktop browser is the release target; mobile-specific acceptance is out of scope.**
 
 For T134's repeatable two-identity privacy matrix, direct-reference probes,

@@ -1102,10 +1102,13 @@ backup; decide on recovery, shutdown, or paid continuation before trial end.
 configuration only when explicitly run as root on Ubuntu 24.04 amd64;
 `deploy/gce_preflight.py` is read-only. Neither runs `gcloud`, contacts Google,
 accesses credential contents, pushes images, changes DNS, nor calls providers.
-The install script was not run on the authoring workstation. Linux-only
-verification commands are the preflight above, `systemd-analyze verify`,
-`systemctl status docker sigma-sandbox sigma`, and the rootless runtime command
-below; use them on the actual Ubuntu VM before production launch.
+For T128 host health without T129 credentials, use the documented
+[host-readiness and reboot-recovery procedure](T128_HOST_READINESS.md),
+including `--host-readiness` before production setup and `--after-reboot`
+following an actual reboot. The regular preflight remains the T129 production
+gate. The installer was not run on the authoring workstation. Live Linux
+service recovery, disk identity, and runtime isolation still require checks on
+the actual Ubuntu VM; local tests do not establish hosted acceptance.
 
 - [gcloud budgets create](https://cloud.google.com/sdk/gcloud/reference/billing/budgets/create)
 - [gcloud VM create](https://cloud.google.com/sdk/gcloud/reference/compute/instances/create)

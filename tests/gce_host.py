@@ -21,6 +21,57 @@ import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
+    def test_host_readiness_derives_rootless_socket_without_production_environment(self) -> None:
+        preflight = gce_preflight.Preflight(host_readiness=True)
+        with patch("gce_preflight._sandbox_uid", return_value=1001):
+            self.assertEqual(preflight._sandbox_socket(), "/run/user/1001/docker.sock")
+        self.assertEqual(preflight.values, {})
+
+    def test_host_readiness_reboot_gate_requires_enabled_daemons_but_not_app(self) -> None:
+        calls: list[list[str]] = []
+        preflight = gce_preflight.Preflight(host_readiness=True, after_reboot=True)
+
+        def command(argv, **kwargs):
+            calls.append(argv)
+            output = "yes\n" if argv[0] == "loginctl" else ""
+            return subprocess.CompletedProcess(argv, 0, output, "")
+
+        with (
+            patch("gce_preflight._sandbox_uid", return_value=1001),
+            patch.object(preflight, "command", side_effect=command),
+        ):
+            preflight.check_services()
+        self.assertIn(["systemctl", "is-enabled", "--quiet", "docker.service"], calls)
+        self.assertIn(["systemctl", "is-enabled", "--quiet", "sigma-sandbox.service"], calls)
+        self.assertNotIn(["systemctl", "is-enabled", "--quiet", "sigma.service"], calls)
+        self.assertIn(
+            ["loginctl", "show-user", "--property=Linger", "--value", "sigma-sandbox"], calls
+        )
+        self.assertTrue(all(result.status == "PASS" for result in preflight.results))
+
+    def test_host_readiness_mode_does_not_require_deploy_env_or_secret_checks(self) -> None:
+        preflight = gce_preflight.Preflight(host_readiness=True)
+        with (
+            patch.object(preflight, "check_platform") as platform,
+            patch.object(preflight, "check_mount") as mount,
+            patch.object(preflight, "check_services") as services,
+            patch.object(preflight, "check_host_daemon") as host_docker,
+            patch.object(preflight, "check_rootless_daemon") as rootless,
+            patch.object(preflight, "check_socket") as socket,
+            patch.object(preflight, "check_runtime_images") as images,
+            patch.object(preflight, "check_app_unit") as app_unit,
+            patch.object(preflight, "check_env") as environment,
+            patch.object(preflight, "check_secret_files") as secrets,
+            patch.object(preflight, "_command"),
+            patch("gce_preflight.os.geteuid", return_value=0),
+        ):
+            platform.side_effect = lambda: preflight.add("Ubuntu production host", "PASS", "test")
+            preflight.run()
+        environment.assert_not_called()
+        secrets.assert_not_called()
+        for check in (mount, services, host_docker, rootless, socket, images, app_unit):
+            check.assert_called_once()
+
     def test_preflight_requires_all_healthchecks_and_healthy_startup_dependencies(self) -> None:
         services = {
             "backend": {
@@ -126,8 +177,30 @@ class GceHostToolingTests(unittest.TestCase):
 
     def test_installer_keeps_state_mount_root_private(self) -> None:
         installer = (DEPLOY / "install-gce-host.sh").read_text(encoding="utf-8")
-        self.assertIn("install -d -o root -g root -m 0700 /srv/sigma-state", installer)
+        self.assertIn("state_mount=/srv/sigma-state", installer)
+        self.assertIn('mountpoint --quiet "$state_mount"', installer)
+        self.assertIn("stat -c '%u:%a' \"$state_mount\"", installer)
+        self.assertIn('install -d -o root -g root -m 0700 "$state_mount"', installer)
+        self.assertIn("state mount path contains data but is not mounted", installer)
         self.assertNotIn("install -d -o root -g root -m 0755 /srv/sigma-state", installer)
+
+    def test_runtime_toolchains_are_pinned_in_their_container_recipes(self) -> None:
+        backend = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        runner = (ROOT / "sandbox-poc/Dockerfile").read_text(encoding="utf-8")
+        sage = (ROOT / "sandbox-poc/Dockerfile.sage").read_text(encoding="utf-8")
+        requirements = (ROOT / "sandbox-poc/requirements.txt").read_text(encoding="utf-8")
+        image_build = (DEPLOY / "build-sandbox-images.sh").read_text(encoding="utf-8")
+        self.assertIn("ghcr.io/astral-sh/uv:0.12.17@sha256:", backend)
+        self.assertIn("uv sync --locked --no-dev", backend)
+        self.assertIn("tectonic%400.15.0", backend)
+        self.assertIn("--checksum=sha256:", backend)
+        self.assertIn("COPY --from=tectonic /usr/local/bin/tectonic", backend)
+        self.assertIn("python:3.12.8-slim@sha256:", runner)
+        self.assertIn("sagemath/sagemath:10.8@sha256:", sage)
+        self.assertTrue(all("==" in line for line in requirements.splitlines() if line.strip()))
+        self.assertIn('DOCKER_HOST="unix://${socket}"', image_build)
+        self.assertIn("sigma-research-python:0.1", image_build)
+        self.assertIn("sigma-research-sage:10.8", image_build)
 
     def test_state_mount_fstab_planning_is_uuid_based_hardened_and_idempotent(self) -> None:
         uuid = "12345678-1234-1234-1234-123456789abc"

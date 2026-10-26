@@ -1,0 +1,64 @@
+# T128 host reproducibility handoff
+
+Branch: `red/t128-host-reproducibility`
+Base: `main` at `803a62d` (PR #156 merge)
+Ticket: T128
+
+## Implemented
+
+- Added `gce_preflight.py --host-readiness --json`, which evaluates the host
+  contract without production `deploy.env`, OAuth, or secret-file prerequisites.
+- Added `--after-reboot --json`, which implies host readiness and checks active
+  plus enabled system Docker and sandbox services, sandbox lingering, state
+  mount identity/options, rootless socket controls, and runner images. It does
+  not require or activate `sigma.service`.
+- Made installer key replacement atomic and made state mountpoint handling
+  refuse symlinks, nonempty unmounted paths, and permission changes on a mounted
+  state filesystem.
+- Documented runtime toolchain boundaries and the operator procedure in
+  `docs/T128_HOST_READINESS.md`; linked it from deployment operations docs.
+
+## T129 interface assumption for repository handoff
+
+The default `gce_preflight.py --json` behavior remains the production gate,
+including `/etc/sigma/deploy.env`, protected secret metadata, Compose settings,
+and app startup contract. Host-only modes are read-only diagnostics and must not
+be used to enable `sigma.service`. The T129 owned Compose, startup, OAuth, and
+secret-delivery files are unchanged. This is the interface for Gray's review;
+no direct worker communication occurred.
+
+## Toolchain audit
+
+The checked-in backend `Dockerfile` already pins uv and runs
+`uv sync --locked`; it installs Tectonic from a checksum-verified archive. The
+Python runner requirements are exact pins; the Sage base uses a digest. The
+existing `deploy/build-sandbox-images.sh` builds and inspects both runner tags
+only when run by `sigma-sandbox` through its rootless daemon. These build/runtime
+inputs are represented, so no host-level copy of uv, Python dependencies, or
+Tectonic was added.
+
+`deploy/prepare_state_disk.py` already handles UUID-backed `/etc/fstab` setup
+with `nodev,nosuid,noexec` and does not format. The new installer guard avoids
+changing a mounted filesystem root. Disk preparation remains a one-time
+operator action after disk identity confirmation.
+
+## Validation and limitations
+
+- `uv run python tests/gce_host.py`: PASS, 20 tests.
+- `./sigma setup`: PASS in the fresh worktree.
+- `./sigma test`: PASS; all scenarios, Ruff check/format, Pyright, frontend
+  typecheck and production build.
+- `git diff --check`: PASS.
+- `bash -n deploy/install-gce-host.sh`: PASS.
+- Provider calls/charges: none.
+- Live VM access, installer execution, actual reboot recovery and new preflight
+  invocation on GCE: not performed per assignment constraint. Hosted acceptance
+  remains unverified; operator reports supplied in the assignment are not
+  claimed as verification of these changes.
+
+Remaining manual prerequisites: operator runs the host gate on `sigma-gce-01`
+and repeats `--after-reboot` after an actual reboot; Gray/T129 separately
+installs protected application configuration and credentials before the
+production preflight and service start.
+
+Elapsed focused implementation time: approximately 40 minutes.
