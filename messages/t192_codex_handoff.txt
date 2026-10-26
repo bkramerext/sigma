@@ -1,0 +1,30 @@
+# T192 — Per-User Project Isolation handoff
+
+Branch: `t192-per-user-project-isolation`  
+Base: current `main` (`07eff567ec3e723902424e150254c1fd490c8017`)  
+Implementation commit: `47ef959`  
+PR: pending
+
+## Result
+
+Audited ownership, API access, storage durability, restart behavior, and sandbox command construction. No server-side implementation bypass was confirmed, so production code was left unchanged. Existing controls bind each protected request's verified Google OIDC `Principal.subject` to the private workspace. The change adds regression assertions for cross-owner project update, text-source evidence write, and execution creation using a guessed victim path. Each returns the generic 404 and leaves project bytes, saved execution records, and evidence-source storage unchanged.
+
+Created the missing canonical `tickets/t192.md` and recorded audit results in `docs/STATUS.md` and `docs/TICKET_TRACKING.md`. T43.2 / PR #166 acceptance evidence was reused for fixture account switching, with its live OAuth limitations preserved.
+
+## Checks run
+
+- `python tests/cloud_workspaces.py` — PASS. Real Uvicorn process and temporary filesystem/SQLite; per-subject workspaces, cross-owner reads/writes, traversal/symlinks, project/paper/export/report/evidence/execution paths, restart, and backup/restore.
+- `python tests/cloud_auth.py` — PASS (18 tests). Signed deterministic Google OIDC tokens; headers cannot replace verified subject.
+- `python tests/python_sandbox.py` — PASS. Fixed Docker command has no mount/volume arguments; execution state/artifacts remain project-scoped.
+- `./sigma test` — PASS all scenarios, Ruff, formatting (258 files), Pyright (0 diagnostics), frontend typecheck, and production build. Existing >500 kB chunk-size advisory only.
+- `git diff --check` — PASS.
+
+No production deployment, live Google OAuth, live inference, paid calls, or credential use. The initial test invocation found missing frontend dependencies in the fresh worktree; after `npm ci --prefix frontend`, the complete `./sigma test` passed. The initial direct `uv --no-sync` invocation also lacked packages before `./sigma test` initialized the worktree's locked environment; the focused regression then passed.
+
+## Remaining risks / live verification
+
+- Distinct live Google identities, hosted OAuth callback, and production account switching remain unverified by constraint.
+- Production mount ownership/permissions, revocation behavior, persistent restart/restore, and actual sandbox runtime isolation require owner-authorized production-equivalent checks before deployment.
+- The Docker command and service API boundaries are tested locally; no actual hostile sandbox process was run as part of T192.
+
+No paid inference or production changes. No self-merge.
