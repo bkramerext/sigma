@@ -90,7 +90,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         document = json.loads(result["project.json"])
     except (ValueError, UnicodeDecodeError) as exc:
         raise BundleError("Invalid project document") from exc
-    if not isinstance(document, dict) or "schema_version" not in document:
+    if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid project document")
     return result
 
