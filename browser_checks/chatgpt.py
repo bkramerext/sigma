@@ -31,6 +31,13 @@ with sync_playwright() as playwright:
     leaks: list[str] = []
 
     def api(route):
+        if route.request.url.endswith("/api/cloud-auth/status"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='{"target":"local","enabled":true,"ready":true,"authenticated":true,"user":{"email":"google-a@example.test","role":"member"},"admin_contact_email":null,"local_setup_missing":[]}',
+            )
+            return
         headers = None
         if FORWARD_ORIGIN:
             headers = dict(route.request.headers)
@@ -69,7 +76,7 @@ with sync_playwright() as playwright:
     assert context.request.get(f"{FIXTURE_ORIGIN}/__fixture__/stats").json()["generated"] == 0
 
     def connection_panel():
-        page.get_by_label("AI connection settings", exact=True).click()
+        page.locator(".api-connection > summary").click()
         return page.get_by_role("dialog", name="AI connection settings")
 
     def no_credential_text():
@@ -80,18 +87,6 @@ with sync_playwright() as playwright:
 
     panel = connection_panel()
     connect = panel.get_by_role("button", name="Continue with ChatGPT", exact=True)
-
-    # Cancel an in-progress sign-in; no model inference may occur.
-    authorization["hold"] = True
-    connect.click()
-    expect(panel.get_by_role("button", name="Cancel sign-in", exact=True)).to_be_visible()
-    panel.get_by_role("button", name="Cancel sign-in", exact=True).click()
-    expect(panel.get_by_role("button", name="Continue with ChatGPT", exact=True)).to_be_enabled()
-    for pending in authorization["held"]:
-        pending.abort()
-    authorization["held"].clear()
-    authorization["hold"] = False
-    no_credential_text()
 
     # Declined authorization is explained safely and remains retryable.
     authorization["declined"] = True
@@ -104,8 +99,50 @@ with sync_playwright() as playwright:
     authorization["declined"] = False
     panel.get_by_role("button", name="Continue with ChatGPT", exact=True).click()
     expect(status.filter(has_text="ChatGPT connected")).to_be_visible(timeout=20000)
-    expect(panel.get_by_text("Using ChatGPT plan", exact=True)).to_be_visible()
+    expect(panel).to_contain_text("plan allowance or credits")
     expect(panel.get_by_text("same-email@example.test", exact=True)).to_be_visible()
+    no_credential_text()
+
+    # Add a distinct ChatGPT identity in the same browser profile. The new
+    # identity becomes active, survives reload, and can be explicitly switched
+    # back to the retained first account without exposing credentials.
+    identity_change = context.request.post(
+        f"{FIXTURE_ORIGIN}/__fixture__/state",
+        data={
+            "state": "connected",
+            "subject": "fixture-subject-two",
+            "email": "second-account@example.test",
+        },
+    )
+    assert identity_change.ok
+    panel.get_by_role("button", name="Connect another account", exact=True).click()
+    expect(status.filter(has_text="ChatGPT connected")).to_be_visible(timeout=20000)
+    expect(panel.get_by_text("second-account@example.test", exact=True)).to_be_visible()
+    second_state = page.evaluate("async () => (await (await fetch('/api/ai/connection')).json())")
+    assert len(second_state["accounts"]) == 2, second_state
+    second_id = second_state["active_account"]
+    first_id = next(item["id"] for item in second_state["accounts"] if item["id"] != second_id)
+    page.reload()
+    expect(status.filter(has_text="ChatGPT connected")).to_be_visible(timeout=15000)
+    connection_panel()
+    expect(
+        page.get_by_role("dialog", name="AI connection settings").get_by_text(
+            "second-account@example.test", exact=True
+        )
+    ).to_be_visible()
+    switched = page.evaluate(
+        "async (accountId) => { const response = await fetch('/api/ai/mode', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode:'chatgpt', account_id:accountId}) }); return {ok: response.ok, body: await response.json()}; }",
+        first_id,
+    )
+    assert switched["ok"] and switched["body"]["active_account"] == first_id, switched
+    page.reload()
+    expect(status.filter(has_text="ChatGPT connected")).to_be_visible(timeout=15000)
+    connection_panel()
+    expect(
+        page.get_by_role("dialog", name="AI connection settings").get_by_text(
+            "same-email@example.test", exact=True
+        )
+    ).to_be_visible()
     no_credential_text()
 
     for fixture_state, expected in (
@@ -127,5 +164,5 @@ with sync_playwright() as playwright:
 
 assert not leaks, "Credential-shaped text appeared in browser output"
 print(
-    "PASS real Chrome isolated ChatGPT sign-in, cancel/decline, connected state, outage/limit/permission/expiry recovery, sanitized UI/console, and zero inference calls"
+    "PASS real Chrome isolated ChatGPT sign-in, decline, distinct-account connect/reload/switch, outage/limit/permission/expiry recovery, sanitized UI/console, and zero inference calls; cancellation is covered by the API regression"
 )
