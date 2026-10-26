@@ -91,6 +91,16 @@ def main() -> None:
         else:
             raise AssertionError("Unsafe path accepted")
         assert not (root / "bad.sigma").exists()
+        invalid_source = root / "invalid.sigma"
+        invalid_source.mkdir()
+        (invalid_source / "project.json").write_text('{"not_a_project":true}')
+        try:
+            migrate(invalid_source, root / "invalid.json")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Migrated invalid project document")
+        assert not (root / "invalid.json").exists()
         symlink_source = root / "symlink.sigma"
         symlink_source.mkdir()
         (symlink_source / "project.json").write_text('{"schema_version":9}')
