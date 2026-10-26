@@ -316,6 +316,21 @@ def main() -> None:
             else:
                 raise AssertionError("Unsafe evidence transaction succeeded")
             assert "evidence/partial.txt" not in list_files(created.path)
+            # Transaction callback failures must leave the published file unchanged.
+            from sigma.project_bundle import transform_members
+
+            before = Path(created.path).read_bytes()
+
+            def reject_transaction(members):
+                raise ProjectError("simulated evidence validation failure")
+
+            try:
+                transform_members(created.path, reject_transaction)
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Failed transaction unexpectedly committed")
+            assert Path(created.path).read_bytes() == before
             assert read_file(created.path, f"research-sessions/{session_id}.json")
             assert json.loads(export_complete_project(created.path))["files"][
                 f"research-sessions/{session_id}.json"
