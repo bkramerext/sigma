@@ -41,6 +41,77 @@ calls, hosted identity, or deployment infrastructure was used. Follow-up fix:
 [PR #197](https://github.com/bkramerext/sigma/pull/197), based on current
 `main` after merging PR #196.
 
+## T128 live GCE host readiness (2026-10-26)
+
+Authenticated GCE access is available in this session. `gcloud auth list` showed
+the active personal owner account; project `sigma-research-prod` lists
+`sigma-gce-01` as RUNNING in `us-west1-b`. The VM has Ubuntu 24.04 amd64, OS
+Login enabled, external IPv4 `136.66.128.82`, and runtime service account
+`sigma-runtime@...`. Current IAM grants on this account include project
+`roles/owner`, `roles/compute.osAdminLogin`, and
+`roles/iap.tunnelResourceAccessor`; this is too broad for routine worker use.
+
+Using PR #195's current-main preflight as the basis, live
+`sudo ... gce_preflight.py --host-readiness --json` first exposed a false
+failure: Docker was invoked as root with `--host /run/user/1001/docker.sock`,
+which Docker parsed as TCP `localhost:2375`. Running it as `sigma-sandbox`
+with the explicit `unix:///run/user/1001/docker.sock` endpoint fixed the rootless
+checks while preserving inherited-context clearing. The reviewed script was
+copied temporarily to `/tmp`, run read-only as root, and removed. The live
+host gate exited 0: all rows PASS, including Ubuntu, UUID/fstab mount,
+`nodev,nosuid,noexec`, private root ownership and sandbox denial, active/enabled
+system Docker and sandbox services, linger, daemon separation, rootless mode,
+socket policy, both Python/Sage images, systemd syntax and guarded service
+unit. The dedicated daemon reports `seccomp`, `rootless`, and `cgroupns`; both
+images inspect successfully as the sandbox user. No application-path runtime
+probe was run because it requires an active backend; `sigma.service` remains
+disabled and inactive as required. Its unit has Docker/sandbox requirements,
+`RequiresMountsFor=/srv/sigma-state`, and guarded preflight startup.
+
+The attached `pd-balanced` state disk is non-auto-delete, 30 GiB, mounted at
+`/srv/sigma-state` from UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`, `ext4`, `root:root 0700`; 28 GiB was
+available. The sandbox user cannot read the mount root. The deployment cost
+estimate currently assumes a 200 GiB state disk and an `e2-standard-4`, while
+the VM has an `e2-standard-2`; reconcile that sizing before sustained hosted
+research. No disk resize or VM change was made.
+
+Effective firewall output for this VM's `sigma-vpc` network and tags showed
+only IAP SSH from `35.235.240.0/20` to `sigma-iap-ssh` and public TCP 80/443 to
+`sigma-web`. The effective 80/443 rule is `0.0.0.0/0`; no effective rule
+exposes TCP 22 publicly or ports 8000, 5173, 2375, or 2376. DNS A resolves to
+the VM address and has no AAAA record. HTTPS returned HTTP/2 200 with verified
+TLS from Caddy; HTTP returned 308. This is the 25-byte readiness page, not
+proof of a running SIGMA application.
+
+The production gate was also run read-only using the reviewed current-main
+checker. It returned FAIL because `/etc/sigma/deploy.env` still includes the
+retired `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` setting; the current runbook says
+to remove that line and retain the exact prior identity in
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. The checker read the protected env file's
+settings but emitted no values; key names were separately listed without
+values, and secret-file contents were not accessed. The deployed
+preflight/configuration was not changed and the app was not started.
+
+Least-privilege access: create a dedicated worker identity, remove project
+Owner/OS Admin from routine use, scope OS Login and IAP tunnel access to this
+VM, and provide a root-owned fixed-argument read-only preflight wrapper through
+a narrowly scoped sudoers rule. To remove SSH commands entirely, a host timer
+can publish only sanitized preflight JSON to a dedicated Cloud Logging view;
+the worker then needs log-view read access only. Avoid OS Config Exec access
+for routine workers because its policy scripts execute on the VM. Google
+documents [OS Login role behavior](https://docs.cloud.google.com/compute/docs/oslogin),
+[IAP TCP forwarding](https://docs.cloud.google.com/iap/docs/using-tcp-forwarding),
+and [OS policy Exec resources](https://docs.cloud.google.com/compute/docs/osconfig/rest/Shared.Types/OSPolicy#Exec).
+No IAM or host configuration was changed.
+
+`uv run python tests/gce_host.py` passed 21 tests and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and production
+build. The build emitted the existing large-chunk advisory. No browser check
+was relevant to this host-preflight change. No paid calls, service start,
+reboot, or production configuration change occurred.
+
 ## Issue #186 single administrator/contact setting follow-up (2026-10-26)
 
 Follow-up to [PR #187](https://github.com/bkramerext/sigma/pull/187) per the

@@ -1,0 +1,52 @@
+R4R — T128 host-readiness preflight socket correction
+
+PR: pending creation
+Branch: red/t128-rootless-preflight-socket
+Base: main at dd23fec (PR #195)
+Ticket: #98 / T128
+
+The host-only preflight ran rootless Docker as root and passed a bare socket
+path to `docker --host`. Docker interpreted it as `tcp://localhost:2375/...`,
+so live checks falsely failed despite a healthy rootless daemon. The checker
+now runs the read-only Docker info/image-inspect commands as `sigma-sandbox`,
+clears inherited Docker host/context variables, and passes an explicit
+`unix:///run/user/<uid>/docker.sock` endpoint. The regression test asserts the
+execution identity, sanitized environment, and endpoint.
+
+Live evidence (2026-10-26):
+- Authenticated `gcloud` access and IAP SSH to `sigma-gce-01` in
+  `sigma-research-prod/us-west1-b` succeeded.
+- The installed host-only checker failed its rootless daemon and two image
+  rows. Direct diagnostics as root showed socket permission denied; the
+  sandbox user's daemon reported `rootless`, and both images inspected.
+- Running the PR #195 current-main checker with the focused fix, copied
+  temporarily to `/tmp` and removed after execution, made
+  `--host-readiness --json --repository /opt/sigma/current` exit 0 with all
+  rows PASS. No service was started and no host config was changed.
+- The persistent disk UUID matched fstab; ext4 mount options included
+  `nodev,nosuid,noexec`; root ownership/mode and sandbox denial passed.
+  Docker and sandbox units were active/enabled; linger and systemd syntax
+  passed. `sigma.service` stayed inactive/disabled.
+- GCE effective firewall rules resolved to public 80/443 and IAP-only 22.
+  DNS/TLS worked and Caddy returned the readiness page. No application runtime
+  probe was run because the backend was not started.
+- The production preflight still fails because deploy.env includes retired
+  `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`; no production configuration was edited.
+  Current runbook remediation is owner-owned and must preserve the prior
+  administrator identity in `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`.
+- Current IAM has project Owner and OS Admin Login for the active user; no IAM
+  changes were made. The status entry recommends a dedicated worker identity,
+  a fixed root-owned read-only wrapper, and sanitized scheduled Cloud Logging
+  output as the no-routine-SSH design.
+
+Checks executed:
+- `uv run python tests/gce_host.py` — 21 passed.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — all scenarios,
+  Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
+  build passed. Build emitted the existing large-chunk advisory.
+- `./sigma setup` — passed; installed locked frontend dependencies after the
+  first suite attempt found `tsc` absent in this worktree.
+
+No paid/provider calls, SSH key sharing, production configuration changes,
+service start, or reboot occurred. Review the live evidence and diff before
+merging; PR author must not merge this PR.
