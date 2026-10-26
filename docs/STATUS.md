@@ -6062,3 +6062,40 @@ deterministic local fixtures; no provider calls or costs occurred. See the
 [issue #228 handoff](../messages/issue228_gray_sponsorship_allowance.txt).
 Implementation is in [PR #232](https://github.com/bkramerext/sigma/pull/232),
 open against `main`, current and mergeable, and not merged.
+
+## Guest sample projects and About privacy actions (2026-10-26)
+
+Guest Home now uses the normal Projects layout with New/Open controls and the
+existing sample catalog. Recent is disabled and the Samples control is removed;
+the sample catalog is shown by default. Opening or creating a guest project uses
+an opaque eight-hour, in-memory guest session and a private temporary workspace.
+The project path resolver confines access to that workspace, guest Recents are
+always empty, and expired workspaces are cleaned up on later guest requests.
+Guest sessions cannot run provider-backed research, paper/proposal generation,
+or AI text conversion. The guest UI no longer makes personal model or catalog
+requests that produced misleading authentication-error toasts.
+
+The Guest Home invitation copy now describes sample projects. The About dialog
+keeps Privacy Policy as a lower-left action button, the policy page has a
+Return to SIGMA action at the top, the Google pill copy is shorter, and artwork
+credit reads “Brian Kramer” / “& GPT Models”.
+
+Verification: `uv run python tests/cloud_auth.py` passed (29 tests), including
+guest sample opening with configured and unready Google Auth, temporary path
+containment, empty Recent, and blocked provider-backed routes. Changed-file
+Ruff check/format and Pyright passed. The
+real Chrome flow `uv run --with playwright python browser_checks/guest_samples.py`
+passed Home controls/copy, sample open into the full workspace, no 401 toast,
+empty Recent, and both privacy actions. Frontend typecheck and production build
+passed; build retains the existing >500 kB chunk advisory. No provider calls or
+costs occurred.
+
+`./sigma test` completed with four repository checks failing outside the guest
+change: `tests/tooling.py` expects the admin-contact warning; Ruff reports four
+issues in `src/sigma/gmail_delivery.py` and `tests/gmail_delivery.py`; format
+check reports existing formatting in `src/sigma/cli.py`, `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, and `tests/gmail_delivery.py`; Pyright reports
+`tests/gmail_delivery.py:56` accessing `.decode` on `Message[str, str]`. The
+frontend typecheck and all guest-focused checks passed. The build step was
+skipped by `./sigma test` after those failures and was run separately
+successfully. See the [Blue guest-samples handoff](../messages/guest_samples_blue_r4r.md).

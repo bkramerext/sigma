@@ -2064,7 +2064,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      {cloud?.enabled ? <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill compact/><ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}
+      {cloud?.enabled ? <ConnectionStatus disabled={connectionDisabled || !cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill compact/><ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
@@ -2156,6 +2156,7 @@ const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title
 
 function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
   const ai = useAI();
+  const cloud = useCloudIdentity();
   const [models, setModels] = useState<CatalogChoice[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2207,6 +2208,10 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   useEffect(() => {
     const controller = new AbortController();
     setCatalogReady(false);
+    if (cloud?.enabled && !cloud.authenticated) {
+      setModels([]); setMessage('Model availability is unavailable in Guest mode.'); setCatalogReady(true);
+      return () => controller.abort();
+    }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) throw new Error('Model availability requires an authorized session. Sign in again or contact the SIGMA administrator. Saved settings are unchanged.');
@@ -2219,7 +2224,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
       if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Model availability could not be verified. Saved settings are unchanged.');
     }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
     return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
+  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status, cloud?.enabled, cloud?.authenticated]);
 
   const current = models.find(model => model.id === view.project.ai_model);
   const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
@@ -2410,12 +2415,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }, [initial?.path]);
   useEffect(() => {
     const controller = new AbortController();
+    if (cloud?.enabled && !cloud.authenticated) {
+      setCatalog([]); setCatalogMessage('Model availability is unavailable in Guest mode.');
+      return () => controller.abort();
+    }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Model catalog unavailable. Check the local server; existing settings are retained.'); return response.json(); }).then(data => {
       setCatalog(data.models); setCatalogMessage(data.message);
       if (!initial) setValues(previous => previous.ai_model ? previous : { ...previous, ai_model: data.default_model, reasoning_effort: data.default_effort });
     }).catch(error => { if (!controller.signal.aborted) setCatalogMessage(errorMessage(error)); });
     return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account]);
+  }, [ai.info?.mode, ai.info?.active_account, cloud?.enabled, cloud?.authenticated]);
   useEffect(() => {
     if (initial) return;
     const controller = new AbortController(); setPreviewBusy(true); setDestination(null); setLocationError('');
@@ -2613,7 +2622,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
   const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2635,8 +2644,8 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
     try {
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
-      // A Sample opens as a saved working copy, which now belongs in Recent.
-      window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
+      // Guest copies live only in the temporary guest workspace.
+      if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
       onOpen(copy);
     }
     catch (error) { setError(errorMessage(error)); }
@@ -2666,6 +2675,7 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
   const samples = useRef<HTMLButtonElement>(null);
   const recentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (guest) setTab('samples'); }, [guest]);
   function switchTab(next: 'recent' | 'samples') {
     if (next === tab) {
       const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
@@ -2679,16 +2689,18 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     }
     setTab(next); (next === 'recent' ? recent : samples).current?.focus();
   }
-  return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
+  return <div className="home-catalog"><div className="catalog-tabs" role={guest ? 'group' : 'tablist'} aria-label="Project lists" onKeyDown={event => {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
     if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
-    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
-    {!guest && <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>}
+    {!guest && <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>}
+    {guest
+      ? <button ref={recent} id="recent-tab" disabled title="Recent projects are unavailable in Guest mode">Recent</button>
+      : <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>}
   </div>
     {!guest && <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>}
-    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen}/></div>
+    <div ref={samplesPanel} id="samples-panel" role={guest ? 'region' : 'tabpanel'} aria-label={guest ? 'Sample projects' : undefined} aria-labelledby={!guest ? 'samples-tab' : undefined} hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
   </div>;
 }
 
@@ -2773,20 +2785,19 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore published research while you're here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login?invite=1">Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}</div></section>}
-      {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore sample projects while you’re here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login?invite=1" onClick={() => window.localStorage.removeItem('sigma.currentProject')}>Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}</div></section>}
+      {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
           <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
         </div>
-        <HomeCatalog onOpen={onOpen}/>
+        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-projects"><HomeCatalog onOpen={onOpen} guest/></section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer &amp;</span><span>OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; GPT Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
@@ -3575,7 +3586,7 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
     <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google connected' : canSignIn ? 'Sign in with Google' : 'Google setup required'}</span>
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
@@ -3946,12 +3957,13 @@ function CloudAuthGate() {
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   if (!status.authenticated && window.location.pathname === '/project') window.history.replaceState(null, '', '/');
-  return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}><AIProvider unavailable={!status.authenticated}><App/></AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
 }
 
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+    <a className="cloud-secondary-button privacy-return-button" href="/">Return to SIGMA</a>
     <a className="cloud-demo-brand" href="/">SIGMA</a>
     <p className="cloud-auth-kicker">Version 1 · proposed draft</p>
     <h1>SIGMA Privacy Notice</h1>
@@ -3975,7 +3987,6 @@ function PrivacyNoticePage() {
     <p>A privacy contact and process for access, correction, or deletion requests have not yet been approved. No response time or deletion guarantee is established here. Please do not treat the invitation email address as a confirmed privacy-request contact until the owner approves it.</p>
     <h2>Owner review required before public use</h2>
     <p>This draft must be reviewed and approved before it is published as the operative notice. Open questions include: the privacy contact and request-handling process; applicable jurisdiction and entity identity; the production hosting region and operator log settings; whether backups are active and how long they are retained; the intended retention and deletion rules for feedback, invitations, account/audit, usage, and workspace data; and the exact applicable Google, OpenAI, and SMTP provider privacy terms.</p>
-    <p><a className="cloud-text-button" href="/">Return to SIGMA</a></p>
   </article></main>;
 }
 

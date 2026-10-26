@@ -34,6 +34,7 @@ from sigma.config_secrets import SecretConfigurationError, secret_value
 
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
+GUEST_COOKIE = "__Host-sigma_guest"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
 INVITE_INTENT_COOKIE = "__Host-sigma_invite_intent"
 DENIED_COOKIE = "__Host-sigma_denied"
@@ -127,7 +128,11 @@ def config() -> Config:
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
     error = "Cloud authentication secret configuration is invalid." if secret_error else None
-    if not origin or not root or (not local and (not client_id or not client_secret or not admin_contact)):
+    if (
+        not origin
+        or not root
+        or (not local and (not client_id or not client_secret or not admin_contact))
+    ):
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
     try:
@@ -523,6 +528,34 @@ async def middleware(request: Request, call_next):
         "HEAD",
     }
     if cfg.error:
+        guest_catalog = path == "/api/projects/samples" and request.method == "GET"
+        guest_open = path == "/api/projects/samples/open" and request.method == "POST"
+        if guest_catalog or guest_open:
+            origin = request.headers.get("origin")
+            allowed = {cfg.origin, "http://127.0.0.1:5173", "http://localhost:5173"}
+            if guest_open and origin not in allowed:
+                return JSONResponse({"error": "Request origin is not authorized."}, status_code=403)
+            from sigma import cloud_workspaces
+
+            guest_cookie = _cookie_name(GUEST_COOKIE, cfg)
+            guest_token = request.cookies.get(guest_cookie)
+            workspace = cloud_workspaces.guest_workspace(guest_token) if guest_token else None
+            if workspace is None:
+                guest_token = secrets.token_hex(32)
+                workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
+            assert workspace is not None and guest_token is not None
+            request.state.cloud_guest_workspace = workspace
+            response = await call_next(request)
+            response.set_cookie(
+                guest_cookie,
+                guest_token,
+                **_cookie_options(cfg, guest_cookie, max_age=SESSION_SECONDS),
+            )
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+            return response
         if public:
             return await call_next(request)
         return JSONResponse({"error": "Cloud authentication is not ready."}, status_code=503)
@@ -538,6 +571,55 @@ async def middleware(request: Request, call_next):
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
         )
     if principal is None:
+        guest_cookie = _cookie_name(GUEST_COOKIE, cfg)
+        guest_token = request.cookies.get(guest_cookie)
+        guest_workspace = None
+        if guest_token:
+            from sigma import cloud_workspaces
+
+            guest_workspace = cloud_workspaces.guest_workspace(guest_token)
+        create_guest = (path == "/api/projects/samples" and request.method == "GET") or (
+            path == "/api/projects/samples/open" and request.method == "POST"
+        )
+        if guest_workspace is None and create_guest:
+            from sigma import cloud_workspaces
+
+            guest_token = secrets.token_hex(32)
+            guest_workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
+            request.state.cloud_guest_cookie_token = guest_token
+        if guest_workspace is not None and path.startswith("/api/projects/"):
+            if (
+                path
+                in {
+                    "/api/projects/research-sessions/start",
+                    "/api/projects/proposals",
+                    "/api/projects/proposals/agentic",
+                    "/api/projects/strategy-suggestions",
+                    "/api/projects/text/convert",
+                    "/api/projects/papers",
+                    "/api/projects/papers/restart",
+                    "/api/projects/research-executions",
+                }
+                or path.startswith("/api/projects/research-sessions/")
+                and request.method == "POST"
+            ):
+                return JSONResponse(
+                    {"error": "Guest projects are available for local review only."},
+                    status_code=403,
+                )
+            request.state.cloud_guest_workspace = guest_workspace
+            response = await call_next(request)
+            if getattr(request.state, "cloud_guest_cookie_token", None):
+                response.set_cookie(
+                    guest_cookie,
+                    guest_token,
+                    **_cookie_options(cfg, guest_cookie, max_age=SESSION_SECONDS),
+                )
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+            return response
         response = JSONResponse({"error": "Authentication required."}, status_code=401)
         _clear_cookie(response, cfg, SESSION_COOKIE)
         return response
@@ -668,7 +750,8 @@ def login(
     )
     if invite:
         response.set_cookie(
-            _cookie_name(INVITE_INTENT_COOKIE, cfg), state,
+            _cookie_name(INVITE_INTENT_COOKIE, cfg),
+            state,
             **_cookie_options(cfg, INVITE_INTENT_COOKIE, max_age=FLOW_SECONDS),
         )
     else:
@@ -790,7 +873,9 @@ async def callback(
                 "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
                 (_hash(denied_token), email, subject, _now() + DENIED_SECONDS),
             )
-        response = RedirectResponse("/?access=denied&invite=1" if invite_intent else "/?access=denied", status_code=303)
+        response = RedirectResponse(
+            "/?access=denied&invite=1" if invite_intent else "/?access=denied", status_code=303
+        )
         _clear_cookie(response, cfg, FLOW_COOKIE)
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
         _clear_cookie(response, cfg, SESSION_COOKIE)

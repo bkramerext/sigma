@@ -133,6 +133,77 @@ class CloudAuthTests(TestCase):
         self.assertEqual(query["prompt"], ["select_account"])
         return query["state"][0], response.cookies[cloud_auth.FLOW_COOKIE]
 
+    def test_guest_sample_projects_use_temporary_workspace_without_recents(self):
+        from sigma import cloud_workspaces
+
+        with TestClient(app, base_url="https://testserver") as guest:
+            catalog = guest.get("/api/projects/samples")
+            self.assertEqual(catalog.status_code, 200, catalog.text)
+            raw_guest = guest.cookies.get(cloud_auth.GUEST_COOKIE)
+            self.assertIsNotNone(raw_guest)
+            workspace = cloud_workspaces.guest_workspace(raw_guest)
+            self.assertIsNotNone(workspace)
+            assert workspace is not None
+            self.assertTrue(workspace.guest)
+            sample_id = catalog.json()["projects"][0]["id"]
+            opened = guest.post(
+                "/api/projects/samples/open",
+                json={"sample_id": sample_id},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(opened.status_code, 200, opened.text)
+            project_path = Path(opened.json()["path"])
+            self.assertTrue(project_path.is_relative_to(workspace.path))
+            self.assertTrue((project_path / "project.json").is_file())
+            self.assertEqual(guest.get("/api/projects/recent").json(), {"projects": []})
+            inspected = guest.get("/api/projects/inspect", params={"path": str(project_path)})
+            self.assertEqual(inspected.status_code, 200, inspected.text)
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/research-sessions/start",
+                    json={"path": str(project_path)},
+                    headers={"Origin": ORIGIN},
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/text/convert",
+                    json={"path": str(project_path)},
+                    headers={"Origin": ORIGIN},
+                ).status_code,
+                403,
+            )
+        self.assertTrue(project_path.exists(), "Guest files remain until expiry, not as projects")
+        with TestClient(app, base_url="https://testserver") as another_guest:
+            self.assertEqual(another_guest.get("/api/projects/recent").status_code, 401)
+
+    def test_guest_projects_stay_temporary_when_local_google_auth_is_unready(self):
+        from dataclasses import replace
+
+        from sigma import cloud_workspaces
+
+        unavailable = replace(cloud_auth.config(), error="Google sign-in is not configured")
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_LOCAL": "true"}),
+            patch.object(cloud_auth, "config", return_value=unavailable),
+            TestClient(app, base_url="https://testserver") as guest,
+        ):
+            catalog = guest.get("/api/projects/samples")
+            self.assertEqual(catalog.status_code, 200, catalog.text)
+            opened = guest.post(
+                "/api/projects/samples/open",
+                json={"sample_id": catalog.json()["projects"][0]["id"]},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(opened.status_code, 200, opened.text)
+            workspace = cloud_workspaces.guest_workspace(
+                guest.cookies.get(cloud_auth._cookie_name(cloud_auth.GUEST_COOKIE, unavailable))
+            )
+            self.assertIsNotNone(workspace)
+            assert workspace is not None
+            self.assertTrue(Path(opened.json()["path"]).is_relative_to(workspace.path))
+
     def finish(self, email="admin@example.org", subject="google-sub-1", changes=None, client=None):
         client = client or self.client
         state, flow_cookie = self.start_flow(client)
