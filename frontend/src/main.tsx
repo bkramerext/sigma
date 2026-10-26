@@ -2775,7 +2775,7 @@ function Home({ initialPath, onOpen }: {
     <div className="home-content">
       <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore published research while you're here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login">Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}<a className="cloud-text-button" href="/demo">Browse published research</a></div><p><a href="/privacy">Privacy notice</a></p></section>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore published research while you're here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login?invite=1">Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}<a className="cloud-text-button" href="/demo">Browse published research</a></div><p><a href="/privacy">Privacy notice</a></p></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -3982,6 +3982,12 @@ function AccessNotGranted({ email }: { email: string }) {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('invite') === '1') {
+      window.history.replaceState(null, '', '/?access=denied');
+      void submit();
+    }
+  }, []);
   async function submit() {
     setBusy(true); setError('');
     try {
