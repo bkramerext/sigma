@@ -141,8 +141,8 @@ sudo stat -c '%U:%G %a %F' "/run/user/$uid/docker.sock"
 
 Expected: Ubuntu 24.04 amd64; Docker and sandbox are enabled, but
 `sigma.service` remains inactive/disabled until separately authorized; state
-mount source UUID equals fstab UUID and
-approved disk inventory, type ext4/XFS, options include `nodev,nosuid,noexec`;
+mount source UUID equals fstab UUID and approved disk inventory, type ext4/XFS,
+options include `nodev,nosuid,noexec`;
 state root `root:root 700`, auth `10001:10001 700`; sandbox account is in
 neither `docker` nor `sudo`; Docker and sandbox are active; service dependency
 properties include `/srv/sigma-state`; unit verification succeeds. Caddy's
