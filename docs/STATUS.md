@@ -40,7 +40,44 @@ any live provider usage. Implementation commit `4e8111e22a27f4bb5a9319578ebdd30b
 was submitted in [PR #157](https://github.com/bkramerext/sigma/pull/157); no
 merge was performed. Elapsed preparation time through PR creation was about
 15 minutes.
+## T129 deployment automation follow-up (2026-10-25)
 
+Added `deploy/deploy-gce-release.py` as the reviewed-SHA operator entry point.
+Initial start and subsequent upgrade commands are documented in the Operations
+Runbook. The command runs host preflight, fetches and builds exact SHA-tagged
+backend/frontend images, changes only the protected release-pin line, and
+verifies systemd, all three container healthchecks, image/checkout identity
+and mounted state. It requires explicit backup/schema assertions for upgrades,
+preserves credentials and state, and attempts to restore prior code/config and
+restart it if candidate startup or health verification fails. Preflight and
+command diagnostics suppress raw subprocess output; detailed host checks are
+safe summarized status fields. T128's installed host preflight, sandbox account,
+socket, daemon and runner images remain assumed host-contract dependencies.
+
+Added offline regression coverage for repeat-deploy idempotency, missing
+configuration, failed startup/recovery, diagnostic redaction and state-file
+preservation; registered it with `./sigma test`. The focused deployment
+automation regression passed. Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and a standalone production frontend build passed;
+`git diff --check` passed. The full `./sigma test` after rebasing on current
+`main` fails three existing T128 expectations: `deployment_package.py`,
+`gce_host.py::test_systemd_templates_preserve_mount_gate_and_rootless_boundary`,
+and `host_monitor.py::test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks`
+still assert that `Requires=`/`After=` list includes the state mount, while
+current T128 `sigma.service` uses `RequiresMountsFor=/srv/sigma-state`. The
+T128 contract change came from current main (`6c9ebbb`) and is outside this
+assignment's edit scope; these Red-owned files were left unchanged. The full
+run skipped the production frontend build after those failures; the standalone
+build passed. No real-browser check was needed because no UI changed. No GCE
+host, production credential, public endpoint, provider or DNS operation was
+accessed or modified.
+
+**Owner actions remain:** configure and protect production credentials/limits,
+confirm the T128 host/disk contract, authorize initial startup and each upgrade
+window plus recovery/schema assertions, and separately authorize DNS/ingress,
+OAuth, provider acceptance, backups and public launch. Offline implementation
+does not verify hosted application behavior. PR and handoff are linked from
+[`messages/t129_gray_deployment_automation.txt`](../messages/t129_gray_deployment_automation.txt).
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
 Started from current `main` at `455d752` in an isolated ticket worktree. Audited

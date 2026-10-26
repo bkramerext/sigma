@@ -1,0 +1,28 @@
+T129 — deployment automation follow-up
+
+Status: R4R, local/offline preparation only. Branch: `gray/t129-deployment-automation`, rebased on `main` (`6c9ebbb`). PR link to be added after publication.
+
+Implemented:
+- Added `deploy/deploy-gce-release.py` for initial start and repeat upgrades by full lowercase Git SHA. It checks protected configuration and host preflight, refuses dirty trees, fetches the exact commit and builds backend/frontend images tagged with that SHA before maintenance. It atomically changes only `SIGMA_RELEASE`, re-runs preflight against the selected checkout, starts through systemd, then checks all container health statuses, backend/frontend image identity, checked-out SHA, active unit and mounted state directory.
+- A repeat deployment of the active SHA verifies preflight and readiness and does not mutate the release. Initial start requires the service inactive and disabled. Upgrades require explicit `--backup-verified` and `--schema-compatible` assertions.
+- Candidate startup/health failure restores the previous checkout and release pin and attempts to restart and verify the previous release. Recovery failure directs the operator to keep ingress closed and inspect sanitized systemd diagnostics. No `down`, volume removal, state write, credential edit or sandbox mutation is performed.
+- Added automated tests for idempotency, missing deploy.env, failed startup/recovery, diagnostic redaction, and exact environment/state preservation. Added the test to the actual `./sigma test` plan.
+- Updated the Operations Runbook, T129 ticket/checklist, and `docs/STATUS.md` with commands, rollback limitations, T128 assumptions, and outstanding owner authorizations.
+
+Validation actually run:
+- `python3 tests/deployment_automation.py` — passed.
+- `python3 tests/deployment_package.py` — passed in final `./sigma test`.
+- `python3 tests/gce_host.py` — 16 passed in final `./sigma test`.
+- `python3 tests/storage.py` — isolated rerun passed; also passed in final `./sigma test`.
+- `python3 tests/host_monitor.py` — 9 passed in final `./sigma test`.
+- `./sigma test` — after rebasing onto current `main` (`6c9ebbb`), all but three T128 host-contract checks passed. `tests/deployment_package.py`, `tests/gce_host.py::test_systemd_templates_preserve_mount_gate_and_rootless_boundary`, and `tests/host_monitor.py::test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks` still require the state mount in `Requires=`/`After=`, while the latest T128 `sigma.service` now uses `RequiresMountsFor=/srv/sigma-state`. These Red-owned expectations were not edited. The test runner skips the frontend production build after failures; I ran `npm --prefix frontend run build` separately and it passed. Earlier on the pre-T128-update base, the focused test set and full checks were clean; an intermediate storage fixture race passed on immediate isolated rerun.
+- `git diff --check` — passed.
+- No browser check was run because this change has no UI. No production VM, public endpoint, DNS, credentials, OAuth or provider calls were accessed. No cost incurred.
+
+Failure and recovery behavior: prerequisite/preflight/build failure leaves the active application and release pin untouched. After stopping for an upgrade, candidate failure triggers old checkout/pin restoration and prior service restart/readiness verification. Raw subprocess output is suppressed. Backup/schema flags are operator assertions, not generated evidence; incompatible migrations require the separately authorized state restore process. Abrupt interruption during deployment may require the existing root-only rollback procedure and journal review.
+
+T128 host assumption: Ubuntu 24.04 amd64 with the installed preflight and service unit, system Docker/Compose for the application, separate rootless `sigma-sandbox` daemon/socket, and the approved Python/Sage runner images. This change does not modify host provisioning, account, socket, rootless daemon or security boundaries. The installed T128 preflight must remain compatible with selected release Compose configuration.
+
+Owner actions not performed: configure protected production credentials/limits; verify owner-approved state disk and T128 rootless host contract; authorize first live start; approve per-release downtime, fresh recovery point and schema compatibility; separately approve DNS/public ingress, OAuth identities, provider-backed acceptance, snapshot policy and public launch. Hosted startup, persistence after container recreation, public HTTPS and restoration remain unverified.
+
+Elapsed implementation and validation effort: approximately 45 minutes. No live operation was authorized by this assignment, and none was attempted.

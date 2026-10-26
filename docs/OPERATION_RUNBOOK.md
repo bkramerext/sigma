@@ -104,7 +104,7 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 5. Set `/etc/sigma/deploy.env` with release SHA, domain, OAuth client ID, approved limits and secret-file paths; protect it `root:root 0600`. Use `deploy/fetch-secrets.sh` for named secrets. Never print secret values.
 6. Run `sudo /usr/local/libexec/sigma/gce_preflight.py --json`; proceed only on PASS/exit 0. Run `python -m sigma.cloud_runtime_check` against the **actual rootless** daemon without development overrides.
 7. Configure DuckDNS A record to the reserved static IP; verify external DNS and HTTPS/Caddy certificate. Set Google OAuth allowed origin `https://sigma-research.duckdns.org` and callback `https://sigma-research.duckdns.org/api/cloud-auth/callback`.
-8. Start with `sudo systemctl enable --now sigma.service`. Check Caddy/API/frontend health, auth mode, private state mounts, logs and research sandbox isolation. Record actual endpoint results.
+8. Start the selected reviewed application release with the one-shot deploy command below. The command starts and enables the service only after the full preflight, container health, release image, and state-mount checks pass. Then complete the public endpoint and hosted acceptance checks; record actual results.
 9. Complete hosted acceptance before inviting users: two distinct Google identities, unauthorized access rejection, workspace isolation, bounded sponsored inference, Python/Sage, sessions/recovery, Markdown/TeX/PDF/report export, browser restart and data persistence. **Desktop browser is the release target; mobile-specific acceptance is out of scope.**
 
 For T134's repeatable two-identity privacy matrix, direct-reference probes,
@@ -249,14 +249,76 @@ restore the 14-point retention invariant.
    look clean; provider outcome may be uncertain. Record deployed SHA and boot
    ID. Local unit/container checks are not hosted acceptance.
 
-## 4. Application release / update
+## 4. Initial deployment and application upgrades
 
-1. Confirm candidate Git SHA, reviewed PR, verified tests/browser evidence, and known migrations. Ensure backup/restore point is current.
-2. Stage new checkout and approved images; inspect pinned image versions and any schema/data migrations. If the sandbox image source changed, rebuild the rootless Python/Sage images.
-3. Announce maintenance; stop production via `sudo systemctl stop sigma.service` before a consistent data snapshot (see next section).
-4. Update `SIGMA_RELEASE` in protected `/etc/sigma/deploy.env` and stage corresponding images/code. Do not change state volume mapping or delete Compose volumes.
-5. Run preflight; start via `sudo systemctl start sigma.service`; verify auth, existing users, project/session persistence, bounded research, exports and HTTPS.
-6. If verification fails, use rollback below. Record SHA, downtime, tests and outcome.
+Use the reviewed full commit SHA as the sole release selector. The repository
+at `/opt/sigma/current` must have `origin` configured and a clean worktree. The
+host's installed read-only preflight must pass, the state disk must be mounted,
+and the protected `/etc/sigma/deploy.env` and both mounted secret files must
+already be configured. The command never prints subprocess output, credentials,
+or secret contents.
+
+This workflow assumes the installed T128 host contract is intact: Ubuntu 24.04
+amd64, system Docker/Compose for the app, and the distinct `sigma-sandbox`
+rootless daemon with its approved socket group and existing Python/Sage runner
+tags. The installed host preflight remains authoritative and must stay
+compatible with the selected release; this T129 automation does not install or
+change T128 host files or sandbox assets.
+
+For the first application start, with `sigma.service` inactive and `SIGMA_RELEASE`
+already set to the selected full SHA in deploy.env:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA --initial
+```
+
+For each upgrade, first announce the downtime, verify the latest recovery point,
+review schema/data migration notes and confirm compatibility with the previous
+release. Then run:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA \
+  --backup-verified --schema-compatible
+```
+
+The upgrade command validates prerequisites, fetches the exact commit, refuses
+a dirty checkout, builds backend/frontend images tagged with that SHA, and only
+then stops the service. It atomically changes only the `SIGMA_RELEASE` line,
+checks preflight again against the candidate, starts the service and verifies
+all three container healthchecks, backend/frontend image identity, checked-out
+SHA, systemd activity and mounted state directory (healthchecks may take up to
+180 seconds). Existing env-file bytes
+other than that one setting and persistent state are retained. Running the
+selected SHA again is idempotent and makes no release changes. Build/preflight
+failures leave the current service and pin untouched.
+
+If candidate start or acceptance checks fail, the command restores the previous
+checkout and release pin and attempts to start the prior release. Its failure
+message is sanitized; inspect `sudo journalctl -u sigma.service -n 100
+--no-pager` for details without copying secrets or user data into tickets.
+If automatic recovery also fails, keep public ingress closed and recover using
+the state-preserving procedure below. A code rollback does not reverse schema
+migrations or provider charges. `--backup-verified` and `--schema-compatible`
+are operator assertions, not automatic backup creation or migration analysis.
+For known incompatible data changes, do not use the code rollback; use the
+approved verified state restore procedure and owner authorization.
+
+If the rootless Python/Sage runner source changes, rebuild those images through
+the dedicated sandbox daemon as a separately reviewed T128 operation. This
+application workflow never edits the sandbox account, daemon, socket, image
+tags, or security boundaries.
+
+### Operations that still require Brian's authorization
+
+This change prepares commands only. An owner must supply and protect the
+production OAuth/OIDC and sponsored-provider credentials, approve spending
+ceilings and budget exposure, confirm the T128 rootless host contract and disk
+identity, and authorize the first live start. Each release upgrade also needs
+the owner's approval for downtime, a verified recovery point and the explicit
+backup/schema compatibility assertions. DNS changes, public ingress, live
+Google OAuth identities, provider-backed acceptance, snapshot policy, and
+public launch remain separately authorized operations. No production secret
+value should be sent through this repository or a deployment log.
 
 ## 5. Daily state-disk backup
 
