@@ -186,7 +186,7 @@ def write_file(bundle_path: str | Path, relative_path: str, contents: bytes) -> 
     if (
         not isinstance(relative_path, str)
         or not relative_path
-        or "\\\\" in relative_path
+        or "\\" in relative_path
         or relative_path.startswith("/")
         or any(part in ("", ".", "..") for part in relative_path.split("/"))
     ):
@@ -212,7 +212,7 @@ def write_file(bundle_path: str | Path, relative_path: str, contents: bytes) -> 
         staged = Path(name)
         try:
             with os.fdopen(fd, "wb") as output:
-                output.write((json.dumps(payload, sort_keys=True, indent=2) + "\\n").encode("utf-8"))
+                output.write((json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8"))
                 output.flush()
                 os.fsync(output.fileno())
             os.replace(staged, path)
