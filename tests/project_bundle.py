@@ -383,6 +383,12 @@ def main() -> None:
                 raise AssertionError("Session identity was overwritten")
             assert _all(created.path) == [record]
             assert read_session_snapshot(created.path) == ([record], 0)
+            imported_session_path = root / "imported-session.json"
+            import_bundle(json.loads(export_complete_project(created.path)), imported_session_path)
+            imported_session = _read(str(imported_session_path), session_id)
+            assert imported_session["project_path"] == str(imported_session_path.resolve())
+            assert imported_session["project_id"] == created.project.id
+            assert read_session_snapshot(str(imported_session_path))[1] == 0
             # An unrelated foreign record must never influence session allocation.
             from sigma.project_bundle import write_file
             foreign_id = str(uuid4())
