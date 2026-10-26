@@ -1,0 +1,73 @@
+{
+  "ticket": "T257",
+  "branch": "feature/local-mock-auth-walkthrough",
+  "tested_commit_sha": "341ef89dd6ed299f2305e5ce284c78b19d0d546c",
+  "started_at": "2026-10-26T23:36:23.261611+00:00",
+  "checks": [
+    {
+      "name": "Python syntax",
+      "status": "passed",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "traceback": null,
+      "duration_seconds": 0.11,
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-m",
+        "compileall",
+        "-q",
+        "src/sigma",
+        "tests/cloud_auth.py"
+      ]
+    },
+    {
+      "name": "Cloud authentication and mock integration",
+      "status": "failed",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_gray/tests/cloud_auth.py\", line 13, in <module>\n    import httpx\nModuleNotFoundError: No module named 'httpx'\n",
+      "traceback": null,
+      "duration_seconds": 0.121,
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "tests/cloud_auth.py"
+      ]
+    },
+    {
+      "name": "Research session simulation",
+      "status": "failed",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_gray/tests/research_sessions.py\", line 15, in <module>\n    import httpx\nModuleNotFoundError: No module named 'httpx'\n",
+      "traceback": null,
+      "duration_seconds": 0.096,
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "tests/research_sessions.py"
+      ]
+    },
+    {
+      "name": "Frontend build",
+      "status": "failed",
+      "exit_code": 254,
+      "stdout": "",
+      "stderr": "npm error code ENOENT\nnpm error syscall open\nnpm error path /Users/admin/sigma_gray/package.json\nnpm error errno -2\nnpm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/Users/admin/sigma_gray/package.json'\nnpm error enoent This is related to npm not being able to find a file.\nnpm error enoent\nnpm error A complete log of this run can be found in: /Users/admin/.npm/_logs/2026-10-26T23_36_23_636Z-debug-0.log\n",
+      "traceback": null,
+      "duration_seconds": 0.078,
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ]
+    }
+  ],
+  "publication": {},
+  "finished_at": "2026-10-26T23:36:23.667152+00:00",
+  "summary": {
+    "passed": 1,
+    "failed": 3,
+    "error": 0,
+    "unavailable": 0
+  }
+}
