@@ -35,6 +35,7 @@ def main() -> None:
             "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
             "SIGMA_STATE_DIR": str(root / "local-state"),
             "SIGMA_CLOUD_OPENAI_API_KEY": "fake-server-credential",
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
             # A personal API key must never win over the sponsored server key.
             "OPENAI_API_KEY": "fake-personal-credential-must-not-be-used",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
@@ -53,7 +54,9 @@ def main() -> None:
 
             from sigma import (
                 agentic,
+                cloud_auth,
                 cloud_research,
+                cloud_workspaces,
                 openai_connection,
                 papers,
                 proposals,
@@ -61,12 +64,14 @@ def main() -> None:
                 text_conversion,
             )
 
-            credential = {
-                "mode": "api_key",
-                "identity": "cloud_service_api_key",
-                "token": "fake-server-credential",
-                "status": "connected",
-            }
+            principal = cloud_auth.Principal("cloud-a", "a@example.test", "member")
+            cloud_auth._persist_user_state(cloud_auth.config(), principal)
+            cloud_auth.set_model_access(principal.subject, "sponsored")
+            workspace_token = cloud_workspaces.bind(principal)
+            try:
+                credential = asyncio.run(openai_connection.auth_context())
+            finally:
+                cloud_workspaces.reset(workspace_token)
             config = {
                 "available": True,
                 "model": "gpt-6.1-sol",
@@ -394,7 +399,7 @@ def main() -> None:
                 )
                 assert proposal_configuration.status_code == 200
                 assert proposal_configuration.json()["mode"] == "api_key"
-                assert proposal_configuration.json()["binding"] == "cloud_service_api_key"
+                assert proposal_configuration.json()["binding"] == credential["identity"]
                 dispatched_before_missing = provider_calls
                 os.environ.pop("SIGMA_CLOUD_OPENAI_API_KEY")
                 openai_connection._identity = ""
@@ -1052,6 +1057,14 @@ def main() -> None:
                 client.headers.update(
                     {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
                 )
+                principal_b = cloud_auth.Principal("cloud-b", "b@example.test", "member")
+                cloud_auth._persist_user_state(cloud_auth.config(), principal_b)
+                cloud_auth.set_model_access(principal_b.subject, "sponsored")
+                workspace_token = cloud_workspaces.bind(principal_b)
+                try:
+                    credential_b = asyncio.run(openai_connection.auth_context())
+                finally:
+                    cloud_workspaces.reset(workspace_token)
                 hidden_status = client.get(
                     f"/api/projects/research-sessions/{session_id}", params={"path": path}
                 )
@@ -1093,7 +1106,7 @@ def main() -> None:
                         json={
                             "path": user_b_path,
                             "expected_project_id": user_b_id,
-                            "expected_binding": credential["identity"],
+                            "expected_binding": credential_b["identity"],
                         },
                     )
                 assert global_exhausted.status_code == 400, global_exhausted.text
@@ -1116,7 +1129,7 @@ def main() -> None:
                         json={
                             "path": user_b_path,
                             "expected_project_id": user_b_id,
-                            "expected_binding": credential["identity"],
+                            "expected_binding": credential_b["identity"],
                         },
                     )
                 assert first_b.status_code == 200, first_b.text
@@ -1141,7 +1154,7 @@ def main() -> None:
                         json={
                             "path": user_b_path,
                             "expected_project_id": user_b_id,
-                            "expected_binding": credential["identity"],
+                            "expected_binding": credential_b["identity"],
                         },
                     )
                 assert user_exhausted.status_code == 400, user_exhausted.text

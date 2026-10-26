@@ -51,9 +51,9 @@ def main(mode: str = "api_key") -> None:
             import cloud_workspace_test_app
             from fastapi.testclient import TestClient
 
-            from sigma import ai_store, cloud_auth, cloud_research
+            from sigma import ai_store, cloud_auth, cloud_research, openai_connection
 
-            binding = "cloud_service_api_key"
+            binding = ""
             if mode == "chatgpt":
                 import asyncio
 
@@ -72,7 +72,6 @@ def main(mode: str = "api_key") -> None:
                         }
 
                 asyncio.run(provision_fixture())
-                binding = "cloud_sponsor:fixture"
 
             # Exercise the real server credential lookup, model discovery,
             # Responses request construction, usage parsing, and cloud ledger.
@@ -245,6 +244,17 @@ def main(mode: str = "api_key") -> None:
                     cloud_auth.config(),
                     cloud_auth.Principal("cloud-a", "a@example.test", "member"),
                 )
+                cloud_auth.set_model_access("cloud-a", "sponsored")
+                from sigma import cloud_workspaces
+
+                principal = cloud_auth.Principal("cloud-a", "a@example.test", "member")
+                workspace_token = cloud_workspaces.bind(principal)
+                try:
+                    import asyncio
+
+                    binding = asyncio.run(openai_connection.auth_context())["identity"]
+                finally:
+                    cloud_workspaces.reset(workspace_token)
                 client.headers["X-Test-Revoked"] = "true"
                 assert client.get("/api/ai/models").status_code == 401
                 del client.headers["X-Test-Revoked"]
@@ -508,6 +518,20 @@ print("PASS fresh-process research, Outcome and report recovery")
                 client.headers.update(
                     {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
                 )
+                cloud_auth._persist_user_state(
+                    cloud_auth.config(),
+                    cloud_auth.Principal("cloud-b", "b@example.test", "member"),
+                )
+                cloud_auth.set_model_access("cloud-b", "sponsored")
+                from sigma import cloud_workspaces
+
+                workspace_token = cloud_workspaces.bind(
+                    cloud_auth.Principal("cloud-b", "b@example.test", "member")
+                )
+                try:
+                    binding_b = asyncio.run(openai_connection.auth_context())["identity"]
+                finally:
+                    cloud_workspaces.reset(workspace_token)
                 hidden_status = client.get(
                     f"/api/projects/research-sessions/{session_id}", params={"path": path}
                 )
@@ -554,7 +578,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                         "strategy_id": second_strategy["id"],
                         "idempotency_key": str(uuid4()),
                         "expected_project_id": second_id,
-                        "expected_binding": binding,
+                        "expected_binding": binding_b,
                         "expected_limits": second_limits.json(),
                     },
                 )
@@ -584,7 +608,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                         "strategy_id": second_strategy["id"],
                         "idempotency_key": str(uuid4()),
                         "expected_project_id": second_id,
-                        "expected_binding": binding,
+                        "expected_binding": binding_b,
                         "expected_limits": second_limits.json(),
                     },
                 )

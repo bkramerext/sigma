@@ -40,6 +40,7 @@ class Workspace:
     subject_hash: str
     path: Path
     email: str | None = None
+    verified_subject: str | None = None
     guest: bool = False
 
 
@@ -78,7 +79,11 @@ def bind(principal: Principal) -> Token[Workspace | None]:
     workspace = workspace_for_subject(subject)
     from dataclasses import replace
 
-    workspace = replace(workspace, email=getattr(principal, "email", None))
+    workspace = replace(
+        workspace,
+        email=getattr(principal, "email", None),
+        verified_subject=subject,
+    )
     return _CURRENT.set(workspace)
 
 

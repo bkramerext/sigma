@@ -236,7 +236,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding, googleAccount, onGoogleSignOut }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void> }; googleAccount?: { role: string; email: string } | null; onGoogleSignOut?: () => Promise<void> } = {}) {
+export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding, googleAccount, onGoogleSignOut }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean }; googleAccount?: { role: string; email: string } | null; onGoogleSignOut?: () => Promise<void> } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -279,7 +279,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const serviceFunded = cloudFunding?.target === 'hosted';
   const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && cloudFunding.authenticationEnabled && !cloudFunding.authorized;
   const projectHeaderLabel = serviceFunded
-    ? 'ChatGPT · SIGMA service'
+    ? cloudFunding?.selectedConnection === 'sponsored' ? 'ChatGPT · SIGMA allowance' : 'ChatGPT · personal connection'
     : localGoogleRequired
       ? 'ChatGPT sign-in · Google sign-in required'
     : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
@@ -292,8 +292,9 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
   const roleLabel = googleAccount?.role === 'admin' ? 'Admin' : 'Member';
   const modelLine = serviceFunded
-    ? cloudFunding?.budget?.remaining_usd === 0 ? 'SIGMA-sponsored · budget exhausted'
-      : cloudFunding?.providerLoading ? 'Checking SIGMA-sponsored access…'
+    ? cloudFunding?.selectedConnection === 'personal' ? 'Personal ChatGPT · unavailable'
+      : cloudFunding?.budget?.remaining_usd === 0 ? 'SIGMA-sponsored · allowance exhausted'
+        : cloudFunding?.providerLoading ? 'Checking SIGMA-sponsored access…'
         : cloudFunding?.providerError ? 'SIGMA-sponsored check failed'
           : cloudFunding?.provider?.status === 'connected' ? 'SIGMA-sponsored'
             : cloudFunding?.provider?.status === 'unconfigured' ? 'SIGMA-sponsored · not configured'
@@ -312,18 +313,29 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
       {googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
       {serviceFunded ? <>
         <h2>Model access</h2>
-        <p>SIGMA checks its administrator-provisioned sponsor connection. Usage is bounded by the SIGMA allowance shown here. Google sign-in identifies your workspace; it does not authorize ChatGPT plan use.</p>
-        {cloudFunding?.providerLoading && <p role="status">Checking sponsored provider authentication and model-catalog reachability. This check does not send a research prompt.</p>}
-        {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'connected' && <p role="status">The SIGMA-sponsored model connection is reachable. This does not guarantee a particular inference will complete.</p>}
-        {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unconfigured' && <p role="status">SIGMA-sponsored model access is not configured. Contact the administrator. SIGMA will not switch to personal or separately billed credentials.</p>}
-        {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unauthorized' && <p role="alert">The SIGMA-sponsored credential was rejected. Contact the administrator; SIGMA will not use a personal billing path.</p>}
-        {(cloudFunding?.providerError || ['unavailable', 'invalid_response', 'forbidden', 'limited', 'disconnected', 'reauth_required', 'plan_not_permitted'].includes(cloudFunding?.provider?.status ?? '')) && <p role="alert">{cloudFunding?.providerError ?? cloudFunding?.provider?.guidance ?? 'The sponsored provider could not be reached.'} Retry the check. No research was run.</p>}
-        <button type="button" className="connection-text-action" disabled={cloudFunding?.providerLoading} onClick={() => void cloudFunding?.retryProvider()}>{cloudFunding?.providerLoading ? 'Checking…' : 'Retry sponsored connection check'}</button>
-        <p>SIGMA service-funded inference · separate from a personal ChatGPT plan.</p>
+        <p>Choose which connection SIGMA will use. The choice is saved for this Google account. SIGMA never switches funding paths automatically.</p>
+        <section className="account-model-choice" aria-label="Personal ChatGPT connection">
+          <p><strong>Connect your own ChatGPT account through OpenAI authentication.</strong></p>
+          <button type="button" className="connection-text-action" aria-pressed={cloudFunding?.selectedConnection === 'personal'} disabled={cloudFunding?.selectingConnection || cloudFunding?.selectedConnection === 'personal'} onClick={() => void cloudFunding?.selectConnection?.('personal')}>{cloudFunding?.selectedConnection === 'personal' ? 'Personal connection selected' : 'Use personal connection'}</button>
+          {cloudFunding?.selectedConnection === 'personal' && <p role="status">Hosted personal ChatGPT authentication is unavailable until an approved access path is established. No personal credential is transferred or used.</p>}
+        </section>
+        {cloudFunding?.authorized && cloudFunding.budget && cloudFunding.budget.remaining_usd > 0 && <button type="button" className="connection-text-action" aria-pressed={cloudFunding.selectedConnection === 'sponsored'} disabled={cloudFunding.selectingConnection || cloudFunding.selectedConnection === 'sponsored'} onClick={() => void cloudFunding?.selectConnection?.('sponsored')}>Or you can use your allowance that's on us.</button>}
+        {cloudFunding?.selectedConnection === 'sponsored' && <section className="account-model-choice" aria-label="SIGMA-sponsored connection">
+          <h3>SIGMA-sponsored ChatGPT</h3>
+          <p>Inference uses SIGMA's designated sponsor connection and the allowance below. It does not use a personal ChatGPT credential.</p>
+          {cloudFunding?.providerLoading && <p role="status">Checking sponsored provider authentication and model-catalog reachability. This check does not send a research prompt.</p>}
+          {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'connected' && <p role="status">The SIGMA-sponsored model connection is reachable. This does not guarantee a particular inference will complete.</p>}
+          {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unconfigured' && <p role="status">SIGMA-sponsored model access is not configured. Contact the administrator. SIGMA will not switch to personal or separately billed credentials.</p>}
+          {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unauthorized' && <p role="alert">The SIGMA-sponsored credential was rejected. Contact the administrator; SIGMA will not use a personal billing path.</p>}
+          {(cloudFunding?.providerError || ['unavailable', 'invalid_response', 'forbidden', 'limited', 'disconnected', 'reauth_required', 'plan_not_permitted'].includes(cloudFunding?.provider?.status ?? '')) && <p role="alert">{cloudFunding?.providerError ?? cloudFunding?.provider?.guidance ?? 'The sponsored provider could not be reached.'} Retry the check. No research was run.</p>}
+          <button type="button" className="connection-text-action" disabled={cloudFunding?.providerLoading} onClick={() => void cloudFunding?.retryProvider()}>{cloudFunding?.providerLoading ? 'Checking…' : 'Retry sponsored connection check'}</button>
+          <p>SIGMA-sponsored inference · separate from a personal ChatGPT plan.</p>
+        </section>}
         {cloudFunding?.authorized && <p className="cloud-chatgpt-allowance"><strong>ChatGPT allowance</strong>{cloudFunding.budget ? <span>{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.remaining_usd)} remaining</span> : cloudFunding.loading ? <span>Loading…</span> : <span>{cloudFunding.error ?? 'Unavailable'}</span>}</p>}
         {cloudFunding?.authorized && cloudFunding.budget && <p className="cloud-chatgpt-usage">Estimated {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.estimated_usage_usd)} · held {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.held_usd)}{cloudFunding.budget.unknown_provider_attempts ? ` · ${cloudFunding.budget.unknown_provider_attempts} unknown-charge attempts` : ''}</p>}
+        {cloudFunding?.connectionError && <p role="alert">{cloudFunding.connectionError}</p>}
         {cloudFunding?.error && <p role="status">{cloudFunding.error} Saved research remains available.</p>}
-        {cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0 && <p role="status">This service-funded allowance is exhausted. Saved research remains available.</p>}
+        {cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0 && <p role="status">This sponsored allowance is exhausted. Sponsored inference is disabled; switch to a personal connection or continue with saved research.</p>}
       </> : <>
         {googleAccount && <h2>Personal model connection</h2>}
         {ai.initialLoading && <p role="status">Checking the configured personal model connection. SIGMA checks provider authentication and reachability; it does not send a research prompt.</p>}

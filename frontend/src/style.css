@@ -354,7 +354,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects .home-catalog .home-empty { padding: 8px 0 0; }
 .home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
 
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   .home-page .home-projects {
     position: relative;
     top: auto;

@@ -107,8 +107,8 @@ def main() -> None:
         }
         with patch.dict(os.environ, cloud_environment, clear=True):
             assert cloud_auth.config().enabled and cloud_auth.config().error is None
-            credential = asyncio.run(openai_connection.auth_context())
-            assert credential["identity"] == "cloud_service_api_key"
+            credential = asyncio.run(openai_connection.sponsored_auth_context("fixture-subject"))
+            assert credential["identity"].startswith("cloud_service_api_key:")
             assert credential["token"] == "fixture-secret"
         with patch.dict(
             os.environ,
@@ -120,7 +120,10 @@ def main() -> None:
             clear=True,
         ):
             assert cloud_auth.config().error is not None
-            assert asyncio.run(openai_connection.auth_context())["identity"] == "cloud_unconfigured"
+            assert (
+                asyncio.run(openai_connection.sponsored_auth_context("fixture-subject"))["identity"]
+                == "cloud_unconfigured"
+            )
         with patch.dict(os.environ, {"T42_TEST_SECRET_FILE": str(path)}, clear=False):
             os.environ.pop("T42_TEST_SECRET", None)
             assert secret_value("T42_TEST_SECRET") == "fixture-secret"

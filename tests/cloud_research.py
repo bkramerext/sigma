@@ -128,7 +128,7 @@ def test_orphaned_job_reconciliation(
             research_sessions.save_limits(project.path, session_limits)
             credential = {
                 "mode": "api_key",
-                "identity": "cloud_service_api_key",
+                "identity": "cloud_service_api_key:" + workspace_a.subject_hash,
                 "token": "test-server-key",
                 "status": "connected",
             }
@@ -649,7 +649,7 @@ def main() -> None:
             },
             clear=False,
         ):
-            cloud_credential = asyncio.run(openai_connection.auth_context())
+            cloud_credential = asyncio.run(openai_connection.sponsored_auth_context(a.subject_hash))
             assert cloud_credential["status"] == "unconfigured"
             assert cloud_credential["token"] == ""
         with patch.dict(
@@ -660,7 +660,7 @@ def main() -> None:
             },
             clear=False,
         ):
-            cloud_credential = asyncio.run(openai_connection.auth_context())
+            cloud_credential = asyncio.run(openai_connection.sponsored_auth_context(a.subject_hash))
             assert cloud_credential["token"] == "explicit-cloud-fixture"
             assert cloud_credential["mode"] == "api_key"
         with (
@@ -755,7 +755,7 @@ def main() -> None:
                 research_sessions.save_limits(live_view.path, session_limits)
                 credential = {
                     "mode": "api_key",
-                    "identity": "cloud_service_api_key",
+                    "identity": "cloud_service_api_key:" + a.subject_hash,
                     "token": "test-server-key",
                     "status": "connected",
                 }

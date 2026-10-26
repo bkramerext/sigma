@@ -6,7 +6,8 @@ import json
 import os
 import stat
 import tempfile
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -14,8 +15,11 @@ from uuid import uuid4
 from sigma.projects import ROOT, ProjectError
 from sigma.ui_instance import private_directory
 
+_DIRECTORY_OVERRIDE: ContextVar[Path | None] = ContextVar("sigma_ai_store_directory", default=None)
 
-def directory() -> Path:
+
+def sponsor_directory() -> Path:
+    """Return the SIGMA-owned sponsor store, independent of request identity."""
     from sigma import cloud_workspaces
 
     if cloud_workspaces.enabled():
@@ -51,6 +55,39 @@ def directory() -> Path:
             "Cannot open private SIGMA account storage. Check directory ownership/0700 permissions."
         ) from None
     return path
+
+
+def directory() -> Path:
+    """Select local, current-user, or (outside a user request) sponsor storage."""
+    override = _DIRECTORY_OVERRIDE.get()
+    if override is not None:
+        return override
+    from sigma import cloud_workspaces
+
+    if cloud_workspaces.enabled():
+        workspace = cloud_workspaces.current()
+        if workspace is not None:
+            root = sponsor_directory()
+            personal_root = root / "personal-users"
+            try:
+                private_directory(personal_root)
+                path = personal_root / workspace.subject_hash
+                private_directory(path)
+            except (OSError, RuntimeError):
+                raise ProjectError("Cannot open private user account storage.") from None
+            return path
+        return sponsor_directory()
+    return sponsor_directory()
+
+
+@contextmanager
+def use_directory(path: Path):
+    """Bind existing auth services to a specific server-side account store."""
+    token: Token[Path | None] = _DIRECTORY_OVERRIDE.set(path)
+    try:
+        yield
+    finally:
+        _DIRECTORY_OVERRIDE.reset(token)
 
 
 def read(path: Path) -> dict[str, Any]:
@@ -105,11 +142,10 @@ def write(path: Path, value: dict[str, Any]) -> None:
 
 
 @asynccontextmanager
-async def transaction():
+async def transaction_at(path: Path):
     """Cross-process serialization also covers rotating-token network exchanges."""
     fd = None
     try:
-        path = directory()
         fd = os.open(path / "credentials.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
@@ -137,3 +173,16 @@ async def transaction():
     finally:
         if fd is not None:
             os.close(fd)
+
+
+@asynccontextmanager
+async def transaction():
+    async with transaction_at(directory()) as state:
+        yield state
+
+
+@asynccontextmanager
+async def sponsor_transaction():
+    """Access the designated sponsor store without inheriting user context."""
+    async with transaction_at(sponsor_directory()) as state:
+        yield state

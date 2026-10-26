@@ -1,0 +1,114 @@
+# T88 Green R4R handoff
+
+## Scope and implementation
+
+Continued the preserved combined entry and invitation flow on branch
+`green/t88-combined-sign-in`, based on current `main` after T200 merge
+`48fe9a1fee87a23c1af1665f1f30723ef39d9e97`. The hosted dialog offers Google,
+Invite Me, and Guest at entry; invited users can explicitly select personal or
+sponsored access. It displays remaining sponsor allowance and hides the sponsor
+choice when exhausted. The existing local ChatGPT sign-in and Guest sample
+access remain intact.
+
+Hosted model selection and connection state are stored by verified Google
+subject. User stores use private hashed-subject directories, separate from the
+SIGMA sponsor store. No personal credential is shared across users, and
+sponsored inference uses only the designated sponsor connection with T200/T99
+allowance, budget, concurrency, reservation, and failure safeguards. Switching
+between connection choices preserves personal authentication state. No silent
+fallback exists.
+
+## Hosted personal limitation and adapter boundary
+
+The hosted personal adapter at `src/sigma/cloud_personal.py` deliberately
+returns unavailable with no credential. `src/sigma/openai_connection.py`
+selects this adapter for a user's explicit personal mode; sponsored mode
+separately selects SIGMA's sponsor connection. `POST /api/ai/mode` persists the
+choice for the verified subject and checks sponsor eligibility/remaining
+allowance before accepting sponsored selection. No browser-supplied identity
+or credential enters this path. Detailed store and routing boundary:
+`docs/T88_HOSTED_PERSONAL_CONNECTION.md`.
+
+The remaining external dependency is a confirmed supported OpenAI
+authorization path that permits hosted use of each user's ChatGPT plan. A
+website OAuth client is not assumed to confer plan-inference rights. No local
+helper transfer workaround was implemented. The hosted personal connection
+therefore remains unavailable until that dependency is resolved. No production
+configuration change, credential transfer, live OAuth, or paid provider call
+was made.
+
+## Evidence and verification
+
+- `tests/cloud_personal.py`: 3 deterministic tests for subject isolation,
+  distinct sponsor store, credential selection, per-user token refresh, and
+  switching.
+- `tests/cloud_auth.py`: 29 tests, including connection preference and
+  allowance-rejection behavior.
+- `tests/cloud_sponsor.py`: 8 tests.
+- Hosted research/API and funding tests passed with deterministic provider
+  mocks, including exhaustion, uncertain failure holds, and user isolation.
+- `browser_checks/t23_1_google_signin.py` passed in real Chrome with mocked
+  Google/provider boundaries: entry, invited/uninvited, Guest, personal
+  unavailable state, explicit sponsor selection, switching, connectivity
+  failure/retry, exhaustion, and isolated Google identities.
+- `./sigma test` passed all scenarios, Ruff, Pyright (0 diagnostics), frontend
+  typecheck/build, and deployment checks. Existing Vite advisory: one JS chunk
+  exceeds 500 kB.
+- No remaining baseline failures. An initial run before test setup was aligned
+  with explicit sponsored selection failed two stale implicit-sponsor
+  expectations; updated targeted suites and final full suite pass.
+
+## Delivery
+
+- Branch: `green/t88-combined-sign-in`
+- Starting base: T200 merge `48fe9a1fee87a23c1af1665f1f30723ef39d9e97`
+- Reconciled current `main`: `6f6a910a64efd29268b5898b2e8f3e8c8791934a`
+- Tested implementation head after main reconciliation:
+  `184d1a3c8ef3b517f19db1013c235d79a99698e9`
+- Final PR head, including this handoff commit, is reported in the R4R notice.
+- PR: [#248](https://github.com/bkramerext/sigma/pull/248)
+- The same `./sigma test` and real Chrome browser check passed again after
+  merging current `main`; merge had no conflicts.
+
+No self-merge or deployment performed.
+
+## PR #246 integration update
+
+Integrated current `main` after PR #246 merged at
+`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`. Resolved overlap in
+`frontend/src/ai-connection.tsx`, `frontend/src/main.tsx`, and
+`src/sigma/cloud_workspaces.py`, retaining both the T88 verified-subject
+binding/connection selection and PR #246's guest state, guest sample catalog,
+Guest Play dialog, and authentication presentation. The merged `AIProvider`
+Guest-unavailable state remains in place; it does not call hosted AI endpoints.
+The T88 browser fixture now exercises the real guest read-only workspace path
+for samples, with only the Google/provider boundaries deterministic.
+
+Chrome checks found and fixed the overlapping Home card/catalog layout: at
+desktop widths the entry card sits beside the sample catalog; at narrower
+widths the entry and catalog flow vertically. This keeps both entry actions
+and sample navigation operable. The denied-account and invited-account
+behaviors, guest project, Guest Play dialog, and unauthenticated inference
+protection remain covered.
+
+Post-integration verification:
+
+- Focused: `tests/cloud_personal.py` (3), `tests/cloud_auth.py` (31),
+  `tests/cloud_workspaces.py`, `tests/cloud_sponsor.py` (8),
+  `tests/cloud_research.py`, `tests/cloud_research_api.py`,
+  `tests/cloud_research_sponsored_api.py`, and `tests/chatgpt.py` — PASS.
+- `uv run --locked --no-sync --with playwright python
+  browser_checks/t23_1_google_signin.py` — PASS in real Chrome.
+- `uv run --locked --no-sync --with playwright python
+  browser_checks/guest_samples.py` — PASS in real Chrome, including sample
+  browsing, read-only Guest Play dialog, and sign-in messaging.
+- `./sigma test` — PASS all repository scenarios, Ruff, Pyright, frontend
+  typecheck/build, and deployment checks. Existing Vite advisory remains for a
+  JS chunk over 500 kB.
+- No OAuth, production, credential-transfer, or paid provider calls.
+
+The integrated branch uses current `main` at
+`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`. The integrated implementation
+commit exercised by the final full and browser checks is
+`c25563a6a14ce5dad4a06a55e08c7aa57c8ef98e`; the current PR head, including
+this handoff update, is reported in the R4R notice.

@@ -22,7 +22,7 @@ def main() -> int:
     try:
         cloud_research._spend_ceiling_decimal()
         cloud_research._user_spend_ceiling_decimal()
-        credential = asyncio.run(openai_connection.auth_context())
+        credential = asyncio.run(openai_connection.sponsored_auth_context("deployment-health"))
         if not openai_connection.cloud_credential(credential):
             return 1
         subprocess.run(

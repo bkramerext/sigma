@@ -2787,6 +2787,7 @@ function Home({ initialPath, onOpen }: {
     <div className="home-content">
       <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only for private projects. Explore published research as a guest.</p><div className="cloud-denied-actions cloud-entry-actions">{cloud.ready ? <><a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a><a className="cloud-secondary-button" href="/api/cloud-auth/login?invite=1">Invite Me</a></> : <p role="status">Google sign-in is not configured yet.</p>}<a className="cloud-text-button" href="/demo">Continue as Guest</a></div><p><a href="/privacy">Privacy notice</a></p></section>}
       {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -3536,7 +3537,7 @@ function App() {
 type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void> };
+type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -3884,6 +3885,8 @@ function CloudAuthGate() {
   const [providerStatus, setProviderStatus] = useState<{ status: string; guidance: string } | null>(null);
   const [providerLoading, setProviderLoading] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [selectingConnection, setSelectingConnection] = useState(false);
   const refresh = useCallback(async () => {
     try {
       const response = await fetch('/api/cloud-auth/status', { credentials: 'same-origin', cache: 'no-store' });
@@ -3995,7 +3998,18 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
-  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection };
+  const selectConnection = useCallback(async (mode: 'personal' | 'sponsored') => {
+    if (selectingConnection) return;
+    setSelectingConnection(true); setConnectionError(null);
+    try {
+      const response = await fetch('/api/ai/mode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+      if (!response.ok) throw await cloudFailure(response, 'Connection choice could not be saved.');
+      await refresh();
+    } catch (cause) {
+      setConnectionError(cause instanceof Error ? cause.message : 'Connection choice could not be saved.');
+    } finally { setSelectingConnection(false); }
+  }, [refresh, selectingConnection]);
+  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', selectConnection, connectionError, selectingConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
@@ -4074,7 +4088,7 @@ function AccessNotGranted({ email }: { email: string }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.'); }
     finally { setBusy(false); }
   }
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Request access using your verified Google account.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! We'll get back to you!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Invite Me using my Google account'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Explore SIGMA</a><a className="cloud-text-button" href="/privacy">Proposed privacy notice · v1</a></div>{error && <p role="alert">{error}</p>}</section>;
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Welcome to SIGMA</h1><p role="status">Your Google account is not yet invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! We'll get back to you!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Invite Me'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Continue as Guest</a><a className="cloud-text-button" href="/privacy">Proposed privacy notice · v1</a></div>{error && <p role="alert">{error}</p>}</section>;
 }
 
 installRequestErrorToasts();

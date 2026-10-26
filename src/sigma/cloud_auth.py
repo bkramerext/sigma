@@ -388,7 +388,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             workspace_id = workspace_for_subject(principal.subject).workspace_id
         except WorkspaceUnavailable as exc:
             raise RuntimeError("Private workspace is unavailable.") from exc
-    model_access = "personal" if cfg.local else "sponsored"
+    # Hosted users begin on their explicitly personal choice. Sponsored access
+    # is available only after an authenticated user selects it.
+    model_access = "personal"
     sponsorship_eligible = int(not cfg.local)
     with _db(cfg) as db:
         _upsert_user_state(
@@ -430,9 +432,38 @@ def _upsert_user_state(
            ON CONFLICT(subject) DO UPDATE SET email=excluded.email,
                role=excluded.role,access_active=1,workspace_id=excluded.workspace_id,
                sponsorship_eligible=excluded.sponsorship_eligible,
-               model_access=excluded.model_access,updated_at=excluded.updated_at""",
+               updated_at=excluded.updated_at""",
         (subject, email, role, workspace_id, sponsorship_eligible, model_access, _now()),
     )
+
+
+def model_access_for_subject(subject: str) -> str:
+    cfg = config()
+    if not cfg.enabled or cfg.error:
+        raise RuntimeError("Account connection choice is unavailable.")
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT model_access FROM user_state WHERE subject=? AND access_active=1", (subject,)
+        ).fetchone()
+    if row is None:
+        raise RuntimeError("Authorized account state is unavailable.")
+    return str(row["model_access"])
+
+
+def set_model_access(subject: str, mode: str) -> None:
+    if mode not in {"personal", "sponsored"}:
+        raise ValueError("Unsupported model connection choice.")
+    cfg = config()
+    if not cfg.enabled or cfg.error or cfg.local:
+        raise RuntimeError("Hosted connection choice is unavailable.")
+    with _db(cfg) as db:
+        changed = db.execute(
+            "UPDATE user_state SET model_access=?,updated_at=? WHERE subject=? AND access_active=1"
+            + (" AND sponsorship_eligible=1" if mode == "sponsored" else ""),
+            (mode, _now(), subject),
+        ).rowcount
+        if changed != 1:
+            raise PermissionError("This account is not eligible for the selected connection.")
 
 
 def persist_model_connection_status(subject: str, status: str) -> None:
@@ -631,7 +662,10 @@ async def middleware(request: Request, call_next):
     if (
         path.startswith("/api/ai/")
         and not cfg.local
-        and not (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
+        and not (
+            (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
+            or (request.method == "POST" and path == "/api/ai/mode")
+        )
     ):
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
@@ -918,7 +952,7 @@ async def callback(
             role,
             workspace_id,
             int(not cfg.local),
-            "personal" if cfg.local else "sponsored",
+            "personal",
         )
         db.execute(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",

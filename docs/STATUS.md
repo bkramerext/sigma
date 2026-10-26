@@ -361,6 +361,58 @@ connectivity remain unverified.
 See [T88 worker handoff](../messages/t88_red_google_sponsored_auth.txt) for the
 requirement evidence and exact final verification results.
 
+### T88 continuation — combined sign-in and hosted connection isolation
+
+Continued the preserved Green entry and invitation UI on top of merged T200
+(`48fe9a1`). The entry dialog presents Google sign-in, Invite Me, and Guest.
+Invited Google accounts can select a personal connection or, while eligible
+with remaining allowance, explicitly choose SIGMA's sponsored connection. The
+dialog displays remaining allowance and hides the sponsored action at zero.
+Guest sample-project access and the existing local ChatGPT sign-in remain
+available. Settings preserve each hosted account's connection selection so
+users can switch without deleting personal authentication.
+
+Hosted account state is selected by verified Google subject. Its future
+personal credential store is under a hashed-subject server directory, distinct
+from the sponsor store. Deterministic tests verify two-user isolation, token
+refresh rotation, selected-connection routing, switching, exhaustion, and
+failure recovery. Sponsored requests continue through T200's sponsor
+connection and T99's existing allowance, budget, reservation, concurrency,
+failure-hold and reconciliation safeguards. Personal and sponsored routing
+never borrow credentials from each other.
+
+Hosted personal inference remains explicitly unavailable. No supported
+OpenAI plan-access authorization path has been established, and the website
+OAuth client is not treated as proof of inference permission. No local-helper
+credential transfer was implemented. The exact adapter boundary and external
+dependency are documented in
+[T88 hosted personal connection boundary](T88_HOSTED_PERSONAL_CONNECTION.md).
+No production change, credential transfer, OAuth call, or paid provider call
+was made.
+
+Verification: `tests/cloud_personal.py` (3), `tests/cloud_auth.py` (29),
+`tests/cloud_sponsor.py` (8), hosted research/API funding and authorization
+scenarios, deployment packaging, Ruff, Pyright, frontend typecheck/build, and
+real Chrome `browser_checks/t23_1_google_signin.py` all passed. `./sigma test`
+passed end to end, including the new subject-isolation suite and production
+build. The build emits the existing advisory for a JavaScript chunk over
+500 kB. The first full-suite attempt before explicit sponsor test setup was
+corrected failed two stale expectations that relied on the old implicit
+sponsor selection; the corrected focused suites and final full suite passed.
+There are no remaining known baseline failures. See the [Green T88 handoff](../messages/t88_green_combined_signin.txt) for exact branch and PR details.
+
+Integrated current `main` after PR #246 merged at
+`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`. Resolved the overlaps in the AI
+provider, Home entry/catalog, and workspace identity changes while preserving
+T88's verified-subject connection routing and PR #246's Guest workspace,
+samples, Guest Play dialog, and sign-in messaging. A responsive Home layout
+keeps the T88 entry actions and Guest sample navigation accessible. Focused
+account/sponsor/research tests, T88 and Guest samples/Play real-Chrome checks,
+and the full `./sigma test` all pass on the integrated tree. Hosted personal
+ChatGPT inference remains unavailable pending a supported authorization path;
+no credential workaround or paid provider call was used. See the updated
+[T88 handoff](../messages/t88_green_combined_signin.txt).
+
 ## Issue #98 integrated local browser acceptance (2026-10-25)
 
 Accepted the current integrated local browser workflows against `origin/main`

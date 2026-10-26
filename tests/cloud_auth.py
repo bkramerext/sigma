@@ -253,7 +253,7 @@ class CloudAuthTests(TestCase):
         self.assertTrue(status["account"]["workspace"]["available"])
         self.assertEqual(
             status["account"]["model_access"],
-            {"mode": "sponsored", "connection": "checking"},
+            {"mode": "personal", "connection": "checking"},
         )
         self.assertTrue(status["account"]["sponsorship"]["eligible"])
         self.assertEqual(status["admin_contact_email"], "admin@example.org")
@@ -291,7 +291,7 @@ class CloudAuthTests(TestCase):
                 1,
                 status["account"]["workspace"]["id"],
                 1,
-                "sponsored",
+                "personal",
                 "checking",
             ),
         )
@@ -341,10 +341,16 @@ class CloudAuthTests(TestCase):
             self.assertEqual(response.headers["cache-control"], "no-store")
         with patch("sigma.api.connection", return_value={"status": "unconfigured"}):
             self.assertEqual(self.client.get("/api/ai/connection").status_code, 200)
-        for path in ("/api/ai/auth/begin", "/api/ai/mode", "/api/ai/disconnect"):
+        for path in ("/api/ai/auth/begin", "/api/ai/disconnect"):
             self.assertEqual(
                 self.client.post(path, headers={"Origin": ORIGIN}, json={}).status_code, 403
             )
+        self.assertEqual(
+            self.client.post(
+                "/api/ai/mode", headers={"Origin": ORIGIN}, json={"mode": "api_key"}
+            ).status_code,
+            422,
+        )
         self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 403)
         self.assertEqual(TestClient(app).get("/api/ai/models").status_code, 401)
 
@@ -1051,6 +1057,33 @@ class CloudAuthTests(TestCase):
             },
         ):
             self.assertIsNotNone(cloud_auth.config().error)
+
+    def test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor(self):
+        signed_in = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        initial = self.client.get("/api/cloud-auth/status").json()
+        self.assertEqual(initial["account"]["model_access"]["mode"], "personal")
+        headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
+        with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
+            selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)
+        self.assertEqual(selected.status_code, 200, selected.text)
+        self.assertEqual(selected.json()["mode"], "api_key")
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+            "sponsored",
+        )
+        with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 0.0}):
+            exhausted = self.client.post(
+                "/api/ai/mode", json={"mode": "sponsored"}, headers=headers
+            )
+        self.assertEqual(exhausted.status_code, 409, exhausted.text)
+        switched = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
+        self.assertEqual(switched.status_code, 200, switched.text)
+        self.assertEqual(switched.json()["status"], "unavailable")
+        refreshed = self.client.get("/api/cloud-auth/status").json()
+        self.assertEqual(refreshed["account"]["model_access"]["mode"], "personal")
 
     def test_session_expiration_is_enforced(self):
         signed_in = self.finish()

@@ -28,7 +28,7 @@ from sigma import (
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.continuations import approved_packets
-from sigma.openai_connection import auth_context, connection, models
+from sigma.openai_connection import auth_context, connection, models, sponsored_auth_context
 from sigma.projects import (
     ProjectError,
     WorkspaceAccessError,
@@ -187,12 +187,14 @@ async def cloud_sponsored_connection(request: Request):
     """Check only the server-held sponsored credential's model-catalog access."""
     if not cloud_workspaces.enabled():
         raise HTTPException(404, "Sponsored cloud connection is unavailable.")
-    state = await connection(refresh=True)
     principal = getattr(request.state, "cloud_principal", None)
     if not isinstance(principal, cloud_auth.Principal):
         raise HTTPException(401, "Authentication required.")
+    sponsor_context = await sponsored_auth_context()
+    state = await connection(refresh=True, context=sponsor_context)
     try:
-        cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
+        if cloud_auth.model_access_for_subject(principal.subject) == "sponsored":
+            cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
     except (sqlite3.Error, OSError, RuntimeError) as exc:
         raise HTTPException(503, "Account connection state could not be saved.") from exc
     return JSONResponse(
@@ -1026,7 +1028,28 @@ async def auth_cancel(identifier: str):
 
 
 @app.post("/api/ai/mode")
-async def auth_mode(body: AuthModeRequest):
+async def auth_mode(body: AuthModeRequest, request: Request):
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if cfg.enabled and not cfg.local:
+        if not isinstance(principal, cloud_auth.Principal):
+            raise HTTPException(401, "Authentication required.")
+        if body.mode not in {"personal", "sponsored"} or body.account_id is not None:
+            raise HTTPException(422, "Choose personal or sponsored access.")
+        if body.mode == "sponsored":
+            try:
+                allowance = cloud_research.snapshot()
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise HTTPException(503, "Sponsored allowance is unavailable.") from exc
+            if float(allowance.get("remaining_usd", 0)) <= 0:
+                raise HTTPException(409, "No sponsored allowance remains.")
+        try:
+            cloud_auth.set_model_access(principal.subject, body.mode)
+        except PermissionError as exc:
+            raise HTTPException(403, "This account cannot select sponsored access.") from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(503, "Connection choice could not be saved.") from exc
+        return await connection(refresh=True)
     await chatgpt_auth.select(body.mode, body.account_id)
     return await connection()
 
