@@ -631,7 +631,6 @@ def get_limits(path: str) -> dict[str, Any]:
             limits = dict(DEFAULT_LIMITS)
         else:
             data = read_file(path, "research-sessions/limits.json")
-        else:
             if len(data) > 4096:
                 raise ProjectError("Research limits file is unsafe or too large")
             try:
