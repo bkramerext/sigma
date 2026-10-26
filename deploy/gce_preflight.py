@@ -791,7 +791,7 @@ class Preflight:
             "Restart=on-failure",
             "SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env",
             "SIGMA_STATE_DISK_MOUNT=/srv/sigma-state",
-            "srv-sigma\\x2dstate.mount",
+            "RequiresMountsFor=/srv/sigma-state",
             "/opt/sigma/current/deploy/start-gce.sh",
             "gce_preflight.py",
         )
