@@ -25,6 +25,13 @@ class GceHostToolingTests(unittest.TestCase):
         services = {
             "backend": {
                 "read_only": True,
+                "user": "10001:10001",
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 256,
+                "mem_limit": "5g",
+                "cpus": 2.0,
+                "tmpfs": ["/tmp:rw,noexec,nosuid,size=128m"],
                 "group_add": ["1002"],
                 "volumes": [
                     {
@@ -35,9 +42,27 @@ class GceHostToolingTests(unittest.TestCase):
                 ],
                 "healthcheck": {"test": ["CMD", "python", "-m", "sigma.deployment_health"]},
             },
-            "frontend": {"healthcheck": {"test": ["CMD-SHELL", "wget /"]}},
+            "frontend": {
+                "read_only": True,
+                "user": "101:101",
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 64,
+                "mem_limit": "128m",
+                "tmpfs": ["/tmp:rw,noexec,nosuid,size=8m"],
+                "healthcheck": {"test": ["CMD-SHELL", "wget /"]},
+            },
             "edge": {
-                "ports": ["80:80"],
+                "read_only": True,
+                "cap_drop": ["ALL"],
+                "cap_add": ["NET_BIND_SERVICE"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 128,
+                "mem_limit": "256m",
+                "ports": [
+                    {"target": 80, "published": "80", "protocol": "tcp"},
+                    {"target": 443, "published": "443", "protocol": "tcp"},
+                ],
                 "healthcheck": {"test": ["CMD-SHELL", "wget localhost:2019"]},
                 "depends_on": {
                     "backend": {"condition": "service_healthy"},
@@ -66,6 +91,85 @@ class GceHostToolingTests(unittest.TestCase):
         with patch.object(preflight, "command", side_effect=compose_result):
             preflight.check_compose()
         self.assertEqual(preflight.results[-1].status, "FAIL")
+
+    def test_preflight_rejects_missing_container_limits_and_unsafe_public_ports(self) -> None:
+        services = {
+            "backend": {
+                "read_only": True,
+                "user": "10001:10001",
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 256,
+                "mem_limit": "5g",
+                "cpus": 2.0,
+                "tmpfs": ["/tmp:rw,noexec,nosuid"],
+            },
+            "frontend": {
+                "read_only": True,
+                "user": "101:101",
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 64,
+                "mem_limit": "128m",
+                "tmpfs": ["/tmp:rw,noexec,nosuid"],
+            },
+            "edge": {
+                "read_only": True,
+                "cap_drop": ["ALL"],
+                "cap_add": ["NET_BIND_SERVICE"],
+                "security_opt": ["no-new-privileges:true"],
+                "pids_limit": 128,
+                "mem_limit": "256m",
+                "ports": [
+                    {"target": 80, "published": "80", "protocol": "tcp"},
+                    {"target": 443, "published": "443", "protocol": "tcp"},
+                ],
+            },
+        }
+        self.assertTrue(
+            all(
+                gce_preflight.Preflight._service_is_restricted(
+                    service,
+                    user=expected_user,
+                    pids=pids,
+                    memory=memory,
+                    cpus=cpus,
+                    capabilities={"NET_BIND_SERVICE"} if service_name == "edge" else None,
+                    require_tmpfs=service_name != "edge",
+                )
+                for service, expected_user, pids, memory, cpus, service_name in (
+                    (services["backend"], "10001:10001", 256, "5g", 2.0, "backend"),
+                    (services["frontend"], "101:101", 64, "128m", None, "frontend"),
+                    (services["edge"], None, 128, "256m", None, "edge"),
+                )
+            )
+        )
+        self.assertTrue(gce_preflight.Preflight._public_ports_are_restricted(services))
+        services["backend"]["pids_limit"] = 0
+        self.assertFalse(
+            gce_preflight.Preflight._service_is_restricted(
+                services["backend"], user="10001:10001", pids=256, memory="5g", cpus=2.0
+            )
+        )
+        services["backend"]["pids_limit"] = 256
+        services["backend"]["tmpfs"] = ["/tmp:rw,noexec,exec"]
+        self.assertFalse(
+            gce_preflight.Preflight._service_is_restricted(
+                services["backend"], user="10001:10001", pids=256, memory="5g", cpus=2.0
+            )
+        )
+        services["backend"]["tmpfs"] = ["/tmp:rw,noexec,nosuid"]
+        services["backend"]["security_opt"].append("seccomp:unconfined")
+        self.assertFalse(
+            gce_preflight.Preflight._service_is_restricted(
+                services["backend"], user="10001:10001", pids=256, memory="5g", cpus=2.0
+            )
+        )
+        services["backend"]["security_opt"].pop()
+        services["edge"]["ports"].append({"target": 8000, "published": "8000", "protocol": "tcp"})
+        self.assertFalse(gce_preflight.Preflight._public_ports_are_restricted(services))
+        services["edge"]["ports"] = [{"target": 8000, "published": "80", "protocol": "tcp"}]
+        self.assertFalse(gce_preflight.Preflight._public_ports_are_restricted(services))
 
     def test_installer_guard_accepts_ubuntu_os_release_spellings(self) -> None:
         guard = DEPLOY / "gce_host_guard.sh"

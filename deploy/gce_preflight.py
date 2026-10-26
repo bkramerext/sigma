@@ -699,6 +699,20 @@ class Preflight:
             valid = (
                 {"backend", "frontend", "edge"}.issubset(services)
                 and backend.get("read_only") is True
+                and self._service_is_restricted(
+                    backend, user="10001:10001", pids=256, memory="5g", cpus=2.0
+                )
+                and self._service_is_restricted(
+                    services["frontend"], user="101:101", pids=64, memory="128m"
+                )
+                and self._service_is_restricted(
+                    services["edge"],
+                    pids=128,
+                    memory="256m",
+                    cpus=None,
+                    capabilities={"NET_BIND_SERVICE"},
+                    require_tmpfs=False,
+                )
                 and configured_gid in backend_groups
                 and socket_mount.get("source") == self.values["SIGMA_SANDBOX_DOCKER_SOCKET"]
                 and socket_mount.get("read_only") is True
@@ -706,6 +720,7 @@ class Preflight:
                 and not services["backend"].get("ports")
                 and not services["frontend"].get("ports")
                 and bool(services["edge"].get("ports"))
+                and self._public_ports_are_restricted(services)
                 and bool(backend_healthcheck.get("test"))
                 and bool(frontend_healthcheck.get("test"))
                 and bool(edge_healthcheck.get("test"))
@@ -720,7 +735,7 @@ class Preflight:
             self.add(
                 "Production Compose configuration",
                 "PASS",
-                "Caddy, backend, and frontend healthchecks, healthy edge dependencies, persistent state bind, and read-only rootless socket are configured",
+                "healthchecks, startup dependencies, persistent state, rootless socket, resource limits, and container restrictions are configured",
             )
         else:
             self.add(
@@ -728,6 +743,77 @@ class Preflight:
                 "FAIL",
                 "merged stack does not satisfy the production host and socket contract",
             )
+
+    @staticmethod
+    def _service_is_restricted(
+        service: dict[str, object],
+        *,
+        user: str | None = None,
+        pids: int,
+        memory: str,
+        cpus: float | None = None,
+        capabilities: set[str] | None = None,
+        require_tmpfs: bool = True,
+    ) -> bool:
+        """Require the deployed app containers' reviewed resource/security policy."""
+        security = {str(item).casefold() for item in service.get("security_opt", [])}  # type: ignore[union-attr]
+        caps = {str(item).upper() for item in service.get("cap_drop", [])}  # type: ignore[union-attr]
+        added_caps = {str(item).upper() for item in service.get("cap_add", [])}  # type: ignore[union-attr]
+        tmpfs = service.get("tmpfs", [])
+
+        def tmpfs_is_noexec(entry: object) -> bool:
+            options = {item.casefold() for item in str(entry).split(":", 1)[-1].split(",")}
+            return "noexec" in options and "exec" not in options
+
+        return (
+            service.get("read_only") is True
+            and caps == {"ALL"}
+            and security == {"no-new-privileges:true"}
+            and added_caps == (capabilities or set())
+            and service.get("pids_limit") == pids
+            and str(service.get("mem_limit", "")).casefold() == memory
+            and (cpus is None or service.get("cpus") == cpus)
+            and (user is None or service.get("user") == user)
+            and (
+                not require_tmpfs
+                or (
+                    isinstance(tmpfs, list)
+                    and bool(tmpfs)
+                    and all(tmpfs_is_noexec(entry) for entry in tmpfs)
+                )
+            )
+        )
+
+    @staticmethod
+    def _public_ports_are_restricted(services: dict[str, dict[str, object]]) -> bool:
+        """Only the edge may publish the reviewed TCP web ports."""
+        for name, service in services.items():
+            ports = service.get("ports", [])
+            if not isinstance(ports, list):
+                return False
+            if name != "edge" and ports:
+                return False
+            if name == "edge":
+                for port in ports:
+                    if isinstance(port, dict):
+                        protocol = str(port.get("protocol", "tcp"))
+                        host_port = str(port.get("published", ""))
+                        target_port = str(port.get("target", ""))
+                    else:
+                        value = str(port)
+                        protocol = value.rsplit("/", 1)[-1] if "/" in value else "tcp"
+                        port_parts = value.split(":")
+                        if len(port_parts) < 2:
+                            return False
+                        host_port, target_port = port_parts[-2:]
+                        target_port = target_port.split("/", 1)[0]
+                    if (
+                        protocol.casefold() != "tcp"
+                        or host_port not in {"80", "443"}
+                        or target_port != host_port
+                    ):
+                        return False
+        return True
 
     def check_app_unit(self) -> None:
         unit = self._path("/etc/systemd/system/sigma.service")

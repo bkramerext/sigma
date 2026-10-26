@@ -1,5 +1,45 @@
 # SIGMA status
 
+## T171 GCE host readiness audit (2026-10-26)
+
+**Overall: BLOCKED for production start.** The audit began from fresh current
+`main` and reviewed T128's preflight, installer, rootless service, UUID state
+disk path, Compose security controls, host monitor and operator runbook. T128
+still requires actual Ubuntu/GCE acceptance. This assignment did not run the
+installer, start production services, make provider calls, change the VM,
+provision resources or reboot.
+
+Offline review found that `gce_preflight.py` checked the production Compose
+health checks, state bind and rootless socket but did not enforce most runtime
+resource and security settings. It could therefore report PASS if limits,
+capability drops or `no-new-privileges` were removed. Preflight now verifies
+backend/frontend/edge UID and container settings, resource limits, noexec
+tmpfs where used, and only edge TCP 80/443 publications. `tests/gce_host.py`
+adds the regression: removed PID limits, an unconfined seccomp override, and
+published port 8000 are rejected.
+
+`uv run --with pytest python -m unittest tests.gce_host -v` ran 17 host tests:
+16 passed, including the new regression; one fails on the coordinator-owned
+stale systemd mount assertion. I did not change it or either of the other two
+known stale assertions in `tests/deployment_package.py` and
+`tests/host_monitor.py`.
+
+`./sigma test` completed every independent step. Its final run reported four
+failures: the three known stale mount assertions and frontend typecheck could
+not find `tsc` in this clean worktree. Ruff lint, Ruff format (238 files), and
+Pyright (0 diagnostics) passed; frontend build was skipped after failures. The
+local Docker Engine responded but reported a non-rootless workstation daemon;
+Docker Compose v2 and `systemd-analyze` were unavailable, so merged production
+Compose rendering and native target unit syntax were not validated here.
+Focused final checks are recorded in the T171 PR handoff.
+
+The evidence-backed dispositions and exact later live-host commands are in
+[T171 host readiness audit](T171_HOST_READINESS.md). The essential blockers
+are actual preflight PASS, current persistent disk identity/permissions,
+rootless daemon and container inspect, target runtime probes, and approved
+reboot recovery. Installer failure can leave partial host state and needs
+inspection before retry.
+
 ## T43.2 / issue #66 multi-account sign-in acceptance (2026-10-25)
 
 Reviewed the full issue and current Google OIDC and ChatGPT SIWC implementations.
