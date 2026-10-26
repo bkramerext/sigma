@@ -307,6 +307,21 @@ class Deployment:
                     raise DeployFailure(
                         f"{service} container image does not match selected release"
                     )
+                if expected_image:
+                    source_sha = _call(
+                        self.runner,
+                        [
+                            "docker",
+                            "inspect",
+                            "--format",
+                            '{{ index .Config.Labels "org.opencontainers.image.revision" }}',
+                            container,
+                        ],
+                    )
+                    if source_sha != sha:
+                        raise DeployFailure(
+                            f"{service} image source label does not match selected release"
+                        )
             if not waiting_for:
                 break
             if time.monotonic() >= deadline:
