@@ -6206,3 +6206,19 @@ Research Outcome passed on the merge tree. Full local verification was limited b
 GitHub SIGMA verification run 40399333103 passed on validated code head
 `aea3365434a3c5fb708749724c132d303649815b`. Hosted sponsor provisioning and
 acceptance remain unverified. See the issue #200 handoff.
+
+## PR #246 — guest integration with current main (2026-10-26)
+
+Integrated `origin/main` at `48fe9a1fee87a23c1af1665f1f30723ef39d9e97` into
+the Guest branch in merge commit `9743cd704b8a97a50b8187877c1464f988818e42`.
+The merge's only conflict was in this status file; both the Guest history and
+T200 reconciliation were retained. Source and test changes from main merged
+without conflicts. Guest Play's “Sign in now” Google pill handoff, “Cancel”
+behavior, and guest no-dispatch/no-mutation constraints passed real-Chrome
+acceptance after the merge. `tests/cloud_auth.py` (30 tests), `tests/chatgpt.py`,
+frontend typecheck/build, and focused Guest Ruff checks passed. `./sigma test`
+passed all steps, including Ruff, formatting, Pyright (0 diagnostics), typecheck,
+and build. Main's T200 integration also resolves the four earlier repository
+baseline failures. Existing >500 kB frontend chunk advisory remains. PR #246 is
+returned open for review; it has not been merged. See the [updated Blue
+handoff](../messages/blue_guest_play_signin_r4r.md).

@@ -3,8 +3,9 @@ BLUE R4R — Guest Play sign-in dialog
 Branch: `fix/guest-samples-about-privacy` (continued for overlap with the active
 Guest implementation).
 PR: https://github.com/bkramerext/sigma/pull/246 (open against `main`; not merged)
-Base: `main` at `6a607a488106f9c9233336eb940f0458024e527b`
-Guest Play implementation commit: `ab1c381`.
+Integrated `origin/main`: `48fe9a1fee87a23c1af1665f1f30723ef39d9e97`
+Integration merge commit (main-integrated code head):
+`9743cd704b8a97a50b8187877c1464f988818e42`.
 
 Guest Play now opens the “Ready to investigate?” dialog:
 
@@ -25,21 +26,29 @@ action styles.
 Verification:
 
 - `uv run --with playwright python browser_checks/guest_samples.py` — PASS in
-real Chrome. The focused test checks exact dialog copy, the existing Google
-pill and login route, Cancel/Escape, restored focus, no research/configuration/
-limits requests, and no write requests when Guest Play is clicked or dismissed.
+  real Chrome. It checks exact dialog copy, the Google pill handoff and login
+  route, left alignment and matching action colors, Cancel/Escape, restored
+  focus, and no research/configuration/limits requests or writes when Guest
+  Play is clicked or dismissed.
+- `uv run python tests/cloud_auth.py` — PASS (30 tests).
+- `uv run python tests/chatgpt.py` — PASS, including recovery behavior.
 - `npm --prefix frontend run typecheck` — PASS.
 - `npm --prefix frontend run build` — PASS; existing >500 kB chunk-size advisory.
 - `uv run ruff check browser_checks/guest_samples.py` — PASS.
 - `uv run ruff format --check browser_checks/guest_samples.py` — PASS.
-- `./sigma test` — completed with four existing failing checks: the admin
-  contact warning assertion; Gmail delivery Ruff findings; formatting in
-  `src/sigma/cli.py`, `src/sigma/gmail_delivery.py`, `src/sigma/ui_instance.py`,
-  and `tests/gmail_delivery.py`; and Pyright's `Message[str, str].decode` error
-  in `tests/gmail_delivery.py:56`. All reached tests including ChatGPT/cloud auth
-  passed. The test runner skipped its build after earlier failures; standalone
-  build passed.
+- `./sigma test` — PASS, including repository Ruff, formatting, Pyright (0
+  diagnostics), frontend typecheck, and build. The four failures recorded on
+  the pre-integration branch (tooling admin-contact assertion, Gmail Ruff and
+  formatting, and Gmail `.decode` Pyright) were resolved by current main; no
+  test failures remain on the integrated tree.
+
+Integration: `origin/main` advanced from `6a607a4` to `48fe9a1` and included
+T200 sponsored ChatGPT/model availability changes. The merge had one conflict,
+in `docs/STATUS.md`; both the Guest entries and main's T200 reconciliation
+entry were retained. No code conflicts occurred. Guest Play and its Google pill
+handoff passed real-Chrome acceptance after integration. The branch is pushed;
+PR #246 is open against `main` and returned for review, not merged.
 
 This change is on the active Guest branch as requested for the overlapping
-implementation. PR #246 is open, mergeable, and not merged. No provider calls or
-budget reservations were made. No research data or authentication logic changed.
+implementation. No provider calls or budget reservations were made. No research
+data or authentication logic changed.

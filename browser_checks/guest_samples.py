@@ -227,6 +227,14 @@ def exercise(ui_url: str, root: Path) -> None:
         )
         expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
         expect(play_dialog.get_by_role("button", name="Cancel")).to_be_visible()
+        actions = play_dialog.locator(".settings-actions")
+        assert (
+            actions.evaluate("element => getComputedStyle(element).justifyContent") == "flex-start"
+        )
+        action_colors = actions.locator("button").evaluate_all(
+            "buttons => buttons.map(button => getComputedStyle(button).color)"
+        )
+        assert len(action_colors) == 2 and action_colors[0] == action_colors[1], action_colors
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         play_dialog.get_by_role("button", name="Sign in now").click()
