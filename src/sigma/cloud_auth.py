@@ -234,6 +234,18 @@ def _initialize(path: Path) -> None:
                 email TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS user_state (
+                subject TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('member','admin')),
+                access_active INTEGER NOT NULL CHECK(access_active IN (0,1)),
+                workspace_id TEXT,
+                sponsorship_eligible INTEGER NOT NULL CHECK(sponsorship_eligible IN (0,1)),
+                model_access TEXT NOT NULL CHECK(model_access IN ('personal','sponsored')),
+                model_connection_status TEXT NOT NULL DEFAULT 'checking'
+                    CHECK(model_connection_status IN ('checking','connected','unconfigured','disconnected','unauthorized','forbidden','limited','unavailable','invalid_response','reauth_required')),
+                updated_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS flows (
                 state_hash TEXT PRIMARY KEY,
                 nonce TEXT NOT NULL,
@@ -322,6 +334,105 @@ def _configured_bootstrap_admin_email(cfg: Config) -> str | None:
         return _bootstrap_admin_email(db, cfg)
 
 
+def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
+    """Return the persistent account model, refreshing revocable access fields."""
+    workspace_id: str | None = None
+    if not cfg.local:
+        from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
+
+        try:
+            workspace_id = workspace_for_subject(principal.subject).workspace_id
+        except WorkspaceUnavailable as exc:
+            raise RuntimeError("Private workspace is unavailable.") from exc
+    model_access = "personal" if cfg.local else "sponsored"
+    sponsorship_eligible = int(not cfg.local)
+    with _db(cfg) as db:
+        _upsert_user_state(
+            db,
+            principal.subject,
+            principal.email,
+            principal.role,
+            workspace_id,
+            sponsorship_eligible,
+            model_access,
+        )
+        row = db.execute(
+            "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status FROM user_state WHERE subject=?",
+            (principal.subject,),
+        ).fetchone()
+    assert row is not None
+    return {
+        "identity": {"email": row["email"], "verified": True},
+        "access": {"status": "invited" if row["access_active"] else "revoked", "role": row["role"]},
+        "workspace": {"available": bool(row["workspace_id"]), "id": row["workspace_id"]},
+        "model_access": {"mode": row["model_access"], "connection": row["model_connection_status"]},
+        "sponsorship": {"eligible": bool(row["sponsorship_eligible"])},
+    }
+
+
+def _upsert_user_state(
+    db: sqlite3.Connection,
+    subject: str,
+    email: str,
+    role: str,
+    workspace_id: str | None,
+    sponsorship_eligible: int,
+    model_access: str,
+) -> None:
+    db.execute(
+        """INSERT INTO user_state(subject,email,role,access_active,workspace_id,
+               sponsorship_eligible,model_access,model_connection_status,updated_at)
+           VALUES(?,?,?,1,?,?,?,'checking',?)
+           ON CONFLICT(subject) DO UPDATE SET email=excluded.email,
+               role=excluded.role,access_active=1,workspace_id=excluded.workspace_id,
+               sponsorship_eligible=excluded.sponsorship_eligible,
+               model_access=excluded.model_access,updated_at=excluded.updated_at""",
+        (subject, email, role, workspace_id, sponsorship_eligible, model_access, _now()),
+    )
+
+
+def persist_model_connection_status(subject: str, status: str) -> None:
+    """Persist provider connectivity from a server-side check for this identity."""
+    allowed = {
+        "checking",
+        "connected",
+        "unconfigured",
+        "disconnected",
+        "unauthorized",
+        "forbidden",
+        "limited",
+        "unavailable",
+        "invalid_response",
+        "reauth_required",
+    }
+    cfg = config()
+    if not cfg.enabled or cfg.error or status not in allowed:
+        raise RuntimeError("Model connection state is unavailable.")
+    with _db(cfg) as db:
+        changed = db.execute(
+            "UPDATE user_state SET model_connection_status=?,updated_at=? WHERE subject=? AND access_active=1",
+            (status, _now(), subject),
+        ).rowcount
+        if changed != 1:
+            raise RuntimeError("Authorized account state is unavailable.")
+
+
+def _sync_user_state_in_db(db: sqlite3.Connection, cfg: Config) -> None:
+    """Persist current revocable roles/eligibility without touching usage history."""
+    for row in db.execute("SELECT subject,email,role FROM user_state").fetchall():
+        role = _authorization_in_db(db, cfg, row["subject"], row["email"])
+        db.execute(
+            "UPDATE user_state SET role=?,access_active=?,sponsorship_eligible=?,updated_at=? WHERE subject=?",
+            (
+                role or row["role"],
+                int(role is not None),
+                int(role is not None and not cfg.local),
+                _now(),
+                row["subject"],
+            ),
+        )
+
+
 def resolve_session(raw: str | None) -> Principal | None:
     cfg = config()
     if not cfg.enabled or cfg.error or not raw or len(raw) > 128:
@@ -335,7 +446,15 @@ def resolve_session(raw: str | None) -> Principal | None:
         role = _authorization(cfg, row["subject"], row["email"])
         if not role:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
+            db.execute(
+                "UPDATE user_state SET access_active=0,sponsorship_eligible=0,updated_at=? WHERE subject=?",
+                (_now(), row["subject"]),
+            )
             return None
+        db.execute(
+            "UPDATE user_state SET role=?,access_active=1,sponsorship_eligible=?,updated_at=? WHERE subject=?",
+            (role, int(not cfg.local), _now(), row["subject"]),
+        )
         return Principal(row["subject"], row["email"], role)
 
 
@@ -419,6 +538,21 @@ def status(request: Request):
             "authenticated": False,
             "user": None,
         }
+    account = None
+    if principal is not None:
+        try:
+            account = _persist_user_state(cfg, principal)
+        except (sqlite3.Error, OSError, RuntimeError):
+            return {
+                "enabled": cfg.enabled,
+                "ready": False,
+                "local_setup_missing": local_setup_missing,
+                "authenticated": False,
+                "user": None,
+                "account": None,
+                "admin_contact_email": None,
+                "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
+            }
     return {
         "enabled": cfg.enabled,
         "ready": not cfg.error if cfg.enabled else True,
@@ -427,6 +561,7 @@ def status(request: Request):
         "local_setup_missing": local_setup_missing,
         "authenticated": principal is not None,
         "user": principal.public() if principal else None,
+        "account": account,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
     }
@@ -611,11 +746,12 @@ async def callback(
     # Provision only after the Google subject has passed authorization, before
     # an authenticated session is issued. This creates an empty root and keeps
     # identity/provider concerns out of project path handling.
+    workspace_id = None
     if not cfg.local:
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:
-            workspace_for_subject(subject)
+            workspace_id = workspace_for_subject(subject).workspace_id
         except WorkspaceUnavailable as exc:
             raise HTTPException(503, "Private workspace is unavailable.") from exc
     raw = secrets.token_urlsafe(32)
@@ -623,6 +759,18 @@ async def callback(
         db.execute(
             "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
             (subject, email, _now()),
+        )
+        # Keep verified identity, current authorization, private workspace,
+        # and funding eligibility as separate server-owned account attributes.
+        # Usage itself remains in the durable cloud-research ledger.
+        _upsert_user_state(
+            db,
+            subject,
+            email,
+            role,
+            workspace_id,
+            int(not cfg.local),
+            "personal" if cfg.local else "sponsored",
         )
         db.execute(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
@@ -858,6 +1006,7 @@ def add_grant(body: GrantRequest, request: Request):
             "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
             (actor.email, "grant", body.kind, value, _now()),
         )
+        _sync_user_state_in_db(db, cfg)
     return {
         "kind": body.kind,
         "value": value,
@@ -936,6 +1085,7 @@ def update_grants(body: GrantUpdatesRequest, request: Request):
                 "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
                 (actor.email, "update", kind, value, _now()),
             )
+        _sync_user_state_in_db(db, cfg)
     return {"updated": [{"kind": kind, "value": value} for kind, value, _, _ in normalized_updates]}
 
 
@@ -967,4 +1117,5 @@ def revoke_grant(kind: str, value: str, request: Request):
             "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
             (actor.email, "revoke", kind, normalized, _now()),
         )
+        _sync_user_state_in_db(db, cfg)
     return {"kind": kind, "value": normalized, "active": False}

@@ -2026,8 +2026,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      <GoogleIdentityPill compact/>
-      <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
+      {cloud?.enabled ? <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill compact/><ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
@@ -2736,7 +2735,7 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
@@ -3445,10 +3444,10 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void> };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -3473,7 +3472,7 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
   }, []);
   const project = audit?.project;
   return <main className="cloud-demo-page">
-    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Sign in with Google</a>}</nav></header>
+    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Sign in with Google</a>}</nav></header>
     <section className="cloud-demo-intro"><p className="cloud-auth-kicker">Public read-only preview</p><h1>Explore a SIGMA research project</h1><p>Inspect a curated saved project, its strategies, research sessions, outcomes, computational evidence and report exports. This shared Demo does not create a workspace or run agents.</p></section>
     {error && <section className="cloud-demo-state" role="alert"><h2>Demo unavailable</h2><p>{error}</p></section>}
     {!audit && !error && <p className="cloud-demo-state" role="status">Loading saved Demo data…</p>}
@@ -3776,6 +3775,9 @@ function CloudAuthGate() {
   const [budget, setBudget] = useState<CloudResearchBudget | null>(null);
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [providerStatus, setProviderStatus] = useState<{ status: string; guidance: string } | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
   const refresh = useCallback(async () => {
     try {
       const response = await fetch('/api/cloud-auth/status', { credentials: 'same-origin', cache: 'no-store' });
@@ -3789,7 +3791,12 @@ function CloudAuthGate() {
       setStatus(current); setFailure(current.ready ? '' : 'Google sign-in is not configured correctly.');
     } catch { setFailure('SIGMA could not check Google sign-in. Refresh this page or contact the administrator.'); }
   }, []);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, [refresh]);
   const loadGrants = useCallback(async () => {
     const response = await fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) throw await cloudFailure(response, 'Access rules could not be loaded.');
@@ -3817,6 +3824,23 @@ function CloudAuthGate() {
     window.addEventListener('focus', fetchBudget);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', fetchBudget); };
   }, [status?.enabled, status?.authenticated, status?.target]);
+  const refreshSponsoredConnection = useCallback(async () => {
+    if (!status?.enabled || !status.authenticated || status.target !== 'hosted') return;
+    setProviderLoading(true);
+    setProviderError(null);
+    try {
+      const response = await fetch('/api/cloud-research/connection', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw await cloudFailure(response, 'SIGMA-sponsored model access could not be checked.');
+      const current = await response.json() as { status: string; guidance: string };
+      setProviderStatus(current);
+    } catch (cause) {
+      setProviderError(cause instanceof Error ? cause.message : 'SIGMA-sponsored model access could not be checked.');
+    } finally { setProviderLoading(false); }
+  }, [status?.enabled, status?.authenticated, status?.target]);
+  useEffect(() => {
+    setProviderStatus(null);
+    if (status?.authenticated && status.target === 'hosted') void refreshSponsoredConnection();
+  }, [status?.authenticated, status?.target, refreshSponsoredConnection]);
   async function addGrant(entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) {
     setBusy(true);
     try {
@@ -3841,13 +3865,17 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
-  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated };
+  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
-  if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
-  return <CloudIdentityContext.Provider value={context}><AIProvider>{status.authenticated ? <App/> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}</AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
+  if (!status.ready) return <GuestExploreLanding canSignIn={false} setupError={failure || 'Google sign-in is not ready.'}/>;
+  return <CloudIdentityContext.Provider value={context}>{status.authenticated ? <AIProvider><App/></AIProvider> : deniedEmail ? <AccessNotGranted email={deniedEmail} contactEmail={status.admin_contact_email}/> : <GuestExploreLanding canSignIn={status.ready} />}{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
+}
+
+function GuestExploreLanding({ canSignIn, setupError }: { canSignIn: boolean; setupError?: string }) {
+  return <main className="cloud-auth-shell"><section className="cloud-auth-card guest-explore-card"><a className="cloud-demo-brand" href="/">SIGMA</a><p className="cloud-auth-kicker">Guest access</p><h1>Explore SIGMA</h1><p>Browse a published research example without signing in. Guest access is read-only and cannot create a private workspace, select a model, run research, or use inference.</p><p className="guest-account-state"><strong>Guest</strong><span>Explore only · no execution</span></p>{setupError && <p role="status">{setupError} The public research example remains available.</p>}<div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore SIGMA</a>{canSignIn && <a className="cloud-secondary-button" href="/api/cloud-auth/login">Sign in with Google</a>}</div></section></main>;
 }
 
 function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {
@@ -3856,7 +3884,7 @@ function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail
   const requestHref = contactEmail
     ? `mailto:${contactEmail}?${new URLSearchParams({ subject, body })}`
     : undefined;
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div></section>;
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA. No account workspace was created.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Explore SIGMA</a></div></section>;
 }
 
 installRequestErrorToasts();

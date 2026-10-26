@@ -227,11 +227,12 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean } } = {}) {
+export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding, googleAccount, onGoogleSignOut }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void> }; googleAccount?: { role: string; email: string } | null; onGoogleSignOut?: () => Promise<void> } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const [accountError, setAccountError] = useState('');
   const providerActive = useProviderActivity();
   useEffect(() => {
     if (!open) return;
@@ -280,17 +281,47 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
+  const roleLabel = googleAccount?.role === 'admin' ? 'Administrator' : 'Regular user';
+  const modelLine = serviceFunded
+    ? cloudFunding?.budget?.remaining_usd === 0 ? 'SIGMA-sponsored · budget exhausted'
+      : cloudFunding?.providerLoading ? 'Checking SIGMA-sponsored access…'
+        : cloudFunding?.providerError ? 'SIGMA-sponsored check failed'
+          : cloudFunding?.provider?.status === 'connected' ? 'SIGMA-sponsored'
+            : cloudFunding?.provider?.status === 'unconfigured' ? 'SIGMA-sponsored · not configured'
+              : cloudFunding?.provider?.status === 'unauthorized' ? 'SIGMA-sponsored · credential rejected'
+                : cloudFunding?.provider ? 'SIGMA-sponsored · provider unavailable' : 'Checking SIGMA-sponsored access…'
+    : ai.connecting || ai.initialLoading ? 'Checking personal model…'
+      : ai.healthError || ai.info?.status === 'unavailable' ? 'Personal model check failed'
+        : ai.info?.status === 'connected' ? 'Personal model connected'
+          : ai.info?.status === 'unauthorized' || ai.info?.status === 'reauth_required' ? 'Personal model needs sign-in'
+            : ai.info?.status === 'unconfigured' || ai.info?.status === 'disconnected' ? 'Personal model not configured'
+              : ai.info?.label ?? 'Personal model status unavailable';
+  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}${googleAccount ? ' account-model-status' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={googleAccount ? `${roleLabel}, ${modelLine}; open account and model settings` : projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>{googleAccount ? <span className="account-model-lines"><span role="status">{roleLabel}</span><span>{modelLine}</span></span> : <span role="status">{visibleLabel}</span>}</summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
+      {googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
       {serviceFunded ? <>
+        <h2>Model access</h2>
+        <p>SIGMA checks its sponsored ChatGPT connection and charges usage to the SIGMA allowance shown here. A ChatGPT subscription is separate and does not provide API access.</p>
+        {cloudFunding?.providerLoading && <p role="status">Checking sponsored provider authentication and model-catalog reachability. This check does not send a research prompt.</p>}
+        {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'connected' && <p role="status">The SIGMA-sponsored model connection is reachable. This does not guarantee a particular inference will complete.</p>}
+        {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unconfigured' && <p role="status">SIGMA-sponsored model access is not configured. Contact the administrator. SIGMA will not switch to personal or separately billed credentials.</p>}
+        {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unauthorized' && <p role="alert">The SIGMA-sponsored credential was rejected. Contact the administrator; SIGMA will not use a personal billing path.</p>}
+        {(cloudFunding?.providerError || ['unavailable', 'invalid_response', 'forbidden', 'limited'].includes(cloudFunding?.provider?.status ?? '')) && <p role="alert">{cloudFunding?.providerError ?? cloudFunding?.provider?.guidance ?? 'The sponsored provider could not be reached.'} Retry the check. No research was run.</p>}
+        <button type="button" className="connection-text-action" disabled={cloudFunding?.providerLoading} onClick={() => void cloudFunding?.retryProvider()}>{cloudFunding?.providerLoading ? 'Checking…' : 'Retry sponsored connection check'}</button>
         <p>SIGMA service-funded inference · separate from a personal ChatGPT plan.</p>
         {cloudFunding?.authorized && <p className="cloud-chatgpt-allowance"><strong>ChatGPT allowance</strong>{cloudFunding.budget ? <span>{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.remaining_usd)} remaining</span> : cloudFunding.loading ? <span>Loading…</span> : <span>{cloudFunding.error ?? 'Unavailable'}</span>}</p>}
         {cloudFunding?.authorized && cloudFunding.budget && <p className="cloud-chatgpt-usage">Estimated {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.estimated_usage_usd)} · held {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.held_usd)}{cloudFunding.budget.unknown_provider_attempts ? ` · ${cloudFunding.budget.unknown_provider_attempts} unknown-charge attempts` : ''}</p>}
         {cloudFunding?.error && <p role="status">{cloudFunding.error} Saved research remains available.</p>}
         {cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0 && <p role="status">This service-funded allowance is exhausted. Saved research remains available.</p>}
       </> : <>
+        {googleAccount && <h2>Personal model connection</h2>}
+        {ai.initialLoading && <p role="status">Checking the configured personal model connection. SIGMA checks provider authentication and reachability; it does not send a research prompt.</p>}
+        {!ai.initialLoading && ai.info?.status === 'connected' && <p role="status">The configured personal model connection is reachable. No research was run.</p>}
+        {!ai.initialLoading && ai.info?.status === 'unconfigured' && <p role="status">No personal model connection is configured. Connect your ChatGPT account or choose the separately billed API key option.</p>}
+        {!ai.initialLoading && ai.info?.status === 'unauthorized' && <p role="status">The provider rejected the saved credential. Sign in again to restore this connection.</p>}
+        {!ai.initialLoading && (ai.healthError || ai.info?.status === 'unavailable') && <p role="status">SIGMA could not reach the model provider. Retry the connection check; no research was run.</p>}
         {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
         {(ai.info?.mode === 'api_key' || !ai.info?.active_account) && <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Connect your ChatGPT account'}</p>}
         <p>{ai.healthError && ai.info?.status !== 'unavailable' ? 'Connection status could not be refreshed. Retry when convenient.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
@@ -300,6 +331,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
         {ai.info?.mode === 'api_key' ? <button type="button" className="connection-text-action" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>API key option</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" className="connection-text-action" onClick={() => void ai.selectMode('api_key')}>Separately billed API Key</button></details>}
       </>}
       {ai.error && <p role="alert">{ai.error}</p>}
+      {accountError && <p role="alert">{accountError}</p>}
     </div></>, document.body)}
   </details>;
 }
