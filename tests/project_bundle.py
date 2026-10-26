@@ -289,6 +289,29 @@ def main() -> None:
                 for name in list_files(created.path)
             )
             assert get_execution_artifact(created.path, execution_id, "result.bin")[0] == bytes(range(128))
+            # Exercise the public asynchronous reservation/dispatch/finalize path
+            # without requiring a Docker daemon or invoking untrusted code.
+            import asyncio
+            from types import SimpleNamespace
+            from sigma.python_sandbox import execute_research_code
+            async def fake_execute(source: str, runtime_name: str = "python"):
+                assert source == "print('integration')"
+                return SimpleNamespace(
+                    status="completed", exit_code=0, stdout="integration\\n",
+                    stderr="", duration_ms=2, artifact_error=None,
+                    image_id="test-image", stdout_base64=None, stderr_base64=None,
+                    artifacts=(("integration.bin", "application/octet-stream", b"evidence"),),
+                )
+            with patch("sigma.python_sandbox.execute", side_effect=fake_execute):
+                integrated = asyncio.run(execute_research_code(
+                    created.path, "print('integration')"
+                ))
+            assert integrated["status"] == "completed"
+            assert get_execution(created.path, integrated["id"])["stdout"] == "integration\\n"
+            assert get_execution_artifact(
+                created.path, integrated["id"], "integration.bin"
+            ) == (b"evidence", "application/octet-stream")
+            assert integrated["id"] in {item["id"] for item in list_executions(created.path)}
             # A complete export/import preserves executable evidence exactly.
             imported = root / "imported-execution.json"
             import_bundle(json.loads(export_complete_project(created.path)), imported)
