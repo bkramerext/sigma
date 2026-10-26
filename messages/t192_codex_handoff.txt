@@ -3,7 +3,7 @@
 Branch: `t192-per-user-project-isolation`  
 Base: current `main` (`07eff567ec3e723902424e150254c1fd490c8017`)  
 Implementation commit: `47ef959`  
-PR: pending
+PR: [#223](https://github.com/bkramerext/sigma/pull/223), open against `main`
 
 ## Result
 

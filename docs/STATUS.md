@@ -5919,3 +5919,4 @@ production deployment, live OAuth, paid inference, or provider calls occurred.
 Production OAuth/account switching, hosted mount permissions, revocation, and
 runtime sandbox isolation still need live production verification; they were
 not tested under this assignment's constraints. See [T192](../tickets/t192.md).
+Implementation and regression tests are in [PR #223](https://github.com/bkramerext/sigma/pull/223), open against `main` and not merged.
