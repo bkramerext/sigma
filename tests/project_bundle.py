@@ -187,6 +187,16 @@ def main() -> None:
             assert Path(created.path).is_file()
             assert Path(created.path).suffix == ".json"
             assert inspect_project(created.path).project == created.project
+            # Until execution records and binary outputs are bundle-backed,
+            # fail explicitly rather than attempting directory creation beneath
+            # the JSON file and leaving ambiguous partial state.
+            from sigma.python_sandbox import _execution_directory
+            try:
+                _execution_directory(created.path)
+            except ProjectError as exc:
+                assert "not yet supported" in str(exc)
+            else:
+                raise AssertionError("JSON execution storage was incorrectly treated as a directory")
             assert created.project.id in {item.project.id for item in list_json_projects()}
             assert json.loads(export_complete_project(created.path)) == read_bundle(created.path)
             try:
