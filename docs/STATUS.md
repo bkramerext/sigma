@@ -106,15 +106,16 @@ That launcher does not grant GCP permissions; PR evidence says the persistent
 worker execution contexts have not yet been verified. This session's successful
 `gcloud` and IAP access proves only this local authenticated context.
 
-Least-privilege access: create a dedicated worker identity, remove project
-Owner/OS Admin from routine use, scope OS Login and IAP tunnel access to this
-VM, and provide a root-owned fixed-argument read-only preflight wrapper through
-a narrowly scoped sudoers rule. To remove SSH commands entirely, a host timer
-can publish only sanitized preflight JSON to a dedicated Cloud Logging view;
-the worker then needs log-view read access only. Avoid OS Config Exec access
-for routine workers because its policy scripts execute on the VM. Google
-documents [OS Login role behavior](https://docs.cloud.google.com/compute/docs/oslogin),
+Least-privilege access: create a dedicated worker identity and remove project
+Owner/OS Admin from routine use. For a limited SSH fallback, scope OS Login and
+IAP tunnel permissions to this VM and allow only a root-owned fixed-argument
+read-only preflight wrapper through sudoers. To remove SSH commands entirely,
+a host timer can publish only sanitized preflight JSON to a dedicated Cloud
+Logging view; grant the worker `roles/logging.viewAccessor` on that view alone.
+Avoid OS Config Exec access for routine workers because its policy scripts
+execute on the VM. Google documents [OS Login role behavior](https://docs.cloud.google.com/compute/docs/oslogin),
 [IAP TCP forwarding](https://docs.cloud.google.com/iap/docs/using-tcp-forwarding),
+[view-scoped Logging access](https://docs.cloud.google.com/logging/docs/access-control),
 and [OS policy Exec resources](https://docs.cloud.google.com/compute/docs/osconfig/rest/Shared.Types/OSPolicy#Exec).
 No IAM or host configuration was changed.
 

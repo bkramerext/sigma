@@ -42,9 +42,11 @@ Live evidence (2026-10-26):
   administrator identity in `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`.
 - Current IAM has project Owner and OS Admin Login for the active user; no IAM
   changes were made. The status entry recommends a dedicated worker identity,
-  a fixed root-owned read-only wrapper, and sanitized scheduled Cloud Logging
-  output as the no-routine-SSH design. Open PR #198 adds a repository launcher
-  and connection checker but does not grant access or verify persistent worker
+  a fixed root-owned read-only wrapper for a limited SSH fallback, and
+  sanitized scheduled Cloud Logging output with view-scoped
+  `roles/logging.viewAccessor` as the no-routine-SSH design. Open PR #198 adds
+  a repository launcher and connection checker but does not grant access or
+  verify persistent worker
   execution contexts; this session verifies only its local context.
 
 Checks executed:
