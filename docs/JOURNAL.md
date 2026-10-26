@@ -343,20 +343,24 @@ The immediate next priority is to resolve #200–#202 and sponsored-budget seman
 
 ### Ticket throughput (snapshot: October 26, 2026 UTC)
 
-The previous Day 4 graph remains a historical snapshot. The following updated cumulative counts include **both GitHub issues and pull requests**, queried independently by type and summed through October 26 UTC. GitHub reports **37 issues and 165 PRs created**, and **25 issues and 144 PRs closed**: **202 created, 169 closed, 33 open**. This is a repository-wide snapshot, not a count of just Day 5 work. It includes recently filed hosted-acceptance issues and other unresolved backlog.
+This graph extends the **same cumulative opened-versus-closed ticket chart** used on Day 4 through all six days. Counts include both GitHub issues and pull requests, using their actual creation and closure timestamps in UTC. Each point represents the end of that UTC date.
 
 ```mermaid
 xychart-beta
-    title "SIGMA tracked items: cumulative snapshots"
-    x-axis ["Oct 25 prior snapshot", "Oct 26 current"]
-    y-axis "Issues + PRs" 0 --> 220
-    line [79, 202]
-    line [70, 169]
+    title "SIGMA tickets opened vs. closed (cumulative)"
+    x-axis ["Oct 21", "Oct 22", "Oct 23", "Oct 24", "Oct 25", "Oct 26"]
+    y-axis "Tickets" 0 --> 210
+    line [1, 3, 56, 74, 158, 202]
+    line [0, 1, 46, 64, 142, 190]
 ```
 
-| UTC snapshot | Created (cumulative) | Closed (cumulative) | Open backlog |
+| UTC date | Opened (cumulative) | Closed (cumulative) | Open backlog |
 | --- | ---: | ---: | ---: |
-| Oct 25, prior recorded snapshot | 79 | 70 | 9 |
-| Oct 26, current query | 202 | 169 | 33 |
+| Oct 21 | 1 | 0 | 1 |
+| Oct 22 | 3 | 1 | 2 |
+| Oct 23 | 56 | 46 | 10 |
+| Oct 24 | 74 | 64 | 10 |
+| Oct 25 | 158 | 142 | 16 |
+| Oct 26 | 202 | 190 | 12 |
 
-The first line is **created**, the second **closed**. Because the first point was recorded earlier in a period of unusually intense integration, this is a **snapshot comparison**, not a normalized daily throughput measure. A rising backlog after launch is consistent with newly exposed acceptance defects; throughput alone does not establish product correctness.
+The first line represents **opened**, the second **closed**. At this snapshot, 190 of 202 tracked items were closed (94%), with 12 remaining open. The earlier Day 4 graph's Oct 25 point was an intraday snapshot rather than the end-of-day count, explaining why its figures differ from this full-day series. Ticket throughput is not a measure of research validity or hosted product acceptance.
