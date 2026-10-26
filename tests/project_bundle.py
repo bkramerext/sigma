@@ -169,6 +169,55 @@ def main() -> None:
             pass
         else:
             raise AssertionError("Symlink directory was followed or silently omitted")
+    # Exercise the four public project-layer entry points with isolated storage.
+    import os
+    from unittest.mock import patch
+    from sigma.projects import (
+        ProjectError, create_json_project, export_complete_project,
+        inspect_project, list_json_projects, migrate_project,
+    )
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root),
+                                     "SIGMA_STATE_DIR": str(root / "state")}):
+            # The application root and Recent index are private and separate.
+            (root / "state").mkdir(mode=0o700)
+            created = create_json_project("Portable Experiment", "Investigate an example")
+            assert Path(created.path).is_file()
+            assert Path(created.path).suffix == ".json"
+            assert inspect_project(created.path).project == created.project
+            assert created.project.id in {item.project.id for item in list_json_projects()}
+            assert json.loads(export_complete_project(created.path)) == read_bundle(created.path)
+            try:
+                create_json_project("Portable Experiment", "Another experiment")
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Duplicate JSON project was created")
+            legacy = root / "legacy.sigma"
+            legacy.mkdir()
+            (legacy / "project.json").write_bytes(
+                read_file(created.path, "project.json")
+            )
+            (legacy / "research-sessions").mkdir()
+            (legacy / "research-sessions" / "result.json").write_bytes(b'{"done":true}')
+            (legacy / "artifacts").mkdir()
+            (legacy / "artifacts" / "binary.dat").write_bytes(bytes(range(256)))
+            migrated = migrate_project(legacy)
+            assert Path(migrated.path).suffix == ".json"
+            assert migrated.project == created.project
+            assert (legacy / "project.json").exists()
+            assert read_file(migrated.path, "research-sessions/result.json") == b'{"done":true}'
+            assert read_file(migrated.path, "artifacts/binary.dat") == bytes(range(256))
+            assert json.loads(export_complete_project(legacy)) == read_bundle(migrated.path)
+            try:
+                migrate_project(legacy)
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Migration overwrote existing destination")
+            assert Path(migrated.path).is_file()
     print("Project bundle round-trip and safety checks passed")
 
 
