@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "tested_sha": "a335f3f782f12128dd4ca65ab4e0e504b35960cb",
+  "base_main_sha": "a335f3f782f12128dd4ca65ab4e0e504b35960cb",
+  "browser": "Google Chrome 156.0.8078.47",
+  "viewports": 12,
+  "page_errors": [],
+  "direct_artifact_focus": true,
+  "scratch": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-a925wsc4"
+}
