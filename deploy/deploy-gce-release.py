@@ -189,12 +189,14 @@ class Deployment:
         if not initial and previous != old_sha:
             raise DeployFailure("current checkout and configured release pin disagree")
 
-        # Build exact candidate tags without changing the active deploy.env.
+        # Build candidate images only from the selected checkout; do not retag old code.
+        _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
         build_env = dict(os.environ)
         build_env["SIGMA_RELEASE"] = sha
-        _call(
-            self.runner,
-            [
+        try:
+            _call(
+                self.runner,
+                [
                 "docker",
                 "compose",
                 "--project-name",
@@ -209,15 +211,17 @@ class Deployment:
                 "backend",
                 "frontend",
             ],
-            env=build_env,
-        )
+                env=build_env,
+            )
+        except DeployFailure:
+            _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", previous])
+            raise
 
         service_stopped = False
         try:
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True
-            _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
             _replace_release(self.env_file, original_env, sha, owner)
             self.check_preflight()
             _call(self.runner, ["systemctl", "start", "sigma.service"])
