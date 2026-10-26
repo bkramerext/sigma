@@ -81,7 +81,7 @@ and [T137](../../../tickets/t137.md).
 
 ## Current-main follow-up (2026-10-26)
 
-On current `main` `8e8d979`, the earlier three full-suite failures were traced
+The acceptance run used `main` at `8e8d979`. The earlier three full-suite failures were traced
 to stale test expectations for the removed explicit
 `srv-sigma\\x2dstate.mount` dependency. The service unit uses
 `RequiresMountsFor=/srv/sigma-state`, which supplies the mount dependency and
@@ -98,3 +98,8 @@ blocked; evidence artifacts persisted. The daemon again reported
 `daemon_rootless: false`. This confirms local isolated execution only, not the
 production rootless host requirement. Real Chrome packaged Compose acceptance
 also passed again; see [T173 smoke and rollback assessment](../t173/README.md).
+
+After Red's T128/PR #181 integration and the loopback Caddy update, PR #183 was
+updated to current `main` at `8acb54a`. The branch retains the T128 release-image,
+Caddy loopback, and host-preflight assertions. PR #184 is not included in this
+synchronization.

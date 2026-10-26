@@ -1,7 +1,7 @@
 # Blue R4R — T170/T173 private deployment readiness
 
 - **Tickets:** T170 and T173
-- **Base:** `main` at `8e8d979`
+- **Initial base:** `main` at `8e8d979`; PR #183 now includes current `main` at `8acb54a` (PR #181 and #185).
 - **Assessment:** BLOCKED for first private production deployment; deterministic/local acceptance passes
 - **Change:** Corrected three stale systemd mount assertions to `RequiresMountsFor=/srv/sigma-state`; added the T173 acceptance report and reproducible disposable rollback fixture. No product/runtime or cloud configuration changed.
 
@@ -18,3 +18,7 @@ No paid provider calls, live OAuth, GCP operations, deployment, production crede
 ## Remaining acceptance
 
 Failed candidate-build injection; target-host rootless Python/Sage proof; production OAuth and real authorized/denied identities; hosted workspace privacy; GCE disk/backup/restore/reboot; actual public app smoke; compatible rollback on production persistent state; provider-backed research under separate authorization; and T137 owner/coordinator go-no-go.
+
+T128 overlap was reconciled by retaining current `main` host assertions and
+combining them with its release-image, loopback Caddy and preflight checks.
+Green's PR #184 is not included in this update.

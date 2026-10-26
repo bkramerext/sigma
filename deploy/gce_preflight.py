@@ -720,7 +720,7 @@ class Preflight:
                 and not services["backend"].get("ports")
                 and not services["frontend"].get("ports")
                 and bool(services["edge"].get("ports"))
-                and self._public_ports_are_restricted(services)
+                and self._gce_ports_are_loopback_only(services)
                 and bool(backend_healthcheck.get("test"))
                 and bool(frontend_healthcheck.get("test"))
                 and bool(edge_healthcheck.get("test"))
@@ -785,8 +785,8 @@ class Preflight:
         )
 
     @staticmethod
-    def _public_ports_are_restricted(services: dict[str, dict[str, object]]) -> bool:
-        """Only the edge may publish the reviewed TCP web ports."""
+    def _gce_ports_are_loopback_only(services: dict[str, dict[str, object]]) -> bool:
+        """Only the edge may publish HTTP, and only on the host loopback."""
         for name, service in services.items():
             ports = service.get("ports", [])
             if not isinstance(ports, list):
@@ -794,23 +794,27 @@ class Preflight:
             if name != "edge" and ports:
                 return False
             if name == "edge":
+                if len(ports) != 1:
+                    return False
                 for port in ports:
                     if isinstance(port, dict):
                         protocol = str(port.get("protocol", "tcp"))
                         host_port = str(port.get("published", ""))
                         target_port = str(port.get("target", ""))
+                        host_ip = str(port.get("host_ip", ""))
                     else:
                         value = str(port)
                         protocol = value.rsplit("/", 1)[-1] if "/" in value else "tcp"
                         port_parts = value.split(":")
-                        if len(port_parts) < 2:
+                        if len(port_parts) != 3:
                             return False
-                        host_port, target_port = port_parts[-2:]
+                        host_ip, host_port, target_port = port_parts
                         target_port = target_port.split("/", 1)[0]
                     if (
-                        protocol.casefold() != "tcp"
-                        or host_port not in {"80", "443"}
-                        or target_port != host_port
+                        host_ip != "127.0.0.1"
+                        or protocol.casefold() != "tcp"
+                        or host_port != "18080"
+                        or target_port != "80"
                     ):
                         return False
         return True

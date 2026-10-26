@@ -322,10 +322,11 @@ def main() -> None:
                 encoding="utf-8",
             )
             (stub_bin / "docker").write_text(
-                f'#!/bin/sh\nprintf "%s\\n" "$@" > "{docker_log}"\n',
+                f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{docker_log}"\n',
                 encoding="utf-8",
             )
             (stub_bin / "chown").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            (stub_bin / "python3").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             (stub_bin / "sudo").write_text(
                 '#!/bin/sh\n[ "$1" = env ] || exit 2\nshift\nexec env "$@"\n',
                 encoding="utf-8",
@@ -342,10 +343,11 @@ def main() -> None:
             production_command = [
                 str(stub_bin / "sudo"),
                 "env",
-                "SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env",
+                f"SIGMA_DEPLOY_ENV_FILE={base / 'deploy.env'}",
                 f"SIGMA_STATE_DISK_MOUNT={base / 'not-mounted'}",
                 str(ROOT / "deploy/start-gce.sh"),
             ]
+            (base / "deploy.env").write_text(f"SIGMA_RELEASE={'a' * 40}\n", encoding="utf-8")
             missing_mount = subprocess.run(
                 production_command,
                 cwd=ROOT,
@@ -375,8 +377,8 @@ def main() -> None:
             )
             assert startup.returncode == 0, startup.stdout
             docker_args = docker_log.read_text(encoding="utf-8").splitlines()
-            assert docker_args[docker_args.index("--env-file") + 1] == "/etc/sigma/deploy.env"
-            assert docker_args[-2:] == ["up", "-d"]
+            assert docker_args[docker_args.index("--env-file") + 1] == str(base / "deploy.env")
+            assert "up" in docker_args and "--no-build" in docker_args
             corrupted = base / "corrupted-disk"
             shutil.copytree(root, corrupted)
             corrupted.chmod(0o700)
