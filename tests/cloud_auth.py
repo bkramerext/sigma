@@ -121,6 +121,55 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_member_projects_are_not_visible_to_other_members(self):
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+        }):
+            for identity in ("member-a", "member-b"):
+                selected = self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": identity}, headers=origin,
+                )
+                self.assertEqual(selected.status_code, 200)
+                created = self.client.post(
+                    "/api/projects/create",
+                    json={"title": "Mock isolation " + identity,
+                          "problem": "Verify member project isolation."},
+                    headers=origin,
+                )
+                self.assertEqual(created.status_code, 201, created.text)
+                project = created.json()
+                self.assertIn("path", project)
+                if identity == "member-a":
+                    member_a_path = project["path"]
+                    self.assertEqual(
+                        self.client.get("/api/projects/inspect", params={"path": member_a_path}).status_code,
+                        200,
+                    )
+                else:
+                    denied = self.client.get(
+                        "/api/projects/inspect", params={"path": member_a_path},
+                    )
+                    self.assertIn(denied.status_code, {400, 403, 404})
+                    denied_open = self.client.post(
+                        "/api/projects/open", json={"path": member_a_path}, headers=origin,
+                    )
+                    self.assertIn(denied_open.status_code, {400, 403, 404})
+            switched = self.client.post(
+                "/api/cloud-auth/mock/select",
+                params={"identity": "member-a"}, headers=origin,
+            )
+            self.assertEqual(switched.status_code, 200)
+            self.assertEqual(
+                self.client.get("/api/projects/inspect", params={"path": member_a_path}).status_code,
+                200,
+            )
+
     def test_mock_member_switches_bind_separate_project_workspaces(self):
         from sigma import cloud_workspaces
 
