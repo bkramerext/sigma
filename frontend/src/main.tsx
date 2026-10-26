@@ -2041,7 +2041,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       {cloud?.enabled && cloud.ready && <FeedbackForm/>}
-      <p className="about-privacy-link"><a href="/privacy">Proposed privacy notice · version 1</a></p>
+      <p className="about-privacy-link"><a className="cloud-secondary-button" href="/privacy">Privacy Policy</a></p>
     </div>
     <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog></div>;
@@ -2775,7 +2775,7 @@ function Home({ initialPath, onOpen }: {
     <div className="home-content">
       <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore published research while you're here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login?invite=1">Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}<a className="cloud-text-button" href="/demo">Browse published research</a></div><p><a href="/privacy">Privacy notice</a></p></section>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only. Explore published research while you're here.</p><div className="cloud-denied-actions">{cloud.ready ? <a className="cloud-auth-button" href="/api/cloud-auth/login?invite=1">Invite Me using my Google account</a> : <p role="status">Google sign-in is not configured yet.</p>}</div></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
