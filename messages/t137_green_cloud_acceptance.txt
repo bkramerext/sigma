@@ -1,4 +1,5 @@
 T99 / T137 consolidated SIGMA Cloud acceptance — implementation handoff
+PR: https://github.com/bkramerext/sigma/pull/160
 
 Added docs/CLOUD_ACCEPTANCE.md, src/sigma/cloud_acceptance.py, and
 tests/cloud_acceptance.py. Linked the procedure from tickets/t137.md and
