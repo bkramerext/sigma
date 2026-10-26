@@ -6042,3 +6042,23 @@ Production OAuth/account switching, hosted mount permissions, revocation, and
 runtime sandbox isolation still need live production verification; they were
 not tested under this assignment's constraints. See [T192](../tickets/t192.md).
 Implementation and regression tests are in [PR #223](https://github.com/bkramerext/sigma/pull/223), open against `main` and not merged.
+
+## Issue #228 — Sponsorship allowance column alignment (2026-10-26)
+
+Renamed the authorized-users column to **Sponsorship Allowance** and centered its
+heading, currency/input unit, and effective-allowance text on the same column
+axis. Preserved the four-column widths, copper/navy colors, and existing
+horizontal scroll behavior. No allowance or backend behavior changed.
+
+Real Chrome check `uv run --with playwright python
+browser_checks/issue228_sponsorship_allowance.py` passed at 1440px and 390px.
+It verifies the exact heading, absence of the old heading, column-center
+alignment, effective amount, horizontal scrolling at 390px, and no page-level
+horizontal overflow. Screenshots: `/tmp/sigma-issue228-admin-1440.png` and
+`/tmp/sigma-issue228-admin-390.png`. `./sigma test` passed, including Ruff,
+formatting, Pyright (0 diagnostics), frontend typecheck, and production build;
+the build reports the existing >500 kB chunk advisory. The test used only
+deterministic local fixtures; no provider calls or costs occurred. See the
+[issue #228 handoff](../messages/issue228_gray_sponsorship_allowance.txt).
+Implementation is in [PR #232](https://github.com/bkramerext/sigma/pull/232),
+open against `main`, current and mergeable, and not merged.

@@ -1,0 +1,31 @@
+GRAY R4R handoff — GitHub issue #228
+
+PR: https://github.com/bkramerext/sigma/pull/232 (open; do not merge).
+Branch: gray/admin-sponsorship-allowance
+Base: main at 913b208f5534807329dea38b44f997f36c77c6c4
+Head: 729c5e4ceb38deef694d9426f2325fe9f6347825 (includes clean merge of the
+base advance after the original implementation commit).
+
+Changed the Authorized users heading to the exact text “Sponsorship Allowance.”
+Centered the heading, the `$`/input control, and the effective allowance text
+within the existing allowance column. Preserved the column widths, four-column
+table structure, existing copper/navy palette, and narrow-screen horizontal
+scroll. No allowance semantics or backend behavior changed.
+
+Verification:
+- `uv run --with playwright python browser_checks/issue228_sponsorship_allowance.py`
+  — PASS in real Chrome at 1440px and 390px. Verified exact heading, no old
+  heading, centered alignment of heading/input/effective amount, contained
+  table scroll at desktop, horizontal table scroll at 390px, and no page-level
+  horizontal overflow. Screenshots: `/tmp/sigma-issue228-admin-1440.png` and
+  `/tmp/sigma-issue228-admin-390.png`.
+- `./sigma test` — PASS, including Ruff, format check, Pyright (0 diagnostics),
+  frontend typecheck, and production build. Build has the existing >500 kB
+  chunk advisory.
+- After cleanly integrating the current `main` advance, the real-Chrome check
+  and complete `./sigma test` were rerun and passed on the updated branch.
+- `git diff --check` and Ruff check/format for changed files — PASS.
+
+The browser UI and API data were deterministic local fixtures. No provider
+calls or costs occurred. No known dependencies, conflicts, unverified ticket
+requirements, or unrelated UI/behavior changes.
