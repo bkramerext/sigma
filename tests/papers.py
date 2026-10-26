@@ -96,6 +96,41 @@ def test_long_tex_compiler_source_bound_is_configurable() -> None:
             raise AssertionError("The TeX compiler must enforce the configured source bound")
 
 
+def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
+    export = {
+        "project": {"id": "snapshot-project", "title": "Snapshot stability"},
+        "research_sessions": [
+            {
+                "id": "paused-session",
+                "status": "paused",
+                "elapsed_seconds": 10,
+                "outcome": {"summary": "Saved outcome"},
+                "artifacts": [{"id": "finding-1", "claim": "Saved claim"}],
+            }
+        ],
+        "agentic_runs": [],
+    }
+    original = json.loads(json.dumps(export))
+    with patch("sigma.api.export_project_view", side_effect=[export, export, export]):
+        first, first_hash = papers._snapshot("unused")
+        first_claim = next(
+            source
+            for source in first["sources"]
+            if source["id"] == "artifact:paused-session:finding-1"
+        )["data"]["claim"]
+        export["research_sessions"][0]["elapsed_seconds"] = 45
+        second, second_hash = papers._snapshot("unused")
+        export["research_sessions"][0]["artifacts"][0]["claim"] = "Changed saved claim"
+        _third, third_hash = papers._snapshot("unused")
+
+    assert first_hash == second_hash
+    assert third_hash != second_hash
+    session_source = next(source for source in second["sources"] if source["kind"] == "session")
+    assert "elapsed_seconds" not in session_source["data"]
+    assert original["research_sessions"][0]["artifacts"][0]["claim"] == "Saved claim"
+    assert first_claim == "Saved claim"
+
+
 def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
     async def check() -> None:
         started = asyncio.Event()
@@ -200,6 +235,28 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
             assert response.headers["content-type"].startswith("text/event-stream")
             assert '"stage":"evidence"' in response.text
             assert '"type": "complete"' in response.text or '"type":"complete"' in response.text
+
+            async def stale_preflight(*_args, **_kwargs):
+                raise papers.PaperSnapshotConflict("Research changed after paper preflight.")
+
+            with patch.object(papers, "generate", new=stale_preflight):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+                ) as client:
+                    response = await client.post(
+                        "/api/projects/papers",
+                        json={
+                            "path": str(path),
+                            "expected_project_id": project_id,
+                            "expected_binding": "chatgpt:fixture",
+                            "expected_snapshot_sha256": "0" * 64,
+                        },
+                    )
+            assert response.status_code == 200
+            assert (
+                '"provider_calls_attempted": 0' in response.text
+                or '"provider_calls_attempted":0' in response.text
+            )
 
     asyncio.run(check())
 
@@ -718,6 +775,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
+    test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:

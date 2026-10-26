@@ -2534,6 +2534,63 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     assert research_sessions.get_limits(str(path)) == future
 
 
+async def test_prior_obligation_overflow_blocks_before_creating_session(path: Path):
+    view, strategy, credential, config = await setup(path)
+    prior_id = str(uuid4())
+    artifacts = [
+        {
+            "id": str(uuid4()),
+            "strategy_id": strategy.id,
+            "claim_or_question": f"Saved investigation {index}.",
+            "open_obligations": [
+                f"Resolve distinct boundary obligation {index} for the recurrence."
+            ],
+        }
+        for index in range(research_sessions.MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY + 1)
+    ]
+    research_sessions._save(
+        str(path),
+        {
+            "id": prior_id,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy.id,
+            "status": "completed",
+            "created_at": research_sessions._now(),
+            "artifacts": artifacts,
+        },
+    )
+    indexed = research_sessions._prior_session_obligations_index(
+        str(path), str(uuid4()), [strategy.id]
+    )
+    assert indexed[1] == 1 and indexed[3][strategy.id] == 1
+    omitted_id = indexed[4][strategy.id][0]
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=AssertionError("context admission must not make a provider request"),
+        ),
+    ):
+        try:
+            await research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+        except ProjectError as exc:
+            message = str(exc)
+            assert "Research was not started" in message
+            assert "Continue from saved evidence" in message
+            assert omitted_id in message
+        else:
+            raise AssertionError("An over-bound history must block before session creation")
+
+    saved = research_sessions._all(str(path))
+    assert len(saved) == 1 and saved[0]["id"] == prior_id
+    assert saved[0]["artifacts"] == artifacts
+
+
 def test_limits_validation(path: Path):
     initialize_project(path, "Limits project", "A question")
     before = research_sessions.get_limits(str(path))
@@ -7009,6 +7066,11 @@ def main():
             )
         )
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
+        asyncio.run(
+            test_prior_obligation_overflow_blocks_before_creating_session(
+                root / "prior-obligation-overflow.sigma"
+            )
+        )
         test_limits_validation(root / "invalid-limits.sigma")
         asyncio.run(test_legacy_limits_are_preserved(root / "legacy-limits.sigma"))
         asyncio.run(test_single_project_admission(root / "single-session.sigma"))

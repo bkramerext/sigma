@@ -137,7 +137,7 @@ def _evaluation_queue_limits() -> tuple[int, int, int, int]:
 
 
 def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
-    """Return the cloud trial caps without changing local research settings."""
+    """Apply administrator-controlled hosted inference caps to sponsored work."""
     result = dict(limits)
     # Even legacy project records with a one-call allowance need room for the
     # minimum Investigator/Skeptic pair; cloud limits never exceed the cap.
@@ -147,11 +147,9 @@ def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
     result["session_duration_minutes"] = min(
         int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
     )
-    cost = result.get("maximum_estimated_cost_usd")
-    result["maximum_estimated_cost_usd"] = round(
-        min(float(cost), MAX_SESSION_SPEND_USD) if cost is not None else MAX_SESSION_SPEND_USD,
-        2,
-    )
+    # This is sponsored service usage, not user API-key billing. A project-level
+    # estimate must never lower or raise the administrator's hosted allowance.
+    result["maximum_estimated_cost_usd"] = MAX_SESSION_SPEND_USD
     return result
 
 

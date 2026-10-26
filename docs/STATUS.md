@@ -5637,3 +5637,32 @@ No release-engineering code correction was indicated by this offline review. Sou
 Focused checks passed: `tests/release_image.py` (3), `tests/deployment_automation.py` (including injected startup failure and persistent sentinel preservation), `tests/state_backup.py` (8), shell syntax checks for startup/rollback/backup, and `git diff --check`. The first `./sigma test` run stopped at frontend typecheck because clean-worktree `node_modules` was absent. After `npm ci --prefix frontend`, the full `./sigma test` passed: lifecycle/deployment/cloud scenarios, T173 failed-build and source-SHA rehearsals, Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production build. No real-browser run was needed because no UI changed; no live deployment checks were attempted.
 
 Evidence handoff: [Gray issue #98 release-integrity review](../messages/t98_gray_release_integrity.txt).
+
+## SIGMA hosted preview follow-up: issues #201–#202 (2026-10-26)
+
+Research-session admission now refuses to create a session when prior-session
+unresolved obligations exceed the frozen context bound. The error lists the
+omitted obligation IDs and points to a focused continuation or strategy-narrowing
+recovery path; previous sessions and evidence remain intact. Context, evidence,
+and spend safeguards remain enabled. Sponsored cloud sessions now use the
+administrator-enforced $0.25 cap independently of a user's API-key spending
+limit; the user cost control is hidden in hosted settings and remains available
+for local/API-key billing.
+
+Paper snapshot hashing now excludes the dynamically computed `elapsed_seconds`
+projection while retaining saved session and evidence fields. A concurrent
+durable evidence change still conflicts. A typed preflight conflict reports
+`provider_calls_attempted: 0`, so the browser no longer claims that a provider
+request may have completed in this known pre-dispatch case. Saved paper versions
+and evidence are not changed by the conflict.
+
+Verification on `main` plus the issue branch: `./sigma test` passed all
+scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and
+production build. Focused paper snapshot/version/API conflict, obligation
+overflow recovery, and sponsored-budget tests passed. Real Chrome model-control
+acceptance passed at desktop and mobile sizes with injected 401, 403, and 503
+catalog failures; settings remained unchanged, model/thinking stayed disabled,
+and no inference was made. No paid provider calls or production changes were
+performed. #201–#202 integration PR is pending review/merge; hosted model
+availability diagnosis for #200 remains open pending authenticated hosted
+request and server evidence.

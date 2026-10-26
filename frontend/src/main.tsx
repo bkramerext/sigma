@@ -1285,6 +1285,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
     setBusy(true); setPhase('Preparing research evidence…'); setError(''); setSuccess('');
     let finishProvider = () => {};
     let requestDispatched = false;
+    let providerCallsAttempted: number | undefined;
     try {
       const preflightParams = new URLSearchParams({
         path, long_form: 'false', expected_project_id: projectId, expected_binding: binding,
@@ -1320,7 +1321,11 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
           const line = frame.split('\n').find(item => item.startsWith('data: '));
           if (!line) continue;
           const event = JSON.parse(line.slice(6));
-          if (event.type === 'error') throw new Error(event.error ?? 'Paper generation failed.');
+          if (event.type === 'error') {
+            if (Number.isInteger(event.provider_calls_attempted) && event.provider_calls_attempted >= 0)
+              providerCallsAttempted = event.provider_calls_attempted;
+            throw new Error(event.error ?? 'Paper generation failed.');
+          }
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
             setPhase(event.stage === 'compile' ? 'Compiling PDF…'
@@ -1344,8 +1349,10 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
       await refresh(selected?.paper_id);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
-        setError(requestDispatched
-          ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
+        setError(requestDispatched && providerCallsAttempted === 0
+          ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
+          : requestDispatched
+            ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
           : message);
       }
     } finally { finishProvider(); request.current = null; setBusy(false); }
@@ -2458,7 +2465,13 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         <label htmlFor="research-duration-value">Maximum session duration</label><div className="research-duration-controls"><input id="research-duration-value" type="number" min={1} max={Math.floor(MAX_SESSION_DURATION_MINUTES / durationUnitMinutes[limitDraft.session_duration_unit])} step={1} value={limitDraft.session_duration_value} aria-invalid={!!limitValidation.errors.session_duration_value} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_value: event.target.value }))}/><select id="research-duration-unit" aria-label="Maximum session duration unit" value={limitDraft.session_duration_unit} onChange={event => setLimitDraft(value => ({ ...value, session_duration_unit: event.target.value as DurationUnit }))}><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 minute to 7 days. Time spent stopped counts.</p>{limitValidation.errors.session_duration_value && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_value}</p>}
         <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={16384} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 16,384 tokens. SIGMA sends this limit where supported and enforces it against reported output usage or a conservative response-size bound.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
         <label htmlFor="research-input-tokens">Maximum input tokens per session</label><input id="research-input-tokens" type="number" min={4096} max={1000000} step={1} placeholder="Unlimited" value={limitDraft.maximum_input_tokens_per_session} aria-invalid={!!limitValidation.errors.maximum_input_tokens_per_session} aria-describedby="research-input-help research-input-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_input_tokens_per_session: event.target.value }))}/><p id="research-input-help" className="settings-hint">Optional cumulative cap. Before dispatch, SIGMA reserves the exact serialized request byte count plus an 8,192-token structural allowance as an upper bound; afterward, reported input usage must fit within that reservation. Unknown or in-flight calls retain their full reservation.</p>{limitValidation.errors.maximum_input_tokens_per_session && <p id="research-input-error" className="limit-error" role="alert">{limitValidation.errors.maximum_input_tokens_per_session}</p>}
-        <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/><p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>{limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
+        {!cloud?.enabled && <>
+          <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label>
+          <input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/>
+          <p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>
+          {limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
+        </>}
+        {cloud?.enabled && <p className="settings-hint"><strong>Sponsored inference budget:</strong> SIGMA administrators enforce a maximum estimated cost of $0.25 per session. This service budget is separate from user API-key spending settings.</p>}
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}

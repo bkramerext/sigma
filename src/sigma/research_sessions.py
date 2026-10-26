@@ -3688,6 +3688,34 @@ async def start_session(
                 record["prior_session_obligation_omitted_by_strategy"],
                 record["prior_session_obligation_omitted_ids_by_strategy"],
             ) = _prior_session_obligations_index(view.path, record["id"], record["strategy_ids"])
+            omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
+            if omitted_by_strategy:
+                blocked = []
+                for selected_strategy_id in record["strategy_ids"]:
+                    omitted_count = omitted_by_strategy.get(selected_strategy_id, 0)
+                    if not omitted_count:
+                        continue
+                    selected_strategy = next(
+                        item
+                        for item in selected_strategies
+                        if item is not None and item.id == selected_strategy_id
+                    )
+                    omitted_ids = record["prior_session_obligation_omitted_ids_by_strategy"].get(
+                        selected_strategy_id, []
+                    )
+                    shown_ids = ", ".join(omitted_ids) or "bounded ID list unavailable"
+                    blocked.append(
+                        f"{selected_strategy.title}: {omitted_count} unresolved obligation(s) "
+                        f"exceed the frozen context bound; omitted obligation IDs: {shown_ids}"
+                    )
+                raise ProjectError(
+                    "Research was not started and no provider call was made because prior-session "
+                    "obligations exceed the context bound. "
+                    + "; ".join(blocked)
+                    + ". Use Continue from saved evidence to create a focused child strategy, "
+                    "or narrow the selected strategy, then start a new session. Earlier sessions "
+                    "and evidence remain available."
+                )
             obligation_source_ids = {
                 artifact_id
                 for item in record["prior_session_obligations"]
