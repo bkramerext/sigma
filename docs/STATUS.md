@@ -5683,3 +5683,22 @@ same failure occurs on unmodified `main` (`2c409e6`). `./sigma test` remains
 blocked by Ruff findings in `browser_checks/model_availability.py` on `main`
 (B023 and formatting); this change did not modify that file. No provider calls
 were made. See [Gray issue #206 handoff](../messages/t206_gray_current_understanding.txt).
+
+## T43.2 independent release acceptance preparation (2026-10-26)
+
+Re-read issue #66 and inspected the current authentication, private workspace,
+sponsored inference, and deterministic browser fixture coverage. PR #214 (T88)
+is still open, so integrated acceptance is deferred until it merges. The new
+[T43.2 acceptance plan](../tickets/t43.2.md) maps each requested criterion to
+existing or T88-provided checks, explicitly separates local ChatGPT account
+switching from hosted sponsored inference, and lists the live hosted gates.
+
+No tests or browser checks were executed for this preparation pass. No code or
+test additions were made because the current deterministic API coverage and
+PR #214's fixture changes cover most identified gaps; focused additional tests
+will be added only if post-merge inspection or execution demonstrates a gap.
+No GCP changes, OAuth/provider calls, paid inference, or credential access
+occurred. Live OAuth, deployed behavior, provider authorization, and two-live-
+account isolation remain **UNVERIFIED**. The acceptance dependency and request
+to resume after the PR merge are recorded in
+[the Gray handoff](../messages/t43_2_gray_multi_account.txt).

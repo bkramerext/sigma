@@ -94,7 +94,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | Session controls, elapsed time and reports | Done |
 | T43 manual acceptance fixes | [PR #62](https://github.com/bkramerext/sigma/pull/62) R4R; deterministic real-Chrome acceptance passed; live Google/ChatGPT OAuth remains unverified |
 | T43.1 third-pass operator acceptance fixes | [PR #63](https://github.com/bkramerext/sigma/pull/63) R4R; consolidated Google/ChatGPT pill polish and responsive Chrome checks passed; live operator OAuth round trip and third manual pass remain required |
-| T43.2 / issue #66 multi-account sign-in acceptance | [PR #166](https://github.com/bkramerext/sigma/pull/166) R4R; deterministic two-account API/Chrome coverage passed; distinct live identities and hosted OAuth remain unverified |
+| T43.2 / issue #66 multi-account sign-in acceptance | Prior deterministic implementation: [PR #166](https://github.com/bkramerext/sigma/pull/166). Independent release acceptance is IN PROGRESS on `gray/t43.2-release-acceptance`, blocked on T88 / [PR #214](https://github.com/bkramerext/sigma/pull/214) merging; plan: [ticket](../tickets/t43.2.md), [handoff](../messages/t43_2_gray_multi_account.txt) |
 | T172 pre-deployment authentication and account-isolation gate | Assessment **BLOCKED for production launch**; fixture API/Chrome checks passed, hosted OAuth and two-identity acceptance remain unverified · [assessment](T172_AUTH_READINESS.md) |
 | T129 | Release-image SHA correctness and reproducibility | Gray · R4R, offline implementation only · [PR #182](https://github.com/bkramerext/sigma/pull/182) · [handoff](../messages/t129_gray_release_sha.txt) | — |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
