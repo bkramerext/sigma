@@ -99,7 +99,7 @@ def restore(bundle: dict[str, Any], destination: str | Path) -> None:
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
-        os.rename(temporary, destination)
+        # Publish without replacing a destination created by a competing writer.\n        # A directory rename may otherwise overwrite an empty destination.\n        if os.path.lexists(destination):\n            raise BundleError("Project destination already exists")\n        os.rename(temporary, destination)
     finally:
         if temporary.exists():
             import shutil
