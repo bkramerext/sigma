@@ -218,6 +218,26 @@ def main() -> None:
             else:
                 raise AssertionError("Migration overwrote existing destination")
             assert Path(migrated.path).is_file()
+            # Research session records use the same authoritative JSON file.
+            from uuid import uuid4
+            from sigma.research_sessions import _save, _read, _all, read_session_snapshot
+
+            session_id = str(uuid4())
+            record = {
+                "id": session_id,
+                "project_id": created.project.id,
+                "project_path": created.path,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "status": "paused",
+            }
+            _save(created.path, record)
+            assert _read(created.path, session_id) == record
+            assert _all(created.path) == [record]
+            assert read_session_snapshot(created.path) == ([record], 0)
+            assert read_file(created.path, f"research-sessions/{session_id}.json")
+            assert json.loads(export_complete_project(created.path))["files"][
+                f"research-sessions/{session_id}.json"
+            ]
             # Complete format: edits, deletion and atomic multi-member changes
             # survive export and re-import with exact binary bytes.
             update_files(created.path, {
@@ -226,7 +246,7 @@ def main() -> None:
                 "evidence/source.txt": b"source evidence",
             })
             assert set(list_files(created.path)) == {
-                "project.json", "research-sessions/one.json",
+                "project.json", f"research-sessions/{session_id}.json", "research-sessions/one.json",
                 "artifacts/trace.bin", "evidence/source.txt",
             }
             exported = json.loads(export_complete_project(created.path))
