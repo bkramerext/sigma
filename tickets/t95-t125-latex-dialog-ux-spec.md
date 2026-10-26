@@ -97,7 +97,7 @@ The broader matrix below is **reference guidance for behavior that already exist
 7. **Save/list/delete:** no cross-version or cross-project damage; Remove scoped correctly.
 8. **Integrity:** explicit AI/not independently verified caution remains visible, no evidence or provenance lost.
 9. **Layout/accessibility:** actual Chrome at desktop and narrow mobile (including 390px and 320px), accessible button names, tab/focus, no clipped actions; no new panel.
-10. **Regression:** focused backend tests for semantics, browser fixture tests for UI states, full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` when integration is complete. No paid provider calls.
+10. **Regression:** focused backend tests for semantics, browser fixture tests for UI states, full `env -u SIGMA_CLOUD_ADMIN_CONTACT_EMAIL ./sigma test` when integration is complete. No paid provider calls.
 
 ## Handoff requirements
 

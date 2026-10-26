@@ -102,7 +102,7 @@ def main() -> None:
             assert status_response.ok
             real_status = status_response.json()
             assert real_status["enabled"] is False, real_status
-            assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in real_status["local_setup_missing"], (
+            assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in real_status["local_setup_missing"], (
                 real_status
             )
 
@@ -119,7 +119,7 @@ def main() -> None:
             setup = page.get_by_role("dialog", name="Google sign-in setup required")
             expect(setup).to_be_visible()
             expect(setup.locator(".google-setup-missing code")).to_contain_text(
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"
             )
             expect(setup.get_by_role("link", name="Sign in with Google")).to_have_count(0)
             expect(setup).to_contain_text("source ~/.bashrc")

@@ -77,9 +77,8 @@ environment, without copying secrets into evidence:
    `sigma-google-oauth-client-secret` and the backend secret-file mechanism;
    runtime IAM grants only required access. Do not print/read back the value.
 8. `SIGMA_CLOUD_PUBLIC_ORIGIN` is the canonical HTTPS origin;
-   `SIGMA_CLOUD_AUTH_ENABLED` is on; `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is the
-   exact verified authorized administrator; and
-   `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is the approved invitation contact.
+   `SIGMA_CLOUD_AUTH_ENABLED` is on; `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is the
+   exact verified authorized administrator and approved invitation contact.
 9. Hosted mode has no local-auth fallback. `/api/cloud-auth/status` reports
    `enabled=true`, `ready=true`, `target="hosted"`; DNS, HTTPS certificate,
    callback and deployed release SHA refer to the same host/release.
@@ -98,7 +97,7 @@ projects only; do not trigger research, paper generation, or provider spending.
 1. Confirm OAuth configuration items 1–9 above with the owner. Confirm status
    endpoint values, HTTPS hostname/certificate and deployed SHA. Stop if any
    mismatch or status is not ready.
-2. In profile A, sign in with the approved bootstrap administrator. Confirm
+2. In profile A, sign in with the approved designated administrator. Confirm
    Google returns through the exact HTTPS callback and SIGMA displays the
    expected account and admin role. Confirm URL ends at the app and contains no
    code, state, nonce or token.
@@ -130,7 +129,7 @@ projects only; do not trigger research, paper generation, or provider spending.
 
 ## Remaining acceptance gaps requiring real identities
 
-- Real authorized bootstrap admin, authorized member, and valid-but-unauthorized
+- Real authorized designated admin, authorized member, and valid-but-unauthorized
   Google account; their distinct stable Google subjects and approved roles.
 - Actual production OAuth project/client/consent/test-user settings, secret
   delivery and least-privilege runtime access, without exposing secret values.

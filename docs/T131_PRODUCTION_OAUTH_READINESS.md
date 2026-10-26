@@ -19,8 +19,8 @@ was performed for this assessment.
 | Client ID | `GOOGLE_OIDC_CLIENT_ID` in root-only `/etc/sigma/deploy.env` must identify the selected production Web client. | Deployment contract confirmed; deployed value uninspected. Do not copy it into evidence. |
 | Client secret | Secret Manager secret `sigma-google-oauth-client-secret`, with an active version provided by its authorized owner; delivery through `deploy/fetch-secrets.sh` to `/run/sigma-secrets/google-oauth-client-secret`, owned by UID/GID `10001`, mode `0400`, then mounted as `/run/secrets/google_oidc_client_secret`. | **Blocked / unverified.** `docs/OPERATION_RUNBOOK.md` and `docs/CLOUD_DEPLOYMENT.md` record that the OAuth secret had not been created as of 2026-10-25 because Secret Manager required an initial version value. No secret was inspected. |
 | Runtime IAM | Attach dedicated `sigma-runtime` service account; grant `roles/secretmanager.secretAccessor` on the OAuth secret resource only (and separately on the OpenAI secret required by the packaged backend). No project-wide secret access, key, Owner or Editor grant. Confirm API enabled, active secret version, runtime identity attachment, and successful file delivery/healthcheck without reading/logging payload. | **Documented target; actual OAuth secret binding/version and delivered file unverified.** Cloud deployment docs describe this narrow resource-level IAM. |
-| Hosted environment | `SIGMA_CLOUD_AUTH_ENABLED=true`; `SIGMA_CLOUD_PUBLIC_ORIGIN=https://sigma-research.duckdns.org`; required exact `GOOGLE_OIDC_CLIENT_ID`; `SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE` resolves via Compose to the mounted secret; bootstrap and contact emails set. | Compose enforces required client ID, secret mount, bootstrap and contact; target origin/auth are set by deployment. **Production environment not inspected.** |
-| Bootstrap administrator | Set `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` to the exact verified email of the human-approved initial administrator. Its first valid Google subject binds the bootstrap admin. Record the role label only in evidence; do not record the email. | Required by Compose and code; production value and subject binding **unverified**. Bootstrap admin is configuration-bound and cannot be revoked through Access Management. |
+| Hosted environment | `SIGMA_CLOUD_AUTH_ENABLED=true`; `SIGMA_CLOUD_PUBLIC_ORIGIN=https://sigma-research.duckdns.org`; required exact `GOOGLE_OIDC_CLIENT_ID`; `SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE` resolves via Compose to the mounted secret; the designated admin/contact address is set. | Compose enforces required client ID, secret mount and designated admin/contact; target origin/auth are set by deployment. **Production environment not inspected.** |
+| Designated administrator and contact | Set `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to the exact verified email of the human-approved initial administrator. Its first valid Google subject binds the account as admin. This same address is shown as the invitation contact. Record the role label only in evidence; do not record the email. | Required by Compose and code; production value and subject binding **unverified**. The configured admin is configuration-bound and cannot be revoked through Access Management. |
 | Authorized members / denied identity | After admin bootstrap, configure exact approved member email entries in SIGMA Access Management; prepare a separate valid Google identity with no SIGMA grant for the denial test. Do not use broad domain grants unless explicitly approved. | Supported by current auth behavior; production grants and owner-approved test identities **not confirmed**. |
 | DNS / VM / HTTPS | Host must resolve to the independently verified VM external IP; certificate and deployed release must serve that same hostname. | The current operator runbook has DNS A-record / external-IP verification pending and says not to infer it from the reserved IP alone. Coordinator and human are independently verifying; **do not use DNS as a readiness assumption**. |
 | Hosted status | From a network external to the VM, `GET https://sigma-research.duckdns.org/api/cloud-auth/status` must return `enabled=true`, `ready=true`, `target="hosted"`; capture HTTP status, UTC time and deployed release SHA without identity details. | Runbook provides a read-only check. No current hosted status response or deployed SHA has been verified here. |
@@ -29,7 +29,8 @@ was performed for this assessment.
 
 Code inspection confirms that `/api/cloud-auth/login` returns HTTP 503 when
 hosted auth configuration is not ready. The status endpoint exposes readiness
-without secret values or bootstrap email. When auth has an internal error,
+without secret values or the designated administrator email. When auth has an
+internal error,
 protected routes return 503; unauthenticated protected requests return 401
 and clear the session cookie. Invalid/unverifiable Google claims fail with
 401. A valid Google identity without a SIGMA grant is redirected to the
@@ -64,7 +65,7 @@ procedure is acceptance work, not authorization to change configuration.
    external IP, HTTPS hostname/certificate and same-origin app/API routing.
    Fetch `/api/cloud-auth/status`; require HTTP success and `enabled=true`,
    `ready=true`, `target="hosted"`. Record release SHA. Stop if any check fails.
-3. Use clean desktop Chrome profile A for the approved bootstrap administrator
+3. Use clean desktop Chrome profile A for the approved designated administrator
    and profile B for a distinct authorized member. Use one isolated profile for
    the valid-but-unauthorized identity. Never copy cookies or reuse profiles.
 4. In profile A, select **Sign in with Google** and complete the real Google
@@ -111,7 +112,7 @@ persistence/recovery acceptance.
   resource/version through the approved secret-entry flow, and grant
   resource-scoped runtime access. These production changes are explicitly
   outside this assignment's authority.
-- Owner must select the exact bootstrap administrator and invitation contact,
+- Owner must select the exact designated administrator/contact,
   approve member and denied test identities, and approve a hosted test window.
 - Coordinator/human must finish independent DNS/external-IP verification;
   deployment owner must provide a known release SHA, ready hosted status, and

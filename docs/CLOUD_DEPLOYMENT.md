@@ -370,15 +370,14 @@ trial-signup, project-creation, or API-enablement command.
    `chgrp sigma-sandbox` and `chmod 0660` after every socket creation. Confirm
    socket ownership/group/mode, numeric group ID, rootless daemon mode, and that
    `sigma-sandbox` is in neither `docker` nor `sudo`. Do not grant world access.
-4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; set the bootstrap
-   address to the approved initial administrator's exact verified Google email
-   and the contact address to the approved invitation contact. Use one address
-   for both only if those identities intentionally are the same. Use the exact
-   40-digit release SHA, production hostname/OAuth client ID, approved limits,
-   socket path and actual numeric GID. The environment file contains only
-   non-secret values and secret-file paths. Set `root:root` mode `0600`. Create
-   the two
-   Secret Manager entries and fetch them with the approved VM service account:
+4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; set the admin contact
+   to the approved initial administrator's exact verified Google email. Use
+   this one address for both admin authorization and invitation contact. Use
+   the exact 40-digit release SHA, production hostname/OAuth client ID, approved
+   limits, socket path and actual numeric GID. The environment file contains
+   only non-secret values and secret-file paths. Set `root:root` mode `0600`.
+   Create both Secret Manager entries and fetch them with the approved VM
+   service account:
 
    ```sh
    sudo /opt/sigma/current/deploy/fetch-secrets.sh PROJECT_ID GOOGLE_OAUTH_SECRET OPENAI_API_KEY_SECRET
@@ -1146,17 +1145,24 @@ Set these deployment environment values to enable cloud authentication:
 | `SIGMA_CLOUD_PUBLIC_ORIGIN=https://sigma.example.org` | Exact public HTTPS origin, with no path or trailing slash. Used for callback and CSRF origin validation. |
 | `GOOGLE_OIDC_CLIENT_ID` | Google OAuth web client ID. |
 | `GOOGLE_OIDC_CLIENT_SECRET` | Google OAuth web client secret; keep server-side only. |
-| `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` | Exact verified Google account permitted to establish the first administrator. Its first Google subject is permanently bound in the auth database. This is an authorization setting, not a contact field. |
-| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public contact address used to prefill an invitation request. SIGMA opens a mail draft and never sends it; this value grants no access or role. |
+| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | The designated administrator's exact verified Google email and the public contact used to prefill invitation requests. Its first verified Google subject is bound in the auth database. SIGMA opens a mail draft and never sends it. |
 | `SIGMA_CLOUD_AUTH_HOME=/var/lib/sigma-auth` | Absolute, service-owned private directory; mode 0700. The SQLite database is mode 0600. |
 | `SIGMA_CLOUD_DEMO_AUDIT=/opt/sigma/cloud-demo/handshake-demo-audit.json` | Absolute path to the curated, server-owned, read-only Project Audit v2 snapshot served to guests. It is separate from private project storage and required for the public Demo. |
 
-Keep these settings conceptually separate. They may contain the same address
-only when the approved public contact is also the exact Google account intended
-to receive the initial, configuration-bound administrator role. A general
-support or operations contact must not be substituted for that identity. The
-bootstrap value cannot be inferred from the contact, and changing it changes
-which verified Google account can claim the initial administrator binding.
+This setting serves both purposes. It must identify the exact Google account
+approved to receive the initial administrator role; it is not a separate
+support mailbox. Its first successful verified sign-in binds that email to the
+Google subject in the auth database. Later sign-ins must match both values.
+
+When upgrading an existing deployment, remove the legacy
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` line from `/etc/sigma/deploy.env` and set
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to the same exact address previously used for
+the bootstrap account to preserve its stored subject binding. The preflight
+rejects the removed setting as unsupported. If intentionally designating a
+different account, its first verified sign-in creates a new binding; the old
+binding is not transferred, and the prior account keeps access only if it has
+an independent active grant. Do not edit or delete the auth database to perform
+this configuration change.
 
 Create a Google OAuth client for a web application. Register the exact redirect
 URI `${SIGMA_CLOUD_PUBLIC_ORIGIN}/api/cloud-auth/callback`. SIGMA uses Google's
@@ -1166,14 +1172,14 @@ requires the Google issuer, exact client audience, unexpired token, matching
 nonce, stable subject, and `email_verified: true`. It rejects multi-audience
 tokens and mismatched authorized-party claims.
 
-After setup, the configured bootstrap address can sign in once to bind its stable
+After setup, the configured admin contact can sign in once to bind its stable
 Google subject as administrator. Administrators can add exact email entries or
 exact email domains in Access Management. Entries authorize accounts; no email
 is delivered. Domain rules compare the complete verified-email domain after
 case normalization, so suffix/lookalike domains do not match. An explicit
 revoked email rule takes precedence over a domain allow rule. Revocation is
 checked on every request and removes matching active sessions. Re-adding a
-revoked email reactivates that exact entry. The bootstrap admin remains
+revoked email reactivates that exact entry. The designated admin remains
 configuration-bound and cannot be revoked in the UI.
 
 Sessions are random opaque values stored only as SHA-256 digests in SQLite.
@@ -1184,12 +1190,12 @@ The auth database contains no provider tokens or project data.
 
 ## Real Google sign-in for local SIGMA
 
-Local Google authentication starts only when the bootstrap administrator email
-is configured. Without that setting, `./sigma start` keeps the existing local
+Local Google authentication starts only when the admin contact email is
+configured. Without that setting, `./sigma start` keeps the existing local
 single-user behavior. Add the operator's actual Gmail address to `~/.bashrc`:
 
 ```dotenv
-export SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL="you@gmail.com"
+export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
 ```
 
 Create a Google Cloud project and configure the OAuth consent screen for the
@@ -1211,23 +1217,23 @@ source ~/.bashrc
 ./sigma start --nav
 ```
 
-The presence of the configured bootstrap email opts this local launch into real
-Google sign-in; the launcher supplies the loopback-only auth settings and stores
-the private access database below `~/.sigma/local-cloud-auth`. The first
+The presence of the configured admin contact email opts this local launch into
+real Google sign-in; the launcher supplies the loopback-only auth settings and
+stores the private access database below `~/.sigma/local-cloud-auth`. The first
 verified login binds both the configured email and Google's immutable subject
 as this local installation's administrator. Every later login must match both
-values. Other identities need an explicit authorization entry. The bootstrap
+values. Other identities need an explicit authorization entry. The configured
 administrator cannot be revoked through Access Management.
 
 The launcher intentionally does not execute or source shell startup files.
-The bootstrap email must be exported into the same shell environment that runs
-`./sigma start --nav`. For example, if it is stored in `~/.bashrc`, run
+The admin contact email must be exported into the same shell environment that
+runs `./sigma start --nav`. For example, if it is stored in `~/.bashrc`, run
 `source ~/.bashrc` in that shell first (or configure the startup file used by
 your shell). You can verify presence without printing the address with
-`test -n "$SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"`. When OAuth client credentials
-are present but the bootstrap email is absent from the launch environment,
-SIGMA keeps local single-user mode and reports which setting is missing; it does
-not silently enable Google authentication or infer an administrator identity.
+`test -n "$SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"`. When OAuth client credentials
+are present but the admin contact is absent from the launch environment, SIGMA
+keeps local single-user mode and reports which setting is missing; it does not
+silently enable Google authentication or infer an administrator identity.
 
 Local OAuth is strictly loopback HTTP: its session cookies are `HttpOnly` and
 `SameSite=Lax` but cannot be `Secure` on localhost. The callback origin is
