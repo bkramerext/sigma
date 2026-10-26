@@ -433,20 +433,17 @@ def main() -> None:
                 raise AssertionError("Import accepted mismatched research session identity")
             assert not rejected_path.exists()
             # An unrelated foreign record must never influence session allocation.
-            from sigma.project_bundle import write_file
             foreign_id = str(uuid4())
             write_file(created.path, f"research-sessions/{foreign_id}.json",
                        json.dumps(dict(record, id=foreign_id,
                                        project_id=str(uuid4()),
                                        session_number=100000)).encode())
             assert read_session_snapshot(created.path)[1] == 1
-            from sigma.project_bundle import delete_file
             delete_file(created.path, f"research-sessions/{foreign_id}.json")
             from sigma.research_sessions import _worker_lock_path
             assert _worker_lock_path(created.path, session_id).parent == Path(created.path).parent
             assert not (Path(created.path) / "research-sessions").exists()
             wrong = dict(record, project_id=str(uuid4()))
-            from sigma.project_bundle import write_file
             write_file(created.path, f"research-sessions/{session_id}.json",
                        json.dumps(wrong).encode())
             try:
@@ -462,7 +459,6 @@ def main() -> None:
             )
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             # Existing malformed limits must never be mistaken for missing defaults.
-            from sigma.project_bundle import write_file
             write_file(created.path, "research-sessions/limits.json", b"{invalid")
             try:
                 get_limits(created.path)
@@ -470,7 +466,6 @@ def main() -> None:
                 pass
             else:
                 raise AssertionError("Corrupt limits were silently reset")
-            from sigma.project_bundle import delete_file
             delete_file(created.path, "research-sessions/limits.json")
             assert _allocate_session_number(created.path, []) == 2
             assert _allocate_session_number(created.path, []) == 3
