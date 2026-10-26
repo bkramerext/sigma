@@ -40,3 +40,39 @@ changes were made.
 
 Dependencies/conflicts: `gh` is not installed in this checkout. PR submission
 uses the connected GitHub tool. No direct coordination with other workers.
+
+T81 CI-unblock follow-up (2026-10-26)
+
+Reconciled with current `origin/main` at
+`6a607a488106f9c9233336eb940f0458024e527b`; merge commit before the fix commit
+is `a98b2f0fdfcfb9f6cb7aec6fe1b22323d1b7ca5d`.
+
+Changes are limited to inherited Ruff/format findings in
+`src/sigma/gmail_delivery.py`, `src/sigma/ui_instance.py`, and
+`src/sigma/cli.py` / `tests/gmail_delivery.py`, plus the email test's Pyright
+decode typing. `src/sigma/ui.py` is current-main code and is already formatted;
+no edit was needed. The non-dict OAuth credential error now uses `TypeError`,
+matching the invalid-type condition. The test asserts bytes before decoding.
+No delivery, authentication, launcher, or UI behavior was redesigned.
+
+Checks on the reconciled tree:
+- Ruff check on the requested files: PASS.
+- Ruff format check on the requested files: PASS.
+- Pyright: 0 errors, warnings, or informations.
+- `uv run --locked python tests/gmail_delivery.py`: PASS (3 tests).
+- Real Chrome `uv run --with playwright python
+  browser_checks/t81_public_legal_pages.py`: PASS; signed-out direct route
+  navigation and refresh, draft statuses, About Privacy link, and no `/tos`
+  app link.
+- `./sigma test`: FAIL. All application scenarios reached the final global
+  lint/type/frontend checks. Ruff check passed and Pyright reported 0. It
+  failed `tests/tooling.py:337` because the startup warning assertion did not
+  find `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`, and then failed format check on
+  `src/sigma/cloud_auth.py`. Both are current-main findings outside the
+  authorized file scope and were left untouched. Frontend typecheck passed;
+  build was skipped after the suite failure.
+
+Exact updated PR head SHA and CI result are recorded in PR #242 after pushing
+this follow-up. This is not R4R while full `./sigma test` / CI remains failing.
+Privacy and terms remain drafts. No deployment, self-merge, issue closure,
+email, or AI provider calls were made.

@@ -25,6 +25,18 @@ format. Hosted verification and production behavior are unverified because
 deployment was explicitly out of scope. See the [Gray
 handoff](../messages/t81_gray_public_legal_pages.txt).
 
+T81 CI-unblock follow-up: reconciled PR #242 with current `main` at
+`6a607a4` (merge commit `a98b2f0`). Corrected only the named inherited
+Ruff/format findings in `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, `src/sigma/cli.py`, and
+`tests/gmail_delivery.py`, plus the Pyright narrowing in the email test. The
+named-file Ruff check/format, Pyright, and focused email delivery tests pass;
+the legal-page Chrome check passes. On this reconciled tree, `./sigma test`
+still exits 1 on a startup-warning assertion in `tests/tooling.py` and
+formatting in current-main `src/sigma/cloud_auth.py`, both outside this
+follow-up's authorized fix scope. Hosted verification remains unverified.
+See the updated [handoff](../messages/t81_gray_public_legal_pages.txt).
+
 ## T81 remaining feedback and privacy increment (2026-10-26)
 
 Continues T81 after invitation PR #225 merged at

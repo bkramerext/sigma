@@ -268,7 +268,9 @@ def main() -> None:
         commands, "start", help="Start or safely restart this checkout's browser UI"
     )
     ui_command.add_argument(
-        "--signin", action="store_true", help="Start with a local admin identity from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+        "--signin",
+        action="store_true",
+        help="Start with a local admin identity from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
     )
     ui_command.add_argument(
         "--navigate",
