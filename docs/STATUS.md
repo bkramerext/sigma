@@ -1,5 +1,25 @@
 # SIGMA status
 
+## Issue #215 — request-toast expiry (2026-10-26)
+
+Request-error toasts now expire after 60 seconds, slide downward before removal,
+and collapse their stack slot so remaining toasts reflow smoothly. Each toast
+has an independent timer; manual dismissal remains available, reduced-motion
+users receive immediate expiration, and the existing four-toast/mobile width
+limits remain intact.
+
+Seven fake-clock Node tests cover timing, independent lifetimes, manual and
+simultaneous dismissal, burst/cleanup behavior, reduced motion, and the CSS
+exit contract. A real-Chrome check verified the downward transform, stack
+reflow, reduced-motion mode, and 390px layout. The complete `./sigma test`
+passed, including Ruff, Pyright, frontend typecheck, and production build.
+After reconciliation, GitHub Actions passed SIGMA verification, Research
+Outcome browser acceptance, and T92 Recent Projects browser acceptance on
+`bdfe0acd2ae867866637e309648b314376140434`; coordinator correction `d625216`
+is preserved. No provider calls or research projects were involved. See [PR
+#221 (T215)](https://github.com/bkramerext/sigma/pull/221) and the [Blue
+handoff](../messages/blue_t215_r4r.md).
+
 ## Issue #217 administrator contact (2026-10-26)
 
 Updated the public administrator contact example to

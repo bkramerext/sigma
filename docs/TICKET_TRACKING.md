@@ -107,6 +107,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | T129 | Release-image SHA correctness and reproducibility | Gray · R4R, offline implementation only · [PR #182](https://github.com/bkramerext/sigma/pull/182) · [handoff](../messages/t129_gray_release_sha.txt) | — |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
 | Network-bound failure toast and safe recovery | Implemented in tested paths ([PR #1](https://github.com/bkramerext/sigma/pull/1)); broader error coverage remains to validate |
+| T215 | Request-toast 60-second expiry and downward exit | R4R · [PR #221 (T215)](https://github.com/bkramerext/sigma/pull/221) · [handoff](../messages/blue_t215_r4r.md) · automated fake-clock and Chrome checks passed · [issue #215](https://github.com/bkramerext/sigma/issues/215) |
 | Live cross-strategy research validation | Open (T17.8) |
 | Formal Lean proof verification | Future, not implemented |
 | LaTeX paper export workflow | **Done** (T20; [PR #5](https://github.com/bkramerext/sigma/pull/5)) |

@@ -330,8 +330,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
             )
             dismiss_errors = page.get_by_role("button", name="Dismiss request error")
-            while dismiss_errors.count():
-                dismiss_errors.first.click()
+            for _ in range(4):
+                if not dismiss_errors.count():
+                    break
+                # Animated toasts can move or expire before Playwright sees a
+                # stable click target. Dispatch directly and allow exit removal.
+                dismiss_errors.first.evaluate("button => button.click()")
+                page.wait_for_timeout(350)
+            expect(dismiss_errors).to_have_count(0, timeout=5000)
             simple_outcome.screenshot(path="/tmp/sigma-advanced-outcome-hint.png")
             preference_link = hint.get_by_role("button", name="Advanced Outcome")
             preference_link.focus()
