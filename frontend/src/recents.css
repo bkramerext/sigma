@@ -152,6 +152,7 @@
 .home-page .catalog-tabs { flex: 0 0 auto; }
 .home-page #samples-panel, .home-page #recent-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
 .home-page #samples-panel[hidden], .home-page #recent-panel[hidden] { display: none; }
+.home-page #recent-panel > .guest-recent-message { margin: 18px 4px; color: #b6c2ce; font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page #samples-panel > .home-samples, .home-page #recent-panel > .home-recents { flex: 1 1 auto; height: 100%; min-height: 0; max-height: none; margin: 0; padding: 8px 4px 0 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
 .home-page .home-samples .sample-type-group ul { margin: 0 0 0 20px; }
 .home-page .home-samples .sample-type-group li:last-child { border-bottom: 0; }

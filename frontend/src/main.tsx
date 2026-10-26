@@ -2670,15 +2670,12 @@ function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView)
 function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
   const [tab, setTab] = useState<'recent' | 'samples'>(() =>
     guest ? 'samples' : window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
-  useEffect(() => { window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [tab]);
   const recent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
   const recentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (guest) setTab('samples'); }, [guest]);
   useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [guest, tab]);
   function switchTab(next: 'recent' | 'samples') {
-    if (guest && next === 'recent') return;
     if (next === tab) {
       const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
       if (panel) {
@@ -2692,17 +2689,15 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     setTab(next); (next === 'recent' ? recent : samples).current?.focus();
   }
   return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); if (!guest) switchTab(tab === 'samples' ? 'recent' : 'samples'); }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
-    if (event.key === 'End') { event.preventDefault(); if (!guest) switchTab('recent'); }
+    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
-    {guest
-      ? <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected="false" tabIndex={-1} disabled title="Recent projects are unavailable in Guest mode">Recent</button>
-      : <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>}
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={guest ? 'Sign in to save your projects.' : 'Show recent projects. Click again to collapse or expand all.'} onClick={() => switchTab('recent')}>Recent</button>
   </div>
-    {!guest && <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>}
-    <div ref={samplesPanel} id="samples-panel" role={guest ? 'region' : 'tabpanel'} aria-label={guest ? 'Sample projects' : undefined} aria-labelledby={!guest ? 'samples-tab' : undefined} hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message">When you are signed in, you can save your projects</p> : <RecentProjects onOpen={onOpen}/>}</div>
+    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
   </div>;
 }
 

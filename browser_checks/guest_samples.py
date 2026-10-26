@@ -129,7 +129,9 @@ def exercise(ui_url: str, root: Path) -> None:
         page = browser.new_page(viewport={"width": 1280, "height": 850})
         failures: list[str] = []
         opened_projects: list[dict] = []
+        recent_responses: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
+        page.on("response", lambda response: recent_responses.append(response.url) if response.url.endswith("/api/projects/recent") else None)
 
         def capture(response):
             if response.url.endswith("/api/projects/samples/open"):
@@ -141,10 +143,17 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
         expect(page.get_by_role("button", name="New")).to_be_visible()
         expect(page.get_by_role("button", name="Open", exact=True)).to_be_visible()
-        expect(page.get_by_role("tab", name="Recent")).to_be_disabled()
+        expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert page.locator("details.sample-type-group[open]").count() == 0
+        page.get_by_role("tab", name="Recent").click()
+        expect(page.get_by_role("tabpanel", name="Recent")).to_contain_text(
+            "When you are signed in, you can save your projects"
+        )
+        expect(page.get_by_role("tab", name="Recent")).to_have_attribute("aria-selected", "true")
+        assert recent_responses == [], recent_responses
+        page.get_by_role("tab", name="Samples").click()
         page.locator(".api-connection summary").first.click()
         expect(page.get_by_role("dialog", name="AI connection settings")).to_contain_text(
             "AI features require a signed-in account"

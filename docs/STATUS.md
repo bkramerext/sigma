@@ -6067,8 +6067,10 @@ open against `main`, current and mergeable, and not merged.
 
 Guest Home now uses the normal Projects layout with New/Open controls and the
 existing sample catalog. The normal Recent/Samples toggle is present, Recent is
-disabled, and Samples is selected by default. Recent and sample groups start
-collapsed. Opening or creating a guest project uses
+selectable, and Samples is selected by default. Selecting Recent shows only the
+static message “When you are signed in, you can save your projects”; it does not
+load or save project history. Recent and sample groups start collapsed. Opening
+or creating a guest project uses
 an opaque eight-hour, in-memory guest session and a private temporary workspace.
 The project path resolver confines access to that workspace, guest Recents are
 always empty, and expired workspaces are cleaned up on later guest requests.
@@ -6089,8 +6091,9 @@ guest sample opening with configured and unready Google Auth, temporary path
 containment, empty Recent, and blocked provider-backed routes. Changed-file
 Ruff check/format and Pyright passed. The
 real Chrome flow `uv run --with playwright python browser_checks/guest_samples.py`
-passed the standard Projects Home, disabled Recent and selected Samples tabs,
-collapsed groups, AI-unavailable feedback from both entry points, sample open
+passed the standard Projects Home, guest Recent static message without a Recent
+request, default Samples selection and collapsed groups, AI-unavailable feedback
+from both entry points, sample open
 into the full workspace, no 401 toast, empty Recent, and both privacy actions.
 Frontend typecheck and production build
 passed; build retains the existing >500 kB chunk advisory. No provider calls or
