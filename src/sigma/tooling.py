@@ -119,6 +119,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/deployment_package.py"],
             [*python, "python", "tests/public_endpoint.py"],
             [*python, "python", "tests/cloud_acceptance.py"],
+            [*python, "python", "tests/deployment_automation.py"],
             [*python, "python", "tests/gce_host.py"],
             [*python, "python", "tests/state_backup.py"],
             [*python, "python", "tests/host_monitor.py"],
