@@ -95,7 +95,7 @@ def ready(url: str, instance_id: str | None = None) -> bool:
         return False
 
 
-def run_ui(*, navigate: bool = False) -> int:
+def run_ui(*, navigate: bool = False, signin: bool = False) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
         return 2
@@ -111,7 +111,7 @@ def run_ui(*, navigate: bool = False) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
-        local_google_auth = bool(os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip())
+        local_google_auth = signin or bool(os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip())
         if local_google_auth:
             if not os.environ.get("GOOGLE_OIDC_CLIENT_ID") or not os.environ.get(
                 "GOOGLE_OIDC_CLIENT_SECRET"
@@ -120,7 +120,7 @@ def run_ui(*, navigate: bool = False) -> int:
                     "Local Google sign-in needs GOOGLE_OIDC_CLIENT_ID and "
                     "GOOGLE_OIDC_CLIENT_SECRET configured."
                 )
-            if not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"):
+            if not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip():
                 raise RuntimeError(
                     "Local Google sign-in needs SIGMA_CLOUD_ADMIN_CONTACT_EMAIL "
                     "set to the designated administrator's actual Google account."
