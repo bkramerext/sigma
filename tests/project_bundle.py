@@ -234,6 +234,21 @@ def main() -> None:
             assert _read(created.path, session_id) == record
             assert _all(created.path) == [record]
             assert read_session_snapshot(created.path) == ([record], 0)
+            from sigma.research_sessions import _worker_lock_path
+            assert _worker_lock_path(created.path, session_id).parent == Path(created.path).parent
+            assert not (Path(created.path) / "research-sessions").exists()
+            wrong = dict(record, project_id=str(uuid4()))
+            from sigma.project_bundle import write_file
+            write_file(created.path, f"research-sessions/{session_id}.json",
+                       json.dumps(wrong).encode())
+            try:
+                _read(created.path, session_id)
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Foreign session was accepted")
+            write_file(created.path, f"research-sessions/{session_id}.json",
+                       json.dumps(record).encode())
             from sigma.research_sessions import (
                 _allocate_session_number, get_limits, save_limits, DEFAULT_LIMITS,
             )
