@@ -3106,7 +3106,9 @@ def has_active_session(path: str) -> bool:
     durable and remain eligible for dispatch after reconnect.
     """
     records, _unavailable = read_session_snapshot(path)
-    directory = Path(project_path(path)) / "research-sessions"
+    project = project_path(path)
+    directory = (project.parent if project.suffix == ".json"
+                 else project / "research-sessions")
     for record in records:
         status = record.get("status")
         if status not in {"queued", "running"}:
@@ -3116,7 +3118,9 @@ def has_active_session(path: str) -> bool:
             return True
         if status == "queued" and cloud_workspaces.enabled():
             return True
-        lock_path = directory / f"{record['id']}.worker.lock"
+        lock_path = (directory / f".{project.name}.{record['id']}.worker.lock"
+                     if project.suffix == ".json"
+                     else directory / f"{record['id']}.worker.lock")
         try:
             fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
         except OSError:
