@@ -1,8 +1,9 @@
 T81 — Green handoff
 
 Branch: green/t81-invitation-workflow
-Base: origin/main at 07eff56
-Head: a17ec35 (Implement hosted invitation request workflow)
+Base: origin/main at 084e23b (merged into branch after PR creation when main advanced)
+Tested source head: 3f46aca (T81 implementation plus current main merge); the
+current branch head adds only ticket/tracker/handoff metadata.
 
 Changes: replaced the hosted denied-access mailto action with a backend POST
 using the short-lived server verified Google subject; persisted requests in the
@@ -12,9 +13,10 @@ delivery to zetacontinuation@gmail.com with the authenticated mailbox as sender;
 updated deployment secret mount/fetch/preflight/docs; refreshed the real Chrome
 access-denied acceptance check.
 
-Verification: ./sigma test passed on the final source; Ruff check/format,
-Pyright, frontend typecheck/build, cloud_auth tests (22), gce_host tests,
-deployment_package check, Python compilation, and git diff --check passed. The
+Verification on the merged current-main head: `./sigma test` passed. Ruff
+check/format, Pyright, frontend typecheck/build, cloud_auth tests (22),
+gce_host tests, deployment_package check, Python compilation, and
+`git diff --check` passed. The
 real Chrome browser check passed the denied screen submission, exact success
 message, responsive layouts, demo/account-switch navigation, and admin review
 list. One earlier full-suite attempt saw a transient failure in the concurrent
