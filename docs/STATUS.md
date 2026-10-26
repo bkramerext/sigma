@@ -93,6 +93,12 @@ settings but emitted no values; key names were separately listed without
 values, and secret-file contents were not accessed. The deployed
 preflight/configuration was not changed and the app was not started.
 
+The current main's open [PR #198](https://github.com/bkramerext/sigma/pull/198)
+adds a repository Codex launcher and read-only worker connectivity checker.
+That launcher does not grant GCP permissions; PR evidence says the persistent
+worker execution contexts have not yet been verified. This session's successful
+`gcloud` and IAP access proves only this local authenticated context.
+
 Least-privilege access: create a dedicated worker identity, remove project
 Owner/OS Admin from routine use, scope OS Login and IAP tunnel access to this
 VM, and provide a root-owned fixed-argument read-only preflight wrapper through
@@ -105,12 +111,15 @@ documents [OS Login role behavior](https://docs.cloud.google.com/compute/docs/os
 and [OS policy Exec resources](https://docs.cloud.google.com/compute/docs/osconfig/rest/Shared.Types/OSPolicy#Exec).
 No IAM or host configuration was changed.
 
-`uv run python tests/gce_host.py` passed 21 tests and
+After rebasing onto current `main` `3cba4e1`, `uv run python
+tests/gce_host.py` passed 21 tests and
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
 Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and production
-build. The build emitted the existing large-chunk advisory. No browser check
-was relevant to this host-preflight change. No paid calls, service start,
-reboot, or production configuration change occurred.
+build. The build emitted the existing large-chunk advisory. The initial suite
+attempt found Ruff formatting and missing frontend `tsc`; after formatting and
+`./sigma setup`, the full rerun passed. No browser check was relevant to this
+host-preflight change. No paid calls, service start, reboot, or production
+configuration change occurred.
 
 ## Issue #186 single administrator/contact setting follow-up (2026-10-26)
 

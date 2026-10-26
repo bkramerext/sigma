@@ -2,7 +2,7 @@ R4R — T128 host-readiness preflight socket correction
 
 PR: pending creation
 Branch: red/t128-rootless-preflight-socket
-Base: main at dd23fec (PR #195)
+Base: current `main` `3cba4e1` after rebase; host fix builds on PR #195
 Ticket: #98 / T128
 
 The host-only preflight ran rootless Docker as root and passed a bare socket
@@ -37,13 +37,17 @@ Live evidence (2026-10-26):
 - Current IAM has project Owner and OS Admin Login for the active user; no IAM
   changes were made. The status entry recommends a dedicated worker identity,
   a fixed root-owned read-only wrapper, and sanitized scheduled Cloud Logging
-  output as the no-routine-SSH design.
+  output as the no-routine-SSH design. Open PR #198 adds a repository launcher
+  and connection checker but does not grant access or verify persistent worker
+  execution contexts; this session verifies only its local context.
 
 Checks executed:
 - `uv run python tests/gce_host.py` — 21 passed.
 - `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — all scenarios,
   Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
-  build passed. Build emitted the existing large-chunk advisory.
+  build passed on current `main` `3cba4e1`. Build emitted the existing
+  large-chunk advisory. Initial full-suite attempt found formatting and missing
+  `tsc`; formatter and `./sigma setup` resolved those setup issues.
 - `./sigma setup` — passed; installed locked frontend dependencies after the
   first suite attempt found `tsc` absent in this worktree.
 
