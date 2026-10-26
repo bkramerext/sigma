@@ -24,14 +24,15 @@ Verification: `tests/cloud_auth.py` passed (18 tests). Real Chrome confirmed the
 configured contact in the invitation `mailto:` link and no horizontal overflow
 at 1280px and 390px. `npm --prefix frontend run typecheck` and
 `npm --prefix frontend run build` passed (the build retains its existing large
-chunk advisory). `./sigma test` ran all scenario checks successfully, then
-exited 1 at the unchanged `browser_checks/model_availability.py` Ruff B023
-closure diagnostic and its existing format differences; Pyright and frontend
-typecheck passed, and the runner skipped its build after the earlier failure.
-The separate build passed. The broader `browser_checks/t22_access_denied.py`
-stopped at its earlier expectation for an “Explore Demo” guest link, absent in
-the current guest Home UI; the focused invitation Chrome check passed. No paid
-provider calls, production configuration changes, or live OAuth occurred.
+chunk advisory). The first `./sigma test` on the ticket's starting `main`
+reported the then-current unrelated Ruff B023/format findings in
+`browser_checks/model_availability.py`. After current `main` advanced and its
+Ruff repair was merged into this branch, `./sigma test` passed every scenario,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
+build. The broader `browser_checks/t22_access_denied.py` stops at its stale
+“Explore Demo” guest-link assertion; current guest Home says “Explore SIGMA”.
+The focused invitation Chrome check passes. No paid provider calls,
+production configuration changes, or live OAuth occurred.
 
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
