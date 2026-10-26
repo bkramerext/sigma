@@ -302,6 +302,96 @@ class CloudAuthTests(TestCase):
         self.assertEqual(denied.headers["location"], "/?access=denied")
         self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
 
+    def test_invitation_request_uses_verified_identity_and_is_admin_only(self):
+        admin_login = self.finish(email="admin@example.org", subject="request-admin")
+        self.assertEqual(admin_login.status_code, 303)
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        visitor_context = TestClient(app)
+        visitor = visitor_context.__enter__()
+        self.addCleanup(visitor_context.__exit__, None, None, None)
+        denied = self.finish(email="visitor@example.org", subject="request-visitor", client=visitor)
+        self.assertEqual(denied.headers["location"], "/?access=denied")
+        visitor.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(cloud_auth, "_deliver_invitation") as deliver:
+            result = visitor.post(
+                "/api/cloud-auth/invitation-request",
+                json={"email": "forged@example.org"},
+                headers={"Origin": ORIGIN},
+            )
+        self.assertEqual(result.status_code, 200)
+        deliver.assert_called_once()
+        self.assertEqual(deliver.call_args.args[0], "visitor@example.org")
+        self.assertGreater(deliver.call_args.args[1], 0)
+        self.assertEqual(visitor.get("/api/cloud-auth/admin/invitation-requests").status_code, 401)
+        requests = self.client.get("/api/cloud-auth/admin/invitation-requests")
+        self.assertEqual(requests.status_code, 200)
+        row = requests.json()["requests"][0]
+        self.assertEqual(row["email"], "visitor@example.org")
+        self.assertEqual(row["status"], "notified")
+        updated = self.client.put(
+            f"/api/cloud-auth/admin/invitation-requests/{row['subject']}",
+            json={"status": "reviewed"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["status"], "reviewed")
+        self.assertEqual(
+            visitor.post("/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}).json()[
+                "duplicate"
+            ],
+            True,
+        )
+        self.assertEqual(deliver.call_count, 1)
+
+    def test_invitation_request_fails_closed_when_notification_unconfigured(self):
+        denied = self.finish(email="visitor@example.org", subject="request-retry")
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(
+            cloud_auth, "_deliver_invitation", side_effect=RuntimeError("not configured")
+        ):
+            failed = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(failed.status_code, 503)
+        self.assertEqual(
+            failed.json()["detail"], "Your request could not be sent. Please try again later."
+        )
+        self.assertEqual(denied.headers["location"], "/?access=denied")
+
+    def test_invitation_notification_uses_authenticated_sender_and_fixed_recipient(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_INVITATION_SMTP_USERNAME": "sigma-notify@example.org",
+                    "SIGMA_INVITATION_SMTP_PASSWORD": "fixture-app-password",
+                },
+            ),
+            patch.object(cloud_auth.smtplib, "SMTP") as smtp_factory,
+        ):
+            client = smtp_factory.return_value.__enter__.return_value
+            cloud_auth._deliver_invitation("verified@example.org", 123)
+        smtp_factory.assert_called_once_with("smtp.gmail.com", 587, timeout=10)
+        client.starttls.assert_called_once()
+        client.login.assert_called_once_with("sigma-notify@example.org", "fixture-app-password")
+        message = client.send_message.call_args.args[0]
+        self.assertEqual(message["From"], "sigma-notify@example.org")
+        self.assertEqual(message["To"], "zetacontinuation@gmail.com")
+
+    def test_invitation_requests_are_rate_limited_per_verified_email(self):
+        with patch.object(cloud_auth, "_deliver_invitation"):
+            for index in range(4):
+                denied = self.finish(email="visitor@example.org", subject=f"request-limit-{index}")
+                self.client.cookies.set(
+                    cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE]
+                )
+                response = self.client.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+                )
+                self.assertEqual(response.status_code, 429 if index == 3 else 200)
+
     def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)

@@ -24,7 +24,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Network | `sigma-vpc` custom VPC; `sigma-us-west1` subnet; proposed `10.42.0.0/24` | Planned; CIDR approval pending |
 | Ingress | IAP SSH `35.235.240.0/20` to TCP 22 only; public TCP 80/443 deferred until launch gates | Planned |
 | Runtime service account | `sigma-runtime@sigma-research-prod.iam.gserviceaccount.com` | Created/enabled, operator screenshot 2026-10-25; secret-level grants pending; no keys or project roles assigned during creation |
-| Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Deferred: Console requires an initial value; no resource or version created, 2026-10-25 |
+| Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key`; `sigma-invitation-smtp-password` | Deferred: Console requires an initial value; no resource or version created, 2026-10-25 |
 | Production Google OAuth client | HTTPS origin `https://sigma-research.duckdns.org`; callback `https://sigma-research.duckdns.org/api/cloud-auth/callback` | Planned; client/project decision pending |
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; project association and trial unverified |
 | Billing / trial / project budget | Both projects linked to `015C1D-E6B877-9913D6`; free trial $300 credit, $0 used (Oct 25); `SIGMA Production - Trial Budget`, $300 custom-range Oct 24 2026–Jan 22 2027, alerts at 50/75/90/100% | Operator screenshots and report Oct 25; trial expiry estimated from start+90 days, not independently confirmed |
@@ -281,8 +281,9 @@ checkbox before the corresponding external action.
 5. Create the production Web OAuth client (separate from localhost testing).
    Configure only the chosen HTTPS origin and exact `/api/cloud-auth/callback`
    redirect. Verify the OAuth consent screen's production/test-user policy.
-   Store the client secret and separately approved OpenAI API key in Secret
-   Manager; enter neither into Git, chat, an image build argument, or browser
+   Store the client secret, separately approved OpenAI API key, and
+   authenticated invitation SMTP credential in Secret Manager; enter none into
+   Git, chat, an image build argument, or browser
    config. `deploy/fetch-secrets.sh` reads these via the VM service account into
    root-readable, app-UID-only files and prints no payload.
 6. Prepare the attached state disk, install Docker Engine/Compose and Caddy,
@@ -381,7 +382,7 @@ trial-signup, project-creation, or API-enablement command.
    service account:
 
    ```sh
-   sudo /opt/sigma/current/deploy/fetch-secrets.sh PROJECT_ID GOOGLE_OAUTH_SECRET OPENAI_API_KEY_SECRET
+   sudo /opt/sigma/current/deploy/fetch-secrets.sh PROJECT_ID GOOGLE_OAUTH_SECRET OPENAI_API_KEY_SECRET INVITATION_SMTP_PASSWORD_SECRET
    ```
 
 5. Run the read-only host gate. It captures system/Docker command output,
@@ -491,8 +492,9 @@ does not satisfy any checkbox.
   policy, approved production host, exact HTTPS origin and callback, bootstrap
   administrator identity, public invitation contact, invited account list and
   revocation procedure. Do not place actual OAuth secret in source control.
-- [ ] Approve creation and initial values of both Secret Manager secrets, the
-  VM's access to only those secret resources, rotation/revocation procedure,
+- [ ] Approve creation and initial values of the Secret Manager resources,
+  SMTP notification account/sender identity and recipient policy, the VM's
+  access to only those secret resources, rotation/revocation procedure,
   sponsored OpenAI project's independent billing/usage caps, $2 default/user
   allowance, $15 global ceiling, and one-job global concurrency.
 - [ ] Approve the initial administrator and each user's access role/allowance,
@@ -786,8 +788,8 @@ gcloud secrets add-iam-policy-binding "$OPENAI_SECRET" --project="$PROJECT_ID" \
 
 An authorized secret owner later adds versions through the secure approved
 mechanism. Do not use shell history or inline `--data-file=<(...)` patterns.
-On the VM, use the existing `deploy/fetch-secrets.sh PROJECT_ID OAUTH_SECRET
-OPENAI_SECRET` as root. It reads via the attached VM identity and writes
+On the VM, use `deploy/fetch-secrets.sh PROJECT_ID OAUTH_SECRET OPENAI_SECRET
+INVITATION_SMTP_SECRET` as root. It reads via the attached VM identity and writes
 app-readable files under `/run`.
 
 ### VPC and IAP administration firewall
@@ -982,7 +984,7 @@ Each action below needs explicit operator approval:
    `/etc/sigma/deploy.env`. Keep only file paths for secret settings. Set root
    ownership and mode `0600`.
 4. Run `sudo /opt/sigma/current/deploy/fetch-secrets.sh "$PROJECT_ID"
-   "$OAUTH_SECRET" "$OPENAI_SECRET"`. Check owner/mode/size without
+   "$OAUTH_SECRET" "$OPENAI_SECRET" "$INVITATION_SMTP_SECRET"`. Check owner/mode/size without
    displaying payloads. Confirm sponsored inference budgets/access and every
    required operator approval are recorded.
 5. Once DNS resolves to the reserved IP and OAuth, secrets, and approvals are
@@ -1146,7 +1148,9 @@ Set these deployment environment values to enable cloud authentication:
 | `SIGMA_CLOUD_PUBLIC_ORIGIN=https://sigma.example.org` | Exact public HTTPS origin, with no path or trailing slash. Used for callback and CSRF origin validation. |
 | `GOOGLE_OIDC_CLIENT_ID` | Google OAuth web client ID. |
 | `GOOGLE_OIDC_CLIENT_SECRET` | Google OAuth web client secret; keep server-side only. |
-| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public contact used to prefill invitation requests. SIGMA opens a mail draft and never sends it. On a fresh auth database, the first verified sign-in matching this address establishes the initial administrator; after that, the stored email and Google subject binding remain the administrator identity even if this contact value changes. |
+| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public invitation contact and initial administrator email on a fresh auth database. After that, the stored email and Google subject binding remain authoritative if this contact changes. |
+| `SIGMA_INVITATION_SMTP_USERNAME` | Authenticated SMTP mailbox and sender identity. The sender is taken from this account to prevent spoofing. |
+| `SIGMA_INVITATION_SMTP_PASSWORD_FILE` | Protected secret file for the SMTP account password or app password. SIGMA uses SMTP STARTTLS and sends notifications to `zetacontinuation@gmail.com`. |
 | `SIGMA_CLOUD_AUTH_HOME=/var/lib/sigma-auth` | Absolute, service-owned private directory; mode 0700. The SQLite database is mode 0600. |
 | `SIGMA_CLOUD_DEMO_AUDIT=/opt/sigma/cloud-demo/handshake-demo-audit.json` | Absolute path to the curated, server-owned, read-only Project Audit v2 snapshot served to guests. It is separate from private project storage and required for the public Demo. |
 
@@ -1253,8 +1257,14 @@ Only that denied flow can read its verified email: the server keeps it in a
 short-lived private-database record behind an opaque `Secure`, `HttpOnly` cookie
 for up to ten minutes. It is not returned by status, does not create a session
 or workspace, and is deleted when Use Another Account starts a fresh
-`prompt=select_account` login. The screen offers a prefilled `mailto:` invitation
-request to the configured contact.
+`prompt=select_account` login. The screen submits a request tied to the verified
+Google identity. The auth database retains request identity, time, delivery,
+and review status; only administrator invitation-review endpoints expose
+records. Notifications use the authenticated SMTP mailbox configured through
+`SIGMA_INVITATION_SMTP_USERNAME` and a protected password file, with STARTTLS
+and recipient `zetacontinuation@gmail.com`. No mail credentials are stored in
+the project database or frontend. The runtime SMTP account and password remain
+deployment prerequisites and must be provisioned through Secret Manager.
 The contact address is intentionally public; access rules and other accounts
 remain private. `/demo` serves the same read-only curated project to anonymous
 visitors, denied identities and signed-in users. Its dedicated API accepts no

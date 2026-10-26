@@ -102,6 +102,8 @@ def main() -> None:
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "GOOGLE_OIDC_CLIENT_SECRET_FILE": str(path),
             "SIGMA_CLOUD_OPENAI_API_KEY_FILE": str(path),
+            "SIGMA_INVITATION_SMTP_USERNAME": "notify@example.test",
+            "SIGMA_INVITATION_SMTP_PASSWORD_FILE": str(path),
         }
         with patch.dict(os.environ, cloud_environment, clear=True):
             assert cloud_auth.config().enabled and cloud_auth.config().error is None

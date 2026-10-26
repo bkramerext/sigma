@@ -28,10 +28,12 @@ temporary=$(mktemp -d "$root/deploy/.local-secrets.XXXXXX")
 project="sigma-t42-local-$$"
 secret_google="$temporary/google-client-secret"
 secret_openai="$temporary/openai-api-key"
+secret_smtp="$temporary/invitation-smtp-password"
 environment="$temporary/deploy.env"
 printf 'local-only-google-secret\n' >"$secret_google"
 printf 'local-only-provider-key\n' >"$secret_openai"
-chmod 0444 "$secret_google" "$secret_openai"
+printf 'local-only-smtp-password\n' >"$secret_smtp"
+chmod 0444 "$secret_google" "$secret_openai" "$secret_smtp"
 cat >"$environment" <<EOF
 SIGMA_RELEASE=local-check
 SIGMA_DOMAIN=localhost
@@ -41,6 +43,8 @@ SIGMA_CLOUD_ADMIN_CONTACT_EMAIL=admin@example.test
 GOOGLE_OIDC_CLIENT_ID=local-check.apps.googleusercontent.com
 SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE=$secret_google
 SIGMA_CLOUD_OPENAI_API_KEY_FILE=$secret_openai
+SIGMA_INVITATION_SMTP_USERNAME=notify@example.test
+SIGMA_INVITATION_SMTP_PASSWORD_FILE=$secret_smtp
 SIGMA_CLOUD_USER_SPEND_CEILING_USD=2.00
 SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=15.00
 SIGMA_CLOUD_USER_MAX_CONCURRENT=1
