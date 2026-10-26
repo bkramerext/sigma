@@ -70,6 +70,8 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         path = Path(name)
         if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
             raise BundleError("Unsafe bundle path")
+        if name != "project.json" and any(other != name and other.startswith(name + "/") for other in files):
+            raise BundleError("Bundle member conflicts with a directory")
         if not isinstance(encoded, str):
             raise BundleError("Invalid encoded file")
         try:
