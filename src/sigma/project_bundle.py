@@ -158,3 +158,68 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
         finally:
             staged.unlink(missing_ok=True)
     return target
+
+
+def read_file(bundle_path: str | Path, relative_path: str) -> bytes:
+    """Read one member of an authoritative JSON bundle."""
+    path = Path(bundle_path)
+    if path.is_symlink() or not path.is_file():
+        raise BundleError("Project JSON must be a regular file")
+    try:
+        return _decode(json.loads(path.read_text(encoding="utf-8")))[relative_path]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise BundleError("Cannot read project bundle member") from exc
+
+
+def write_file(bundle_path: str | Path, relative_path: str, contents: bytes) -> None:
+    """Atomically update a bundle member while preserving concurrent member writes.
+
+    Every cooperating writer takes a stable sidecar lock, re-reads the complete
+    bundle while locked, then replaces it with a fsynced new version. The
+    replace does not invalidate the sidecar lock.
+    """
+    path = Path(bundle_path)
+    if path.suffix != ".json" or path.is_symlink() or not path.is_file():
+        raise BundleError("Project JSON must be a regular file")
+    if not isinstance(contents, bytes):
+        raise BundleError("Project member contents must be bytes")
+    if (
+        not isinstance(relative_path, str)
+        or not relative_path
+        or "\\\\" in relative_path
+        or relative_path.startswith("/")
+        or any(part in ("", ".", "..") for part in relative_path.split("/"))
+    ):
+        raise BundleError("Unsafe bundle path")
+    lock = path.with_name("." + path.name + ".write.lock")
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(lock, flags, 0o600)
+    with os.fdopen(fd, "a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        if path.is_symlink() or not path.is_file():
+            raise BundleError("Project JSON is no longer a regular file")
+        members = _decode(json.loads(path.read_text(encoding="utf-8")))
+        members[relative_path] = contents
+        payload = {
+            "format": FORMAT,
+            "version": VERSION,
+            "files": {
+                name: base64.b64encode(data).decode("ascii")
+                for name, data in sorted(members.items())
+            },
+        }
+        fd, name = tempfile.mkstemp(prefix=".sigma-update-", dir=path.parent)
+        staged = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as output:
+                output.write((json.dumps(payload, sort_keys=True, indent=2) + "\\n").encode("utf-8"))
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(staged, path)
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            staged.unlink(missing_ok=True)
