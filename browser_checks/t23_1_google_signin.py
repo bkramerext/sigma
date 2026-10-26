@@ -362,12 +362,17 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                 )
             ).to_be_visible()
             page.evaluate("window.scrollTo(0, 0)")
+            page.evaluate(
+                "path => window.localStorage.setItem('sigma.currentProject', path)",
+                project_a["path"],
+            )
             expect(
                 account.get_by_role("button", name="Sign out of Google", exact=True)
             ).to_be_visible()
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
             expect(page).to_have_url(ui_url + "/")
             expect(page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
+            assert page.evaluate("window.localStorage.getItem('sigma.currentProject')") is None
             assert api_request("GET", "/api/projects/recent").status_code == 401
 
             page.get_by_role("link", name="Sign in with Google").click()

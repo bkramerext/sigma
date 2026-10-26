@@ -5848,6 +5848,28 @@ blocked by Ruff findings in `browser_checks/model_availability.py` on `main`
 (B023 and formatting); this change did not modify that file. No provider calls
 were made. See [Gray issue #206 handoff](../messages/t206_gray_current_understanding.txt).
 
+## T43.2 / issue #66 independent release acceptance (2026-10-26)
+
+Integrated acceptance ran on a Gray branch containing T88 merge
+`e82152010c81c53a84753fdbcc323628e16dfeae`. Deterministic API tests passed for
+guest denial, invited/admin roles, grant revocation and expiry, owner-scoped
+workspaces and research artifacts, sponsored provider status, and user budget
+enforcement. A focused sponsored API assertion now confirms administrators
+receive the same $0.25 per-user allowance as members. The Google Chrome fixture
+passed guest/member/admin transitions, provider failure/recovery, sign-out,
+denial, remembered-project clearing, and desktop/mobile layouts. Separate
+two-user Chrome and ChatGPT SIWC fixture checks also passed.
+
+`./sigma test` passed all scenarios, Ruff, formatting, Pyright, frontend
+typecheck, and build. The first run encountered transient research-worker lock
+contention; the isolated scenario passed, followed by a complete passing run.
+The existing >500 kB chunk advisory remains. Actual Google OAuth, hosted
+callback/deployment/session behavior, live provider authorization, and
+distinct-live-account workspace isolation remain **UNVERIFIED**. No live GCP,
+OAuth/provider calls, paid inference, credentials, or private user data were
+used. Full requirement-by-requirement evidence is in
+[T43.2](../tickets/t43.2.md) and the
+[Gray handoff](../messages/t43_2_gray_multi_account.txt).
 ## Issue #209 — Copy-only strategy suggestions (reconciled 2026-10-26)
 
 PR #213 was reconciled with Gray PR #212 at `6bab28f`. The resulting interface

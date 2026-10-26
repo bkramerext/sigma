@@ -195,6 +195,28 @@ def main() -> None:
                 assert sponsor_status.json()["mode"] == "sponsored"
                 assert sponsor_status.json()["status"] == "connected"
                 assert "authorization" not in sponsor_status.json()
+                # Administrators receive the same per-identity sponsored
+                # allowance; role grants administration authority, not an
+                # inference-budget exemption.
+                client.headers.update(
+                    {
+                        "X-Test-Subject": "cloud-admin",
+                        "X-Test-Email": "admin@example.test",
+                        "X-Test-Role": "admin",
+                    }
+                )
+                cloud_auth._persist_user_state(
+                    cloud_auth.config(),
+                    cloud_auth.Principal("cloud-admin", "admin@example.test", "admin"),
+                )
+                admin_budget = client.get("/api/cloud-research/budget")
+                assert admin_budget.status_code == 200, admin_budget.text
+                assert admin_budget.json()["allowance_usd"] == 0.25
+                assert admin_budget.json()["remaining_usd"] == 0.25
+                client.headers.pop("X-Test-Role")
+                client.headers.update(
+                    {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
+                )
                 import sqlite3
 
                 with sqlite3.connect(root / "auth" / "access.sqlite3") as db:
