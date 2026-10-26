@@ -38,9 +38,7 @@ with sync_playwright() as playwright:
                 )
                 return
         response = route.fetch(
-            url=request.url.replace(
-                UI_ORIGIN.replace("http://", ""), f"127.0.0.1:{FIXTURE_PORT}"
-            ),
+            url=request.url.replace(UI_ORIGIN.replace("http://", ""), f"127.0.0.1:{FIXTURE_PORT}"),
             headers={**request.headers, "origin": "http://127.0.0.1:5173"},
         )
         if "/api/projects/papers/preflight?" in request.url and response.ok:
@@ -76,9 +74,7 @@ with sync_playwright() as playwright:
     expect(dialog).to_be_visible()
     assert dialog.evaluate("element => element.contains(document.activeElement)")
     expect(dialog.get_by_role("button", name="Close", exact=True)).to_be_visible()
-    expect(dialog).to_contain_text(
-        "Create a LaTeX paper from this project’s saved research"
-    )
+    expect(dialog).to_contain_text("Create a LaTeX paper from this project’s saved research")
     expect(dialog).to_contain_text("AI-generated and has not been independently verified")
     expect(dialog).to_contain_text("Selected model:")
     expect(dialog.locator("input[type=checkbox]")).to_have_count(0)
@@ -111,15 +107,11 @@ with sync_playwright() as playwright:
     expect(generate).to_be_enabled()
 
     generate.click()
-    expect(dialog.get_by_role("button", name="Generating paper…")).to_be_disabled(
-        timeout=10000
-    )
+    expect(dialog.get_by_role("button", name="Generating paper…")).to_be_disabled(timeout=10000)
     expect(dialog.locator(".ai-paper-status")).to_be_visible()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
-    expect(dialog.locator(".ai-paper-status")).to_contain_text(
-        "Paper saved in Saved versions."
-    )
+    expect(dialog.locator(".ai-paper-status")).to_contain_text("Paper saved in Saved versions.")
     assert long_form_preflights and all(long_form_preflights), long_form_preflights
     expect(card).to_contain_text("A Long-Form Experimental Research Synthesis")
 

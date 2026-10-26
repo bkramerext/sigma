@@ -258,17 +258,28 @@ def main() -> None:
             expect(page.locator(".home-topline .project-google-signin")).to_have_text(
                 "Google account connected"
             )
-            expect(page.locator(".home-topline .project-google-signin .connection-dot")).to_have_css(
-                "background-color", "rgb(117, 177, 140)"
+            expect(
+                page.locator(".home-topline .project-google-signin .connection-dot")
+            ).to_have_css("background-color", "rgb(117, 177, 140)")
+            assert (
+                page.locator(".home-topline .project-google-signin .connection-dot").evaluate(
+                    "e => getComputedStyle(e).animationName"
+                )
+                == "none"
             )
-            assert page.locator(".home-topline .project-google-signin .connection-dot").evaluate(
-                "e => getComputedStyle(e).animationName"
-            ) == "none"
             expect(page.get_by_text(BOOTSTRAP, exact=True)).to_have_count(0)
             # The Home account pills keep the same padding and height through
             # the former 700px breakpoint, sit over the artwork, and remain
             # above (rather than on top of) the Projects area.
-            for width, height in ((1440, 900), (800, 800), (700, 800), (600, 800), (520, 800), (390, 844), (360, 740)):
+            for width, height in (
+                (1440, 900),
+                (800, 800),
+                (700, 800),
+                (600, 800),
+                (520, 800),
+                (390, 844),
+                (360, 740),
+            ):
                 page.set_viewport_size({"width": width, "height": height})
                 google_home = page.locator(".home-topline .project-google-signin")
                 chatgpt_home = page.locator(".home-topline .api-connection > summary")
@@ -278,16 +289,26 @@ def main() -> None:
                 assert google_box and chatgpt_box and projects_box, width
                 assert abs(google_box["height"] - 34) <= 1, (width, google_box)
                 assert abs(chatgpt_box["height"] - 34) <= 1, (width, chatgpt_box)
-                assert google_box["x"] >= 0 and chatgpt_box["x"] >= 0, (width, google_box, chatgpt_box)
+                assert google_box["x"] >= 0 and chatgpt_box["x"] >= 0, (
+                    width,
+                    google_box,
+                    chatgpt_box,
+                )
                 assert google_box["x"] + google_box["width"] <= width, (width, google_box)
                 assert chatgpt_box["x"] + chatgpt_box["width"] <= width, (width, chatgpt_box)
                 assert chatgpt_box["x"] - (google_box["x"] + google_box["width"]) >= 8, (
-                    width, google_box, chatgpt_box
+                    width,
+                    google_box,
+                    chatgpt_box,
                 )
-                assert projects_box["y"] >= max(
-                    google_box["y"] + google_box["height"],
-                    chatgpt_box["y"] + chatgpt_box["height"],
-                ) - 1, (width, projects_box, google_box, chatgpt_box)
+                assert (
+                    projects_box["y"]
+                    >= max(
+                        google_box["y"] + google_box["height"],
+                        chatgpt_box["y"] + chatgpt_box["height"],
+                    )
+                    - 1
+                ), (width, projects_box, google_box, chatgpt_box)
                 admin_link = page.locator(".administrator-settings-link")
                 if admin_link.count():
                     admin_box = admin_link.bounding_box()
@@ -301,7 +322,9 @@ def main() -> None:
                         )
                         assert not overlaps, (width, admin_box, pill_box)
                     assert projects_box["y"] >= admin_box["y"] + admin_box["height"] - 1, (
-                        width, admin_box, projects_box
+                        width,
+                        admin_box,
+                        projects_box,
                     )
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
                 google_styles = google_home.evaluate(
@@ -317,14 +340,20 @@ def main() -> None:
             page.locator(".home-topline .project-google-signin").click()
             account = page.get_by_role("dialog", name="Google account")
             expect(account.get_by_text(BOOTSTRAP, exact=True)).to_be_visible()
-            expect(account.get_by_role("button", name="Use another Google account")).to_have_count(0)
-            expect(account.get_by_role("heading", name="Connect your Google account")).to_have_count(0)
+            expect(account.get_by_role("button", name="Use another Google account")).to_have_count(
+                0
+            )
+            expect(
+                account.get_by_role("heading", name="Connect your Google account")
+            ).to_have_count(0)
             email = account.locator(".google-account-email")
             initial_width = account.evaluate("e => e.getBoundingClientRect().width")
             assert account.evaluate("e => getComputedStyle(e).padding") == "12px"
             assert email.evaluate("e => getComputedStyle(e).color") == "rgb(240, 204, 160)"
             assert email.evaluate("e => getComputedStyle(e).fontSize") == "15px"
-            email.evaluate("e => { e.textContent = 'alexandria.long.research.account@example-domain.test'; }")
+            email.evaluate(
+                "e => { e.textContent = 'alexandria.long.research.account@example-domain.test'; }"
+            )
             expanded_width = account.evaluate("e => e.getBoundingClientRect().width")
             assert expanded_width > initial_width and expanded_width <= 360, (
                 initial_width,
@@ -353,12 +382,16 @@ def main() -> None:
             expect(usage_tab).to_have_attribute("aria-selected", "true")
             expect(usage_tab).to_be_focused()
             usage_box = dialog.bounding_box()
-            assert usage_box and all(abs(dialog_box[key] - usage_box[key]) <= 1 for key in ("x", "y", "width", "height")), (dialog_box, usage_box)
+            assert usage_box and all(
+                abs(dialog_box[key] - usage_box[key]) <= 1 for key in ("x", "y", "width", "height")
+            ), (dialog_box, usage_box)
             page.keyboard.press("ArrowLeft")
             expect(access_tab).to_have_attribute("aria-selected", "true")
             expect(access_tab).to_be_focused()
             access_box = dialog.bounding_box()
-            assert access_box and all(abs(dialog_box[key] - access_box[key]) <= 1 for key in ("x", "y", "width", "height")), (dialog_box, access_box)
+            assert access_box and all(
+                abs(dialog_box[key] - access_box[key]) <= 1 for key in ("x", "y", "width", "height")
+            ), (dialog_box, access_box)
             expect(dialog.get_by_role("tab", name="Account usage")).to_have_attribute(
                 "aria-selected", "false"
             )
@@ -382,10 +415,36 @@ def main() -> None:
             table_during_new = grants_table.bounding_box()
             parent_box = dialog.bounding_box()
             panel_box = add_panel.bounding_box()
-            assert table_before_new and table_during_new and all(abs(table_before_new[key] - table_during_new[key]) <= 1 for key in ("x", "y", "width", "height")), (table_before_new, table_during_new)
-            assert parent_box and panel_box and parent_box["x"] <= panel_box["x"] and parent_box["y"] <= panel_box["y"] and panel_box["x"] + panel_box["width"] <= parent_box["x"] + parent_box["width"] and panel_box["y"] + panel_box["height"] <= parent_box["y"] + parent_box["height"], (parent_box, panel_box)
-            assert abs((panel_box["x"] + panel_box["width"] / 2) - (parent_box["x"] + parent_box["width"] / 2)) <= 1, (parent_box, panel_box)
-            assert abs((panel_box["y"] + panel_box["height"] / 2) - (parent_box["y"] + parent_box["height"] / 2)) <= 1, (parent_box, panel_box)
+            assert (
+                table_before_new
+                and table_during_new
+                and all(
+                    abs(table_before_new[key] - table_during_new[key]) <= 1
+                    for key in ("x", "y", "width", "height")
+                )
+            ), (table_before_new, table_during_new)
+            assert (
+                parent_box
+                and panel_box
+                and parent_box["x"] <= panel_box["x"]
+                and parent_box["y"] <= panel_box["y"]
+                and panel_box["x"] + panel_box["width"] <= parent_box["x"] + parent_box["width"]
+                and panel_box["y"] + panel_box["height"] <= parent_box["y"] + parent_box["height"]
+            ), (parent_box, panel_box)
+            assert (
+                abs(
+                    (panel_box["x"] + panel_box["width"] / 2)
+                    - (parent_box["x"] + parent_box["width"] / 2)
+                )
+                <= 1
+            ), (parent_box, panel_box)
+            assert (
+                abs(
+                    (panel_box["y"] + panel_box["height"] / 2)
+                    - (parent_box["y"] + parent_box["height"] / 2)
+                )
+                <= 1
+            ), (parent_box, panel_box)
             add_panel.get_by_label("New email address").fill("reviewer@example.org")
             add_panel.get_by_label("New ChatGPT allowance").fill("4.50")
             add_box = add_panel.get_by_role("button", name="Add", exact=True).bounding_box()
@@ -396,11 +455,17 @@ def main() -> None:
                 add_box,
                 cancel_box,
             )
-            assert not any(request.startswith("POST ") and "/grants" in request for request in admin_requests)
+            assert not any(
+                request.startswith("POST ") and "/grants" in request for request in admin_requests
+            )
             add_panel.get_by_role("button", name="Cancel", exact=True).click()
             expect(page.get_by_role("group", name="Add authorized user")).to_have_count(0)
-            expect(dialog.locator(".admin-add-row").get_by_role("button", name="New")).to_be_focused()
-            assert not any(request.startswith("POST ") and "/grants" in request for request in admin_requests)
+            expect(
+                dialog.locator(".admin-add-row").get_by_role("button", name="New")
+            ).to_be_focused()
+            assert not any(
+                request.startswith("POST ") and "/grants" in request for request in admin_requests
+            )
             dialog.locator(".admin-grants-table").get_by_role(
                 "button", name="New", exact=True
             ).click()
@@ -421,26 +486,42 @@ def main() -> None:
             expect(dialog.get_by_role("button", name="Save Updates")).to_have_count(0)
             table_before_remove = grants_table.bounding_box()
             added.get_by_role("button", name="Remove", exact=True).click()
-            removal = page.get_by_role("group", name="Confirm remove access for reviewer@example.org")
+            removal = page.get_by_role(
+                "group", name="Confirm remove access for reviewer@example.org"
+            )
             expect(removal).to_contain_text("Recorded usage will be retained.")
             expect(removal).to_be_in_viewport()
             page.screenshot(path="/tmp/sigma-t40-admin-remove-overlay.png", full_page=True)
             assert removal.evaluate("e => e.closest('tr') === null")
             table_during_remove = grants_table.bounding_box()
-            assert table_before_remove and table_during_remove and all(abs(table_before_remove[key] - table_during_remove[key]) <= 1 for key in ("x", "y", "width", "height")), (table_before_remove, table_during_remove)
+            assert (
+                table_before_remove
+                and table_during_remove
+                and all(
+                    abs(table_before_remove[key] - table_during_remove[key]) <= 1
+                    for key in ("x", "y", "width", "height")
+                )
+            ), (table_before_remove, table_during_remove)
             page.mouse.move(0, 0)
-            assert added.get_by_role("button", name="Remove", exact=True).evaluate(
-                "e => getComputedStyle(e).color"
-            ) == "rgb(240, 204, 160)"
+            assert (
+                added.get_by_role("button", name="Remove", exact=True).evaluate(
+                    "e => getComputedStyle(e).color"
+                )
+                == "rgb(240, 204, 160)"
+            )
             removal.get_by_role("button", name="Cancel", exact=True).click()
-            expect(page.get_by_role("group", name="Confirm remove access for reviewer@example.org")).to_have_count(0)
+            expect(
+                page.get_by_role("group", name="Confirm remove access for reviewer@example.org")
+            ).to_have_count(0)
             assert not any(request.startswith("DELETE ") for request in admin_requests)
             added.get_by_role("button", name="Remove", exact=True).click()
-            page.get_by_role("group", name="Confirm remove access for reviewer@example.org").get_by_role(
-                "button", name="Confirm", exact=True
-            ).click()
+            page.get_by_role(
+                "group", name="Confirm remove access for reviewer@example.org"
+            ).get_by_role("button", name="Confirm", exact=True).click()
             expect(dialog.get_by_text("reviewer@example.org", exact=True)).to_have_count(0)
-            expect(dialog.get_by_text("Removed access for reviewer@example.org.", exact=True)).to_have_count(0)
+            expect(
+                dialog.get_by_text("Removed access for reviewer@example.org.", exact=True)
+            ).to_have_count(0)
             dialog.get_by_role("tab", name="Account usage").click()
             expect(dialog.locator(".admin-usage-table")).to_be_visible()
             expect(dialog.locator(".admin-usage-table")).to_contain_text(BOOTSTRAP)
@@ -458,9 +539,12 @@ def main() -> None:
             new_row = dialog.locator(".admin-add-row")
             expect(new_row.get_by_role("button", name="New", exact=True)).to_be_visible()
             assert new_row.locator("td").count() == 4
-            assert new_row.locator("td").nth(3).get_by_role(
-                "button", name="New", exact=True
-            ).is_visible()
+            assert (
+                new_row.locator("td")
+                .nth(3)
+                .get_by_role("button", name="New", exact=True)
+                .is_visible()
+            )
             assert new_row.locator("td").nth(0).inner_text() == ""
             dialog.get_by_role("button", name="Close", exact=True).click()
 
@@ -487,14 +571,48 @@ def main() -> None:
                 expect(add_panel).to_be_in_viewport()
                 table_after = dialog.locator(".admin-grants-table").bounding_box()
                 parent_after = dialog.bounding_box()
-                assert table_before and table_after and all(abs(table_before[key] - table_after[key]) <= 1 for key in ("y", "width", "height")), (width, table_before, table_after)
-                assert parent_before and parent_after and all(abs(parent_before[key] - parent_after[key]) <= 1 for key in ("x", "y", "width", "height")), (width, parent_before, parent_after)
+                assert (
+                    table_before
+                    and table_after
+                    and all(
+                        abs(table_before[key] - table_after[key]) <= 1
+                        for key in ("y", "width", "height")
+                    )
+                ), (width, table_before, table_after)
+                assert (
+                    parent_before
+                    and parent_after
+                    and all(
+                        abs(parent_before[key] - parent_after[key]) <= 1
+                        for key in ("x", "y", "width", "height")
+                    )
+                ), (width, parent_before, parent_after)
                 parent_box = dialog.bounding_box()
                 panel_box = add_panel.bounding_box()
-                assert parent_box and panel_box and parent_box["x"] <= panel_box["x"] and parent_box["y"] <= panel_box["y"] and panel_box["x"] + panel_box["width"] <= parent_box["x"] + parent_box["width"] and panel_box["y"] + panel_box["height"] <= parent_box["y"] + parent_box["height"], (width, parent_box, panel_box)
+                assert (
+                    parent_box
+                    and panel_box
+                    and parent_box["x"] <= panel_box["x"]
+                    and parent_box["y"] <= panel_box["y"]
+                    and panel_box["x"] + panel_box["width"] <= parent_box["x"] + parent_box["width"]
+                    and panel_box["y"] + panel_box["height"]
+                    <= parent_box["y"] + parent_box["height"]
+                ), (width, parent_box, panel_box)
                 expect(add_panel.get_by_role("heading", name="New Email or Domain")).to_be_visible()
-                assert abs((panel_box["x"] + panel_box["width"] / 2) - (parent_box["x"] + parent_box["width"] / 2)) <= 1, (width, parent_box, panel_box)
-                assert abs((panel_box["y"] + panel_box["height"] / 2) - (parent_box["y"] + parent_box["height"] / 2)) <= 1, (width, parent_box, panel_box)
+                assert (
+                    abs(
+                        (panel_box["x"] + panel_box["width"] / 2)
+                        - (parent_box["x"] + parent_box["width"] / 2)
+                    )
+                    <= 1
+                ), (width, parent_box, panel_box)
+                assert (
+                    abs(
+                        (panel_box["y"] + panel_box["height"] / 2)
+                        - (parent_box["y"] + parent_box["height"] / 2)
+                    )
+                    <= 1
+                ), (width, parent_box, panel_box)
                 if width == 390:
                     page.screenshot(path="/tmp/sigma-t40-admin-add-overlay-390.png", full_page=True)
                 add_panel.get_by_role("button", name="Cancel", exact=True).click()
@@ -503,10 +621,16 @@ def main() -> None:
                 assert access_box
                 dialog.get_by_role("tab", name="Account usage").click()
                 usage_box = dialog.bounding_box()
-                assert usage_box and all(abs(access_box[key] - usage_box[key]) <= 1 for key in ("x", "y", "width", "height")), (width, access_box, usage_box)
+                assert usage_box and all(
+                    abs(access_box[key] - usage_box[key]) <= 1
+                    for key in ("x", "y", "width", "height")
+                ), (width, access_box, usage_box)
                 dialog.get_by_role("tab", name="Access Management").click()
                 restored_box = dialog.bounding_box()
-                assert restored_box and all(abs(access_box[key] - restored_box[key]) <= 1 for key in ("x", "y", "width", "height")), (width, access_box, restored_box)
+                assert restored_box and all(
+                    abs(access_box[key] - restored_box[key]) <= 1
+                    for key in ("x", "y", "width", "height")
+                ), (width, access_box, restored_box)
                 page.screenshot(path=f"/tmp/sigma-t40-admin-dialog-{width}.png", full_page=True)
                 dialog.get_by_role("button", name="Close", exact=True).click()
 

@@ -40,7 +40,9 @@ with sync_playwright() as playwright:
     page.goto(UI)
     samples = page.get_by_role("tabpanel", name="Samples")
     samples.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
-    expect(page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3 v1")).to_be_visible()
+    expect(
+        page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3 v1")
+    ).to_be_visible()
     project_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     project_id = json.loads(Path(project_path, "project.json").read_text())["id"]
     page.get_by_role("button", name="Back to home", exact=True).click()

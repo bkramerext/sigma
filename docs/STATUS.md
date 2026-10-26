@@ -1,5 +1,26 @@
 # SIGMA status
 
+## Issue #117 adversarial review follow-up (2026-10-26)
+
+Reviewed issue #117 against current main `13a63c4` and its full discussion.
+The Ubuntu installer test safety defect, Ubuntu `os-release` spellings, and
+failure aggregation are already corrected by merged T117; the preflight
+`BLOCKED` fixture also passes independently. Ruff lint already covers
+`deploy/`, `browser_checks/`, and `docs/evaluations/` with no current lint
+findings. Ruff format found 17 existing files outside its gate (16 browser
+checks and one evaluation exporter); these were formatted and added to the
+format gate with a regression assertion.
+
+`./sigma test` ran all independent checks and reported three failures in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`.
+Each asserts the old explicit systemd mount unit; current main uses
+`RequiresMountsFor=/srv/sigma-state`. These deployment test corrections remain
+with the coordinator under the accepted T128 handoff and were not changed here.
+Pyright and frontend typecheck passed; frontend build was safely skipped after
+the earlier failures. The installer was not run, and no cloud or provider
+activity occurred. Detailed outputs are in
+[`issue-117-red-adversarial-review.txt`](../messages/issue-117-red-adversarial-review.txt).
+
 ## T146 Increment 22 authorized live comparison (2026-10-26)
 
 Executed the one owner-authorized OpenAI API comparison after a successful

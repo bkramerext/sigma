@@ -54,9 +54,7 @@ with sync_playwright() as playwright:
     opener.click()
     dialog = page.get_by_role("dialog", name="About SIGMA")
     expect(dialog).to_be_visible()
-    features = dialog.locator("details").filter(
-        has=page.get_by_text("Key Features", exact=True)
-    )
+    features = dialog.locator("details").filter(has=page.get_by_text("Key Features", exact=True))
     features.locator("summary").click()
     expect(features.get_by_role("heading", name="Readable Mathematical Text")).to_be_visible()
     expect(features).to_contain_text(

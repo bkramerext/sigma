@@ -1,0 +1,58 @@
+RED — issue #117 adversarial review fixes
+
+Base: origin/main 13a63c4 (2026-10-26)
+Branch: red/issue-117-adversarial-review
+PR: pending
+
+Findings verified
+
+1. GCE test reports: the original report is stale in detail. On current main,
+   tests/gce_host.py runs 16 tests and fails only the old systemd mount-unit
+   assertion. The same obsolete assertion fails in tests/deployment_package.py
+   and tests/host_monitor.py. Current deploy/systemd/sigma.service uses
+   RequiresMountsFor=/srv/sigma-state, introduced in T128. The accepted T128
+   handoff assigns remaining deployment test corrections to the coordinator;
+   Red left those assertions unchanged.
+2. Installer safety: already corrected by merged T117. Tests invoke only the
+   sourced guard against fixtures, never the real installer. Quoted/unquoted
+   Ubuntu values and Debian/Fedora blocking are covered. The installer itself
+   calls the host guard before package/filesystem operations. Verified by code
+   inspection and current tests; no Ubuntu root execution was performed.
+3. Local preflight: stale. Current Debian-fixture BLOCKED test passes within the
+   focused GCE suite; Ubuntu fixture separately covers FAIL / exit 1.
+4. Failure aggregation: already implemented by merged T117. The full run
+   continued through independent checks, recorded all three failures, retained
+   nonzero exit, and skipped only frontend build after failures. Existing
+   tests/tooling.py covers aggregate failure behavior and unsafe-step skipping.
+5. Ruff: lint already includes deploy, browser_checks, and docs/evaluations;
+   current full lint has zero findings, so the reported 14 are stale. Ruff
+   format omitted browser_checks and docs/evaluations. Inventory found 17
+   unformatted files (16 browser checks, one evaluation exporter); they were
+   formatted and both directories added to the check with a regression test.
+
+Changes
+
+- Add browser_checks and docs/evaluations to the Ruff format gate.
+- Format the 17 files the expanded gate found, without changing behavior.
+- Assert in tests/tooling.py that both directories remain in the format gate.
+- Record the adjudication and actual suite results in docs/STATUS.md.
+
+Validation actually run
+
+- ./sigma setup — passed.
+- uv run --locked --no-sync python tests/tooling.py — passed.
+- uv run --locked --no-sync ruff check src tests sigma deploy browser_checks
+  scripts docs/evaluations — passed.
+- uv run --locked --no-sync ruff format --check src tests sigma deploy scripts
+  browser_checks docs/evaluations — passed (236 files already formatted).
+- ./sigma test — exited 1 with the three T128-related stale assertions listed
+  above. All later independent checks ran; Pyright and frontend typecheck
+  passed. Frontend production build was skipped by the safety policy following
+  earlier failures.
+- uv run --locked --no-sync python tests/gce_host.py — same single stale
+  systemd assertion; the other 15 tests, including Ubuntu identity and local
+  preflight fixtures, passed.
+
+No real installer execution, GCP provisioning, or provider calls/charges.
+Remaining work: coordinator updates the three deployment assertions to match
+the T128 RequiresMountsFor behavior, then reruns relevant and full checks.

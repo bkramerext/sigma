@@ -53,9 +53,7 @@ with sync_playwright() as playwright:
     generate = dialog.get_by_role("button", name="Generate paper", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
-    expect(dialog.get_by_role("button", name="Generating paper…")).to_be_disabled(
-        timeout=10000
-    )
+    expect(dialog.get_by_role("button", name="Generating paper…")).to_be_disabled(timeout=10000)
     expect(dialog.get_by_role("status")).to_be_visible()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
@@ -102,9 +100,9 @@ with sync_playwright() as playwright:
     title_line = card.locator(".saved-paper-expand")
     metadata_line = card.locator(".saved-paper-meta")
     remove_button = metadata_line.get_by_role("button", name="Remove")
-    assert remove_button.evaluate(
-        "button => getComputedStyle(button).color"
-    ) == "rgb(241, 197, 141)"
+    assert (
+        remove_button.evaluate("button => getComputedStyle(button).color") == "rgb(241, 197, 141)"
+    )
     title_box = title_line.bounding_box()
     actions_box = actions.bounding_box()
     metadata_box = metadata_line.locator("p").bounding_box()

@@ -346,9 +346,7 @@ with sync_playwright() as p:
         expect(page.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         expect(
             page.get_by_text(
-                "OpenAI API connected"
-                if status == "connected"
-                else f"ChatGPT sign-in · {label}",
+                "OpenAI API connected" if status == "connected" else f"ChatGPT sign-in · {label}",
                 exact=True,
             )
         ).to_be_visible()
@@ -372,7 +370,9 @@ with sync_playwright() as p:
     expect(
         page.get_by_role("heading", name="Another editor changed this name", exact=True)
     ).to_be_visible()
-    expect(page.get_by_role("button", name="Project difficulty not set", exact=True)).to_be_visible()
+    expect(
+        page.get_by_role("button", name="Project difficulty not set", exact=True)
+    ).to_be_visible()
     settings_button = page.get_by_role("button", name="Project settings", exact=True)
     settings_button.click()
     expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("")

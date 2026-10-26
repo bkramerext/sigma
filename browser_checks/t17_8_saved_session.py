@@ -54,14 +54,40 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
     project = archived_export["project"]
     session = archived_export["research_sessions"][0]
     session["problem"] = "Determine the maximum number of regions cut out by n straight lines."
-    session["strategy_text"] = "Insert one line at a time, prove an upper bound for each increment, and give an arrangement attaining every increment."
+    session["strategy_text"] = (
+        "Insert one line at a time, prove an upper bound for each increment, and give an arrangement attaining every increment."
+    )
     argument = [
-        ("Assumptions", "Work in the Euclidean plane with n distinct lines. For attainment, choose a general-position arrangement: no parallel pairs and no triple intersections.", "assumption"),
-        ("At most n regions are added", "The nth line has at most n−1 intersection points with earlier lines, hence at most n pieces. Each piece can split at most one old region, so the increment is at most n.", "deduction"),
-        ("Why crossings split distinct regions", "Every old region is an intersection of open half-planes, hence convex. Two separated pieces cannot be in one old region, because the segment between them would cross an earlier line. An open region met by the new line has points on both sides and is split into two.", "deduction"),
-        ("Attainment", "For lines L_k: y=kx+k², intersections with earlier L_i have x=−(i+k), distinct for fixed k. No three lines meet at one point, so the nth inserted line has n−1 crossings and creates n regions.", "deduction"),
-        ("Recurrence and base case", "The bound and construction give R(n)=R(n−1)+n for n≥1. The empty arrangement has R(0)=1.", "deduction"),
-        ("Closed form", "Induction yields R(n)=1+Σ(k=1…n)k=1+n(n+1)/2: the base n=0 holds, and adding n gives the formula at n.", "deduction"),
+        (
+            "Assumptions",
+            "Work in the Euclidean plane with n distinct lines. For attainment, choose a general-position arrangement: no parallel pairs and no triple intersections.",
+            "assumption",
+        ),
+        (
+            "At most n regions are added",
+            "The nth line has at most n−1 intersection points with earlier lines, hence at most n pieces. Each piece can split at most one old region, so the increment is at most n.",
+            "deduction",
+        ),
+        (
+            "Why crossings split distinct regions",
+            "Every old region is an intersection of open half-planes, hence convex. Two separated pieces cannot be in one old region, because the segment between them would cross an earlier line. An open region met by the new line has points on both sides and is split into two.",
+            "deduction",
+        ),
+        (
+            "Attainment",
+            "For lines L_k: y=kx+k², intersections with earlier L_i have x=−(i+k), distinct for fixed k. No three lines meet at one point, so the nth inserted line has n−1 crossings and creates n regions.",
+            "deduction",
+        ),
+        (
+            "Recurrence and base case",
+            "The bound and construction give R(n)=R(n−1)+n for n≥1. The empty arrangement has R(0)=1.",
+            "deduction",
+        ),
+        (
+            "Closed form",
+            "Induction yields R(n)=1+Σ(k=1…n)k=1+n(n+1)/2: the base n=0 holds, and adding n gives the formula at n.",
+            "deduction",
+        ),
     ]
     latest = session["artifacts"][-1]
     review = latest.setdefault("objective_review", {})
@@ -83,7 +109,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
         for index, (title, text, status) in enumerate(argument, 1)
     ]
     session["outcome"]["solution_review"] = review
-    session["outcome"]["summary"] = "R(n)=1+n(n+1)/2 is supported by the saved insertion argument and an attaining family; candidate remains unverified."
+    session["outcome"]["summary"] = (
+        "R(n)=1+n(n+1)/2 is supported by the saved insertion argument and an attaining family; candidate remains unverified."
+    )
     (project_path / "project.json").write_text(
         json.dumps(project, ensure_ascii=False), encoding="utf-8"
     )
