@@ -16,16 +16,18 @@ sign-in, reload, logout, rejected identity, and isolated project workspaces.
 Executed Chrome checks used simulated identities and provider callbacks. They
 are not real Google OAuth, real ChatGPT OAuth, or hosted acceptance. The full
 Google A/B × ChatGPT A/B identity cross-product, Google/ChatGPT sign-out
-interaction with distinct approved live identities, and hosted OAuth callback
-remain UNVERIFIED. Hosted personal ChatGPT authorization remains blocked by
+interaction with distinct approved live identities, browser-level completion
+of the ChatGPT cancel button, and hosted OAuth callback remain UNVERIFIED. The
+AI auth begin/cancel API endpoints and cancellation state are covered by the
+deterministic test. Hosted personal ChatGPT authorization remains blocked by
 policy and must not be enabled. The hosted-mode API test continues to assert
 the 403 guard; local and hosted identity boundaries remain separate.
 
 `uv run --locked --no-sync python tests/chatgpt.py` passed. Real Chrome passed
 `browser_checks/chatgpt.py` against its isolated SIWC fixture and
 `browser_checks/t23_1_google_signin.py` against its self-started Google fixture.
-`./sigma test` ran on current main before edits and again with this change; both
-runs report the same three pre-existing failures in
+`./sigma test` ran on current main before edits and again after the account
+isolation/browser changes; both runs report the same three pre-existing failures in
 `tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
 they expect the previous `srv-sigma\\x2dstate.mount` dependency while current
 main's systemd unit uses `RequiresMountsFor=/srv/sigma-state`. No auth tests

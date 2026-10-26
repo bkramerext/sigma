@@ -204,6 +204,21 @@ async def checks(root):
         started = await auth.begin()
         auth.cancel(started["id"])
         assert auth.attempt_status(started["id"])["status"] == "cancelled"
+        async with REAL_CLIENT(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8000"
+        ) as auth_api:
+            response = await auth_api.post(
+                "/api/ai/auth/begin", json={}, headers={"Origin": "http://127.0.0.1:5173"}
+            )
+            assert response.status_code == 200, response.text
+            api_attempt_id = response.json()["id"]
+            cancelled = await auth_api.post(
+                f"/api/ai/auth/cancel/{api_attempt_id}",
+                json={},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            assert cancelled.status_code == 200, cancelled.text
+        assert auth.attempt_status(api_attempt_id)["status"] == "cancelled"
         assert (await auth.preferences())["active_account"] == first_id
         fixture.discovery_override = {"token_endpoint": "https://foreign.example/token"}
         await rejection(auth.begin(), "discovery")
