@@ -575,7 +575,13 @@ class Preflight:
                     "--format",
                     "{{json .SecurityOptions}}",
                 ],
-                environment={"PATH": "/usr/bin:/bin", "HOME": "/root"},
+                environment={
+                    "PATH": "/usr/bin:/bin",
+                    "HOME": "/root",
+                    "DOCKER_CONFIG": "/etc/docker",
+                    "DOCKER_HOST": "",
+                    "DOCKER_CONTEXT": "",
+                },
             )
         except (OSError, subprocess.TimeoutExpired):
             self.add(
@@ -671,7 +677,13 @@ class Preflight:
             self._command(
                 "Rootless image " + image,
                 ["docker", "--host", socket, "image", "inspect", image],
-                env={"PATH": "/usr/bin:/bin", "HOME": "/root"},
+                env={
+                    "PATH": "/usr/bin:/bin",
+                    "HOME": "/root",
+                    "DOCKER_CONFIG": "/etc/docker",
+                    "DOCKER_HOST": "",
+                    "DOCKER_CONTEXT": "",
+                },
             )
 
     def check_compose(self) -> None:
