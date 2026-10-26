@@ -45,6 +45,12 @@ def _files(directory: Path) -> dict[str, str]:
             entries[relative] = base64.b64encode(child.read_bytes()).decode("ascii")
     if "project.json" not in entries:
         raise BundleError("Project has no project.json")
+    try:
+        document = json.loads(base64.b64decode(entries["project.json"]))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise BundleError("Invalid source project document") from exc
+    if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
+        raise BundleError("Invalid source project schema")
     return entries
 
 
