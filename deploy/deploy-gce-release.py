@@ -189,34 +189,46 @@ class Deployment:
         if not initial and previous != old_sha:
             raise DeployFailure("current checkout and configured release pin disagree")
 
-        # Build from the selected commit, not whichever release happened to
-        # be checked out before deployment. Keep this inside the recovery scope:
-        # a failed build must restore the previous checkout and release pin.
+        # Export the exact requested commit to an isolated build worktree.
+        # Never build the candidate tag from the previously active checkout.
         service_stopped = False
         candidate_started = False
         try:
-            _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
-            build_env = dict(os.environ)
-            build_env["SIGMA_RELEASE"] = sha
-            _call(
-                self.runner,
-                [
-                    "docker",
-                    "compose",
-                    "--project-name",
-                    "sigma",
-                    "--env-file",
-                    str(self.env_file),
-                    "-f",
-                    str(self.repository / "deploy/compose.yaml"),
-                    "-f",
-                    str(self.repository / "deploy/compose.gce.yaml"),
-                    "build",
-                    "backend",
-                    "frontend",
-                ],
-                env=build_env,
-            )
+            with tempfile.TemporaryDirectory(prefix="sigma-release-build-") as build_dir:
+                build_tree = Path(build_dir) / "source"
+                _call(
+                    self.runner,
+                    ["git", "-C", str(self.repository), "worktree", "add", "--detach", str(build_tree), sha],
+                )
+                try:
+                    build_env = dict(os.environ)
+                    build_env["SIGMA_RELEASE"] = sha
+                    _call(
+                        self.runner,
+                        [
+                            "docker",
+                            "compose",
+                            "--project-name",
+                            "sigma",
+                            "--env-file",
+                            str(self.env_file),
+                            "-f",
+                            str(build_tree / "deploy/compose.yaml"),
+                            "-f",
+                            str(build_tree / "deploy/compose.gce.yaml"),
+                            "build",
+                            "--build-arg",
+                            f"SIGMA_RELEASE={sha}",
+                            "backend",
+                            "frontend",
+                        ],
+                        env=build_env,
+                    )
+                finally:
+                    _call(
+                        self.runner,
+                        ["git", "-C", str(self.repository), "worktree", "remove", "--force", str(build_tree)],
+                    )
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True
