@@ -158,3 +158,15 @@ Verification after reconciliation:
 
 The exact merge-result PR head SHA and hosted CI results are recorded in PR #242
 after the reconciliation commit is pushed.
+
+T81 current-main hosted verification update (2026-10-26)
+
+On merge-result head `1338b8355807ba471716da95c5423f5d196263b1`, the first
+SIGMA verification run #808 failed in `tests/research_sessions.py` because
+restart coverage encountered an already-active research worker. Startup safety
+passed, as did Ruff, formatting, Pyright, and the frontend typecheck in that
+run. The retry of the failed job passed. The T92 Recent Projects browser run
+#95, Research Outcome browser run #164, and T200 Model availability browser run
+#8 also passed. Local `./sigma test` and the real Chrome T81 legal-page check
+passed on this merge result. No deploy, self-merge, issue closure, or provider
+calls occurred.
