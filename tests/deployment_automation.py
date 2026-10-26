@@ -53,6 +53,8 @@ def main() -> None:
                 output = (
                     "healthy"
                     if "Health.Status" in argv[3]
+                    else OLD
+                    if "org.opencontainers.image.revision" in argv[3]
                     else f"sigma-{argv[-1].removeprefix('container-')}:{OLD}"
                 )
             elif argv[-2:] == ["rev-parse", "HEAD"]:
@@ -105,6 +107,8 @@ def main() -> None:
                 output = (
                     "healthy"
                     if "Health.Status" in argv[3]
+                    else OLD
+                    if "org.opencontainers.image.revision" in argv[3]
                     else f"sigma-{argv[-1].removeprefix('container-')}:{OLD}"
                 )
                 return subprocess.CompletedProcess(argv, 0, output, "")
@@ -133,16 +137,19 @@ def main() -> None:
 
         # The candidate checkout must precede image build so tags cannot lie
         # about which source tree produced them.
-        checkout_index = next(
+        export_index = next(
             index for index, argv in enumerate(calls)
-            if argv[:4] == ["git", "-C", str(repo), "checkout"]
+            if argv[:5] == ["git", "-C", str(repo), "worktree", "add"]
             and argv[-1] == NEW
         )
         build_index = next(
             index for index, argv in enumerate(calls)
-            if argv[:2] == ["docker", "compose"] and argv[-1] == "build"
+            if argv[:2] == ["docker", "compose"] and argv[-1] == "frontend"
+            and "build" in argv
         )
-        assert checkout_index < build_index
+        assert export_index < build_index
+        build_argv = calls[build_index]
+        assert f"SIGMA_RELEASE={NEW}" in build_argv
 
         print(
             "GCE release automation idempotency, missing config, startup rollback, and state preservation passed."
