@@ -35,6 +35,7 @@ class Fixture:
         self.accesses = {}
         self.requests = []
         self.subject = "fixture-subject-one"
+        self.email = "same-email@example.test"
         self.scope = SCOPES
         self.claims_override = {}
         self.token_override = {}
@@ -82,7 +83,7 @@ class Fixture:
             "aud": registration["issued"],
             "iat": int(time.time()),
             "exp": int(time.time()) + 3600,
-            "email": "same-email@example.test",
+            "email": self.email,
             "email_verified": True,
             "name": "Controlled fixture account",
             **self.claims_override,
