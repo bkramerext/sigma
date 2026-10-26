@@ -213,6 +213,33 @@ class Deployment:
             service_stopped = False
             candidate_started = True
             self.verify_health(sha)
+            compose = [
+                "docker",
+                "compose",
+                "--project-name",
+                "sigma",
+                "--env-file",
+                str(self.env_file),
+                "-f",
+                str(self.repository / "deploy/compose.yaml"),
+                "-f",
+                str(self.repository / "deploy/compose.gce.yaml"),
+            ]
+            backend_id = _call(self.runner, compose + ["ps", "-q", "backend"])
+            frontend_id = _call(self.runner, compose + ["ps", "-q", "frontend"])
+            _call(
+                self.runner,
+                [
+                    "python3",
+                    str(self.repository / "deploy/release_image.py"),
+                    "record",
+                    sha,
+                    "--backend-container",
+                    backend_id,
+                    "--frontend-container",
+                    frontend_id,
+                ],
+            )
             if initial:
                 _call(self.runner, ["systemctl", "enable", "sigma.service"])
         except DeployFailure as failure:
