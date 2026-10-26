@@ -394,8 +394,19 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
             raise BundleError("Cannot import unreadable research session") from exc
         if not isinstance(session, dict) or session.get("project_id") != project_id:
             raise BundleError("Cannot import foreign research session")
-        if not isinstance(session.get("project_path"), str):
-            raise BundleError("Research session is missing project provenance")
+        session_id = member.removeprefix("research-sessions/").removesuffix(".json")
+        from uuid import UUID
+        try:
+            if str(UUID(session_id)) != session_id:
+                raise ValueError("Noncanonical session identifier")
+        except (ValueError, TypeError) as exc:
+            raise BundleError("Cannot import invalid research session identifier") from exc
+        if (session.get("id") != session_id
+            or type(session.get("session_number")) is not int
+            or session["session_number"] < 1
+            or not isinstance(session.get("status"), str)
+            or not isinstance(session.get("project_path"), str)):
+            raise BundleError("Cannot import malformed research session")
         session["project_path"] = str(path.resolve())
         members[member] = (json.dumps(session, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     canonical = {
