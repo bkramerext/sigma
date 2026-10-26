@@ -2939,6 +2939,70 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: str) -> dict[str, Any]:
+    """Persist a terminal UI fixture through the normal session storage layer.
+
+    This entry point performs no provider, auth-context, or worker calls.
+    Only the authenticated local mock API may invoke it.
+    """
+    if scenario not in {"completed", "failed", "provider-error", "exhausted"}:
+        raise ProjectError("Unknown mock research scenario")
+    view, _guard = _snapshot(path)
+    strategy = next(
+        (item for item in view.project.strategies
+         if item.id == strategy_id and item.removed_at is None and item.enabled),
+        None,
+    )
+    if strategy is None:
+        raise ProjectError("Choose an enabled, saved strategy")
+    with _project_manager_lock(view.path):
+        records = _all(view.path)
+        previous = next((item for item in records if item.get("idempotency_key") == idempotency_key), None)
+        if previous:
+            if previous.get("strategy_id") != strategy_id:
+                raise ProjectError("Idempotency key belongs to another strategy")
+            return _public(previous)
+        if any(item.get("status") in {"queued", "running"} for item in records):
+            raise ProjectError("A research session is already active")
+        now = _now()
+        failed = scenario != "completed"
+        message = {
+            "completed": "Simulated research completed. No provider was called.",
+            "failed": "Simulated research failed. No provider was called.",
+            "provider-error": "Simulated AI provider unavailable. No provider was called.",
+            "exhausted": "Simulated sponsorship allowance exhausted. No provider was called.",
+        }[scenario]
+        record = {
+            "schema_version": 1, "id": str(uuid4()),
+            "session_number": _allocate_session_number(view.path, records),
+            "project_path": view.path, "project_id": view.project.id,
+            "strategy_id": strategy.id, "strategy_title": strategy.title,
+            "strategy_text": strategy.approach, "strategy_ids": [strategy.id],
+            "strategy_runs": [{
+                "strategy_id": strategy.id, "strategy_title": strategy.title,
+                "strategy_text": strategy.approach,
+                "status": "failed" if failed else "ended",
+                "current_action": "Simulation finished", "cycle": 1,
+                "calls_used": 0, "artifacts": [], "reason": message,
+            }],
+            "strategy_snapshot": [{"id": strategy.id, "title": strategy.title, "eligibility": "eligible"}],
+            "problem": view.project.problem, "investigation_type": view.project.investigation_type,
+            "model": "mock-deterministic", "reasoning_effort": "none",
+            "mode": "mock", "idempotency_key": idempotency_key,
+            "status": "failed" if failed else "ended",
+            "created_at": now, "updated_at": now, "started_at": now,
+            "calls_used": 0, "call_limit": 0, "cycle_limit": 1,
+            "cycle": 1, "steps": [], "artifacts": [], "strategy_assessments": [],
+            "interventions": [], "message": message, "current_action": "Simulation finished",
+            "events": [{"sequence": 1, "timestamp": now, "kind": "simulation.finished",
+                        "role": None, "message": message}],
+            "mock_scenario": scenario, "simulated": True,
+        }
+        record["outcome"] = _outcome(record)
+        _save(view.path, record)
+        return _public(record)
+
+
 def list_sessions(path: str) -> list[dict[str, Any]]:
     return [_public(_recover(item)) for item in _all(path)]
 
