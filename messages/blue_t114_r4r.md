@@ -4,7 +4,7 @@
 
 **Base:** current `main` `429b4d7` (branch started from `58b360e`, then rebased)
 
-**Current implementation commit:** `a89edf0d894bb4357b1308f71207d69ca5c1e832`
+**Implementation commit:** `a89edf0d894bb4357b1308f71207d69ca5c1e832` (PR head also includes the tracker/handoff link update)
 
 **PR:** [#216](https://github.com/bkramerext/sigma/pull/216), open, not merged
 
