@@ -12,8 +12,8 @@ function buildCommit(): string {
 // Python project metadata is the canonical product version.
 function productVersion(): string {
   const metadata = readFileSync(new URL('../pyproject.toml', import.meta.url), 'utf8');
-  const section = metadata.split(/^\\[project\\]\\s*$/m)[1]?.split(/^\\[/m)[0];
-  const version = section?.match(/^version\\s*=\\s*"([^"]+)"/m)?.[1];
+  const section = metadata.split(/^\[project\]\s*$/m)[1]?.split(/^\[/m)[0];
+  const version = section?.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
   if (!version) throw new Error('Missing [project].version in pyproject.toml');
   const frontendVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
   if (frontendVersion !== version) throw new Error('Frontend and Python product versions differ');
