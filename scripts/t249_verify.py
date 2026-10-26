@@ -56,6 +56,9 @@ def main() -> int:
         "docker_info": command(["docker", "info", "--format", "{{json .ServerVersion}}"], timeout=20),
         "docker_images": command(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"], timeout=20),
     }
+    checks["docker_lifecycle"] = command(
+        [interpreter, "tests/t249_docker_lifecycle.py"], timeout=180, env=env
+    )
     # Human-readable simulations are standalone Python programs. Select only
     # related suites, so unrelated provider/network tests do not obscure T249.
     candidates = sorted((root / "tests").glob("*.py"))
