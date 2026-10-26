@@ -101,7 +101,9 @@ SIGMA is built through human-directed, AI-assisted software engineering. Brian s
 
 The mock-auth selector is a development-only tool for manually inspecting the hosted identity UI without Google OAuth. It must only be used with a loopback development server. It is not an authentication method for deployment and does not emulate Google's identity verification or OpenAI inference.
 
-For a dedicated local checkout, set these variables in that checkout's ignored .env file:
+Start the interactive mock sign-in walkthrough with `./sigma start --mock-auth --navigate`. The launcher enables mock mode only for its loopback child processes and disables local auto-admin. Do not combine `--mock-auth` with `--signin`.
+
+For advanced manual configuration, set these variables in that checkout's ignored .env file:
 
 ```dotenv
 SIGMA_CLOUD_AUTH_ENABLED=true
