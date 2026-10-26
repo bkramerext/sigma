@@ -47,8 +47,8 @@ Authenticated GCE access is available in this session. `gcloud auth list` showed
 the active personal owner account; project `sigma-research-prod` lists
 `sigma-gce-01` as RUNNING in `us-west1-b`. The VM has Ubuntu 24.04 amd64, OS
 Login enabled, external IPv4 `136.66.128.82`, and runtime service account
-`sigma-runtime@...`. Current IAM grants on this account include project
-`roles/owner`, `roles/compute.osAdminLogin`, and
+`sigma-runtime@sigma-research-prod.iam.gserviceaccount.com`. Current IAM grants
+on this account include project `roles/owner`, `roles/compute.osAdminLogin`, and
 `roles/iap.tunnelResourceAccessor`; this is too broad for routine worker use.
 
 Using PR #195's current-main preflight as the basis, live
