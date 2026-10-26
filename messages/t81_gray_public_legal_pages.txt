@@ -76,3 +76,42 @@ Exact updated PR head SHA and CI result are recorded in PR #242 after pushing
 this follow-up. This is not R4R while full `./sigma test` / CI remains failing.
 Privacy and terms remain drafts. No deployment, self-merge, issue closure,
 email, or AI provider calls were made.
+
+T81 current-main startup test and cloud-auth format follow-up
+
+Base remains `origin/main` at
+`6a607a488106f9c9233336eb940f0458024e527b` (merged in commit
+`a98b2f0fdfcfb9f6cb7aec6fe1b22323d1b7ca5d`). Updated `tests/tooling.py` to
+match current startup behavior:
+- Guest startup with a blank admin-contact value runs with
+  `SIGMA_LOCAL_AUTO_ADMIN=false` and does not require admin contact or OAuth
+  credentials.
+- `--signin` without the admin-contact value prints the friendly error and
+  returns before constructing the launcher or starting servers.
+- Configured `--signin` remains covered; tests confirm the backend receives
+  the OAuth secret and admin identity, the frontend receives neither, and
+  local auto-admin is enabled.
+
+Applied only Ruff's formatter output to three existing expressions in
+`src/sigma/cloud_auth.py`; no behavior changed. **Coordination note for
+Brian/coordinator:** Blue's PR #246 also touches `src/sigma/cloud_auth.py`.
+This branch's overlap is formatting-only on the current-main expressions near
+config validation, cookie creation, and denied-access redirect. Please route
+this overlap to the coordinator through Brian; no direct worker coordination
+occurred.
+
+Verification on this tree:
+- `uv run --locked python tests/tooling.py`: PASS.
+- `uv run --locked ruff check tests/tooling.py src/sigma/cloud_auth.py`: PASS.
+- `uv run --locked ruff format --check tests/tooling.py src/sigma/cloud_auth.py`:
+  PASS.
+- `uv run --locked pyright`: 0 errors, warnings, or informations.
+- `./sigma test`: PASS, all scenarios, Ruff check/format, Pyright, frontend
+  typecheck, and production build. Existing >500 kB chunk advisory remains.
+- Real Chrome `uv run --with playwright python
+  browser_checks/t81_public_legal_pages.py`: PASS for signed-out direct
+  navigation/refresh at `/privacy` and `/tos`, draft labels, About Privacy,
+  and no `/tos` app link.
+
+The updated PR head and CI status are recorded in PR #242. The R4R designation
+is pending completion of GitHub CI. No deployment, self-merge, or issue closure.

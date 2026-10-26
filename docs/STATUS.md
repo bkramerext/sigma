@@ -1,5 +1,25 @@
 # SIGMA status
 
+## T81 PR #242 CI unblock (2026-10-26)
+
+Updated the stale `tests/tooling.py` startup checks to match current `main`:
+ordinary launch without `--signin` works with a blank admin-contact setting
+as Guest (`SIGMA_LOCAL_AUTO_ADMIN=false`); `--signin` without the contact
+returns its friendly error before constructing the launcher or starting
+servers; and configured `--signin` continues to exercise server-only OAuth
+credentials and local admin setup. Applied Ruff's formatting-only changes to
+three expressions in `src/sigma/cloud_auth.py` without changing behavior.
+This file also overlaps Blue's PR #246; the overlap is limited to those
+formatting changes and is reported in the Gray handoff for coordinator
+reconciliation through Brian.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build (existing >500 kB chunk advisory).
+Real Chrome passed `browser_checks/t81_public_legal_pages.py` for signed-out
+direct navigation and refresh of `/privacy` and `/tos`, draft labels, the About
+Privacy link, and absence of app `/tos` links. No deployment occurred. See the
+[Gray handoff](../messages/t81_gray_public_legal_pages.txt).
+
 ## T81 public legal pages follow-up (2026-10-26)
 
 On current `main` `623a9464fed585cf951b02be54e8e4ab683bb559`, the existing

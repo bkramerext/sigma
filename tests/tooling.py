@@ -260,7 +260,7 @@ def check_local_google_startup() -> None:
         patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
         patch("sigma.ui.stop_servers"),
     ):
-        assert run_ui(navigate=True) == 0
+        assert run_ui(navigate=True, signin=True) == 0
     backend_env = launch.call_args_list[0].kwargs["env"]
     frontend_env = launch.call_args_list[1].kwargs["env"]
     for key, value in {
@@ -271,6 +271,7 @@ def check_local_google_startup() -> None:
     }.items():
         assert backend_env[key] == value
     assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+    assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "true"
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
     assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
@@ -303,21 +304,16 @@ def check_local_google_setup_warning() -> None:
         assert local_google_configuration_warning() is None
 
 
-def check_partial_google_startup_warns_without_enabling_auth() -> None:
+def check_guest_startup_without_admin_contact() -> None:
     backend, frontend = Mock(), Mock()
     backend.poll.return_value = None
     frontend.poll.return_value = None
     owner = MagicMock()
     owner.__enter__.return_value.replacement_request.return_value = None
-    warning_output = StringIO()
     with (
         patch.dict(
             "os.environ",
-            {
-                "GOOGLE_OIDC_CLIENT_ID": "client-id",
-                "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
-            },
+            {},
             clear=True,
         ),
         patch("sigma.ui.Instance", return_value=owner),
@@ -331,13 +327,32 @@ def check_partial_google_startup_warns_without_enabling_auth() -> None:
         patch("sigma.ui.ready", return_value=True),
         patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
         patch("sigma.ui.stop_servers"),
-        redirect_stderr(warning_output),
     ):
         assert run_ui() == 0
-    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in warning_output.getvalue()
     backend_env = launch.call_args_list[0].kwargs["env"]
-    assert "SIGMA_CLOUD_AUTH_ENABLED" not in backend_env
-    assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+    assert backend_env["SIGMA_CLOUD_AUTH_ENABLED"] == "true"
+    assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+    assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in backend_env
+    assert "GOOGLE_OIDC_CLIENT_SECRET" not in backend_env
+
+
+def check_signin_without_admin_contact_fails_before_launch() -> None:
+    error_output = StringIO()
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("sigma.ui.load_local_config"),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.Instance") as instance,
+        patch("sigma.ui.subprocess.Popen") as launch,
+        redirect_stderr(error_output),
+    ):
+        assert run_ui(signin=True) == 2
+    assert "Cannot start SIGMA with --signin." in error_output.getvalue()
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL is not configured." in error_output.getvalue()
+    instance.assert_not_called()
+    launch.assert_not_called()
 
 
 def check_shutdown_and_suspended() -> None:
@@ -416,7 +431,8 @@ def main() -> None:
         check_ui()
         check_local_google_startup()
         check_local_google_setup_warning()
-        check_partial_google_startup_warns_without_enabling_auth()
+        check_guest_startup_without_admin_contact()
+        check_signin_without_admin_contact_fails_before_launch()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()
