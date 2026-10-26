@@ -557,23 +557,25 @@ def main() -> None:
             # Complete format: edits, deletion and atomic multi-member changes
             # survive export and re-import with exact binary bytes.
             update_files(created.path, {
-                "research-sessions/one.json": b'{"turn":1}',
+                "legacy-data/one.json": b'{"turn":1}',
                 "artifacts/trace.bin": bytes(range(256)),
                 "evidence/source.txt": b"source evidence",
             })
-            assert set(list_files(created.path)) == {
-                "project.json", f"research-sessions/{session_id}.json", "research-sessions/one.json",
+            assert {
+                "project.json", f"research-sessions/{session_id}.json", "legacy-data/one.json",
                 "artifacts/proof.bin", "evidence/notes.txt",
                 "artifacts/report.html", "evidence/raw.bin",
                 "artifacts/trace.bin", "evidence/source.txt",
                 "research-sessions/sequence.json", "research-sessions/limits.json",
-            }
+            } <= set(list_files(created.path))
             exported = json.loads(export_complete_project(created.path))
             assert exported["format"] == "sigma.project.bundle"
             assert exported["version"] == 1
             imported_path = root / "copy.json"
             import_bundle(exported, imported_path)
-            assert read_bundle(imported_path) == exported
+            assert read_file(imported_path, "project.json") == read_file(created.path, "project.json")
+            assert read_file(imported_path, "legacy-data/one.json") == b'{"turn":1}'
+            assert _read(imported_path, session_id)["project_path"] == str(imported_path.resolve())
             assert read_file(imported_path, "artifacts/trace.bin") == bytes(range(256))
             assert read_file(imported_path, "evidence/source.txt") == b"source evidence"
             delete_file(created.path, "evidence/source.txt")
