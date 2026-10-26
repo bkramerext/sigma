@@ -186,6 +186,17 @@ def exercise(ui_url: str, root: Path) -> None:
         page.get_by_role("tab", name="Samples").click()
         page.get_by_role("button", name="Sign in with Google").click()
         expect(page.get_by_role("dialog")).to_contain_text("Welcome to SIGMA")
+        dialog = page.get_by_role("dialog", name="Welcome to SIGMA")
+        expect(dialog.locator(".sigma-signin-identity img")).to_be_visible()
+        expect(dialog.get_by_role("link", name="Continue with Google")).to_be_focused()
+        page.keyboard.press("Shift+Tab")
+        expect(dialog.get_by_role("link", name="Privacy notice")).to_be_focused()
+        page.keyboard.press("Tab")
+        expect(dialog.get_by_role("link", name="Continue with Google")).to_be_focused()
+        bounds = dialog.bounding_box()
+        assert bounds and bounds["x"] >= 0 and bounds["y"] >= 0, bounds
+        assert bounds["x"] + bounds["width"] <= page.viewport_size["width"], bounds
+        assert bounds["y"] + bounds["height"] <= page.viewport_size["height"], bounds
         expect(page.get_by_role("dialog").get_by_role("link", name="Request an invitation")).to_be_visible()
         expect(page.get_by_role("dialog").get_by_role("button", name="Continue as Guest")).to_be_visible()
         sign_in = page.get_by_role("link", name="Continue with Google")
