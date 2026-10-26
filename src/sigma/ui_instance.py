@@ -46,7 +46,7 @@ def recognized_launcher(command: str, entry: str) -> bool:
         return False
     if entry not in args:
         return False
-    args = args[args.index(entry) + 1:]
+    args = args[args.index(entry) + 1 :]
     if not args or args[0] not in ("start", "ui"):
         return False
     return len(args) == 1 or (
@@ -125,7 +125,9 @@ class Instance:
                 or current["command"] != record["command"]
                 or not recognized_launcher(command, entry)
             ):
-                raise RuntimeError(f"SIGMA owner process identity changed (PID {pid}); refusing to signal.")
+                raise RuntimeError(
+                    f"SIGMA owner process identity changed (PID {pid}); refusing to signal."
+                )
             return pid, current
         except (ValueError, TypeError, KeyError, UnicodeError, OSError) as exc:
             raise RuntimeError("Cannot verify SIGMA owner record; refusing takeover.") from exc
