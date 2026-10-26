@@ -514,3 +514,22 @@ Rollback action or follow-up issue:
 ```
 
 **Maintenance rule:** Any recurring operational action discovered during Cloud deployment or incidents gets a tested step here before it is considered operationally handed off.
+
+## T128 host-readiness and T129 exact-SHA release procedure
+
+Before the first application start, follow [T128 host readiness](T128_HOST_READINESS.md) and [T128 live-readiness evidence](T128_LIVE_READINESS.md). Host identity, state-disk UUID/mount options, rootless Docker, service dependencies, container restrictions, and effective GCE firewall rules must be observed on the actual VM; source inspection alone is not a PASS.
+
+The release operator must use a full lowercase 40-character commit SHA. The deployment command builds backend and frontend images from an exported Git archive of that exact commit using `deploy/release_image.py`, labels and verifies their source SHA, and records immutable image IDs/digests after healthy startup. It must not build the requested tag from the currently checked-out release. Initial start:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA --initial
+```
+
+Upgrade (only after verifying a recovery-point backup and schema compatibility):
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA \
+  --backup-verified --schema-compatible
+```
+
+Do not run these commands until T128 host checks, production configuration/secret delivery, and the coordinator's explicit deployment authorization are complete. A local rehearsal does not constitute hosted acceptance.
