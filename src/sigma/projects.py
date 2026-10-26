@@ -1424,3 +1424,46 @@ def list_json_projects() -> tuple[ProjectView, ...]:
         except ProjectError:
             continue
     return tuple(result)
+
+
+def save_project_artifacts(
+    value: str | Path, artifacts: dict[str, bytes | None],
+) -> None:
+    """Atomically save or remove evidence and artifacts in a JSON project.
+
+    Names must be relative to evidence/ or artifacts/. A single transaction
+    publishes the entire change set or leaves the previous project intact.
+    """
+    path = project_path(value)
+    if path.suffix != ".json":
+        raise ProjectError("Artifact bundle writes require a JSON project")
+    inspect_project(path)
+    if not isinstance(artifacts, dict) or any(
+        not isinstance(name, str)
+        or not name.startswith(("evidence/", "artifacts/"))
+        or name in ("evidence/", "artifacts/")
+        for name in artifacts
+    ):
+        raise ProjectError("Artifact paths must be under evidence/ or artifacts/")
+    from sigma.project_bundle import update_files
+
+    try:
+        update_files(path, artifacts)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot save project artifacts: {exc}") from exc
+
+
+def read_project_artifact(value: str | Path, name: str) -> bytes:
+    """Read an evidence or artifact member from an authorized JSON project."""
+    path = project_path(value)
+    if path.suffix != ".json" or not isinstance(name, str) or not name.startswith(
+        ("evidence/", "artifacts/")
+    ):
+        raise ProjectError("Artifact path is invalid")
+    inspect_project(path)
+    from sigma.project_bundle import read_file
+
+    try:
+        return read_file(path, name)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot read project artifact: {exc}") from exc
