@@ -9,7 +9,7 @@
 | [T126](t126.md) | GCP project, trial, access | 👤 Brian + Coordinator | In progress |
 | [T127](t127.md) | VM, dedicated disk, static IP, network/IAM | 👤 **Brian** (console actions); 🔴 Red technical guidance | **Next** |
 | [T128](t128.md) | Host bootstrap, rootless Docker and preflight | 🔴 Red | Blocked by T127 |
-| [T129](t129.md) | Compose app, health and durable state | 🔴 Red | Offline implementation in [PR #152](https://github.com/bkramerext/sigma/pull/152); hosted acceptance pending Brian's T127 handoff |
+| [T129](t129.md) | Compose app, health and durable state | 🔴 Red | Automation follow-up [PR #161](https://github.com/bkramerext/sigma/pull/161) in review; hosted acceptance pending owner configuration and authorization |
 | [T130](t130.md) | DuckDNS and HTTPS | 🔴 Red; 👤 Brian DNS account changes | Blocked by T127/T129 |
 | [T131](t131.md) | Hosted Google OAuth, sign-in | 🔴 Red backend + ⚪ Gray preparation; 👤 Brian OAuth console/secret | **Closed: T131/PR156 and T131/PR158 merged; live OAuth acceptance deferred (unverified)** |
 | [T132](t132.md) | Hosted inference, sessions, Python/Sage | ⚪ Gray preparation; 🔴 Red integration; 👤 Brian live access/authorization | **Closed: T132/PR157 merged; hosted research and rootless acceptance deferred (unverified)** |
