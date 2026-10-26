@@ -6099,3 +6099,5 @@ check reports existing formatting in `src/sigma/cli.py`, `src/sigma/gmail_delive
 frontend typecheck and all guest-focused checks passed. The build step was
 skipped by `./sigma test` after those failures and was run separately
 successfully. See the [Blue guest-samples handoff](../messages/guest_samples_blue_r4r.md).
+Implementation is in [PR #246](https://github.com/bkramerext/sigma/pull/246),
+open against `main` and not merged.

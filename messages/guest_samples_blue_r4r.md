@@ -1,6 +1,7 @@
 BLUE R4R handoff — Guest sample projects and About privacy actions
 
 Branch: `fix/guest-samples-about-privacy`
+PR: https://github.com/bkramerext/sigma/pull/246 (open against `main`; not merged)
 Base: `main` at `6a607a488106f9c9233336eb940f0458024e527b`
 Implementation commit: `eabb1bcf0b3393f47c9dc879ce1d9d4e50290a2e`
 The PR branch will include this handoff-only follow-up commit after the code
