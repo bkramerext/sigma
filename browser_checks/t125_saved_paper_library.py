@@ -228,7 +228,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             row.get_by_role("group", name="Confirm removal of Saved fixture 1").get_by_role(
                 "button", name="Confirm remove"
             ).click()
-            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
+            expect(
+                dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
+            ).to_have_count(0)
             expect(
                 dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')
             ).to_have_count(1)
@@ -243,7 +245,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             )
             expect(second_row.get_by_role("link", name="Download text file")).to_be_visible()
             expect(second_row.get_by_role("link", name="Open PDF in browser")).to_be_visible()
-            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
+            expect(
+                dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
+            ).to_have_count(0)
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.screenshot(path="/tmp/sigma-t125-paper-library-mobile.png", full_page=True)
             assert not generation_posts, generation_posts
