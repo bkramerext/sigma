@@ -36,6 +36,41 @@ the Ruff failure; `npm --prefix frontend run build` was run separately and
 passed. This is R4R with that baseline Ruff defect and the unrelated browser
 evidence-focus failure recorded for review, in [PR #213](https://github.com/bkramerext/sigma/pull/213).
 
+## Current state — research effectiveness (2026-10-26)
+
+Engineering tests and deterministic dry-runs establish implementation
+properties only; they do not establish research superiority. T146 preserved
+one authorized, same-model paired live case on a single scheduling problem.
+Both arms found the exact answer; SIGMA's Skeptic added no substantive
+correction, and the single-role baseline later weakened a correct result after
+an invalid self-critique. This is a descriptive within-session observation, not
+a test of cumulative cross-strategy research. Full records and limitations are
+in the [T146 assessment](evaluations/increment_22/exports/trial_20261025/assessment.md).
+
+The blinded unfamiliar-task comparison of cumulative Investigator/Skeptic
+research across multiple strategies and saved sessions remains **not frozen and
+not run**. Its current design, proposed $15.60 / 192-call maximum, scoring plan,
+failure handling, and freeze/authorization gates are in the
+[T114 cumulative preregistration](evaluations/T114_CUMULATIVE_PREREGISTRATION.md).
+No paid or live provider call is authorized by that document. The earlier
+public six-task dry-run and T146's one-task comparison are not substitutes.
+Same-model Investigator/Skeptic agreement is not independent verification.
+
+The bounded maintainability review records `research_sessions.py` at 8,666
+lines and recommends staged, behavior-preserving extraction only if separately
+prioritized; no wholesale refactor was performed. See the preregistration for
+module seams and current blockers. Cloud acceptance status is recorded in its
+dated entries below and is separate from research-quality evidence.
+
+T114 engineering verification: the cumulative planner's deterministic,
+budget, pairing, and failure-retention checks pass; focused Ruff and Pyright
+pass. `./sigma test` reaches all scenarios and Pyright (0 diagnostics), but
+exits 1 at pre-existing Ruff/format findings in
+`browser_checks/model_availability.py`; consequently the frontend production
+build is skipped by the runner. Frontend typecheck passes. No browser workflow
+or new SIGMA project/session was exercised; the existing T146 exports remain
+the actual live paired evidence. No provider call was made.
+
 ## T129 initial GCE preview deployment (2026-10-26)
 
 Deployed release `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` to
@@ -950,13 +985,16 @@ structured scrutiny, not independent verification.
 solution-bearing stock strategy and cannot count as independent discovery. A
 later answer-free live run produced a reviewed proof candidate, but exact role
 inputs were not retained and output fields were truncated; its independence is
-unverified. Deterministic fixtures and archived sessions are useful engineering
-evidence, not new live trials. The matched-budget blind comparison remains
-**unexecuted**. Its current proposal is [issue 114 preregistration](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
-It tests only within-session adversarial review against single-role self-review;
-it cannot establish cumulative persistence. The separate longitudinal design
-is [issue #119](https://github.com/bkramerext/sigma/issues/119). No live
-shakedown or scored run is authorized.
+unverified. T146 later completed one authorized same-model paired case on a
+single scheduling task. Both arms found the optimum; the Skeptic added no
+substantive correction and the single-role baseline later withdrew its correct
+conclusion after an invalid critique. This remains a descriptive
+within-session observation; it does not test cumulative cross-strategy or
+cross-session value. The unfamiliar-task cumulative comparison remains
+**not frozen and not run**. Its current design is [T114 cumulative
+preregistration](evaluations/T114_CUMULATIVE_PREREGISTRATION.md); the old
+within-session protocol remains [historical](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
+No further live run is authorized by T114.
 
 **What is established:** the dated entries below link to actual tests, exports,
 browser observations and bounded engineering results, with their stated limits.

@@ -73,6 +73,7 @@
 | T45 | **HIGH:** Long-form TeX paper generation under output/context limits | Implemented; PR #68 open for final review | [ticket](../tickets/t45.md) · [PR #68](https://github.com/bkramerext/sigma/pull/68) |
 | T46 | Home and Project About dialog and product introduction | R4R · Green · [PR #73](https://github.com/bkramerext/sigma/pull/73) · [ticket](../tickets/t46.md) |
 | T47 | First-class Markdown Conclusion in Research Session Outcome | Implemented; R4R | Gray · [ticket](tickets/t47.md) · [PR #72](https://github.com/bkramerext/sigma/pull/72) |
+| T114 | Blind matched-budget comparison of cumulative research; bounded maintainability review | P0 preregistration / deterministic planner R4R; no cumulative blind run · [PR #216](https://github.com/bkramerext/sigma/pull/216) | Blue · [issue #114](https://github.com/bkramerext/sigma/issues/114) · [cumulative preregistration](evaluations/T114_CUMULATIVE_PREREGISTRATION.md) · [T146 single-case evidence](evaluations/increment_22/exports/trial_20261025/assessment.md) |
 
 ### T23.1 scope
 

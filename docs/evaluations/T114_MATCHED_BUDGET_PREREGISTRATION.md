@@ -1,4 +1,10 @@
-# Issue 114: within-session adversarial collaboration evaluation
+# Issue 114: historical within-session adversarial collaboration proposal
+
+> **Historical, superseded for current T114 work.** Revision 2 proposed a
+> within-session study and predates the preserved T146 one-case matched live
+> comparison. It is not frozen and does not test cumulative cross-strategy or
+> cross-session research. The current cumulative preregistration is
+> [T114_CUMULATIVE_PREREGISTRATION.md](T114_CUMULATIVE_PREREGISTRATION.md).
 
 **Revision 2, prepared 2026-10-25 after external adversarial review.**
 **State: proposed, not frozen, not executed, and not authorized for paid inference.**
