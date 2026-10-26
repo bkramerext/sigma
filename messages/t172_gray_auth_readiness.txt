@@ -1,0 +1,24 @@
+T172 — Authentication and account-isolation readiness assessment
+
+Branch: gray/t172-auth-readiness
+Base: main at b33e994 (current main when work started)
+Assessment: BLOCKED for production launch; fixture acceptance passes, live hosted acceptance remains unverified.
+
+Reviewed integrated T66/issue #66 (PR #169), T131 and T134 implementation, acceptance notes, runbooks, cloud auth/workspace/storage code, API middleware, ChatGPT auth and provider selection. No auth source files or T163 files were changed. Detailed evidence, production OAuth requirements, first-live-sign-in checklist, remaining real-identity gaps and launch decision are in docs/T172_AUTH_READINESS.md. Added tickets/t172.md and indexed it in the tracker.
+
+Findings:
+- No new launch-blocking code defect identified in the deterministic code/test review. Auth includes state/nonce/claim verification, exact-origin CSRF defense for mutations, Secure/HttpOnly/SameSite hosted cookies, hashed server-side 8-hour sessions and revocation, current-grant authorization, owner-bound workspaces, and hosted personal ChatGPT auth rejection.
+- Production launch is BLOCKED by absent production evidence: configured Web OAuth client/secret delivery, real admin/member/denied identities, HTTPS callback and deployed cookies/session behavior, hosted T131 flow, hosted T134 cross-owner privacy matrix, and hosted persistence/recovery.
+- Hosted-mode personal ChatGPT auth stays prohibited; no change proposed.
+
+Checks actually run:
+- `uv run --locked --no-sync python tests/cloud_auth.py` via `./sigma test`: PASS, 16 tests. Includes callback state/nonce/claims/replay, authorization and denied account, session persistence/expiry/logout, switching, Origin and hosted ChatGPT 403 cases.
+- `tests/cloud_workspaces.py`, `tests/cloud_research.py`, `tests/cloud_research_api.py`, `tests/cloud_research_sponsored_api.py`, and `tests/storage.py`: PASS during first `./sigma test`; persistent-disk two-subject isolation, restart/restore, ownership and hosted API cases.
+- `uv run --locked --with playwright python browser_checks/t23_1_google_signin.py`: PASS in real Chrome with deterministic local identity/API fixtures and temporary storage (sign-in, reload, logout, anonymous/revoked denial, rejected identity, switching and project isolation). No Google endpoint or external provider was contacted.
+- First `./sigma test`: FAIL overall on three unrelated existing systemd mount expectation assertions (`tests/deployment_package.py`, `tests/gce_host.py`, `tests/host_monitor.py`); expected old `srv-sigma\\x2dstate.mount`, actual service uses `RequiresMountsFor=/srv/sigma-state`. Initially frontend `tsc` was absent; after `npm ci --prefix frontend`, standalone typecheck/build passed. Build was skipped in the full suite after earlier failures.
+- Second `./sigma test`, while other checkouts were executing broad suites: same three systemd assertions plus `tests/research_sessions.py` fixture worker-active lock contention. Auth/workspace/storage still passed. Ruff check/format and Pyright passed; frontend typecheck passed; full-suite build skipped after failures. Treat the research-session result as suite contention, not an authentication result.
+- `git diff --check`: PASS. No Google OAuth, ChatGPT OAuth, provider inference, production credential access/change, cloud operation or hosted policy change.
+
+No hosted URL, release SHA, real identity evidence, or live sign-in was available, so no hosted row can be marked PASS. The deliverable is an assessment and a repeatable first-live-sign-in gate, not a production go-ahead.
+
+Elapsed time: approximately 20 minutes at handoff.
