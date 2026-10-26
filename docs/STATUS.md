@@ -5311,3 +5311,82 @@ Offline implementation is R4R in [PR #182](https://github.com/bkramerext/sigma/p
 the full evidence handoff is in [T129 Gray handoff](../messages/t129_gray_release_sha.txt).
 Hosted release behavior and rollback with actual production images remain
 unverified.
+
+## T170 — pre-deployment research workflow acceptance (2026-10-26)
+
+Started from current `main` at `b33e9945ec2c18d149ad5e8a45b2da6fa70849b9`.
+Overall assessment: **BLOCKED for production go/no-go; PASS for the scoped
+local simulated workflows**. Project creation/session lifecycle, evidence
+continuity, Outcomes/reports, and Markdown/TeX/PDF exports passed deterministic
+and packaged Chrome checks. Local Colima Python and Sage execution passed
+isolation probes; production rootless daemon acceptance remains blocked. The
+T91 packaged Chrome run also verified backend recreation, fresh-volume restore,
+and simulated-account isolation. No live provider use, paid call, or GCE action
+occurred.
+
+The acceptance report and captured app exports are in
+[T170 evaluation evidence](evaluations/t170/README.md). The existing T91
+browser check now accepts optional `SIGMA_T91_EVIDENCE_DIR` to retain actual
+downloaded audit/report bytes plus fixture TeX/PDF and a source-ID/hash
+manifest; the default temporary behavior is unchanged. No deterministic
+product regression gap was found, so no duplicate T99/T137 test or product
+behavior was added.
+
+`./sigma test` **failed** three existing deployment assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
+they expect the old escaped `srv-sigma\\x2dstate.mount` dependency, while
+current `main` uses `RequiresMountsFor=/srv/sigma-state`. Ruff passed, Pyright
+reported zero errors/warnings, and frontend typecheck passed; the frontend
+production build was skipped by the test runner after the failures. Relevant
+research/session, continuity, Python/Sage contract, report/paper, T99 sponsored
+API, workspace, and storage steps passed during the same run.
+
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check --allow-nonrootless-dev`
+passed Python and Sage container probes (UID 65532, host files/state/network/
+Docker socket blocked; captured artifacts persisted). The daemon reported
+`daemon_rootless: false`, so this is local Colima evidence only. Both
+`bash deploy/validate-local.sh` and the run with `SIGMA_T91_EVIDENCE_DIR` passed
+real Chrome against packaged Compose; the latter retained audit JSON, text and
+HTML reports, TeX, and a parsed PDF with hashes. OAuth and inference were
+skipped. No production instance was provided, and T137 remains blocked on
+hosted acceptance and coordinator/owner go-no-go. Work completed in about 24
+minutes, ahead of the 45-minute target.
+
+## T170 / T173 current-main acceptance follow-up (2026-10-26)
+
+T170/T173 acceptance evidence was gathered on `main` `8e8d979`; PR #183 was
+subsequently updated through `main` `8acb54a` after Red's T128/PR #181 and
+T130/PR #185, then through current `main` `4f0339a` after Green's PR #184.
+The review covered the T129/T130/T135/T136 release controls, T132/T133 workflow evidence, T137 launch gate, T171 host audit,
+T172 auth gate and T131 OAuth checklist. No paid calls or cloud changes were
+performed. The application is not deployed; public HTTPS currently serves the
+temporary readiness page as supplied in the assignment.
+
+Corrected the three stale deterministic systemd assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
+current `deploy/systemd/sigma.service` declares `RequiresMountsFor=/srv/sigma-state`
+with Docker/sandbox requirements and ordering, rather than spelling the
+escaped mount-unit dependency directly. This changes tests only. `./sigma test`
+now passes end to end, including Ruff, format, Pyright (0 diagnostics), frontend
+typecheck and production build.
+
+Current acceptance evidence is recorded in [T170](evaluations/t170/README.md)
+and [T173](evaluations/t173/README.md). Real Chrome against disposable packaged
+Compose passed project/strategy editing and reopen, saved sessions/Outcome,
+audit/text/HTML exports, fixture TeX/PDF compilation and download, backend
+restart, container recreation, fresh-volume restore, report/paper/session hash
+continuity, and simulated second-user isolation. Python and SageMath runtime
+probes passed in local Colima containers (UID 65532; host secret/state, network,
+and Docker socket blocked), but daemon rootless status was false. A disposable
+Linux fixture ran the real rollback helper's failed-health and healthy branches;
+the failed branch restored the old SHA, and both branches preserved a state
+sentinel. No failed image-build injection was run.
+
+**Readiness remains BLOCKED** for production. The failed-build path and actual
+GCE/systemd rollback, target-host rootless isolation, persistent-disk backup and
+restore, reboot, hosted HTTPS/API app checks, production OAuth/admin/member/
+rejected identities, workspace isolation, and any provider-backed session need
+owner-authorized live acceptance. The runbook requires a verified recovery point
+and schema-compatibility assertion before code rollback; restore and code
+rollback are separate. No application was deployed and no T137 go/no-go was
+made.

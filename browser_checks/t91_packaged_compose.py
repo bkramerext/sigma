@@ -36,6 +36,7 @@ CHROME = os.environ.get(
 )
 PROJECT = os.environ["SIGMA_T91_COMPOSE_PROJECT"]
 COMPOSE_ENV = os.environ["SIGMA_T91_COMPOSE_ENV"]
+EVIDENCE_DIR = os.environ.get("SIGMA_T91_EVIDENCE_DIR")
 SAMPLE = ROOT / "samples/nonconsecutive-subset-sums/project.json"
 ORIGIN = "https://localhost"
 MATRIX = {
@@ -417,6 +418,9 @@ def main() -> None:
                 with page_a.expect_download() as downloaded:
                     dialog.get_by_role("button", name="Download", exact=True).click()
                 report_file = Path(temporary) / f"sigma-t91-report.{extension}"
+                if EVIDENCE_DIR:
+                    report_file = Path(EVIDENCE_DIR) / f"t91-project.{extension}"
+                    report_file.parent.mkdir(parents=True, exist_ok=True)
                 downloaded.value.save_as(report_file)
                 report_bytes = report_file.read_bytes()
                 assert b"T91 Packaged Chrome Copy" in report_bytes
@@ -466,6 +470,13 @@ def main() -> None:
                 and hashlib.sha256(paper_record["tex_source"].encode()).hexdigest()
                 == compiled["tex_sha256"]
             )
+            if EVIDENCE_DIR:
+                evidence_root = Path(EVIDENCE_DIR)
+                evidence_root.mkdir(parents=True, exist_ok=True)
+                (evidence_root / "t91-paper.tex").write_text(
+                    paper_record["tex_source"], encoding="utf-8"
+                )
+                (evidence_root / "t91-paper.pdf").write_bytes(pdf)
             MATRIX["real Tectonic PDF compilation and authenticated download"] = (
                 f"PASS — Tectonic PDF validated and authenticated download matched SHA-256 {compiled['pdf_sha256']} ({compiled['pdf_bytes']} bytes)"
             )
@@ -571,6 +582,73 @@ def main() -> None:
             MATRIX["saved TeX, PDF, report and session evidence survive backend recreation"] = (
                 f"PASS — TeX SHA-256 {compiled['tex_sha256']}; PDF SHA-256 unchanged; session evidence equal; report SHA-256 {report_digest} unchanged"
             )
+            if EVIDENCE_DIR:
+                evidence_root = Path(EVIDENCE_DIR)
+                audit_bytes = (evidence_root / "t91-project.json").read_bytes()
+                text_bytes = (evidence_root / "t91-project.txt").read_bytes()
+                html_bytes = (evidence_root / "t91-project.html").read_bytes()
+                (evidence_root / "MANIFEST.json").write_text(
+                    json.dumps(
+                        {
+                            "source_project_id": project_id,
+                            "source_session_id": session_id,
+                            "source_paper_id": paper_id,
+                            "capture_commit": subprocess.run(
+                                ["git", "rev-parse", "HEAD"],
+                                cwd=ROOT,
+                                check=True,
+                                capture_output=True,
+                                text=True,
+                            ).stdout.strip(),
+                            "application": "local packaged Compose and real Chrome; simulated identities and deterministic sample data",
+                            "provider_calls": 0,
+                            "exports": {
+                                "project_audit": {
+                                    "file": "t91-project.json",
+                                    "bytes": len(audit_bytes),
+                                    "sha256": hashlib.sha256(audit_bytes).hexdigest(),
+                                },
+                                "text_report": {
+                                    "file": "t91-project.txt",
+                                    "bytes": len(text_bytes),
+                                    "sha256": hashlib.sha256(text_bytes).hexdigest(),
+                                },
+                                "html_report": {
+                                    "file": "t91-project.html",
+                                    "bytes": len(html_bytes),
+                                    "sha256": hashlib.sha256(html_bytes).hexdigest(),
+                                },
+                                "tex": {
+                                    "file": "t91-paper.tex",
+                                    "bytes": len(paper_record["tex_source"].encode()),
+                                    "sha256": compiled["tex_sha256"],
+                                },
+                                "pdf": {
+                                    "file": "t91-paper.pdf",
+                                    "bytes": len(pdf),
+                                    "sha256": compiled["pdf_sha256"],
+                                },
+                            },
+                            "activity": [
+                                "created project as a copy from the stock sample",
+                                "edited project and strategy",
+                                "reopened project",
+                                "reviewed saved session and Outcome",
+                                "downloaded audit/text/HTML reports",
+                                "compiled fixture TeX, downloaded and parsed PDF",
+                                "recreated backend and verified persisted IDs and hashes",
+                            ],
+                            "limitations": [
+                                "simulated Google identities; no OAuth",
+                                "deterministic sample session and fixture-authored paper; no live provider",
+                                "local Colima storage; not GCE or production persistent-disk mount",
+                            ],
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
 
             MATRIX["backup restores into fresh storage with identities and hashes intact"] = (
                 "RUNNING"
