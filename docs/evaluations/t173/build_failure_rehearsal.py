@@ -63,7 +63,7 @@ def main() -> None:
         assert marker.read_bytes() == b"persistent-fixture"
         assert not any(command[:2] == ["systemctl", "stop"] for command in calls)
         assert not any(command[:4] == ["git", "-C", str(checkout), "checkout"] for command in calls)
-        assert sum(command[:1] == ["docker"] for command in calls) == 1
+        assert sum(command[:2] == ["python3", str(checkout / "deploy/release_image.py")] and command[2] == "build" for command in calls) == 1
 
     print(
         "PASS: failed candidate build leaves active pin, service and persistent fixture untouched"
