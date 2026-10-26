@@ -26,7 +26,9 @@ projects.”, styled in the Projects header font at a smaller size; it does not
 request or save project history. Recent and sample groups start collapsed.
 Browse Published Research is absent. The Guest sign-in pill uses the normal
 Google sign-in dialog and link. Attempts to generate a strategy receive a clear
-signed-in-account message without starting a provider request.
+signed-in-account message without starting a provider request. The TeX dialog
+shows “Sign in to export your research as TeX.” to guests and does not request
+saved paper data.
 About retains Privacy Policy as a lower-left action button. The privacy notice
 provides a top Return to SIGMA action. Google pill labels are shorter. Artwork
 credit is “Brian Kramer” / “& GPT Models”.
@@ -42,8 +44,9 @@ Verification:
   real Chrome: standard Projects Home, hidden New/Open actions, two-line Recent
   message in the header font without a Recent
   API request, default Samples selection and collapsed groups, normal Google
-  sign-in action, Generate feedback, full sample project open, no authentication
-  error, empty Recents, About Privacy Policy, and privacy-page Return to SIGMA.
+  sign-in action, TeX message without paper API requests, Generate feedback,
+  full sample project open, no authentication error, empty Recents, About Privacy
+  Policy, and privacy-page Return to SIGMA.
 - `npm --prefix frontend run typecheck` and `npm --prefix frontend run build` —
   PASS; existing >500 kB chunk advisory remains.
 - `./sigma test` — completed with four unrelated repository failures:

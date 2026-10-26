@@ -130,8 +130,10 @@ def exercise(ui_url: str, root: Path) -> None:
         failures: list[str] = []
         opened_projects: list[dict] = []
         recent_responses: list[str] = []
+        paper_requests: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
         page.on("response", lambda response: recent_responses.append(response.url) if response.url.endswith("/api/projects/recent") else None)
+        page.on("request", lambda request: paper_requests.append(request.url) if "/api/projects/papers" in request.url else None)
 
         def capture(response):
             if response.url.endswith("/api/projects/samples/open"):
@@ -181,6 +183,12 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Did Jesus Use Cannabis? v1")).to_be_visible(
             timeout=15000
         )
+        papers_before_dialog = len(paper_requests)
+        page.get_by_role("button", name="LaTeX research paper").click()
+        tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+        expect(tex_dialog).to_contain_text("Sign in to export your research as TeX.")
+        assert len(paper_requests) == papers_before_dialog, paper_requests
+        tex_dialog.get_by_role("button", name="Close").click()
         page.get_by_role("button", name="Generate", exact=True).click()
         expect(page.get_by_role("status").filter(has_text="AI features require a signed-in account.")).to_be_visible()
         expect(page.get_by_role("button", name="Back to home").first).to_be_visible()

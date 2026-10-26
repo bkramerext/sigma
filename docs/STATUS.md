@@ -6078,9 +6078,10 @@ always empty, and expired workspaces are cleaned up on later guest requests.
 Guest sessions cannot run provider-backed research, paper/proposal generation,
 or AI text conversion. The Guest sign-in pill uses the normal Google sign-in
 dialog and link. Guest attempts to generate a strategy receive a clear
-signed-in-account message; the temporary project remains available. The guest
-UI no longer makes personal model or catalog requests that produced misleading
-authentication-error toasts.
+signed-in-account message; the temporary project remains available. The TeX
+dialog tells guests “Sign in to export your research as TeX.” without requesting
+paper data. The guest UI no longer makes personal model or catalog requests that
+produced misleading authentication-error toasts.
 
 The separate Guest welcome panel is removed; Projects appears in the same Home
 location as for signed-in users. Browse Published Research is absent for guests.
@@ -6095,7 +6096,7 @@ Ruff check/format and Pyright passed. The
 real Chrome flow `uv run --with playwright python browser_checks/guest_samples.py`
 passed the standard Projects Home, guest Recent static message without a Recent
 request, default Samples selection and collapsed groups, normal Google sign-in
-action, Generate feedback, sample open
+action, TeX guest message without paper API requests, Generate feedback, sample open
 into the full workspace, no 401 toast, empty Recent, and both privacy actions.
 Frontend typecheck and production build
 passed; build retains the existing >500 kB chunk advisory. No provider calls or

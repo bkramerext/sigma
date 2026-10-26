@@ -1190,7 +1190,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId: string; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -1208,7 +1208,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
-  useEffect(() => { dialog.current?.showModal(); void refresh(); return () => request.current?.abort(); }, []);
+  useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   async function refresh(keepId?: string) {
     setLoading(true);
     try {
@@ -1363,6 +1363,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
+      {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
       <p className="settings-hint">The paper is AI-generated and has not been independently verified. Generation uses your selected provider and may consume allowance or incur charges. It does not start a research session.</p>
       <p className="settings-hint ai-paper-model">Selected model: <strong>{model || 'Loading…'}</strong></p>
@@ -1409,6 +1410,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
       </article>}</div>
       </article>)}</section>}
+      </>}
     </div>
   </dialog>;
 }
@@ -3434,7 +3436,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />
