@@ -10,6 +10,8 @@
 
 **Reconciled code head:** `7f89dcb` (merge of current `main` `084e23b`)
 
+**GitHub-CI-verified PR head:** `bdfe0acd2ae867866637e309648b314376140434`
+
 ## Delivered
 
 - Request error toasts have independent 60-second lifetimes. Expiration and
@@ -41,8 +43,9 @@
   reconciliation; independent toast expiry, downward transform, reflow,
   reduced-motion mode and 390px layout verified.
 
-GitHub CI for the reconciled final head is being checked after this branch push;
-its result will be recorded before this handoff is considered final.
+GitHub Actions passed on the verified PR head above: SIGMA verification run
+729, Research Outcome browser acceptance run 120, and T92 Recent Projects
+browser acceptance run 51. The PR remains open and is not self-merged.
 
 ## Limitations
 
