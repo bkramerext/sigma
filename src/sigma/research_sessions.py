@@ -3126,6 +3126,13 @@ async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
     if not cloud_workspaces.enabled():
         return
+    # A mock-only workspace must never touch the hosted job service.
+    queued = [
+        record for record in _all(path)
+        if not record.get("simulated") and record.get("status") == "queued"
+    ]
+    if not queued:
+        return
     try:
         cloud_research.reconcile_orphaned_jobs()
     except cloud_research.CloudResearchUnavailable as exc:
