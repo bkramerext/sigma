@@ -5,6 +5,7 @@ PR: https://github.com/bkramerext/sigma/pull/246 (open against `main`; not merge
 Base: `main` at `6a607a488106f9c9233336eb940f0458024e527b`
 Initial implementation commit: `eabb1bcf0b3393f47c9dc879ce1d9d4e50290a2e`
 Guest UI and AI feedback follow-up: `e11aa18286e08477f82ec300f44997773f9c6343`
+Guest Google sign-in pill follow-up: `a185928569304fd591bc06a87f9b6b4c890296fd`
 The final PR head SHA is in the R4R notice.
 
 Implemented temporary Guest workspaces with opaque, process-local tokens and
