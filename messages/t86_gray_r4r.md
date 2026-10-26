@@ -1,7 +1,7 @@
 # Gray R4R — PR #224 (T86)
 
-**Branch:** `gray/t86-readme-integration` → `main`  
-**Head:** `ad860499666ac9574dd129a248145ab75dbf0e67`
+**Branch:** `gray/t86-readme-integration` → `main`
+**Implementation head before handoff commit:** `ad860499666ac9574dd129a248145ab75dbf0e67`
 
 ## Summary
 
