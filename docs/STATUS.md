@@ -32,8 +32,8 @@ typecheck, and production build (existing large-chunk advisory). Local Docker
 was not rootless; Compose v2 and `systemd-analyze` were unavailable. No real
 browser check applied to this configuration/documentation change. No provider
 calls or costs occurred. Corrections and the readiness record are in
-[PR #181](https://github.com/bkramerext/sigma/pull/181), head
-`04e6fe3f19016f8e74333f07e2ba6ebac5bfdd33`; it is open and unmerged.
+[PR #181](https://github.com/bkramerext/sigma/pull/181), open and unmerged,
+with the final tracking/handoff documentation.
 
 ## T171 GCE host readiness audit (2026-10-26)
 

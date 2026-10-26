@@ -3,7 +3,8 @@ T128 — GCE host readiness and runtime security review
 Branch: red/t128-readiness-review
 Base: main at 8e8d979
 PR: https://github.com/bkramerext/sigma/pull/181
-Head: 04e6fe3f19016f8e74333f07e2ba6ebac5bfdd33
+Implementation commit: 04e6fe3f19016f8e74333f07e2ba6ebac5bfdd33; the PR also
+contains the final tracking/handoff update.
 
 Readiness: BLOCKED for production activation. I reviewed current host
 installer/preflight code, systemd units, persistent state path, sandbox command,
@@ -64,5 +65,5 @@ an separately approved application-path Python/Sage isolation probe. Keep
 provider-backed OAuth/research acceptance are also outside this assignment.
 
 Handoff: `docs/T128_HOST_READINESS.md`, `docs/STATUS.md`, and `tickets/t128.md`.
-Elapsed: about 21 minutes from initial repository inspection through test,
-documentation, commit, push and PR creation. No paid calls or provider costs.
+Elapsed: about 23 minutes from initial repository inspection through test,
+documentation, commit, push and PR handoff. No paid calls or provider costs.
