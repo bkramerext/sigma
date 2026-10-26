@@ -51,6 +51,8 @@ def _files(directory: Path) -> dict[str, str]:
         raise BundleError("Invalid source project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid source project schema")
+    if not 1 <= document["schema_version"] <= 9:
+        raise BundleError("Unsupported source project schema")
     return entries
 
 
@@ -78,7 +80,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         path = Path(name)
         if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
             raise BundleError("Unsafe bundle path")
-        if name != "project.json" and any(other != name and other.startswith(name + "/") for other in files):
+        if any(other != name and other.startswith(name + "/") for other in files):
             raise BundleError("Bundle member conflicts with a directory")
         if not isinstance(encoded, str):
             raise BundleError("Invalid encoded file")
@@ -92,6 +94,8 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         raise BundleError("Invalid project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid project document")
+    if not 1 <= document["schema_version"] <= 9:
+        raise BundleError("Unsupported project schema version")
     return result
 
 
@@ -305,6 +309,8 @@ def update_files(
         raise BundleError("Project JSON must be a regular file")
     if not isinstance(changes, dict):
         raise BundleError("Bundle changes must be a dictionary")
+    if not changes:
+        return
     for name, value in changes.items():
         if (
             not isinstance(name, str)
@@ -336,7 +342,8 @@ def update_files(
             "files": {name: base64.b64encode(data).decode("ascii")
                       for name, data in members.items()},
         })
-        _publish_members(path, members, ".sigma-transaction-")
+        if changes:
+            _publish_members(path, members, ".sigma-transaction-")
 
 
 def transform_file(
