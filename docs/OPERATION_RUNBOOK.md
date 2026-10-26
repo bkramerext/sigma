@@ -251,11 +251,11 @@ restore the 14-point retention invariant.
 
 ## 4. Application release / update
 
-1. Confirm candidate Git SHA, reviewed PR, verified tests/browser evidence, and known migrations. Ensure backup/restore point is current.
-2. Stage new checkout and approved images; inspect pinned image versions and any schema/data migrations. If the sandbox image source changed, rebuild the rootless Python/Sage images.
+1. Confirm candidate full Git SHA, reviewed PR, verified tests/browser evidence, and known migrations. Ensure backup/restore point is current.
+2. From a repository checkout with the candidate commit available, build release images using `python3 /path/to/checkout/deploy/release_image.py build /path/to/checkout FULL_40_CHAR_SHA`. This exports the requested commit from Git, so dirty files and the checkout's current HEAD are not build inputs. The command fails if the exact commit cannot be resolved. Inspect the generated `sigma-backend:SHA` and `sigma-frontend:SHA` image labels before proceeding. If the sandbox image source changed, rebuild the rootless Python/Sage images.
 3. Announce maintenance; stop production via `sudo systemctl stop sigma.service` before a consistent data snapshot (see next section).
-4. Update `SIGMA_RELEASE` in protected `/etc/sigma/deploy.env` and stage corresponding images/code. Do not change state volume mapping or delete Compose volumes.
-5. Run preflight; start via `sudo systemctl start sigma.service`; verify auth, existing users, project/session persistence, bounded research, exports and HTTPS.
+4. Update `SIGMA_RELEASE` in protected `/etc/sigma/deploy.env` to that same full SHA. Do not change state volume mapping or delete Compose volumes.
+5. Run preflight; start via `sudo systemctl start sigma.service`. Startup verifies both image source labels and uses Compose `--no-build`; it records the source commit, actual running container IDs, immutable image IDs and any repository digests in `/var/lib/sigma/releases/SHA.json`. Verify that record and the running containers, then verify auth, existing users, project/session persistence, bounded research, exports and HTTPS.
 6. If verification fails, use rollback below. Record SHA, downtime, tests and outcome.
 
 ## 5. Daily state-disk backup
