@@ -19,6 +19,6 @@ jobs:
       - name: Install project
         run: python -m pip install -e .
       - name: Compile touched modules
-        run: python -m py_compile src/sigma/projects.py src/sigma/project_bundle.py src/sigma/research_sessions.py tests/project_bundle.py
+        run: python -m py_compile src/sigma/projects.py src/sigma/project_bundle.py src/sigma/research_sessions.py src/sigma/python_sandbox.py tests/project_bundle.py
       - name: Execute project round-trip and public API tests
         run: python tests/project_bundle.py
