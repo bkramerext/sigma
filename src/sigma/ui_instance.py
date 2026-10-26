@@ -38,6 +38,24 @@ def private_directory(path: Path) -> None:
         )
 
 
+def recognized_launcher(command: str, entry: str) -> bool:
+    """Recognize supported launch flags without weakening process identity checks."""
+    try:
+        args = shlex.split(command)
+    except ValueError:
+        return False
+    if entry not in args:
+        return False
+    args = args[args.index(entry) + 1:]
+    if not args or args[0] not in ("start", "ui"):
+        return False
+    return len(args) == 1 or (
+        args[0] == "start"
+        and len(args[1:]) == len(set(args[1:]))
+        and all(flag in ("--nav", "--navigate", "--signin") for flag in args[1:])
+    )
+
+
 class Instance:
     def __init__(
         self, root: Path = ROOT, shutdown_only: bool = False, register_owner: bool = False
@@ -105,10 +123,9 @@ class Instance:
                 current["uid"] != str(os.getuid())
                 or current["start"] != record["start"]
                 or current["command"] != record["command"]
-                or entry not in command
-                or not command.endswith((" ui", " start", " start --navigate", " start --nav"))
+                or not recognized_launcher(command, entry)
             ):
-                raise RuntimeError("SIGMA owner process identity changed; refusing to signal.")
+                raise RuntimeError(f"SIGMA owner process identity changed (PID {pid}); refusing to signal.")
             return pid, current
         except (ValueError, TypeError, KeyError, UnicodeError, OSError) as exc:
             raise RuntimeError("Cannot verify SIGMA owner record; refusing takeover.") from exc
@@ -143,10 +160,7 @@ class Instance:
                 continue
             if (
                 process["uid"] != str(os.getuid())
-                or entry not in process["command"].split()
-                or not process["command"].endswith(
-                    (" ui", " start", " start --navigate", " start --nav")
-                )
+                or not recognized_launcher(process["command"], entry)
                 or not process["start"]
             ):
                 raise RuntimeError(
