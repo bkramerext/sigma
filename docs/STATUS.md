@@ -6105,3 +6105,12 @@ Research Outcome passed on the merge tree. Full local verification was limited b
 GitHub SIGMA verification run 40399333103 passed on validated code head
 `aea3365434a3c5fb708749724c132d303649815b`. Hosted sponsor provisioning and
 acceptance remain unverified. See the issue #200 handoff.
+
+## T201 local obligation recovery follow-up (2026-10-26)
+
+The local overflow admission check reports bounded obligation IDs and excerpts for
+large histories, preserves saved research, and guides users to fork from a saved
+session while disabling the over-limit original. Blocked attempts no longer reserve
+session numbers. Focused regression uses a disposable project and fake provider;
+see [the T201 handoff](../messages/issue_201_local_recovery.txt). Original hosted
+project acceptance remains unverified and issue #201 stays open.

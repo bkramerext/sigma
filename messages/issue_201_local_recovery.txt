@@ -1,0 +1,9 @@
+T201 local recovery follow-up
+
+Base: main 48fe9a1fee87a23c1af1665f1f30723ef39d9e97. T201 remains open for later original-project acceptance.
+
+The local admission path now reports bounded IDs and obligation excerpts even when prior history exceeds 64 unresolved obligations. It still refuses to dispatch when the frozen per-strategy context limit is exceeded. The error names the existing fork-from-findings action and tells the user to disable the over-limit original; editing it retains history. Fork is available directly on an expanded saved session. A rejected start no longer reserves a session number, and the confirmation controls close after rejection so recovery actions are available. Saved research is not erased or reclassified.
+
+Local isolated regression covers 25 and 65 unresolved obligations, displayed IDs and text, bounded pointer count, editing the parent, no new session and no provider request on rejection, byte-identical saved evidence, and a focused child that performs two fake-provider calls after disabling the parent. It creates its own project, requires no hosted data or credentials, and passed. Research session scenarios passed; Ruff and Pyright passed. Frontend typecheck and build passed for the baseline; the PR CI verifies this change. The real Chromium workflow uses a disposable local fixture and rejects provider inference. CI results must be checked at the final PR head.
+
+The local full suite is subject to this environment's AF_UNIX restrictions (instance_ownership and ui_registry); an earlier run also hit SOCKS proxy configuration. Real browser and original hosted state are not verified locally. No deployment, production changes, real provider calls or costs. The original incident and actual hosted owner remain unverified; later acceptance is required.

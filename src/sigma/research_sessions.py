@@ -3577,11 +3577,10 @@ async def start_session(
                 if limits.get("maximum_input_tokens_per_session") is not None and price is not None
                 else None
             )
-            session_number = _allocate_session_number(view.path, records)
             record = {
                 "schema_version": 1,
                 "id": str(uuid4()),
-                "session_number": session_number,
+                "session_number": 0,
                 "project_path": view.path,
                 "project_id": view.project.id,
                 "strategy_id": strategy.id,
@@ -3693,6 +3692,7 @@ async def start_session(
                 record["prior_session_obligation_omitted_ids"],
                 record["prior_session_obligation_omitted_by_strategy"],
                 record["prior_session_obligation_omitted_ids_by_strategy"],
+                omitted_details_by_strategy,
             ) = _prior_session_obligations_index(view.path, record["id"], record["strategy_ids"])
             omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
             if omitted_by_strategy:
@@ -3709,19 +3709,33 @@ async def start_session(
                     omitted_ids = record["prior_session_obligation_omitted_ids_by_strategy"].get(
                         selected_strategy_id, []
                     )
-                    shown_ids = ", ".join(omitted_ids) or "bounded ID list unavailable"
+                    shown_ids = (
+                        "; ".join(
+                            f"{item['id']} ({item['text']})"
+                            for item in omitted_details_by_strategy.get(selected_strategy_id, [])
+                        )
+                        or "bounded ID list unavailable"
+                    )
+                    pointer_note = (
+                        f" (showing {len(omitted_ids)} of {omitted_count})"
+                        if len(omitted_ids) < omitted_count
+                        else ""
+                    )
                     blocked.append(
                         f"{selected_strategy.title}: {omitted_count} unresolved obligation(s) "
-                        f"exceed the frozen context bound; omitted obligation IDs: {shown_ids}"
+                        f"exceed the frozen context bound; omitted obligation IDs{pointer_note}: {shown_ids}"
                     )
                 raise ProjectError(
                     "Research was not started and no provider call was made because prior-session "
                     "obligations exceed the context bound. "
                     + "; ".join(blocked)
-                    + ". Use Continue from saved evidence to create a focused child strategy, "
-                    "or narrow the selected strategy, then start a new session. Earlier sessions "
-                    "and evidence remain available."
+                    + ". Disable the affected strategy before starting another session. To pursue "
+                    "a narrower question, expand a saved session and choose Fork strategy from "
+                    "findings. Review its copied recent findings before saving; earlier evidence "
+                    "remains in the saved session. Editing the original strategy "
+                    "does not remove its history. Earlier sessions and evidence remain available."
                 )
+            record["session_number"] = _allocate_session_number(view.path, records)
             obligation_source_ids = {
                 artifact_id
                 for item in record["prior_session_obligations"]
@@ -4755,6 +4769,7 @@ def _obligation_ledger(
     project_id: Any = None,
     strategy_id: Any = None,
     prior_obligations: list[dict[str, Any]] | None = None,
+    unbounded_for_admission: bool = False,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
     """Apply obligation events chronologically; missing later notes do not resolve."""
     entries: dict[str, dict[str, Any]] = {}
@@ -4976,7 +4991,7 @@ def _obligation_ledger(
     result = list(entries.values())
     for item in result:
         item.pop("_seen_source_ids", None)
-    if len(result) <= MAX_CONTEXT_OBLIGATIONS:
+    if unbounded_for_admission or len(result) <= MAX_CONTEXT_OBLIGATIONS:
         return result, 0, []
     mandatory = [item for item in result if item["status"] == "unresolved"]
     if len(mandatory) > MAX_CONTEXT_OBLIGATIONS:
@@ -7877,15 +7892,23 @@ def _prior_session_findings_index(
 
 def _prior_session_obligations_index(
     project_path: Any, current_session_id: Any, strategy_ids: list[str]
-) -> tuple[list[dict[str, Any]], int, list[str], dict[str, int], dict[str, list[str]]]:
+) -> tuple[
+    list[dict[str, Any]],
+    int,
+    list[str],
+    dict[str, int],
+    dict[str, list[str]],
+    dict[str, list[dict[str, str]]],
+]:
     """Freeze scoped unresolved obligations from completed history for this session."""
     if not isinstance(project_path, str) or not isinstance(current_session_id, str):
-        return [], 0, [], {}, {}
+        return [], 0, [], {}, {}, {}
     selected: list[dict[str, Any]] = []
     omitted_ids: list[str] = []
     omitted_count = 0
     omitted_by_strategy: dict[str, int] = {}
     omitted_ids_by_strategy: dict[str, list[str]] = {}
+    omitted_details: dict[str, list[dict[str, str]]] = {}
     sessions = [
         item
         for item in _all(project_path)
@@ -7908,6 +7931,7 @@ def _prior_session_obligations_index(
             history,
             project_id=None,
             strategy_id=strategy_id,
+            unbounded_for_admission=True,
         )
         unresolved = [item for item in ledger if item.get("status") == "unresolved"]
         unresolved.sort(
@@ -7939,12 +7963,26 @@ def _prior_session_obligations_index(
                 omitted_ids.append(compact["obligation_id"])
                 omitted_by_strategy[strategy_id] = omitted_by_strategy.get(strategy_id, 0) + 1
                 omitted_ids_by_strategy.setdefault(strategy_id, []).append(compact["obligation_id"])
+                if len(omitted_details.setdefault(strategy_id, [])) < MAX_CONTEXT_OMISSION_POINTERS:
+                    omitted_details[strategy_id].append(
+                        {
+                            "id": compact["obligation_id"],
+                            "text": _bounded_note(compact["text"], 160),
+                        }
+                    )
                 continue
             if _json_bytes([*selected, compact]) > MAX_PRIOR_OBLIGATION_CONTEXT_BYTES:
                 omitted_count += 1
                 omitted_ids.append(compact["obligation_id"])
                 omitted_by_strategy[strategy_id] = omitted_by_strategy.get(strategy_id, 0) + 1
                 omitted_ids_by_strategy.setdefault(strategy_id, []).append(compact["obligation_id"])
+                if len(omitted_details.setdefault(strategy_id, [])) < MAX_CONTEXT_OMISSION_POINTERS:
+                    omitted_details[strategy_id].append(
+                        {
+                            "id": compact["obligation_id"],
+                            "text": _bounded_note(compact["text"], 160),
+                        }
+                    )
                 continue
             selected.append(compact)
     return (
@@ -7956,6 +7994,7 @@ def _prior_session_obligations_index(
             key: values[:MAX_CONTEXT_OMISSION_POINTERS]
             for key, values in omitted_ids_by_strategy.items()
         },
+        omitted_details,
     )
 
 

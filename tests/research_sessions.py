@@ -1918,6 +1918,7 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         frozen_omitted_ids,
         frozen_omitted_by_strategy,
         frozen_omitted_ids_by_strategy,
+        _,
     ) = research_sessions._prior_session_obligations_index(view.path, str(uuid4()), [strategy])
     assert frozen_omitted == 0 and not frozen_omitted_ids
     assert len(frozen) == 1 and frozen[0]["source_artifact_ids"] == ["old-open"]
@@ -2581,14 +2582,92 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
         except ProjectError as exc:
             message = str(exc)
             assert "Research was not started" in message
-            assert "Continue from saved evidence" in message
+            assert "Fork strategy from findings" in message
+            assert "Disable the affected strategy" in message
             assert omitted_id in message
+            assert indexed[5][strategy.id][0]["text"] in message
         else:
             raise AssertionError("An over-bound history must block before session creation")
 
     saved = research_sessions._all(str(path))
     assert len(saved) == 1 and saved[0]["id"] == prior_id
     assert saved[0]["artifacts"] == artifacts
+    assert not (path / "research-sessions" / "sequence.json").exists()
+
+    # Editing the old strategy does not discard its unresolved history. Even
+    # histories above the ledger's 64-item dispatch bound receive useful IDs.
+    edit_strategy(path, strategy.id, strategy.title, "Investigate only one boundary case.")
+    for index in range(len(artifacts), 65):
+        artifacts.append(
+            {
+                "id": str(uuid4()),
+                "strategy_id": strategy.id,
+                "claim_or_question": f"Saved investigation {index}.",
+                "open_obligations": [
+                    f"Resolve distinct boundary obligation {index} for the recurrence."
+                ],
+            }
+        )
+    saved[0]["artifacts"] = artifacts
+    research_sessions._save(str(path), saved[0])
+    prior_bytes = (path / "research-sessions" / f"{prior_id}.json").read_bytes()
+    indexed = research_sessions._prior_session_obligations_index(
+        str(path), str(uuid4()), [strategy.id]
+    )
+    assert indexed[3][strategy.id] == 41 and len(indexed[4][strategy.id]) == 32
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=AssertionError("no provider request"),
+        ),
+    ):
+        try:
+            await research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+        except ProjectError as exc:
+            assert indexed[4][strategy.id][0] in str(exc)
+            assert indexed[5][strategy.id][0]["text"] in str(exc)
+            assert "showing 32 of 41" in str(exc)
+            assert "Editing the original strategy does not remove its history" in str(exc)
+        else:
+            raise AssertionError("Large over-bound history must block before session creation")
+    assert (path / "research-sessions" / f"{prior_id}.json").read_bytes() == prior_bytes
+    assert len(research_sessions._all(str(path))) == 1
+    assert not (path / "research-sessions" / "sequence.json").exists()
+
+    # A new focused strategy has its own history. Disable the blocked parent,
+    # select the child, and prove admission and bounded progress with a fake
+    # provider while the original saved evidence remains untouched.
+    child_view = create_strategy(path, "Focused child", "Check one saved boundary obligation.")
+    child = next(item for item in child_view.project.strategies if item.id != strategy.id)
+    set_strategy_enabled(path, strategy.id, False)
+    limits = research_sessions.get_limits(str(path))
+    research_sessions.save_limits(str(path), {**limits, "research_rounds": 1, "model_calls": 2})
+    outputs = [investigation(1), skeptic(1)]
+
+    async def fake_provider(_request):
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(fake_provider), **kwargs
+            ),
+        ),
+    ):
+        child_session = await research_sessions.start_session(
+            str(path), child.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        completed = await wait_for(path, child_session["id"])
+    assert completed["calls_used"] == 2 and completed["artifacts"]
+    assert not outputs
+    assert (path / "research-sessions" / f"{prior_id}.json").read_bytes() == prior_bytes
 
 
 def test_limits_validation(path: Path):
