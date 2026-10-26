@@ -1,5 +1,51 @@
 # SIGMA status
 
+## T129 initial GCE preview deployment (2026-10-26)
+
+Deployed release `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` to
+`sigma-gce-01` in `sigma-research-prod` / `us-west1-b` through authenticated
+IAP. The VM checkout, `/etc/sigma/deploy.env` release pin, and backend/frontend
+image source labels all identify that SHA. The installed host preflight was
+updated from the release and includes PR #199's rootless Docker invocation fix.
+
+Before deployment, the retired `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` line was
+removed after confirming its identity matched the existing
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`; the contact line was preserved unchanged.
+The original protected file is backed up at
+`/var/lib/sigma/releases/deploy.env.before-e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3`
+(`root:root`, mode `0600`). A pre-deployment snapshot of the attached
+`sigma-state` disk reached READY as `sigma-state-preview-20261026-063909`.
+It is a one-off recovery point without the scheduled-backup labels. The first
+documented uppercase-T/Z snapshot name was rejected by GCE's resource-name
+rules; no resource was created by that rejected attempt.
+
+The T128 host-readiness gate passed all rows after installing the corrected
+checker. Production preflight passed all 23 rows before startup and again after
+startup. `deploy/deploy-gce-release.py ... --initial` built and started the
+exact release; `sigma.service` and host Caddy are active, and backend,
+frontend, and edge containers report healthy. The existing Caddy hostname
+block was still serving a static readiness page, so it was backed up at
+`/var/lib/sigma/releases/Caddyfile.before-e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3`
+and changed only to the documented loopback reverse proxy; Caddy validation
+and reload passed.
+
+The public endpoint probe passed DNS A, private-port closure, HTTP-to-HTTPS
+redirect, trusted HTTPS root, SPA deep link, and hosted API readiness. Local
+headless Google Chrome loaded the live page with the SIGMA title, app root,
+semantic main element, and rendered body text. No paid inference, IAM change,
+DNS/firewall change, reboot, or destructive storage operation occurred. The
+initial probe exposed the missing host-Caddy route; after that documented
+route was installed, the full probe passed. One manual preflight invocation
+also omitted `--repository /opt/sigma/current` and therefore looked in the
+installed checker's libexec directory; the documented invocation passed, and
+the service remained stopped only until that correct gate was rerun.
+
+Formal acceptance is still pending tomorrow. No OAuth sign-in or two-identity
+isolation test, research runtime execution, paid provider call, reboot recovery,
+or restore drill was performed. The recurring backup scheduler is not
+configured; the one-off snapshot is the current recovery point. No tests were
+run as part of this deployment operation.
+
 ## T88 Google account and sponsored model access (2026-10-26)
 
 Implemented on ticket branch red/t88-google-sponsored-auth from current
@@ -55,52 +101,6 @@ connectivity remain unverified.
 
 See [T88 worker handoff](../messages/t88_red_google_sponsored_auth.txt) for the
 requirement evidence and exact final verification results.
-
-## T129 initial GCE preview deployment (2026-10-26)
-
-Deployed release `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` to
-`sigma-gce-01` in `sigma-research-prod` / `us-west1-b` through authenticated
-IAP. The VM checkout, `/etc/sigma/deploy.env` release pin, and backend/frontend
-image source labels all identify that SHA. The installed host preflight was
-updated from the release and includes PR #199's rootless Docker invocation fix.
-
-Before deployment, the retired `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` line was
-removed after confirming its identity matched the existing
-`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`; the contact line was preserved unchanged.
-The original protected file is backed up at
-`/var/lib/sigma/releases/deploy.env.before-e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3`
-(`root:root`, mode `0600`). A pre-deployment snapshot of the attached
-`sigma-state` disk reached READY as `sigma-state-preview-20261026-063909`.
-It is a one-off recovery point without the scheduled-backup labels. The first
-documented uppercase-T/Z snapshot name was rejected by GCE's resource-name
-rules; no resource was created by that rejected attempt.
-
-The T128 host-readiness gate passed all rows after installing the corrected
-checker. Production preflight passed all 23 rows before startup and again after
-startup. `deploy/deploy-gce-release.py ... --initial` built and started the
-exact release; `sigma.service` and host Caddy are active, and backend,
-frontend, and edge containers report healthy. The existing Caddy hostname
-block was still serving a static readiness page, so it was backed up at
-`/var/lib/sigma/releases/Caddyfile.before-e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3`
-and changed only to the documented loopback reverse proxy; Caddy validation
-and reload passed.
-
-The public endpoint probe passed DNS A, private-port closure, HTTP-to-HTTPS
-redirect, trusted HTTPS root, SPA deep link, and hosted API readiness. Local
-headless Google Chrome loaded the live page with the SIGMA title, app root,
-semantic main element, and rendered body text. No paid inference, IAM change,
-DNS/firewall change, reboot, or destructive storage operation occurred. The
-initial probe exposed the missing host-Caddy route; after that documented
-route was installed, the full probe passed. One manual preflight invocation
-also omitted `--repository /opt/sigma/current` and therefore looked in the
-installed checker's libexec directory; the documented invocation passed, and
-the service remained stopped only until that correct gate was rerun.
-
-Formal acceptance is still pending tomorrow. No OAuth sign-in or two-identity
-isolation test, research runtime execution, paid provider call, reboot recovery,
-or restore drill was performed. The recurring backup scheduler is not
-configured; the one-off snapshot is the current recovery point. No tests were
-run as part of this deployment operation.
 
 ## Issue #98 integrated local browser acceptance (2026-10-25)
 

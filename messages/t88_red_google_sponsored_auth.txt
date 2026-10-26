@@ -4,7 +4,8 @@ Issue: https://github.com/bkramerext/sigma/issues/88
 Base: main at 2c409e6b4e045e75a84b369c12f545cb8a969e32
 Branch: red/t88-google-sponsored-auth
 PR: https://github.com/bkramerext/sigma/pull/214
-Commit: 0497aeec661d9e099cae039362aa84116cf3861a
+Reviewed PR head before handoff refresh: 6cc47e30bc231f5d49260a2a502e88721f03b4d9
+Final PR head: recorded in the R4R response (handoff-only update follows the reviewed head).
 
 Implementation
 
@@ -42,8 +43,11 @@ Verification
 - Static/frontend: Ruff, Ruff format, Pyright, npm frontend typecheck and
   production build.
 - Full suite: `./sigma test` passed all repository scenarios, Ruff, Ruff format,
-  Pyright, frontend typecheck and production build. Vite reports the existing
-  511.79 kB main JavaScript chunk warning; build succeeded.
+  Pyright, frontend typecheck and production build at implementation head
+  `0497aeec661d9e099cae039362aa84116cf3861a`. A final rerun covering the
+  subsequent documentation-only commits is recorded in the PR Actions and
+  R4R response. Vite reports the existing 511.79 kB main JavaScript chunk
+  warning; build succeeded.
 - The first full-suite pass exposed a pre-existing Ruff B023/format failure in
   browser_checks/model_availability.py. Fixed its closure capture with a bound
   default argument; full suite passed once before the latest final edits.
@@ -71,11 +75,17 @@ Integration overlaps and conflicts
   coordinator/product direction. Hosted mode also intentionally rejects
   personal ChatGPT OAuth under T172; it uses only SIGMA-sponsored inference.
 
-Remaining live verification
+Current-main integration check
 
-- Real Google OAuth callback/cookie behavior, distinct hosted identities,
-  deployed two-user isolation and real sponsored provider reachability remain
-  unverified. They require approved accounts/deployment window. Provider
-  connectivity here is tested with deterministic responses only.
+- Checked against `main` at `6bab28f39349ec4696c19cb782bbf24740f8a130`; the PR is reported mergeable and a local merge-tree check found no conflict with current main.
+- Simulated combination with PR #213 (`811b3cf35aa7ee06e99ff1610b159b701c6a17bb`): the Current Understanding suggestion code and T88 account/provider code coexist in `frontend/src/main.tsx` and `src/sigma/api.py`. T88 status notes are positioned separately from PR #213’s top-of-file status addition to avoid a documentation conflict if T88 merges first. No source-code conflict or change dependency was found.
+
+Deployment acceptance gates (UNVERIFIED)
+
+- Real Google OAuth callback/cookie behavior, deployed two-account isolation,
+  and live sponsored-provider connectivity remain UNVERIFIED. These are
+  deployment acceptance gates, not blockers to merging the tested
+  implementation; they require an approved account/deployment window.
+
 - A successful provider catalog check confirms authentication/reachability,
   not a successful inference, available quota or research quality.
