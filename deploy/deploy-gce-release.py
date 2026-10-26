@@ -209,6 +209,8 @@ class Deployment:
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True
+            _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
+            candidate_checkout_changed = True
             _replace_release(self.env_file, original_env, sha, owner)
             self.check_preflight()
             _call(self.runner, ["systemctl", "start", "sigma.service"])
