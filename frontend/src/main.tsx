@@ -2658,9 +2658,9 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
   const [tab, setTab] = useState<'recent' | 'samples'>(() =>
-    window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
+    guest ? 'samples' : window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
   useEffect(() => { window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [tab]);
   const recent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
@@ -2685,9 +2685,9 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>
+    {!guest && <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>}
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
+    {!guest && <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>}
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen}/></div>
   </div>;
 }
@@ -2784,6 +2784,7 @@ function Home({ initialPath, onOpen }: {
         </div>
         <HomeCatalog onOpen={onOpen}/>
       </section>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-projects"><HomeCatalog onOpen={onOpen} guest/></section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer &amp;</span><span>OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
