@@ -1,5 +1,43 @@
 # SIGMA status
 
+## Issue #98 repository Codex launcher (2026-10-25)
+
+Added `./scripts/codex`, `scripts/codex-env.sh`, and the read-only
+`scripts/codex-check.sh`. The wrapper resolves the checkout from its own path,
+sources the shared environment, rejects recursive dispatch, resolves the CLI,
+and uses `exec` so CLI arguments, exit status, and signals pass through. The
+environment exports the observed project `sigma-research-prod`, zone
+`us-west1-b`, VM `sigma-gce-01`, and hostname `sigma-research.duckdns.org`;
+PATH updates are repeatable. It does not change gcloud configuration, copy
+credentials, require Docker, or start services. Six deterministic launcher
+regressions are in `tests/codex_launcher.py` and are part of `./sigma test`.
+The worker protocol now names this launcher for future SIGMA worker starts.
+
+`python3 tests/codex_launcher.py -v` passed all 6 tests, including exact
+argument forwarding, missing CLI, recursion, environment/idempotency, exit
+status, and signal propagation. `./scripts/codex --version` printed
+`codex-cli 0.164.0`. `bash -n
+scripts/codex scripts/codex-env.sh scripts/codex-check.sh` passed. A live
+`./scripts/codex-check.sh` verified active gcloud authentication (identity
+withheld), expected configured project/zone, and read-only IAP SSH to
+`sigma-gce-01`; it reported `FAIL` overall because this host lacks `gh`.
+Direct `gcloud compute ssh sigma-gce-01 --project=sigma-research-prod
+--zone=us-west1-b --tunnel-through-iap --command=true --quiet` exited 0.
+`./sigma test` passed all steps, including repository lint/format, Pyright,
+frontend typecheck, and production build (the build reports the existing large
+chunk advisory). The suite began before the sixth SIGTERM case was added, so it
+ran the earlier five cases; the final six-case file passed directly afterward.
+
+This Codex tool session ran on the authenticated local macOS arm64 host, not an
+observed isolated cloud sandbox. The wrapper passes its exported environment to
+the Codex CLI process and its child processes when launched there. There is no
+evidence here that the four persistent worker sessions are launched through
+this wrapper or inherit this host's environment/authentication; access from
+those worker execution contexts remains UNVERIFIED. No credentials were copied
+or displayed, no gcloud configuration or IAM/network policy changed, and no
+provider calls or costs occurred. No real-browser check applies to this
+launcher change.
+
 ## Issue #186 single administrator/contact setting follow-up (2026-10-26)
 
 Follow-up to [PR #187](https://github.com/bkramerext/sigma/pull/187) per the

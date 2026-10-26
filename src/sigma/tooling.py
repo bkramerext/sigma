@@ -69,6 +69,7 @@ def run_tooling(command: str) -> int:
     else:
         python = ["uv", "run", "--locked", "--no-sync"]
         steps = [
+            [*python, "python", "tests/codex_launcher.py"],
             [*python, "python", "tests/lifecycle.py"],
             [*python, "python", "tests/project_creation.py"],
             [*python, "python", "tests/recents.py"],

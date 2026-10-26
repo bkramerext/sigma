@@ -59,6 +59,13 @@ Write a message file for coordinator handoff.
 
 ## 4. Worker isolation and message protocol
 
+**Repository launcher:** When starting a Codex worker from a SIGMA checkout,
+launch it with `./scripts/codex [arguments...]`. The repository-local wrapper
+sets the SIGMA environment for that Codex process and its children. It cannot
+change the environment of an already-running Codex session or make host
+credentials/resources available in a separately isolated execution sandbox;
+verify access from the actual worker context before claiming it.
+
 **Mandatory instruction in every worker-facing message:** Include the exact rule **“Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.”** This requirement applies to initial ticket assignments, follow-up tasks, correction requests, rebase requests, and handoffs. Do not assume a worker remembers the rule from an earlier message. Workers may read shared repository artifacts and integrated code, but may not directly instruct, message, or negotiate with other workers. The human and ChatGPT coordinator remain the only authorized coordination path.
 
 **No worker-to-worker coordination.** Blue, Green, Gray, and Red do not send each other instructions, negotiate APIs directly, or silently modify each other's branches. Dependencies, collisions, or discoveries are reported to the responsible ChatGPT coordinator through the human. The coordinator decides sequencing, interface contracts, and reassignment. If an issue crosses the local/cloud boundary, the human routes it between coordinators.

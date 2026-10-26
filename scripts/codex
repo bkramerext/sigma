@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -u
+
+_sigma_launcher=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || {
+  printf '%s\n' 'SIGMA Codex: cannot resolve launcher directory' >&2
+  exit 1
+}
+_sigma_root=$(cd -- "$_sigma_launcher/.." 2>/dev/null && pwd -P) || {
+  printf '%s\n' 'SIGMA Codex: cannot resolve repository root' >&2
+  exit 1
+}
+
+if [ "${SIGMA_CODEX_WRAPPER_ACTIVE:-}" = 1 ]; then
+  printf '%s\n' 'SIGMA Codex: recursive wrapper invocation prevented' >&2
+  exit 126
+fi
+
+# Resolve the real CLI before setting the guard. Source the shared environment
+# in this process so interactive and noninteractive invocations behave alike.
+. "$_sigma_root/scripts/codex-env.sh" || exit 1
+_sigma_real=$(type -P codex 2>/dev/null || true)
+if [ -z "$_sigma_real" ]; then
+  printf '%s\n' 'SIGMA Codex: Codex CLI executable not found on PATH' >&2
+  exit 127
+fi
+_sigma_real_abs=$(cd -- "$(dirname -- "$_sigma_real")" 2>/dev/null && printf '%s/%s' "$PWD" "$(basename -- "$_sigma_real")")
+_sigma_wrapper_abs="$_sigma_root/scripts/codex"
+if [ "$_sigma_real_abs" = "$_sigma_wrapper_abs" ]; then
+  printf '%s\n' 'SIGMA Codex: recursive wrapper resolution prevented' >&2
+  exit 126
+fi
+
+export SIGMA_CODEX_WRAPPER_ACTIVE=1
+exec "$_sigma_real" "$@"
