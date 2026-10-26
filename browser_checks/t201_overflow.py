@@ -11,6 +11,11 @@ info = json.loads(Path(os.environ["SIGMA_T201_INFO"]).read_text())
 path = Path(info["path"])
 saved = path / "research-sessions" / (info["session"] + ".json")
 before = saved.read_bytes()
+session_files = {
+    item.name
+    for item in saved.parent.glob("*.json")
+    if item.name not in {"limits.json", "sequence.json"}
+}
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
         executable_path=os.environ["SIGMA_BROWSER_EXECUTABLE"], headless=True
@@ -28,6 +33,11 @@ with sync_playwright() as playwright:
     expect(alert).to_contain_text("Fork strategy from findings")
     expect(page.get_by_role("button", name="Start a new research session")).to_be_visible()
     assert saved.read_bytes() == before
+    assert {
+        item.name
+        for item in saved.parent.glob("*.json")
+        if item.name not in {"limits.json", "sequence.json"}
+    } == session_files
     row = page.locator(f'li[data-session-id="{info["session"]}"]')
     if row.locator(".session-row-content").is_hidden():
         row.locator(".session-row-disclosure").click()
