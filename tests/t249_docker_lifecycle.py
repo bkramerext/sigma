@@ -81,6 +81,36 @@ async def verify():
             assert any(item["id"] == interrupted["id"] and item["status"] == "interrupted"
                        for item in list_executions(path))
             print("PASS interrupted reservation remains inspectable after lock loss")
+
+            # An interrupted reservation must survive export/import without
+            # being promoted to success or silently executed again.
+            recovered = root / "recovered.json"
+            import_bundle(json.loads(export_complete_project(path)), recovered)
+            recovered_record = get_execution(recovered, interrupted["id"])
+            assert recovered_record["status"] == "interrupted", recovered_record
+            assert recovered_record["stdout"] == ""
+            assert recovered_record["exit_code"] is None
+            assert get_execution(path, interrupted["id"])["status"] == "interrupted"
+            print("PASS interruption evidence survives export/import")
+
+            # Integrity checks must detect same-length modifications to
+            # captured bytes, including after a valid Docker run.
+            from sigma.project_bundle import read_file, write_file
+            member = f"research-executions/{artifact_run['id']}.artifacts/proof.bin"
+            original = read_file(path, member)
+            tampered = bytes([original[0] ^ 0xff]) + original[1:]
+            write_file(path, member, tampered)
+            from sigma.projects import ProjectError
+            try:
+                get_execution_artifact(path, artifact_run["id"], "proof.bin")
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Modified binary artifact passed integrity verification")
+            write_file(path, member, original)
+            assert get_execution_artifact(path, artifact_run["id"], "proof.bin")[0] == original
+            print("PASS corrupted artifact rejected without losing valid evidence")
+
         finally:
             projects.projects_root = original_root
 
