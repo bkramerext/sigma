@@ -381,7 +381,9 @@ def _configured_bootstrap_admin_email(cfg: Config) -> str | None:
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
-    if not cfg.local:
+    # Mock users need distinct workspace identities even though the local
+    # development server otherwise follows the local-storage path.
+    if not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")):
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:
