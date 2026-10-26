@@ -5212,5 +5212,7 @@ they expect `srv-sigma\\x2dstate.mount`, while current `main` uses
 production build was skipped by the suite after those failures. No live cloud
 operation, deployment, paid provider call, or browser workflow was performed.
 
-Offline code and tests are prepared for PR review. Hosted release behavior and
-rollback with actual production images remain unverified.
+Offline implementation is R4R in [PR #182](https://github.com/bkramerext/sigma/pull/182);
+the full evidence handoff is in [T129 Gray handoff](../messages/t129_gray_release_sha.txt).
+Hosted release behavior and rollback with actual production images remain
+unverified.
