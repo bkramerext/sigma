@@ -5969,7 +5969,15 @@ No authenticated SMTP credential is provisioned in this checkout and no live
 email or hosted deployment was performed. Production notification delivery
 remains dependent on creating the approved SMTP Secret Manager resource and
 configuring the account identity in deployment settings. No mail credential
-was added to source control.
+was added to source control. Reconciled with current main
+(`90fab8cbd5293d4cf4e0bad07b161a8c5d409f86`) at validated integration commit
+`6f90d3f49bbb324b3e8d953bfe1b92ed293c12d3`; GitHub reports PR #225 open,
+non-draft, and mergeable. The post-reconciliation `./sigma test`, Ruff check and
+format, Pyright, frontend typecheck/build, and real Chrome invitation/auth check
+all passed. The Chrome scenario exercised verified-denial submission, success,
+account switch, Demo handoff, local Home, and administrator review. No live SMTP
+credential or delivery was available. See the updated T81 handoff.
+
 ## T192 — Per-User Project Isolation (2026-10-26)
 
 Audited the current-main Google OIDC subject-to-workspace flow, protected API
