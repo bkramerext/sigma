@@ -266,6 +266,28 @@ def main() -> None:
             assert media_type == "application/octet-stream"
             assert f"research-executions/{execution_id}.json" in list_files(created.path)
             assert f"research-executions/{execution_id}.artifacts/result.bin" in list_files(created.path)
+            # Duplicate output filenames and invalid finalizations must leave
+            # the committed execution and its binary output unchanged.
+            extra_id = str(uuid4())
+            extra = {**execution, "id": extra_id, "source": "print('other')"}
+            _save_record(runtime_directory, extra)
+            try:
+                _save_record(
+                    runtime_directory, {**extra, "status": "completed"},
+                    (("same.bin", "application/octet-stream", b"a"),
+                     ("same.bin", "application/octet-stream", b"b")),
+                    finalizing=True,
+                )
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Duplicate output filenames were accepted")
+            assert get_execution(created.path, extra_id)["status"] == "interrupted"
+            assert not any(
+                name.startswith(f"research-executions/{extra_id}.artifacts/")
+                for name in list_files(created.path)
+            )
+            assert get_execution_artifact(created.path, execution_id, "result.bin")[0] == bytes(range(128))
             # A complete export/import preserves executable evidence exactly.
             imported = root / "imported-execution.json"
             import_bundle(json.loads(export_complete_project(created.path)), imported)
