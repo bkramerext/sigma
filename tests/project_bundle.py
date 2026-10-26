@@ -204,6 +204,12 @@ def main() -> None:
             }
             runtime_directory = _execution_directory(created.path)
             _save_record(runtime_directory, execution)
+            try:
+                _save_record(runtime_directory, execution)
+            except ProjectError as exc:
+                assert "already reserved" in str(exc)
+            else:
+                raise AssertionError("Execution identifier collision was accepted")
             # An orphaned reservation is reported as interrupted, not rerun.
             assert get_execution(created.path, execution_id)["status"] == "interrupted"
             assert list_executions(created.path)[0]["status"] == "interrupted"
@@ -217,6 +223,12 @@ def main() -> None:
             else:
                 raise AssertionError("Duplicate execution reservation was accepted")
             final_execution = {**execution, "status": "completed"}
+            try:
+                _save_record(runtime_directory, execution, finalizing=True)
+            except ProjectError as exc:
+                assert "terminal status" in str(exc)
+            else:
+                raise AssertionError("Running execution was finalized")
             _save_record(
                 runtime_directory, final_execution,
                 (("result.bin", "application/octet-stream", bytes(range(128))),),
