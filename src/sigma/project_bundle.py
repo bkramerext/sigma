@@ -93,38 +93,30 @@ def restore(bundle: dict[str, Any], destination: str | Path) -> None:
         raise BundleError("Project destination already exists")
     if destination.parent.is_symlink() or not destination.parent.is_dir():
         raise BundleError("Project destination parent must be a real directory")
-    temporary = Path(tempfile.mkdtemp(prefix=".sigma-restore-", dir=destination.parent))
+    # Create the final destination exclusively. This cannot replace a competing
+    # directory. On an interrupted restore, an incomplete destination remains
+    # visible and must be handled explicitly rather than silently overwritten.
+    try:
+        destination.mkdir()
+    except FileExistsError as exc:
+        raise BundleError("Project destination already exists") from exc
     try:
         for name, data in files.items():
-            target = temporary / name
+            target = destination / name
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
-        # Linux renameat2(RENAME_NOREPLACE) is not portable. Reserve the name
-        # atomically with mkdir, then move files into the reserved directory.
-        # This avoids a check/rename race that could replace another directory.
+        directory_fd = os.open(destination, os.O_RDONLY)
         try:
-            destination.mkdir()
-        except FileExistsError as exc:
-            raise BundleError("Project destination already exists") from exc
-        try:
-            for name, data in files.items():
-                target = destination / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with target.open("xb") as stream:
-                    stream.write(data)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-        except BaseException:
-            import shutil
-            shutil.rmtree(destination)
-            raise
-    finally:
-        if temporary.exists():
-            import shutil
-            shutil.rmtree(temporary)
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except BaseException as exc:
+        raise BundleError(
+            f"Restore incomplete at {destination}; inspect before retrying"
+        ) from exc
 
 
 def migrate(directory: str | Path, destination: str | Path) -> Path:
