@@ -1,5 +1,27 @@
 # SIGMA status
 
+## T99 / T137 consolidated Cloud acceptance preparation (2026-10-26)
+
+Added [the consolidated acceptance procedure](CLOUD_ACCEPTANCE.md), a
+read-only runner (`python -m sigma.cloud_acceptance`), automated report-contract
+tests, and an illustrative [JSON sample](evaluations/t137/sample-evidence.json).
+The runner reuses the existing DNS/TLS/redirect/SPA/API validator and can
+initialize/finalize the T137 matrix. Ten areas begin as `NOT RUN`; only the
+public probe can be automatically marked PASS/FAIL. Hosted browser,
+provider-authorized, owner-authorized, and operator checks remain evidence
+gates. T137 remains pending coordinator/owner go/no-go.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build. The first run caught one unused
+import/format issue in the new module; after correction the full rerun passed.
+The new contract tests passed within the full run. No real-browser workflow,
+public endpoint, Google identity, provider, GCE VM, or production configuration
+was accessed. The sample is explicitly illustrative: no hosted evidence, no
+release SHA, and all ten checks `NOT RUN`. Hosted T131/T134/T133 flows and
+operator T135/T136 restore/recovery steps remain to be performed and reviewed.
+Focused implementation elapsed approximately 10 minutes; hosted acceptance is
+unfinished by design and remains with the authorized owner/coordinator.
+
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
 Started from current `main` at `455d752` in an isolated ticket worktree. Audited

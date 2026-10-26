@@ -1,0 +1,27 @@
+T99 / T137 consolidated SIGMA Cloud acceptance — implementation handoff
+
+Added docs/CLOUD_ACCEPTANCE.md, src/sigma/cloud_acceptance.py, and
+tests/cloud_acceptance.py. Linked the procedure from tickets/t137.md and
+recorded local validation and remaining hosted gates in docs/STATUS.md.
+The JSON example is docs/evaluations/t137/sample-evidence.json.
+
+The runner reuses sigma.public_endpoint.validate_public_endpoint for the
+explicitly requested DNS/TLS/redirect/SPA/API probe. It makes no changes to
+the deployment. Other hosted rows remain NOT RUN until evidence is manually
+recorded; summary logic rejects invalid statuses and never considers FAIL,
+BLOCKED, or NOT RUN complete. A GO CANDIDATE still requires coordinator and
+owner review. The procedure points to existing T131/T133/T134/T135/T136 and
+T91/T100 materials instead of duplicating their workflows.
+
+Validation: focused tests passed; full ./sigma test passed after correcting
+an initial unused-import/style failure. Ruff, format, Pyright (0 diagnostics),
+frontend typecheck and production build passed. No hosted endpoint, Google,
+provider, browser workflow, or VM was accessed. No provider charges/calls.
+
+Hosted actions remain: confirm release SHA and owner-authorized window; run
+public HTTPS probe; execute OAuth and A/B identity checks; authorized provider
+inference; Python/Sage host isolation; project/session/Outcome/report/TeX/PDF
+browser checks; approved app restart; verified backup/restore/rollback; and
+monitoring/recovery evidence. Coordinator and owner retain final go/no-go.
+
+Elapsed implementation time: approximately 10 minutes. No PR was merged.
