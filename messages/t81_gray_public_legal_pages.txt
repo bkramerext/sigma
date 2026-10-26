@@ -1,0 +1,42 @@
+T81 public legal pages follow-up — Gray R4R
+
+Branch: gray/t81-public-legal-pages
+Base: origin/main at 623a9464fed585cf951b02be54e8e4ab683bb559
+PR head: see exact SHA in the linked PR description (the handoff is part of
+the commit, so the commit cannot contain its own object ID).
+
+Implemented:
+- Preserved the unauthenticated `/privacy` route and its existing proposed /
+  draft status; changed the About dialog's link label to `Privacy`.
+- Added a public direct route at `/tos`, rendered before the auth gate. Its
+  concise proposed terms describe experimental research limitations, user
+  review of outputs, and provider context when an AI feature is selected.
+- Marked `/tos` as awaiting Brian's review. It is not linked from the SIGMA
+  application. Wording for review is in `docs/TOS_DRAFT_v1.md`.
+- Added `browser_checks/t81_public_legal_pages.py` for signed-out direct
+  navigation and refresh, draft labels, the About link, and no `/tos` links.
+
+Checks actually run:
+- Real Chrome `uv run --with playwright python
+  browser_checks/t81_public_legal_pages.py`: PASS for `/privacy` and `/tos`
+  direct navigation + refresh, draft labels, About Privacy link, and no app
+  `/tos` links.
+- `uv run --locked ruff check browser_checks/t81_public_legal_pages.py`: PASS.
+- `uv run --locked ruff format --check browser_checks/t81_public_legal_pages.py`:
+  PASS after formatting the new file.
+- `npm --prefix frontend run build`: PASS; existing >500 kB chunk advisory.
+- `./sigma test`: FAIL on existing current-main Ruff violations and formatting
+  in `src/sigma/gmail_delivery.py`, `src/sigma/ui_instance.py`,
+  `tests/gmail_delivery.py`, and Pyright error at `tests/gmail_delivery.py:56`.
+  Application test scenarios and frontend typecheck preceding those final
+  checks passed; the suite skipped the build after failure, and direct build
+  passed.
+
+Hosted `/privacy` and `/tos` verification is UNVERIFIED; no deployment or
+production publication was performed. Brian's review of proposed Terms wording
+is required before production publication. The existing privacy notice remains
+a proposed draft awaiting approval. No AI provider calls, email, or production
+changes were made.
+
+Dependencies/conflicts: `gh` is not installed in this checkout. PR submission
+uses the connected GitHub tool. No direct coordination with other workers.

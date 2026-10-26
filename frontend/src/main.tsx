@@ -2041,7 +2041,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       {cloud?.enabled && cloud.ready && <FeedbackForm/>}
-      <p className="about-privacy-link"><a href="/privacy">Proposed privacy notice · version 1</a></p>
+      <p className="about-privacy-link"><a href="/privacy">Privacy</a></p>
     </div>
     <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog></div>;
@@ -3979,6 +3979,24 @@ function PrivacyNoticePage() {
   </article></main>;
 }
 
+function TermsOfServicePage() {
+  useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
+  return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+    <a className="cloud-demo-brand" href="/">SIGMA</a>
+    <p className="cloud-auth-kicker">Proposed terms · draft for review</p>
+    <h1>Terms of Service</h1>
+    <p className="privacy-draft-alert" role="status">These proposed terms are awaiting Brian's review and are not approved terms.</p>
+    <h2>Experimental research software</h2>
+    <p>SIGMA is an experimental research workbench. Features and results may be incomplete, inaccurate, or unavailable. Research outputs, including generated text, calculations, code, and reports, are not guaranteed to be correct or complete.</p>
+    <h2>Your review and use</h2>
+    <p>Review research outputs and verify important claims independently before relying on them or sharing them. A successful computation or agent review does not by itself establish a proof or a correct result.</p>
+    <p>Use SIGMA only with material you are authorized to provide. When you choose an AI feature, relevant prompts and project context may be sent to the provider for the selected connection. Review the applicable provider terms and settings before using that feature.</p>
+    <h2>Review status</h2>
+    <p>This draft needs Brian's review before it is published as operative terms. No additional operator policies or service commitments are stated here.</p>
+    <p><a className="cloud-text-button" href="/">Return to SIGMA</a></p>
+  </article></main>;
+}
+
 function AccessNotGranted({ email }: { email: string }) {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -3999,4 +4017,4 @@ function AccessNotGranted({ email }: { email: string }) {
 }
 
 installRequestErrorToasts();
-createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);
+createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : window.location.pathname === '/tos' ? <TermsOfServicePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);

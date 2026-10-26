@@ -1,5 +1,30 @@
 # SIGMA status
 
+## T81 public legal pages follow-up (2026-10-26)
+
+On current `main` `623a9464fed585cf951b02be54e8e4ab683bb559`, the existing
+public `/privacy` route remains labeled as a proposed notice awaiting Brian's
+approval. The About dialog link is now clearly labeled **Privacy**. Added a
+public `/tos` route with concise proposed terms for experimental research
+features. It is visibly marked as a draft for Brian's review, and no `/tos`
+navigation link is added to the SIGMA app. The draft is recorded in
+[TOS_DRAFT_v1.md](TOS_DRAFT_v1.md); it must be reviewed before production
+publication.
+
+Local verification: real Chrome passed direct signed-out navigation and
+refresh at `/privacy` and `/tos`, both draft labels, the About Privacy link,
+and absence of `/tos` app links. Frontend typecheck and
+`npm --prefix frontend run build` passed (existing >500 kB chunk advisory).
+`./sigma test` ran the application scenarios and frontend typecheck but exited
+1 on current-main Ruff findings in `src/sigma/gmail_delivery.py`,
+`src/sigma/ui_instance.py`, and `tests/gmail_delivery.py`, formatting findings
+in those files, and the existing Pyright error at
+`tests/gmail_delivery.py:56`; the build step was skipped by the suite and then
+passed when run directly. The new browser check passes targeted Ruff check and
+format. Hosted verification and production behavior are unverified because
+deployment was explicitly out of scope. See the [Gray
+handoff](../messages/t81_gray_public_legal_pages.txt).
+
 ## T81 remaining feedback and privacy increment (2026-10-26)
 
 Continues T81 after invitation PR #225 merged at
