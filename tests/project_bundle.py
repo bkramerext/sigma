@@ -101,6 +101,20 @@ def main() -> None:
         else:
             raise AssertionError("Migrated invalid project document")
         assert not (root / "invalid.json").exists()
+        corrupted_schema = {
+            **bundle,
+            "files": {
+                **bundle["files"],
+                "project.json": "eyJzY2hlbWFfdmVyc2lvbiI6dHJ1ZX0=",
+            },
+        }
+        try:
+            restore(corrupted_schema, root / "bad-schema.sigma")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Boolean schema version accepted")
+        assert not (root / "bad-schema.sigma").exists()
         symlink_source = root / "symlink.sigma"
         symlink_source.mkdir()
         (symlink_source / "project.json").write_text('{"schema_version":9}')
