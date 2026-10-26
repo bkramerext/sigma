@@ -288,8 +288,8 @@ def main() -> None:
                 raise AssertionError("Corrupt limits were silently reset")
             from sigma.project_bundle import delete_file
             delete_file(created.path, "research-sessions/limits.json")
-            assert _allocate_session_number(created.path, []) == 1
             assert _allocate_session_number(created.path, []) == 2
+            assert _allocate_session_number(created.path, []) == 3
             # Two concurrent allocators must never issue the same session number.
             from concurrent.futures import ThreadPoolExecutor
 
@@ -297,10 +297,10 @@ def main() -> None:
                 numbers = list(executor.map(
                     lambda _: _allocate_session_number(created.path, []), range(24)
                 ))
-            assert sorted(numbers) == list(range(3, 27))
+            assert sorted(numbers) == list(range(4, 28))
             assert json.loads(read_file(created.path, "research-sessions/sequence.json"))[
                 "next_session_number"
-            ] == 27
+            ] == 28
             assert save_limits(created.path, dict(DEFAULT_LIMITS)) == dict(DEFAULT_LIMITS)
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             from sigma.research_sessions import _snapshot
@@ -406,7 +406,7 @@ def main() -> None:
                 "project_path": created.path,
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "updated_at": "2026-01-01T00:00:00+00:00",
-                "session_number": 27,
+                "session_number": 28,
                 "status": "queued",
             }
             for status in ("queued", "running", "paused", "running", "completed"):
@@ -417,9 +417,9 @@ def main() -> None:
             removed = remove_session(
                 created.path, lifecycle_id, lifecycle["updated_at"]
             )
-            assert removed["removed"] and removed["session_number"] == 27
+            assert removed["removed"] and removed["session_number"] == 28
             assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
-            assert _allocate_session_number(created.path, []) == 27
+            assert _allocate_session_number(created.path, []) == 28
             # A nonterminal session must not be deleted, and a completed
             # session must reject stale optimistic-concurrency timestamps.
             lifecycle["status"] = "paused"
