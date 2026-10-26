@@ -69,6 +69,12 @@ probe was run because it requires an active backend; `sigma.service` remains
 disabled and inactive as required. Its unit has Docker/sandbox requirements,
 `RequiresMountsFor=/srv/sigma-state`, and guarded preflight startup.
 
+The installed checker and `/opt/sigma/current/deploy/gce_preflight.py` still
+have SHA-256 `2a084da34a0e2969853e7ef21d7464e4bd18c71e15697c1eb8bcc8c1916b125e`;
+the audited main source before this fix was `8540b1af17a90b2f69685c328b7932dda01405c2af096da6af2c17a3a893b67b`.
+No host copy was replaced. The installed checker will continue to false-fail
+rootless daemon/image rows until the reviewed fix is merged and deployed.
+
 The attached `pd-balanced` state disk is non-auto-delete, 30 GiB, mounted at
 `/srv/sigma-state` from UUID
 `28ef67cb-4da8-46e7-9a8b-dce0470153a5`, `ext4`, `root:root 0700`; 28 GiB was
