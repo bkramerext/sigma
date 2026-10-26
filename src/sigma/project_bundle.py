@@ -439,3 +439,46 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
     finally:
         staged.unlink(missing_ok=True)
     return path
+
+
+def transform_members(
+    bundle_path: str | Path,
+    update: Callable[[dict[str, bytes]], dict[str, bytes | None]],
+) -> None:
+    """Transactionally update bundle members after inspecting the locked snapshot.
+
+    The callback sees a copy of every member and returns changed members only.
+    Validation and quota decisions are made under the same lock as publication.
+    """
+    path = Path(bundle_path)
+    if path.suffix != ".json" or path.is_symlink() or not path.is_file():
+        raise BundleError("Project JSON must be a regular file")
+    lock = path.with_name("." + path.name + ".write.lock")
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        if path.is_symlink() or not path.is_file():
+            raise BundleError("Project JSON is no longer a regular file")
+        members = _decode(json.loads(path.read_text(encoding="utf-8")))
+        changes = update(dict(members))
+        if not isinstance(changes, dict):
+            raise BundleError("Bundle transaction must return a dictionary")
+        for name, value in changes.items():
+            if (not isinstance(name, str) or not name or chr(92) in name
+                or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/"))):
+                raise BundleError("Unsafe bundle path")
+            if value is not None and not isinstance(value, bytes):
+                raise BundleError("Bundle transaction values must be bytes or None")
+            if name == "project.json" and value is None:
+                raise BundleError("Cannot remove project document")
+            if value is None:
+                members.pop(name, None)
+            else:
+                members[name] = value
+        if changes:
+            _decode({
+                "format": FORMAT, "version": VERSION,
+                "files": {name: base64.b64encode(data).decode("ascii")
+                          for name, data in members.items()},
+            })
+            _publish_members(path, members, ".sigma-transaction-")
