@@ -674,6 +674,22 @@ async def middleware(request: Request, call_next):
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )
+    if _mock_enabled(cfg) and principal.subject.startswith("mock:"):
+        # Mock mode must never reach any provider-backed execution endpoint.
+        # Read-only project browsing remains available; local project creation
+        # and research mutations are blocked until a fully simulated executor exists.
+        if path.startswith("/api/ai/") or (
+            path.startswith("/api/projects/")
+            and request.method not in {"GET", "HEAD", "OPTIONS"}
+        ):
+            scenario = _mock_allowance(cfg, principal.subject)
+            mode = model_access_for_subject(principal.subject)
+            message = (
+                "Simulated sponsorship allowance exhausted."
+                if mode == "sponsored" and scenario["scenario"] == "exhausted"
+                else "Mock walkthrough: execution is disabled to prevent real provider charges."
+            )
+            return JSONResponse({"error": message, "simulated": True}, status_code=403)
     request.state.cloud_principal = principal
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
@@ -733,7 +749,8 @@ def mock_funding(request: Request):
         raise HTTPException(401, "Choose a mock member first.")
     _persist_user_state(cfg, principal)
     return {"mode": model_access_for_subject(principal.subject),
-            "allowance": _mock_allowance(cfg, principal.subject)}
+            "allowance": _mock_allowance(cfg, principal.subject),
+            "provider": _mock_provider(cfg, principal.subject)}
 
 
 @router.post("/mock/allowance")
@@ -764,6 +781,40 @@ def mock_allowance(request: Request, scenario: str):
             (principal.subject, scenario, _now()),
         )
     return _mock_allowance(cfg, principal.subject)
+
+
+_MOCK_PROVIDERS = {"connected", "unavailable", "error"}
+
+
+def _mock_provider(cfg: Config, subject: str) -> str:
+    with _db(cfg) as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS mock_providers (
+            subject TEXT PRIMARY KEY, scenario TEXT NOT NULL, updated_at INTEGER NOT NULL
+        )""")
+        row = db.execute("SELECT scenario FROM mock_providers WHERE subject=?", (subject,)).fetchone()
+    return str(row["scenario"]) if row else "connected"
+
+
+@router.post("/mock/provider")
+def mock_provider(request: Request, scenario: str):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if request.headers.get("origin") != cfg.origin or request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock scenario changes require a same-origin loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    if scenario not in _MOCK_PROVIDERS:
+        raise HTTPException(400, "Unknown mock provider scenario.")
+    with _db(cfg) as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS mock_providers (
+            subject TEXT PRIMARY KEY, scenario TEXT NOT NULL, updated_at INTEGER NOT NULL
+        )""")
+        db.execute("""INSERT INTO mock_providers(subject,scenario,updated_at) VALUES(?,?,?)
+            ON CONFLICT(subject) DO UPDATE SET scenario=excluded.scenario,updated_at=excluded.updated_at""",
+            (principal.subject, scenario, _now()))
+    return {"provider": scenario, "simulated": True}
 
 
 @router.post("/mock/model-access")
