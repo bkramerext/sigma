@@ -3634,7 +3634,7 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
-      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
+      <div ref={panel} className={`connection-details google-connection-details${cloud?.authenticated ? "" : " sigma-signin-dialog"}`} role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
       {!cloud ? <>
         <h2 id="google-account-title">Checking Google sign-in</h2>
         <p>SIGMA is checking the local Google authentication configuration.</p>
@@ -3646,10 +3646,10 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
         <p>Set the missing values in the environment used to start SIGMA. Put the Google OAuth client ID and secret in this checkout’s <code>.env</code>. Set <code>SIGMA_CLOUD_ADMIN_CONTACT_EMAIL</code> to the public invitation contact. On a fresh auth database, this address also identifies the first administrator; after the first verified sign-in, the saved administrator identity remains bound if the contact changes. If the setting is in <code>~/.bashrc</code>, run <code>source ~/.bashrc</code> in the launching shell, then restart with <code>./sigma start --nav</code>.</p>
         <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
       </> : <>
-        {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
+        {!cloud?.authenticated && <div className="sigma-signin-identity"><img src="/sigma-slogan-copper-approved.png" alt="SIGMA" /><p className="cloud-auth-kicker">Research workspace</p><h2 id="google-account-title">Welcome to SIGMA</h2><p>Sign in to your private workspace, or explore the sample projects as a guest.</p></div>}
         {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
         {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-        {!cloud?.authenticated && canSignIn && <div className="cloud-denied-actions cloud-entry-actions"><a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a><a className="cloud-secondary-button" href="/api/cloud-auth/login?invite=1">Invite Me</a><button type="button" className="cloud-text-button" onClick={close}>Continue as Guest</button><a className="cloud-text-button" href="/privacy">Privacy notice</a></div>}
+        {!cloud?.authenticated && canSignIn && <div className="sigma-signin-actions"><a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a><a className="sigma-signin-invite" href="/api/cloud-auth/login?invite=1">Request an invitation</a><div className="sigma-signin-footer"><button type="button" className="cloud-text-button" onClick={close}>Continue as Guest</button><a className="cloud-text-button" href="/privacy">Privacy notice</a></div></div>}
         {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
       </>}
       {error && <p role="alert">{error}</p>}
