@@ -4,9 +4,11 @@ import base64
 import json
 from email import message_from_bytes
 from io import BytesIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import TestCase, main
+from unittest.mock import patch
 from urllib.parse import parse_qs
-
-import pytest
 
 from sigma.gmail_delivery import SEND_ENDPOINT, TOKEN_ENDPOINT, send_invitation
 
@@ -27,55 +29,68 @@ class FakeResponse:
         return self.data.read(size)
 
 
-def test_gmail_invitation_refreshes_token_and_sends(monkeypatch, tmp_path):
-    token_file = tmp_path / "gmail-token.json"
-    token_file.write_text(json.dumps({
-        "client_id": "client-id",
-        "client_secret": "client-secret",
-        "refresh_token": "refresh-token",
-    }))
-    monkeypatch.setenv("SIGMA_INVITATION_GMAIL_TOKEN_FILE", str(token_file))
-    monkeypatch.setenv("SIGMA_INVITATION_GMAIL_SENDER", "zetacontinuation@gmail.com")
-    calls = []
+class GmailDeliveryTests(TestCase):
+    def test_refresh_and_send(self):
+        with TemporaryDirectory() as directory:
+            token_file = Path(directory) / "gmail-token.json"
+            token_file.write_text(json.dumps({
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "refresh_token": "refresh-token",
+            }))
+            calls = []
 
-    def fake_urlopen(request, timeout):
-        calls.append(request)
-        if request.full_url == TOKEN_ENDPOINT:
-            assert parse_qs(request.data.decode())["grant_type"] == ["refresh_token"]
-            return FakeResponse({"access_token": "access-token"})
-        assert request.full_url == SEND_ENDPOINT
-        assert request.get_header("Authorization") == "Bearer access-token"
-        raw = json.loads(request.data)["raw"]
-        message = message_from_bytes(base64.urlsafe_b64decode(raw))
-        assert message["From"] == "zetacontinuation@gmail.com"
-        assert message["To"] == "zetacontinuation@gmail.com"
-        assert "applicant@example.com" in message.get_payload(decode=True).decode()
-        return FakeResponse({"id": "message-id"})
+            def fake_urlopen(request, timeout):
+                calls.append(request)
+                if request.full_url == TOKEN_ENDPOINT:
+                    self.assertEqual(
+                        parse_qs(request.data.decode())["grant_type"], ["refresh_token"]
+                    )
+                    return FakeResponse({"access_token": "access-token"})
+                self.assertEqual(request.full_url, SEND_ENDPOINT)
+                self.assertEqual(request.get_header("Authorization"), "Bearer access-token")
+                raw = json.loads(request.data)["raw"]
+                message = message_from_bytes(base64.urlsafe_b64decode(raw))
+                self.assertEqual(message["From"], "zetacontinuation@gmail.com")
+                self.assertEqual(message["To"], "zetacontinuation@gmail.com")
+                self.assertIn("applicant@example.com", message.get_payload(decode=True).decode())
+                return FakeResponse({"id": "message-id"})
 
-    monkeypatch.setattr("sigma.gmail_delivery.urlopen", fake_urlopen)
-    send_invitation("applicant@example.com", 123, recipient="zetacontinuation@gmail.com")
-    assert len(calls) == 2
+            env = {
+                "SIGMA_INVITATION_GMAIL_TOKEN_FILE": str(token_file),
+                "SIGMA_INVITATION_GMAIL_SENDER": "zetacontinuation@gmail.com",
+            }
+            with patch.dict("os.environ", env), patch(
+                "sigma.gmail_delivery.urlopen", side_effect=fake_urlopen
+            ):
+                send_invitation("applicant@example.com", 123, recipient=env["SIGMA_INVITATION_GMAIL_SENDER"])
+            self.assertEqual(len(calls), 2)
+
+    def test_requires_configuration(self):
+        with patch.dict("os.environ", {
+            "SIGMA_INVITATION_GMAIL_TOKEN_FILE": "",
+            "SIGMA_INVITATION_GMAIL_SENDER": "",
+        }):
+            with self.assertRaisesRegex(RuntimeError, "not configured"):
+                send_invitation("applicant@example.com", 123, recipient="zetacontinuation@gmail.com")
+
+    def test_does_not_leak_token_errors(self):
+        with TemporaryDirectory() as directory:
+            token_file = Path(directory) / "gmail-token.json"
+            token_file.write_text(json.dumps({
+                "client_id": "id", "client_secret": "secret", "refresh_token": "secret-refresh"
+            }))
+            env = {
+                "SIGMA_INVITATION_GMAIL_TOKEN_FILE": str(token_file),
+                "SIGMA_INVITATION_GMAIL_SENDER": "zetacontinuation@gmail.com",
+            }
+            with patch.dict("os.environ", env), patch(
+                "sigma.gmail_delivery.urlopen", side_effect=OSError("secret-refresh")
+            ):
+                with self.assertRaisesRegex(RuntimeError, "could not be delivered") as raised:
+                    send_invitation("applicant@example.com", 123, recipient=env["SIGMA_INVITATION_GMAIL_SENDER"])
+            self.assertNotIn("secret-refresh", str(raised.exception))
 
 
-def test_gmail_invitation_requires_configuration(monkeypatch):
-    monkeypatch.delenv("SIGMA_INVITATION_GMAIL_TOKEN_FILE", raising=False)
-    monkeypatch.delenv("SIGMA_INVITATION_GMAIL_SENDER", raising=False)
-    with pytest.raises(RuntimeError, match="not configured"):
-        send_invitation("applicant@example.com", 123, recipient="zetacontinuation@gmail.com")
-
-
-def test_gmail_invitation_does_not_leak_token_errors(monkeypatch, tmp_path):
-    token_file = tmp_path / "gmail-token.json"
-    token_file.write_text(json.dumps({
-        "client_id": "id", "client_secret": "secret", "refresh_token": "secret-refresh"
-    }))
-    monkeypatch.setenv("SIGMA_INVITATION_GMAIL_TOKEN_FILE", str(token_file))
-    monkeypatch.setenv("SIGMA_INVITATION_GMAIL_SENDER", "zetacontinuation@gmail.com")
-
-    def fail(_request, timeout):
-        raise OSError("secret-refresh")
-
-    monkeypatch.setattr("sigma.gmail_delivery.urlopen", fail)
-    with pytest.raises(RuntimeError, match="could not be delivered") as exc:
-        send_invitation("applicant@example.com", 123, recipient="zetacontinuation@gmail.com")
-    assert "secret-refresh" not in str(exc.value)
+if __name__ == "__main__":
+    main()
