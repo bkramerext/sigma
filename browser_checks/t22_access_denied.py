@@ -46,9 +46,50 @@ with sync_playwright() as playwright:
     page.route("**/api/cloud-auth/status", status)
     guest_page = browser.new_page(viewport={"width": 1280, "height": 850})
     guest_page.route("**/api/cloud-auth/status", status)
+    guest_feedback: list[dict] = []
+    guest_page.route(
+        "**/api/cloud-auth/feedback",
+        lambda route: (
+            guest_feedback.append(route.request.post_data_json),
+            route.fulfill(
+                status=200, content_type="application/json", body='{"status":"received"}'
+            ),
+        ),
+    )
     guest_page.goto(BASE_URL, wait_until="networkidle")
     expect(guest_page.get_by_role("link", name="Explore SIGMA")).to_have_attribute("href", "/demo")
     expect(guest_page.get_by_role("heading", name="Explore SIGMA")).to_be_visible()
+    expect(
+        guest_page.get_by_role("link", name="Proposed privacy notice · version 1")
+    ).to_have_attribute("href", "/privacy")
+    guest_page.get_by_text("Send product feedback").click()
+    guest_page.get_by_label("Feedback").fill("The guest example was easy to understand.")
+    guest_page.get_by_role("button", name="Send feedback").click()
+    expect(
+        guest_page.get_by_text(
+            "Thanks for your feedback. It has been sent for administrator review."
+        )
+    ).to_be_visible()
+    assert guest_feedback == [
+        {"message": "The guest example was easy to understand.", "contact_email": None}
+    ]
+
+    privacy_page = browser.new_page(viewport={"width": 1280, "height": 850})
+    privacy_api_requests: list[str] = []
+    privacy_page.on(
+        "request",
+        lambda request: (
+            privacy_api_requests.append(request.url) if "/api/" in request.url else None
+        ),
+    )
+    privacy_page.goto(f"{BASE_URL}/privacy", wait_until="networkidle")
+    expect(privacy_page.get_by_role("heading", name="SIGMA Privacy Notice")).to_be_visible()
+    expect(
+        privacy_page.get_by_text("This proposed notice is awaiting owner approval.")
+    ).to_be_visible()
+    assert not privacy_api_requests
+    privacy_page.set_viewport_size({"width": 390, "height": 844})
+    assert privacy_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     page.route(
         "**/api/cloud-auth/denied",
         lambda route: route.fulfill(
@@ -66,6 +107,9 @@ with sync_playwright() as playwright:
     ).to_be_visible()
     expect(page.get_by_text("visitor@example.org")).to_be_visible()
     expect(page.get_by_role("heading", name="Projects")).to_have_count(0)
+    expect(page.get_by_role("link", name="Proposed privacy notice · v1")).to_have_attribute(
+        "href", "/privacy"
+    )
 
     demo = page.get_by_role("link", name="Explore SIGMA")
     expect(demo).to_have_attribute("href", "/demo")
@@ -90,6 +134,21 @@ with sync_playwright() as playwright:
         )
     ).to_be_visible()
     assert invitation_posts == [{"method": "POST", "body": {}}]
+    page.route(
+        "**/api/cloud-auth/feedback",
+        lambda route: route.fulfill(
+            status=503,
+            content_type="application/json",
+            body='{"detail":"Feedback is temporarily unavailable."}',
+        ),
+    )
+    page.get_by_text("Send product feedback").click()
+    page.get_by_label("Feedback").fill("The invitation screen could use a little more detail.")
+    page.get_by_role("button", name="Send feedback").click()
+    expect(page.locator(".about-feedback-form [role='alert']")).to_contain_text(
+        "Feedback is temporarily unavailable."
+    )
+    expect(page.get_by_role("button", name="Send feedback")).to_be_visible()
     switch = page.get_by_role("link", name="Use Another Account")
     expect(switch).to_have_attribute("href", "/api/cloud-auth/login")
     for width, height in ((1280, 850), (390, 844)):
@@ -151,6 +210,16 @@ with sync_playwright() as playwright:
             body='{"projects":[],"models":[],"samples":[]}',
         ),
     )
+    admin_feedback_submissions: list[dict] = []
+    admin_page.route(
+        "**/api/cloud-auth/feedback",
+        lambda route: (
+            admin_feedback_submissions.append(route.request.post_data_json),
+            route.fulfill(
+                status=200, content_type="application/json", body='{"status":"received"}'
+            ),
+        ),
+    )
     admin_page.route(
         "**/api/cloud-auth/status",
         lambda route: route.fulfill(
@@ -202,16 +271,57 @@ with sync_playwright() as playwright:
             ),
         ),
     )
+    admin_page.route(
+        "**/api/cloud-auth/admin/feedback",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "feedback": [
+                        {
+                            "id": "a" * 32,
+                            "account_email": None,
+                            "contact_email": "visitor@example.org",
+                            "message": "Please make project creation easier to find.",
+                            "submitted_at": 1_800_000_000,
+                            "status": "new",
+                        }
+                    ]
+                }
+            ),
+        ),
+    )
     admin_page.goto(BASE_URL, wait_until="networkidle")
+    admin_page.get_by_role("button", name="About", exact=True).click()
+    expect(admin_page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
+    admin_page.get_by_text("Send product feedback").click()
+    admin_page.get_by_label("Feedback").fill("The signed-in feedback form is easy to find.")
+    admin_page.get_by_label("Contact email (optional)").fill("contact@example.org")
+    admin_page.get_by_role("button", name="Send feedback").click()
+    expect(
+        admin_page.get_by_text(
+            "Thanks for your feedback. It has been sent for administrator review."
+        )
+    ).to_be_visible()
+    assert admin_feedback_submissions == [
+        {
+            "message": "The signed-in feedback form is easy to find.",
+            "contact_email": "contact@example.org",
+        }
+    ]
+    admin_page.get_by_role("button", name="Close").click()
     expect(admin_page.get_by_role("link", name="Administrator settings")).to_be_visible()
     admin_page.get_by_role("link", name="Administrator settings").click()
     expect(admin_page.get_by_role("heading", name="Administrator Settings")).to_be_visible()
     expect(admin_page.get_by_role("heading", name="Invitation requests")).to_be_visible()
-    expect(admin_page.get_by_text("visitor@example.org")).to_be_visible()
+    expect(admin_page.get_by_text("visitor@example.org").first).to_be_visible()
+    expect(admin_page.get_by_role("heading", name="Product feedback")).to_be_visible()
+    expect(admin_page.get_by_text("Please make project creation easier to find.")).to_be_visible()
     expect(admin_page.get_by_role("tab", name="Account usage")).to_be_visible()
 
     browser.close()
 
 print(
-    "PASS real Chrome denied account Home, server invitation success, account switch, Demo handoff, unrestricted local Home, and administrator invitation review"
+    "PASS real Chrome public feedback/privacy, denied account invitation/privacy/error states, account switch, Demo handoff, unrestricted local Home, and administrator invitation/feedback review"
 )
