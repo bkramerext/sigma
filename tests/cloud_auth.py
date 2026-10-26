@@ -121,6 +121,24 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_auth_requires_explicit_loopback_local_configuration(self):
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            "GOOGLE_OIDC_CLIENT_ID": "",
+            "GOOGLE_OIDC_CLIENT_SECRET": "",
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
+        }):
+            cfg = cloud_auth.config()
+            self.assertIsNone(cfg.error)
+            self.assertTrue(cfg.local)
+            self.assertTrue(cloud_auth._mock_enabled(cfg))
+        with patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.example.org"}):
+            self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+
     def test_mock_auth_disabled_for_hosted_and_nonlocal_configurations(self):
         with patch.dict(os.environ, {"SIGMA_MOCK_AUTH": "1"}):
             self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
