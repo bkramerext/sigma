@@ -131,6 +131,19 @@ def main() -> None:
         assert (state / "auth.sqlite").read_bytes() == b"preserve-me"
         assert start_attempts == 2  # candidate failed, previous release restarted
 
+        # The candidate checkout must precede image build so tags cannot lie
+        # about which source tree produced them.
+        checkout_index = next(
+            index for index, argv in enumerate(calls)
+            if argv[:4] == ["git", "-C", str(repo), "checkout"]
+            and argv[-1] == NEW
+        )
+        build_index = next(
+            index for index, argv in enumerate(calls)
+            if argv[:2] == ["docker", "compose"] and argv[-1] == "build"
+        )
+        assert checkout_index < build_index
+
         print(
             "GCE release automation idempotency, missing config, startup rollback, and state preservation passed."
         )
