@@ -1126,7 +1126,9 @@ def project_destination(title: str = "") -> ProjectDestination:
         return ProjectDestination(str(root), None, False)
     _, name = _project_name(title)
     path = root / name
-    taken = os.path.lexists(path) or _title_key(title) in _occupied_titles(root)
+    json_path = path.with_suffix(".json")
+    taken = (os.path.lexists(path) or os.path.lexists(json_path)
+             or _title_key(title) in _occupied_titles(root))
     return ProjectDestination(str(root), str(path), taken)
 
 
