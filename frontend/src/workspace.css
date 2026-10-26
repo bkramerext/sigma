@@ -320,6 +320,13 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .current-understanding li p { margin: 0.4rem 0; }
 .current-understanding .text-view-link { white-space: normal; text-align: left; }
 .current-understanding-limits { margin-top: 0.8rem; }
+.strategy-suggestion-action { display: grid; justify-items: start; gap: .45rem; margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--workspace-border, #4a4036); }
+.strategy-suggestion-action small, .strategy-suggestion-heading > span { color: var(--workspace-muted, #b9aa98); }
+.strategy-suggestion-result { width: 100%; }
+.strategy-suggestion-result > summary { cursor: pointer; color: var(--workspace-copper, #e4b57c); }
+.strategy-suggestion-heading { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+.strategy-suggestion-heading .text-copy-button { flex: 0 0 auto; }
+.strategy-suggestion-result .outcome-markdown { overflow-wrap: anywhere; }
 .research-artifacts li:focus { outline: 1px solid var(--workspace-copper, #e4b57c); outline-offset: 4px; }
 @media (max-width: 900px) { .current-understanding-columns { grid-template-columns: 1fr; gap: 0.4rem; } }
 
@@ -327,11 +334,3 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .current-understanding button.text-view-link:hover { color: #ffe2b9; }
 .workspace-page .current-understanding button.text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 @media (max-width: 600px) { .workspace-page .current-understanding button.text-view-link { min-height: 44px; } }
-
-.continuation-approval label { display: block; margin-block: .6rem; }
-.continuation-approval select, .continuation-approval textarea, .continuation-approval input:not([type="checkbox"]) { display: block; width: 100%; max-width: 100%; box-sizing: border-box; }
-.continuation-approval textarea { min-height: 7rem; }
-.continuation-approval code { overflow-wrap: anywhere; }
-.continuation-approval pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
-.continuation-evidence pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
-.continuation-evidence p, .continuation-evidence summary { overflow-wrap: anywhere; }

@@ -149,6 +149,8 @@ from sigma.api import app
             )
             page = browser.new_page(viewport={"width": 1440, "height": 1000}, accept_downloads=True)
             errors, inference = [], []
+            suggestion_requests = []
+            active_project_id = ""
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on(
                 "request",
@@ -162,17 +164,41 @@ from sigma.api import app
                     else None
                 ),
             )
-            page.route(
-                "**/api/**",
-                lambda route: route.fulfill(
-                    response=route.fetch(
-                        url=route.request.url.replace(ui_url, api_url),
-                        headers={**route.request.headers, "origin": "http://127.0.0.1:5173"},
+
+            def api_route(route):
+                if (
+                    route.request.url.endswith("/api/projects/proposals/config")
+                    or "/api/projects/proposals/config?" in route.request.url
+                ):
+                    route.fulfill(
+                        json={
+                            "available": True,
+                            "project_id": active_project_id,
+                            "binding": "browser-fixture",
+                            "mode": "api_key",
+                            "model": "fixture-model",
+                            "reasoning_effort": "high",
+                        }
                     )
-                ),
-            )
+                elif route.request.url.endswith("/api/projects/strategy-suggestions"):
+                    suggestion_requests.append(route.request.post_data_json)
+                    route.fulfill(
+                        json={
+                            "markdown": "## Test a boundary case\n\nCompare the unresolved boundary with the saved findings.\n\n**Rationale:** Session evidence leaves this case open."
+                        }
+                    )
+                else:
+                    route.fulfill(
+                        response=route.fetch(
+                            url=route.request.url.replace(ui_url, api_url),
+                            headers={**route.request.headers, "origin": "http://127.0.0.1:5173"},
+                        )
+                    )
+
+            page.route("**/api/**", api_route)
             for slug in slugs:
                 path = str(PROJECTS / (slug + ".sigma"))
+                active_project_id = json.loads((Path(path) / "project.json").read_text())["id"]
                 page.goto(ui_url + "/")
                 page.get_by_role("button", name="Open", exact=True).click()
                 dialog = page.get_by_role("dialog", name="Open Project")
@@ -205,6 +231,37 @@ from sigma.api import app
                 else:
                     expect(summary).to_contain_text("No reviewed finding is saved")
                     assert not state["findings"] and not state["obligations"]
+                if slug == "maximum-regions-archived":
+                    action = summary.get_by_role("button", name="Suggest a Strategy", exact=True)
+                    expect(action).to_be_visible()
+                    page.context.grant_permissions(
+                        ["clipboard-read", "clipboard-write"], origin=ui_url
+                    )
+                    before_strategy_count = len(
+                        json.loads((Path(path) / "project.json").read_text())["strategies"]
+                    )
+                    action.click()
+                    result = summary.locator(".strategy-suggestion-result")
+                    result.wait_for()
+                    expect(result.locator(":scope > summary")).to_have_text("Suggested strategy")
+                    expect(page.get_by_role("dialog")).to_have_count(0)
+                    result.locator(":scope > summary").click()
+                    expect(result).to_contain_text("Test a boundary case")
+                    result.get_by_role("button", name="Copy suggested strategy").click()
+                    assert (
+                        page.evaluate("navigator.clipboard.readText()")
+                        == "## Test a boundary case\n\nCompare the unresolved boundary with the saved findings.\n\n**Rationale:** Session evidence leaves this case open."
+                    )
+                    result.locator(":scope > summary").click()
+                    expect(result.locator(".outcome-markdown")).to_be_hidden()
+                    assert (
+                        len(json.loads((Path(path) / "project.json").read_text())["strategies"])
+                        == before_strategy_count
+                    )
+                    assert (
+                        len(suggestion_requests) == 1
+                        and suggestion_requests[0]["expected_project_id"] == active_project_id
+                    )
                 navigation = []
                 for name in ("Inspect finding:", "Inspect earlier evidence:"):
                     buttons = summary.get_by_role("button").filter(has_text="Session")
@@ -341,5 +398,5 @@ assert all(
 )
 (EXPORTS / "CURRENT_STATE_MANIFEST.json").write_text(json.dumps(export_manifest, indent=2))
 print(
-    "PASS real Chrome: current understanding, exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no provider work"
+    "PASS real Chrome: current understanding and copy-only Markdown suggestion (provider endpoint mocked), exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
 )
