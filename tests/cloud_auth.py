@@ -239,6 +239,54 @@ class CloudAuthTests(TestCase):
             )
             self.assertEqual(blocked.status_code, 403)
 
+    def test_mock_members_cannot_read_each_others_session_records(self):
+        from sigma import research_sessions
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+        }):
+            self.assertEqual(self.client.post(
+                "/api/cloud-auth/mock/select", params={"identity": "member-a"},
+                headers=origin,
+            ).status_code, 200)
+            created = self.client.post(
+                "/api/projects/create",
+                json={"title": "Private mock session", "problem": "Test isolation"},
+                headers=origin,
+            )
+            self.assertEqual(created.status_code, 201, created.text)
+            path = created.json()["path"]
+            session_id = "11111111-1111-4111-8111-111111111111"
+            # The session file belongs to Member A's project workspace.
+            with patch.object(research_sessions, "_snapshot") as snapshot:
+                # A project-scoped read must resolve through the active workspace,
+                # never through a supplied path belonging to another member.
+                self.assertEqual(self.client.get(
+                    "/api/projects/research-sessions", params={"path": path},
+                ).status_code, 200)
+                self.assertFalse(snapshot.called)
+            self.assertEqual(self.client.post(
+                "/api/cloud-auth/mock/select", params={"identity": "member-b"},
+                headers=origin,
+            ).status_code, 200)
+            for endpoint in (
+                "/api/projects/research-sessions",
+                f"/api/projects/research-sessions/{session_id}",
+            ):
+                denied = self.client.get(endpoint, params={"path": path})
+                self.assertIn(denied.status_code, {400, 403, 404}, denied.text)
+            self.assertEqual(self.client.post(
+                "/api/cloud-auth/mock/select", params={"identity": "member-a"},
+                headers=origin,
+            ).status_code, 200)
+            self.assertEqual(self.client.get(
+                "/api/projects/research-sessions", params={"path": path},
+            ).status_code, 200)
+
     def test_mock_member_projects_are_not_visible_to_other_members(self):
         origin = {"Origin": "http://127.0.0.1:5173"}
         with patch.dict(os.environ, {
