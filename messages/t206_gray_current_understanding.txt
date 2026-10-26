@@ -1,0 +1,22 @@
+Issue #206 handoff — Gray — 2026-10-26
+
+Branch: gray/t206-current-understanding
+Base: main at 2c409e6b4e045e75a84b369c12f545cb8a969e32
+Head: see linked pull request
+
+Scope and changes
+- Made the Current Understanding heading prominent in the existing copper/black visual system.
+- Added a clearly visible conventional chevron using the native details/summary disclosure; kept the section expanded by default.
+- Removed the saved-session count from the heading. The existing count in the sessions pane remains.
+- Preserved synthesis content, evidence references, and navigation handlers. No Play dialog, evidence-scope selection, session semantics, or AI behavior was changed.
+- Added browser assertions for the header, default-open state, disclosure interaction, count location, reload state, and responsive widths.
+
+Verification
+- Passed: `SIGMA_CURRENT_UNDERSTANDING_HEADER_ONLY=1 SIGMA_CURRENT_UNDERSTANDING_OUTPUT=/tmp/sigma-t206-current-understanding uv run --with playwright python browser_checks/current_understanding.py` — real Chrome; heading, count placement, native expand/collapse, default expansion, 1440/390/320 px layout; no provider work.
+- Passed: `uv run --locked --no-sync ruff check browser_checks/current_understanding.py` and the corresponding Ruff format check.
+- Passed: `npm run typecheck` and `npm run build` in `frontend/` (Vite reports its existing >500 kB chunk advisory).
+- `./sigma test` failed at Ruff due to B023 (`status` loop binding) and formatting in `browser_checks/model_availability.py`. The failure is outside this change.
+- Full `browser_checks/current_understanding.py` fails while waiting for focus on a `research-artifact-*` element. Reproduced the same failure on an untouched worktree at the exact base commit, so existing evidence navigation verification remains blocked by baseline behavior.
+- No paid inference, provider calls, production changes, or secrets were used.
+
+Remaining verification: existing full-browser artifact-focus failure and repo-wide Ruff baseline findings need resolution before those checks pass. Focused visual/disclosure acceptance passes.

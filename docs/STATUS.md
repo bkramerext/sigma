@@ -5668,3 +5668,18 @@ hosted workflow acceptance against the supplied persisted project; #202 also
 requires explicit authorization before any paid hosted generation. Issue #200
 remains open pending an authenticated hosted availability request and server
 evidence to identify the underlying failure.
+
+## Issue #206 — Current Understanding presentation (2026-10-26)
+
+Current Understanding now uses the established copper/black visual hierarchy,
+a visible native disclosure chevron, and an expanded-by-default disclosure. The
+redundant saved-session count was removed from its heading; the separate session
+pane count remains. Research synthesis, evidence links, and navigation logic
+were left intact. The layout was checked at 1440, 390, and 320 pixels.
+
+Focused real Chrome verification and the frontend typecheck/build passed. The
+full browser check still fails while focusing a linked research artifact; the
+same failure occurs on unmodified `main` (`2c409e6`). `./sigma test` remains
+blocked by Ruff findings in `browser_checks/model_availability.py` on `main`
+(B023 and formatting); this change did not modify that file. No provider calls
+were made. See [Gray issue #206 handoff](../messages/t206_gray_current_understanding.txt).
