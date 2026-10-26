@@ -157,13 +157,20 @@ def main() -> None:
                 body = {
                     "title": "API math",
                     "problem": "A mathematical question",
-                    "research_mode": "mathematical",
+                    "investigation_type": "mathematical",
+                    "ai_model": None,
+                    "reasoning_effort": "high",
                     "difficulty": "hard",
+                    "show_advanced_outcome_details": True,
                 }
                 response = client.post("/api/projects/create", json=body)
                 assert response.status_code == 201, response.text
                 assert response.json()["project"]["investigation_type"] == "mathematical"
                 assert response.json()["project"]["difficulty"] == "hard"
+                assert response.json()["project"]["show_advanced_outcome_details"] is True
+                assert inspect_project(
+                    response.json()["path"]
+                ).project.show_advanced_outcome_details
                 chemistry = client.post(
                     "/api/projects/create",
                     json={
@@ -175,10 +182,11 @@ def main() -> None:
                 assert chemistry.status_code == 201, chemistry.text
                 assert chemistry.json()["project"]["investigation_type"] == "chemistry"
                 assert chemistry.json()["project"]["difficulty"] == "medium"
+                assert chemistry.json()["project"]["show_advanced_outcome_details"] is False
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(
-                        "/api/projects/create", json={**body, "research_mode": "invalid"}
+                        "/api/projects/create", json={**body, "investigation_type": "invalid"}
                     ).status_code
                     == 400
                 )

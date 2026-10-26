@@ -19,12 +19,57 @@ with sync_playwright() as p:
     )
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     errors = []
+    render_loop_errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on(
+        "console",
+        lambda message: (
+            render_loop_errors.append(message.text)
+            if message.type == "error" and "Maximum update depth exceeded" in message.text
+            else None
+        ),
+    )
 
     def forward(route):
         route.fulfill(response=route.fetch(url=route.request.url.replace(base, fixture)))
 
     page.route("**/api/**", forward)
+    # Exercise project/session controls without a real account or provider call.
+    page.route(
+        "**/api/ai/connection*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "mode": "chatgpt",
+                    "status": "connected",
+                    "label": "ChatGPT connected (browser fixture)",
+                    "accounts": [],
+                    "active_account": None,
+                }
+            ),
+        ),
+    )
+    page.route(
+        "**/api/projects/proposals/config*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "available": True,
+                    "provider": "openai",
+                    "mode": "chatgpt",
+                    "binding": "chatgpt:browser-fixture",
+                    "project_id": "browser-fixture-project",
+                    "model": "gpt-6.1-sol",
+                    "reasoning_effort": "high",
+                    "message": "Browser fixture; no provider call is made.",
+                }
+            ),
+        ),
+    )
     page.goto(base)
     project = page.evaluate(
         """async () => {
@@ -68,6 +113,8 @@ with sync_playwright() as p:
     page.goto(base + "/project?path=" + quote(path, safe=""))
     rows = page.locator(".strategy-list > li")
     expect(rows).to_have_count(3)
+    page.wait_for_timeout(1500)
+    assert not render_loop_errors, render_loop_errors
     third_row = rows.nth(2)
     page.get_by_role("button", name="Start a new research session", exact=True).click()
     expect(page.get_by_role("region", name="Sessions").get_by_role("alert")).to_contain_text(
@@ -112,6 +159,7 @@ with sync_playwright() as p:
     assert start_payloads[0]["strategy_id"] == enabled_strategy_ids[0]
     assert page.locator("li[data-session-id]").count() == 0
     assert not errors, errors
+    assert not render_loop_errors, render_loop_errors
     print(
         "PASS Chrome strategy rows define the session set; over-budget prevention, no duplicate selector, same-slot confirmation, and no provider session"
     )

@@ -697,6 +697,7 @@ class CreateProjectRequest(BaseModel):
     ai_model: str | None = None
     reasoning_effort: str = "high"
     difficulty: str = "medium"
+    show_advanced_outcome_details: bool = False
 
 
 @app.get("/api/projects/destination")
@@ -714,6 +715,7 @@ def create_project_view(body: CreateProjectRequest):
             body.ai_model,
             body.reasoning_effort,
             body.difficulty,
+            body.show_advanced_outcome_details,
         )
     )
 
