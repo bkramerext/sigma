@@ -333,6 +333,31 @@ def main() -> None:
             delete_file(created.path, "evidence/source.txt")
             assert "evidence/source.txt" not in list_files(created.path)
             assert "evidence/source.txt" in list_files(imported_path)
+            # Simulate durable lifecycle transitions without provider calls.
+            # Terminal sessions can be removed without touching the sequence.
+            from sigma.research_sessions import remove_session
+
+            lifecycle_id = str(uuid4())
+            lifecycle = {
+                "id": lifecycle_id,
+                "project_id": created.project.id,
+                "project_path": created.path,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+                "session_number": 27,
+                "status": "queued",
+            }
+            for status in ("queued", "running", "paused", "running", "completed"):
+                lifecycle["status"] = status
+                _save(created.path, lifecycle)
+                assert _read(created.path, lifecycle_id)["status"] == status
+                assert any(item["id"] == lifecycle_id for item in read_session_snapshot(created.path)[0])
+            removed = remove_session(
+                created.path, lifecycle_id, lifecycle["updated_at"]
+            )
+            assert removed["removed"] and removed["session_number"] == 27
+            assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
+            assert _allocate_session_number(created.path, []) == 27
             # Creation uses the normal project schema and preserves options.
             customized = create_json_project(
                 "Custom JSON", "Research with options",
