@@ -1,0 +1,30 @@
+T81 — Green handoff
+
+Branch: green/t81-invitation-workflow
+Base: origin/main at 07eff56
+Head: a17ec35 (Implement hosted invitation request workflow)
+
+Changes: replaced the hosted denied-access mailto action with a backend POST
+using the short-lived server verified Google subject; persisted requests in the
+auth SQLite database; added per-email daily rate limiting, duplicate handling,
+admin-only request review and status updates; added authenticated STARTTLS SMTP
+delivery to zetacontinuation@gmail.com with the authenticated mailbox as sender;
+updated deployment secret mount/fetch/preflight/docs; refreshed the real Chrome
+access-denied acceptance check.
+
+Verification: ./sigma test passed on the final source; Ruff check/format,
+Pyright, frontend typecheck/build, cloud_auth tests (22), gce_host tests,
+deployment_package check, Python compilation, and git diff --check passed. The
+real Chrome browser check passed the denied screen submission, exact success
+message, responsive layouts, demo/account-switch navigation, and admin review
+list. One earlier full-suite attempt saw a transient failure in the concurrent
+research-session scenario; the focused scenario passed on retry and the next
+full suite passed.
+
+No paid/provider calls, real email delivery, cloud secret creation, or hosted
+deployment occurred. No SMTP credential is configured in this environment;
+runtime setup still needs the approved SMTP account and Secret Manager secret.
+No project identity or research data was changed.
+
+R4R. Dependencies: none in the branch. Live delivery remains unverified until
+the SMTP runtime credential is provisioned and delivery is exercised.
