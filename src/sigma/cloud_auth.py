@@ -35,6 +35,7 @@ from sigma.config_secrets import SecretConfigurationError, secret_value
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
+INVITE_INTENT_COOKIE = "__Host-sigma_invite_intent"
 DENIED_COOKIE = "__Host-sigma_denied"
 FEEDBACK_RATE_COOKIE = "__Host-sigma_feedback_rate"
 SESSION_SECONDS = 8 * 60 * 60
@@ -126,7 +127,7 @@ def config() -> Config:
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
     error = "Cloud authentication secret configuration is invalid." if secret_error else None
-    if not client_id or not client_secret or not origin or not root or not admin_contact:
+    if not origin or not root or (not local and (not client_id or not client_secret or not admin_contact)):
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
     try:
@@ -155,7 +156,7 @@ def config() -> Config:
     database = None
     if not error:
         try:
-            admin_contact = _normalize_email(admin_contact)
+            admin_contact = _normalize_email(admin_contact) if admin_contact else None
             path = Path(root)
             if not path.is_absolute():
                 raise ValueError
@@ -473,6 +474,14 @@ def _sync_user_state_in_db(db: sqlite3.Connection, cfg: Config) -> None:
 
 def resolve_session(raw: str | None) -> Principal | None:
     cfg = config()
+    if (
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
+        and cfg.admin_contact_email
+    ):
+        return Principal("local-admin:" + cfg.admin_contact_email, cfg.admin_contact_email, "admin")
     if not cfg.enabled or cfg.error or not raw or len(raw) > 128:
         return None
     with _db(cfg) as db:
@@ -610,6 +619,7 @@ def status(request: Request):
 @router.get("/login")
 def login(
     request: Request,
+    invite: bool = False,
 ):
     cfg = config()
     if not cfg.enabled:
@@ -656,6 +666,13 @@ def login(
         state,
         **_cookie_options(cfg, FLOW_COOKIE, max_age=FLOW_SECONDS),
     )
+    if invite:
+        response.set_cookie(
+            _cookie_name(INVITE_INTENT_COOKIE, cfg), state,
+            **_cookie_options(cfg, INVITE_INTENT_COOKIE, max_age=FLOW_SECONDS),
+        )
+    else:
+        _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
     _clear_cookie(response, cfg, SESSION_COOKIE)
     response.headers["Cache-Control"] = "no-store"
@@ -759,6 +776,7 @@ async def callback(
             raise ValueError("Invalid subject")
     except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(401, "Google sign-in could not be verified.") from None
+    invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
     role = _authorization(cfg, subject, email)
     if not role:
         denied_token = secrets.token_urlsafe(32)
@@ -772,8 +790,9 @@ async def callback(
                 "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
                 (_hash(denied_token), email, subject, _now() + DENIED_SECONDS),
             )
-        response = RedirectResponse("/?access=denied", status_code=303)
+        response = RedirectResponse("/?access=denied&invite=1" if invite_intent else "/?access=denied", status_code=303)
         _clear_cookie(response, cfg, FLOW_COOKIE)
+        _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
         _clear_cookie(response, cfg, SESSION_COOKIE)
         response.set_cookie(
             _cookie_name(DENIED_COOKIE, cfg),
@@ -823,6 +842,7 @@ async def callback(
         **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
     _clear_cookie(response, cfg, FLOW_COOKIE)
+    _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"

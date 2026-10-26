@@ -13,6 +13,11 @@ def main() -> None:
         print("SIGMA requires uv. Install uv, then retry ./sigma setup.", file=sys.stderr)
         sys.exit(2)
     root = Path(__file__).resolve().parent
+    # This launcher always targets this checkout's .venv. An activated
+    # environment from another checkout must not leak into uv's selection.
+    active = os.environ.get("VIRTUAL_ENV")
+    if active and Path(active).resolve() != (root / ".venv").resolve():
+        os.environ.pop("VIRTUAL_ENV", None)
     os.execv(uv, [uv, "run", "--project", str(root), "sigma", *sys.argv[1:]])
 
 
