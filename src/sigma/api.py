@@ -496,8 +496,14 @@ async def research_session_view(session_id: str, path: str):
     return research_sessions.get_session(path, session_id)
 
 
+class MockResearchStartRequest(OpenRequest):
+    strategy_id: str
+    idempotency_key: str
+    expected_project_id: str
+
+
 @app.post("/api/projects/research-sessions/mock")
-def mock_research_start_view(body: ResearchStartRequest, request: Request, scenario: str = "completed"):
+def mock_research_start_view(body: MockResearchStartRequest, request: Request, scenario: str = "completed"):
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
     if (
