@@ -111,6 +111,55 @@ async def verify():
             assert get_execution_artifact(path, artifact_run["id"], "proof.bin")[0] == original
             print("PASS corrupted artifact rejected without losing valid evidence")
 
+            # Kill a separate SIGMA worker after it has durably reserved an
+            # execution. This is a real process death, not a mocked lock loss.
+            import os
+            import signal
+            import subprocess
+            import sys
+            import time
+            child_code = (
+                "import asyncio,sys\\n"
+                "from sigma.python_sandbox import execute_research_code\\n"
+                "asyncio.run(execute_research_code(sys.argv[1], "
+                "'import time; time.sleep(6); print(42)'))\\n"
+            )
+            child = subprocess.Popen(
+                [sys.executable, "-c", child_code, str(path)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                env=os.environ.copy(),
+            )
+            killed = False
+            try:
+                deadline = time.monotonic() + 12
+                prior_ids = {item["id"] for item in list_executions(path)}
+                while time.monotonic() < deadline:
+                    current = [item for item in list_executions(path)
+                               if item["id"] not in prior_ids and item["status"] == "running"]
+                    if current:
+                        doomed_id = current[0]["id"]
+                        child.kill()
+                        child.wait(timeout=5)
+                        killed = True
+                        break
+                    if child.poll() is not None:
+                        raise AssertionError(
+                            "Docker worker exited before reservation: "
+                            + child.stderr.read().decode(errors="replace")
+                        )
+                    await asyncio.sleep(0.05)
+                assert killed, "Docker worker did not create a running reservation"
+                dead = get_execution(path, doomed_id)
+                assert dead["status"] == "interrupted", dead
+                assert dead["exit_code"] is None
+                assert get_execution(imported, first["id"])["status"] == "completed"
+                print("PASS real SIGMA worker termination preserves uncertain execution")
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait(timeout=5)
+
+
         finally:
             projects.projects_root = original_root
 
