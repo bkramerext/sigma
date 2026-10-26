@@ -1,6 +1,6 @@
 T129 — deployment automation follow-up
 
-Status: R4R, local/offline preparation only. Branch: `gray/t129-deployment-automation`, rebased on `main` (`6c9ebbb`). PR link to be added after publication.
+Status: R4R, local/offline preparation only. Branch: `gray/t129-deployment-automation`, rebased on `main` (`6c9ebbb`). PR: https://github.com/bkramerext/sigma/pull/161.
 
 Implemented:
 - Added `deploy/deploy-gce-release.py` for initial start and repeat upgrades by full lowercase Git SHA. It checks protected configuration and host preflight, refuses dirty trees, fetches the exact commit and builds backend/frontend images tagged with that SHA before maintenance. It atomically changes only `SIGMA_RELEASE`, re-runs preflight against the selected checkout, starts through systemd, then checks all container health statuses, backend/frontend image identity, checked-out SHA, active unit and mounted state directory.
@@ -11,11 +11,9 @@ Implemented:
 
 Validation actually run:
 - `python3 tests/deployment_automation.py` — passed.
-- `python3 tests/deployment_package.py` — passed in final `./sigma test`.
-- `python3 tests/gce_host.py` — 16 passed in final `./sigma test`.
-- `python3 tests/storage.py` — isolated rerun passed; also passed in final `./sigma test`.
-- `python3 tests/host_monitor.py` — 9 passed in final `./sigma test`.
-- `./sigma test` — after rebasing onto current `main` (`6c9ebbb`), all but three T128 host-contract checks passed. `tests/deployment_package.py`, `tests/gce_host.py::test_systemd_templates_preserve_mount_gate_and_rootless_boundary`, and `tests/host_monitor.py::test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks` still require the state mount in `Requires=`/`After=`, while the latest T128 `sigma.service` now uses `RequiresMountsFor=/srv/sigma-state`. These Red-owned expectations were not edited. The test runner skips the frontend production build after failures; I ran `npm --prefix frontend run build` separately and it passed. Earlier on the pre-T128-update base, the focused test set and full checks were clean; an intermediate storage fixture race passed on immediate isolated rerun.
+- `python3 tests/storage.py` — passed in the final full-suite run.
+- The current full-suite run fails three Red-owned checks after latest main: `tests/deployment_package.py`, `tests/gce_host.py::test_systemd_templates_preserve_mount_gate_and_rootless_boundary`, and `tests/host_monitor.py::test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks` still require the state mount in `Requires=`/`After=`, while current T128 service configuration uses `RequiresMountsFor=/srv/sigma-state`.
+- `./sigma test` — after rebasing onto current `main` (`6c9ebbb`), all but three T128 host-contract checks passed. `tests/deployment_package.py`, `tests/gce_host.py::test_systemd_templates_preserve_mount_gate_and_rootless_boundary`, and `tests/host_monitor.py::test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks` still require the state mount in `Requires=`/`After=`, while the latest T128 `sigma.service` now uses `RequiresMountsFor=/srv/sigma-state`. These Red-owned expectations were not edited. The test runner skips the frontend production build after failures; I ran `npm --prefix frontend run build` separately and it passed. An earlier storage fixture race passed on immediate isolated rerun.
 - `git diff --check` — passed.
 - No browser check was run because this change has no UI. No production VM, public endpoint, DNS, credentials, OAuth or provider calls were accessed. No cost incurred.
 

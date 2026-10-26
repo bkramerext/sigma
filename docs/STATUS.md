@@ -68,7 +68,7 @@ current T128 `sigma.service` uses `RequiresMountsFor=/srv/sigma-state`. The
 T128 contract change came from current main (`6c9ebbb`) and is outside this
 assignment's edit scope; these Red-owned files were left unchanged. The full
 run skipped the production frontend build after those failures; the standalone
-build passed. No real-browser check was needed because no UI changed. No GCE
+build passed. The change is submitted in [PR #161](https://github.com/bkramerext/sigma/pull/161); no merge was performed. No real-browser check was needed because no UI changed. No GCE
 host, production credential, public endpoint, provider or DNS operation was
 accessed or modified.
 
@@ -76,7 +76,7 @@ accessed or modified.
 confirm the T128 host/disk contract, authorize initial startup and each upgrade
 window plus recovery/schema assertions, and separately authorize DNS/ingress,
 OAuth, provider acceptance, backups and public launch. Offline implementation
-does not verify hosted application behavior. PR and handoff are linked from
+does not verify hosted application behavior. The handoff is linked from
 [`messages/t129_gray_deployment_automation.txt`](../messages/t129_gray_deployment_automation.txt).
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
