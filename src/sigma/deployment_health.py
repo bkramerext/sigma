@@ -23,7 +23,7 @@ def main() -> int:
         cloud_research._spend_ceiling_decimal()
         cloud_research._user_spend_ceiling_decimal()
         credential = asyncio.run(openai_connection.auth_context())
-        if credential.get("identity") != "cloud_service_api_key" or not credential.get("token"):
+        if not openai_connection.cloud_credential(credential):
             return 1
         subprocess.run(
             ["docker", "info", "--format={{.ServerVersion}}"],

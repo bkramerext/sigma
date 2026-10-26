@@ -628,7 +628,11 @@ async def middleware(request: Request, call_next):
     # Local Google identity gates project access but does not replace the
     # separate local ChatGPT account flow. Hosted SIGMA must never proxy a
     # user's personal ChatGPT authorization through the service.
-    if path.startswith("/api/ai/") and not cfg.local:
+    if (
+        path.startswith("/api/ai/")
+        and not cfg.local
+        and not (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
+    ):
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )

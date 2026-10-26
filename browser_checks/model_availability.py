@@ -61,15 +61,19 @@ with sync_playwright() as playwright:
             "Model availability check failed (HTTP 503). Retry after connectivity is restored. Saved settings are unchanged.",
         ),
     ]
-    for status, expected_message in cases:
-        page.route(
-            "**/api/ai/models",
-            lambda route, response_status=status: route.fulfill(
+
+    def catalog_failure(response_status):
+        def handle(route):
+            route.fulfill(
                 status=response_status,
                 content_type="application/json",
                 body=json.dumps({"error": "fixture failure"}),
-            ),
-        )
+            )
+
+        return handle
+
+    for status, expected_message in cases:
+        page.route("**/api/ai/models", catalog_failure(status))
         page.reload()
         model = page.locator(".project-model-pill")
         thinking = page.locator(".project-thinking-pill")

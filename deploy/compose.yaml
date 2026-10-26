@@ -33,6 +33,9 @@ services:
     environment:
       SIGMA_CLOUD_AUTH_ENABLED: "true"
       SIGMA_CLOUD_AUTH_HOME: /var/lib/sigma-auth
+      SIGMA_CLOUD_CHATGPT_AUTH_HOME: /var/lib/sigma-auth/chatgpt-sponsor
+      SIGMA_CLOUD_INFERENCE_PROVIDER: ${SIGMA_CLOUD_INFERENCE_PROVIDER:-api_key}
+      SIGMA_CLOUD_SPONSOR_EMAIL: ${SIGMA_CLOUD_SPONSOR_EMAIL:-}
       SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces
       SIGMA_CLOUD_DEMO_AUDIT: /opt/sigma/demo/handshake-demo-audit.json
       SIGMA_CLOUD_PUBLIC_ORIGIN: https://${SIGMA_DOMAIN:?set SIGMA_DOMAIN}

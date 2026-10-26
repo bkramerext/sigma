@@ -303,7 +303,7 @@ def check_local_google_setup_warning() -> None:
         assert local_google_configuration_warning() is None
 
 
-def check_partial_google_startup_warns_without_enabling_auth() -> None:
+def check_partial_google_startup_remains_guest_without_admin() -> None:
     backend, frontend = Mock(), Mock()
     backend.poll.return_value = None
     frontend.poll.return_value = None
@@ -334,9 +334,11 @@ def check_partial_google_startup_warns_without_enabling_auth() -> None:
         redirect_stderr(warning_output),
     ):
         assert run_ui() == 0
-    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in warning_output.getvalue()
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in warning_output.getvalue()
     backend_env = launch.call_args_list[0].kwargs["env"]
-    assert "SIGMA_CLOUD_AUTH_ENABLED" not in backend_env
+    assert backend_env["SIGMA_CLOUD_AUTH_ENABLED"] == "true"
+    assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+    assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
     assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
 
 
@@ -416,7 +418,7 @@ def main() -> None:
         check_ui()
         check_local_google_startup()
         check_local_google_setup_warning()
-        check_partial_google_startup_warns_without_enabling_auth()
+        check_partial_google_startup_remains_guest_without_admin()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()

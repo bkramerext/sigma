@@ -16,7 +16,7 @@ from uuid import uuid4
 import httpx
 
 
-def main() -> None:
+def main(mode: str = "api_key") -> None:
     with TemporaryDirectory(prefix="sigma-cloud-api-", dir=Path.cwd().parent) as temporary:
         root = Path(temporary)
         root.chmod(0o700)
@@ -33,6 +33,9 @@ def main() -> None:
             "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
             "SIGMA_STATE_DIR": str(root / "local-state"),
             "SIGMA_CLOUD_OPENAI_API_KEY": "fake-server-credential",
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": mode,
+            "SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test",
+            "SIGMA_CLOUD_CHATGPT_AUTH_HOME": str(root / "sponsor"),
             "OPENAI_API_KEY": "local-key-must-not-be-used",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
             "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
@@ -48,7 +51,28 @@ def main() -> None:
             import cloud_workspace_test_app
             from fastapi.testclient import TestClient
 
-            from sigma import cloud_auth, cloud_research
+            from sigma import ai_store, cloud_auth, cloud_research
+
+            binding = "cloud_service_api_key"
+            if mode == "chatgpt":
+                import asyncio
+
+                async def provision_fixture():
+                    async with ai_store.transaction() as state:
+                        state["active"] = "fixture"
+                        state["accounts"] = {
+                            "fixture": {
+                                "email": "sponsor@example.test",
+                                "client_id": "oaiapp_fixture",
+                                "subject": "fixture-subject",
+                                "access_token": "fake-plan-credential",
+                                "expires_at": time.time() + 3600,
+                                "scopes": ["resource.invoke", "chatgpt.tokens.use.direct"],
+                            }
+                        }
+
+                asyncio.run(provision_fixture())
+                binding = "cloud_sponsor:fixture"
 
             # Exercise the real server credential lookup, model discovery,
             # Responses request construction, usage parsing, and cloud ledger.
@@ -130,11 +154,27 @@ def main() -> None:
 
             def provider_handler(request):
                 nonlocal fail_next_inference, timeout_next_inference
-                assert request.headers["authorization"] == "Bearer fake-server-credential"
+                assert request.headers["authorization"] == (
+                    "Bearer fake-plan-credential"
+                    if mode == "chatgpt"
+                    else "Bearer fake-server-credential"
+                )
                 if request.url.path == "/v1/models":
                     return httpx.Response(
                         200,
-                        json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+                        json=(
+                            {
+                                "models": [
+                                    {
+                                        "slug": "gpt-6.1-sol",
+                                        "display_name": "Sol",
+                                        "visibility": "list",
+                                    }
+                                ]
+                            }
+                            if mode == "chatgpt"
+                            else {"object": "list", "data": [{"id": "gpt-6.1-sol"}]}
+                        ),
                     )
                 assert request.url.path == "/v1/responses"
                 payload = json.loads(request.content)
@@ -152,6 +192,24 @@ def main() -> None:
                         json={"error": {"code": "fixture_server_error", "message": "fixture"}},
                     )
                 output = investigator if role == "research_investigator" else skeptic
+                if mode == "chatgpt":
+                    assert payload["stream"] is True and "max_output_tokens" not in payload
+                    value = provider_response(output) | {"id": "resp_fixture"}
+                    event = {"type": "response.completed", "sequence_number": 1, "response": value}
+                    created = {
+                        "type": "response.created",
+                        "sequence_number": 0,
+                        "response": {"id": "resp_fixture"},
+                    }
+                    return httpx.Response(
+                        200,
+                        headers={"content-type": "text/event-stream"},
+                        content="data: "
+                        + json.dumps(created)
+                        + "\n\ndata: "
+                        + json.dumps(event)
+                        + "\n\n",
+                    )
                 return httpx.Response(200, json=provider_response(output))
 
             real_client = httpx.AsyncClient
@@ -224,18 +282,32 @@ def main() -> None:
                         "SELECT model_connection_status FROM user_state WHERE subject=?",
                         ("cloud-a",),
                     ).fetchone() == ("connected",)
-                with patch.dict(os.environ, {"SIGMA_CLOUD_OPENAI_API_KEY": ""}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_OPENAI_API_KEY": "",
+                        **(
+                            {"SIGMA_CLOUD_SPONSOR_EMAIL": "absent@example.test"}
+                            if mode == "chatgpt"
+                            else {}
+                        ),
+                    },
+                ):
                     unconfigured = client.get("/api/ai/models")
                     sponsor_unconfigured = client.get("/api/cloud-research/connection")
                 assert unconfigured.status_code == 200
-                assert unconfigured.json()["connection"]["status"] == "unconfigured"
+                assert unconfigured.json()["connection"]["status"] == (
+                    "disconnected" if mode == "chatgpt" else "unconfigured"
+                )
                 assert sponsor_unconfigured.status_code == 200
-                assert sponsor_unconfigured.json()["status"] == "unconfigured"
+                assert sponsor_unconfigured.json()["status"] == (
+                    "disconnected" if mode == "chatgpt" else "unconfigured"
+                )
                 with sqlite3.connect(root / "auth" / "access.sqlite3") as db:
                     assert db.execute(
                         "SELECT model_connection_status FROM user_state WHERE subject=?",
                         ("cloud-a",),
-                    ).fetchone() == ("unconfigured",)
+                    ).fetchone() == (("disconnected" if mode == "chatgpt" else "unconfigured"),)
                 assert provider_calls == []
                 created = client.post(
                     "/api/projects/create",
@@ -269,7 +341,7 @@ def main() -> None:
                     "strategy_id": strategy_id,
                     "idempotency_key": key,
                     "expected_project_id": project_id,
-                    "expected_binding": "cloud_service_api_key",
+                    "expected_binding": binding,
                     "expected_limits": limits.json(),
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
@@ -482,7 +554,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                         "strategy_id": second_strategy["id"],
                         "idempotency_key": str(uuid4()),
                         "expected_project_id": second_id,
-                        "expected_binding": "cloud_service_api_key",
+                        "expected_binding": binding,
                         "expected_limits": second_limits.json(),
                     },
                 )
@@ -512,7 +584,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                         "strategy_id": second_strategy["id"],
                         "idempotency_key": str(uuid4()),
                         "expected_project_id": second_id,
-                        "expected_binding": "cloud_service_api_key",
+                        "expected_binding": binding,
                         "expected_limits": second_limits.json(),
                     },
                 )
@@ -582,3 +654,4 @@ print("PASS fresh-process research, Outcome and report recovery")
 
 if __name__ == "__main__":
     main()
+    main("chatgpt")

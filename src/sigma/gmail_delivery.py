@@ -29,18 +29,20 @@ def send_invitation(email: str, requested_at: int, *, recipient: str) -> None:
         path = Path(token_file)
         credentials = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(credentials, dict):
-            raise ValueError("Invalid OAuth credentials")
+            raise TypeError("Invalid OAuth credentials")
         if not {"client_id", "client_secret", "refresh_token"} <= credentials.keys():
             raise ValueError("Missing OAuth refresh credentials")
         if not all(credentials[k] for k in ("client_id", "client_secret", "refresh_token")):
             raise ValueError("Empty OAuth refresh credentials")
         # Do not accept an arbitrary token endpoint from the credentials file.
-        body = urlencode({
-            "client_id": credentials["client_id"],
-            "client_secret": credentials["client_secret"],
-            "refresh_token": credentials["refresh_token"],
-            "grant_type": "refresh_token",
-        }).encode("utf-8")
+        body = urlencode(
+            {
+                "client_id": credentials["client_id"],
+                "client_secret": credentials["client_secret"],
+                "refresh_token": credentials["refresh_token"],
+                "grant_type": "refresh_token",
+            }
+        ).encode("utf-8")
         request = Request(
             TOKEN_ENDPOINT,
             data=body,
@@ -71,6 +73,6 @@ def send_invitation(email: str, requested_at: int, *, recipient: str) -> None:
         with urlopen(request, timeout=15) as response:
             if response.status != 200:
                 raise ValueError("Gmail API send was unsuccessful")
-    except (OSError, ValueError, KeyError, TypeError, HTTPError, URLError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, HTTPError, URLError):
         # Avoid leaking OAuth tokens, response bodies, or provider error details.
         raise RuntimeError("Invitation notification could not be delivered.") from None
