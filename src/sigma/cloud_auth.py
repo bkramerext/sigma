@@ -696,6 +696,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/text/source",
             "/api/projects/recent/forget",
             "/api/projects/samples/open",
+            "/api/projects/research-sessions/mock",
         }
         project_write = (
             path.startswith("/api/projects/")
