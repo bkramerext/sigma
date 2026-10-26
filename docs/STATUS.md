@@ -1,5 +1,69 @@
 # SIGMA status
 
+## Host Caddy and GCE Compose port contract (2026-10-26)
+
+Kept host Caddy as the GCE public HTTPS endpoint. `deploy/compose.gce.yaml`
+now overrides the Compose edge publication to a single
+`127.0.0.1:18080:80/tcp` binding and runs that edge in HTTP mode. Its upstream
+scheme is explicitly HTTPS so the application receives the production origin
+scheme. Local Compose retains its configurable 80/443 defaults. The exact host
+site block is in `deploy/host-caddy.Caddyfile`; GCE preflight now rejects any
+other published port, non-loopback bind, or additional edge publication.
+
+Fetched T128 merge `37b2433e90da10afe09c478284cbee6aea44a005` before final
+verification. The stale systemd mount assertions were corrected there; I did
+not modify Red's files. Focused GCE port-contract/preflight checks passed, as
+did the deployment package, GCE host (18 tests), host monitor (9 tests), and
+release-image (3 tests). `./sigma test` passed all scenarios, Ruff check and
+format, Pyright (0 diagnostics), frontend typecheck, and frontend production
+build (with the existing large-chunk advisory). Docker Compose v2 is
+unavailable here, so I could not render the merged Compose configuration
+locally. No live VM, GCE, or deployment operation was performed.
+
+## T128 GCE host readiness and runtime security review (2026-10-26)
+
+**Readiness: BLOCKED for production activation.** Reviewed current `main`
+(`8e8d979`), the host preflight/installer, state disk path, systemd services,
+production Compose policy, runtime-check command, and operator runbooks. Source
+inspection supports the intended boundaries: a separate rootless
+`sigma-sandbox` daemon, unprivileged isolated research containers, and backend
+state mounted only from `/srv/sigma-state/auth`. These are not live-host
+observations. No SSH, cloud/provider calls, installer, service activation,
+reboot, or infrastructure change occurred. Supplied host status, IP, DNS, and
+TLS facts were not independently checked.
+
+Reconciled the three stale deployment assertions in `tests/deployment_package.py`,
+`tests/gce_host.py`, and `tests/host_monitor.py`: current `sigma.service` uses
+`RequiresMountsFor=/srv/sigma-state`, with explicit Docker and rootless-sandbox
+`Requires`/`After` ordering. The production package also defines its own Caddy
+edge publishing 80/443 on all interfaces by default, which conflicts with the
+operator-reported active host Caddy. Production must select one edge or add a
+reviewed loopback upstream mode before activation. Detailed verified facts,
+limits, and pending read-only commands are in
+[`T128 host readiness`](T128_HOST_READINESS.md).
+
+Baseline `./sigma test` completed all scenarios through static analysis but
+failed on the three stale assertions and absent frontend `tsc`; the frontend
+build was skipped after failures. After correcting the assertions and running
+`npm ci --prefix frontend`, focused deployment-package, GCE-host (17 tests),
+and host-monitor (9 tests) checks passed. Final `./sigma test` passed all
+offline scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend
+typecheck, and production build (existing large-chunk advisory). Local Docker
+was not rootless; Compose v2 and `systemd-analyze` were unavailable. No real
+browser check applied to this configuration/documentation change. No provider
+calls or costs occurred. Corrections and the readiness record are in
+[PR #181](https://github.com/bkramerext/sigma/pull/181).
+
+Integration follow-up: fetched T129 merge `7d4898733690fa17931e7f2c86aa92b03317ea79`
+and merged current `main` into the T128 branch without conflicts. The integrated
+diff was limited to T128 docs/tracking and the three mount assertions. T129's
+release builder, requested-SHA verification in `start-gce.sh`, provenance
+message, and release/storage tests are unchanged from current `main`. Focused
+deployment, GCE host (17), host monitor (9), release-image (3), and storage
+checks passed. `./sigma test` passed all offline scenarios, Ruff, formatting,
+Pyright (0 diagnostics), frontend typecheck and production build (existing
+large-chunk advisory). No GCE or deployment services were touched.
+
 ## T171 GCE host readiness audit (2026-10-26)
 
 **Overall: BLOCKED for production start.** The audit began from fresh current
@@ -5196,17 +5260,54 @@ connection, configured local OAuth sign-in and identity isolation, local versus
 hosted connection UI, and strategy/session controls without a React render
 loop. The strategy browser uses deterministic AI configuration fixtures and
 intercepts session start; no provider call is made. `npm --prefix frontend run
-build` passed (existing Vite chunk-size advisory). `./sigma test` passed its
-project, auth, research, lint, format, Pyright (0 diagnostics), and frontend
-typecheck steps, but remains red on the three existing deployment mount
-assertions in `tests/deployment_package.py`, `tests/gce_host.py`, and
-`tests/host_monitor.py`; they expect the old escaped mount dependency while
-`deploy/systemd/sigma.service` uses `RequiresMountsFor=/srv/sigma-state`. Its
-build step was skipped after those failures; the standalone production build
-passed. No cloud, OAuth-provider, or AI-provider operation was performed.
+build` passed (existing Vite chunk-size advisory). The first `./sigma test`
+run on base `8e8d979` failed three deployment mount assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`.
+After merging PR #181's test reconciliation with current `main` (`8acb54a`),
+`./sigma test` passed all scenarios, deployment checks, Ruff, format, Pyright
+(0 diagnostics), frontend typecheck, and frontend build. The four real-Chrome
+checks were rerun on the updated base and passed. No cloud, OAuth-provider, or
+AI-provider operation was performed.
 
 PR #168 supplied these changes against its old base but is no longer suitable
 for integration because its changes conflicted with current `main`. Its render
 loop fix is already in `main`; the remaining corrections are carried by the
 fresh-base T163 PR. Close #168 after the replacement PR is merged so its
 discussion and verification record remain available through that interval.
+
+## T129 — Release-image SHA correctness and reproducibility (2026-10-26)
+
+Confirmed the release mismatch: production Compose selected image tags from
+`SIGMA_RELEASE` while retaining a `build:` context rooted at the mutable
+`/opt/sigma/current` checkout. `start-gce.sh` ran Compose `up` without
+`--no-build`, so startup could build working-tree contents and still apply the
+operator's requested SHA tag. The operator runbook did not bind image contents
+to that SHA. Rollback changes the same SHA pin and preserves existing state,
+preflight, restart and health gates.
+
+Added `deploy/release_image.py`: it accepts only a full lowercase commit SHA,
+requires Git to resolve that exact object, exports the commit tree via
+`git archive`, and builds both `linux/amd64` images from the exported context
+with an OCI source-revision label. Production startup verifies both image
+labels before Compose, uses `up --no-build`, and records the source SHA,
+container IDs, actual immutable image IDs and available repository digests
+under `/var/lib/sigma/releases/SHA.json`. Rollback candidates without matching
+provenance labels fail closed. Deterministic tests cover a dirty tree with a
+different HEAD, unresolved/malformed SHA, source-label mismatch, and digest
+recording. The storage startup fixture now supplies a deterministic release
+pin and stubs the verifier.
+
+Focused checks passed: `tests/release_image.py` (3 tests), `tests/storage.py`,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, `bash -n
+deploy/start-gce.sh`, and `git diff --check`. `./sigma test` ran the full
+suite but exited 1 on three pre-existing systemd dependency assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`;
+they expect `srv-sigma\\x2dstate.mount`, while current `main` uses
+`RequiresMountsFor=/srv/sigma-state`. All other scenarios passed. Frontend
+production build was skipped by the suite after those failures. No live cloud
+operation, deployment, paid provider call, or browser workflow was performed.
+
+Offline implementation is R4R in [PR #182](https://github.com/bkramerext/sigma/pull/182);
+the full evidence handoff is in [T129 Gray handoff](../messages/t129_gray_release_sha.txt).
+Hosted release behavior and rollback with actual production images remain
+unverified.

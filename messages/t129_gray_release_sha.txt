@@ -1,0 +1,45 @@
+# T129 Gray handoff
+
+**State:** R4R — offline implementation only; no deployment.
+**Base:** current `main` at `8e8d9799dcd5b0610a9bb57d07ad9a47835b05dd`.
+**Branch:** `gray/t129-release-image-sha`.
+**PR:** [#182](https://github.com/bkramerext/sigma/pull/182), targets `main`.
+
+## Finding and correction
+
+Confirmed the SHA mismatch risk. Production Compose tags backend/frontend
+images with `SIGMA_RELEASE` but had build contexts rooted at the mutable
+`/opt/sigma/current`; `start-gce.sh` used `up -d` without `--no-build`. An
+operator could therefore start images built from another HEAD or dirty files
+under the requested SHA tag. The runbook did not bind image content to the
+requested commit.
+
+Added `deploy/release_image.py build CHECKOUT FULL_SHA`. It validates a full
+lowercase SHA resolves to that exact Git commit, exports that commit's tree
+with `git archive`, then builds both amd64 images from that isolated context
+and applies the OCI revision label. Startup checks labels before Compose,
+uses `--no-build`, and records the requested source commit, running container
+IDs, actual image IDs and available repository digests in a per-release JSON
+file. Existing rollback gates/state handling remain intact; mismatched or
+unlabelled rollback images are refused by the same startup provenance check.
+
+## Checks run
+
+- `uv run --locked --no-sync python tests/release_image.py` — PASS (3 tests:
+  dirty checkout/unrelated HEAD, invalid/unresolved SHA before Docker, wrong
+  image source label and release record contents).
+- `uv run --locked --no-sync python tests/storage.py` — PASS (including the
+  amended startup fixture).
+- `./sigma test` — FAIL overall on three existing mount dependency assertions
+  in `tests/deployment_package.py`, `tests/gce_host.py`, and
+  `tests/host_monitor.py`. They expect `srv-sigma\\x2dstate.mount`, while
+  current `main` uses `RequiresMountsFor=/srv/sigma-state`. The first run also
+  caught a fixture that expected no release pin; that fixture was corrected
+  and its focused storage suite passed on rerun. All other scenarios passed.
+  Ruff, format, Pyright (0 diagnostics), and frontend typecheck passed; frontend
+  production build was skipped after the three earlier failures.
+- `bash -n deploy/start-gce.sh`, Ruff check/format and `git diff --check` — PASS.
+
+No live cloud operation, deployment, paid provider call, or browser workflow
+occurred. Hosted rollout and rollback remain unverified. Elapsed time was
+approximately 13 minutes through PR creation.

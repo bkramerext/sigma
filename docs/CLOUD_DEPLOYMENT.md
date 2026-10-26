@@ -114,12 +114,16 @@ operator security acceptance item: verify on the target Linux image that a
 compromised rootless runner cannot read the app state or gain host root before
 inviting users.
 
-Compose exposes only the Caddy edge on TCP 80/443. HTTP/3/UDP 443 is not
-enabled in this deployment package.
+Local Compose exposes the Caddy edge on TCP 80/443. For GCE, the Compose
+override retains that edge internally but publishes only its HTTP listener at
+`127.0.0.1:18080`; the installed host Caddy owns public TCP 80/443 and
+terminates TLS. HTTP/3/UDP 443 is not enabled in this deployment package.
 The backend and frontend have no host-published ports. Caddy serves SPA routes
 and proxies `/api/*` to FastAPI on the same origin. Caddy stores certificates in
-its named `/data` volume and obtains/renews them after the DNS record points to
-the VM and inbound TCP 80/443 are reachable. Google OAuth's production origin
+its named `/data` volume and obtains/renews them in local Compose. The GCE edge
+uses HTTP behind host Caddy and forwards the configured HTTPS scheme to the
+application. The host Caddy site block is in `deploy/host-caddy.Caddyfile`.
+Google OAuth's production origin
 is always `https://$SIGMA_DOMAIN`; its exact callback is
 `https://$SIGMA_DOMAIN/api/cloud-auth/callback`.
 For the selected host these are `https://sigma-research.duckdns.org` and
@@ -131,7 +135,8 @@ it verifies DNS, public reachability of the app/daemon ports, HTTP-to-HTTPS
 redirect, trusted HTTPS, an SPA deep link, and the hosted auth status API.
 It does not update DNS or firewall rules. TCP 80/443 are the only public
 ingress ports; public TCP 22 remains closed (IAP only), and 8000, 5173, 2375,
-and 2376 must remain unreachable. The Compose edge binds TCP 80/443 only.
+and 2376 must remain unreachable. On GCE the Compose edge is reachable only
+through host loopback on TCP 18080.
 
 All private hosted state uses `$SIGMA_STATE_DISK_MOUNT/auth` on the attached
 state disk: Google auth/session SQLite, subject/workspace mappings, user project

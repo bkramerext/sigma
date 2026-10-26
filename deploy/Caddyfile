@@ -11,9 +11,13 @@
 	}
 	@api path /api /api/*
 	handle @api {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			header_up X-Forwarded-Proto {$SIGMA_CADDY_UPSTREAM_SCHEME}
+		}
 	}
 	handle {
-		reverse_proxy frontend:8080
+		reverse_proxy frontend:8080 {
+			header_up X-Forwarded-Proto {$SIGMA_CADDY_UPSTREAM_SCHEME}
+		}
 	}
 }
