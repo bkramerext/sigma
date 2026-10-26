@@ -526,6 +526,10 @@ def _execution_directory(path: str | Path) -> Path:
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
     if target.is_relative_to(samples):
         raise ProjectError("Research executions cannot be stored in sample projects")
+    if target.suffix == ".json":
+        raise ProjectError(
+            "Research execution persistence for single-file JSON projects is not yet supported"
+        )
     directory = target / "research-executions"
     if directory.is_symlink():
         raise ProjectError("Research execution directory must not be a symbolic link")
