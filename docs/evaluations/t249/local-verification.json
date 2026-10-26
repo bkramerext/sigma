@@ -7,8 +7,8 @@
         "tests/project_bundle.py"
       ],
       "exit_code": 1,
-      "seconds": 0.03,
-      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 646, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 36, in main\n    write_file(migrated, \"research-sessions/session.json\", b'{\"status\":\"revised\"}')\n    ^^^^^^^^^^\nUnboundLocalError: cannot access local variable 'write_file' where it is not associated with a value\n",
+      "seconds": 0.04,
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 641, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_bundle.py\", line 124, in main\n    assert import_bundle(read_bundle(migrated), imported) == imported\n           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/admin/sigma_blue/src/sigma/project_bundle.py\", line 396, in import_bundle\n    raise BundleError(\"Cannot import foreign research session\")\nsigma.project_bundle.BundleError: Cannot import foreign research session\n",
       "stdout": ""
     },
     "compile": {
@@ -21,7 +21,7 @@
         "tests/project_bundle.py"
       ],
       "exit_code": 0,
-      "seconds": 0.11,
+      "seconds": 0.03,
       "stderr": "",
       "stdout": ""
     },
@@ -33,7 +33,7 @@
         "{{.Repository}}:{{.Tag}}"
       ],
       "exit_code": 0,
-      "seconds": 0.16,
+      "seconds": 0.17,
       "stderr": "",
       "stdout": "sigma-frontend:local-check\nsigma-backend:local-check\nsigma-t100-local:check\nsigma-t100-backend:latest\nsigma-backend:t99\nsigma-research-python:0.1\nsigma-api:t22-deployment-final\nsigma-api:t22-deployment-test\nsigma-research-sage:10.8\ncloudflare-dev/fastapi:b75662b5\nsigma-t221-fastapi:spike\npython:3.13-slim-bookworm\npython:3.13-slim-bookworm\nalpine:3.21\ncloudflare/cloudflared:2026.10.0\nghcr.io/astral-sh/uv:0.12.17\ncloudflare/proxy-everything:<none>\nsagemath/sagemath:<none>\nnode:22.14.0-bookworm-slim\ndocker:27.5.1-cli\nnginx:1.27.4-alpine\npython:3.12.8-slim\npython:3.12.8-slim\ncaddy:<none>\ndocker/compose:latest\n"
     },
@@ -45,7 +45,7 @@
         "{{json .ServerVersion}}"
       ],
       "exit_code": 0,
-      "seconds": 0.03,
+      "seconds": 0.02,
       "stderr": "",
       "stdout": "\"29.5.2\"\n"
     },
@@ -55,8 +55,8 @@
         "tests/project_creation.py"
       ],
       "exit_code": 1,
-      "seconds": 0.76,
-      "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\nTraceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_creation.py\", line 308, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_creation.py\", line 136, in main\n    ).read_text() == \"Concurrent research\"\n      ~~~~~~~~~^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/pathlib/__init__.py\", line 787, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:\n         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/pathlib/__init__.py\", line 771, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmp2hwj8sn1/managed/preserve-partial.sigma/notes.txt'\n",
+      "seconds": 0.68,
+      "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\nTraceback (most recent call last):\n  File \"/Users/admin/sigma_blue/tests/project_creation.py\", line 308, in <module>\n    main()\n    ~~~~^^\n  File \"/Users/admin/sigma_blue/tests/project_creation.py\", line 136, in main\n    ).read_text() == \"Concurrent research\"\n      ~~~~~~~~~^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/pathlib/__init__.py\", line 787, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:\n         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/pathlib/__init__.py\", line 771, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmphcomm60p/managed/preserve-partial.sigma/notes.txt'\n",
       "stdout": "PASS all research types serialized/reopened, destination preview, collision and strategy integrity\nPASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection\n"
     },
     "simulation:project_reports.py": {
@@ -75,7 +75,7 @@
         "tests/project_settings.py"
       ],
       "exit_code": 0,
-      "seconds": 0.77,
+      "seconds": 0.78,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen\nPASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes\nPASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior\n"
     },
@@ -85,7 +85,7 @@
         "tests/python_sandbox.py"
       ],
       "exit_code": 0,
-      "seconds": 0.68,
+      "seconds": 0.5,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API\n"
     },
@@ -95,9 +95,9 @@
         "tests/research_sessions.py"
       ],
       "exit_code": 0,
-      "seconds": 40.43,
+      "seconds": 40.69,
       "stderr": "",
-      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.839s\nPersistent research session scenarios passed.\n"
+      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.779s\nPersistent research session scenarios passed.\n"
     },
     "simulation:sage_execution.py": {
       "command": [
@@ -105,7 +105,7 @@
         "tests/sage_execution.py"
       ],
       "exit_code": 0,
-      "seconds": 0.69,
+      "seconds": 0.79,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery\n"
     }
@@ -126,7 +126,7 @@
     "simulation:sage_execution.py"
   ],
   "python": "/Users/admin/sigma_blue/.venv/bin/python",
-  "tested_head": "e2e7373f857032face6dbccff7074645e4deda27",
+  "tested_head": "d9626d788243cb4f585da22c6183f843e2869cab",
   "ticket": "T249",
-  "utc": "2026-10-26T23:22:23.348951+00:00"
+  "utc": "2026-10-26T23:24:52.732676+00:00"
 }
