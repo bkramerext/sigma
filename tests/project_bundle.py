@@ -260,7 +260,7 @@ def main() -> None:
             else:
                 raise AssertionError("Unreserved execution was finalized")
             assert f"research-executions/{wrong_id}.json" not in list_files(created.path)
-            assert {item["id"] for item in list_executions(created.path)} == {execution_id, extra_id}
+            assert {item["id"] for item in list_executions(created.path)} == {execution_id}
             contents, media_type = get_execution_artifact(created.path, execution_id, "result.bin")
             assert contents == bytes(range(128))
             assert media_type == "application/octet-stream"
