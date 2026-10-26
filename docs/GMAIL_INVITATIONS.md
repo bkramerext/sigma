@@ -47,3 +47,20 @@ the notification reaches the designated recipient. Production acceptance also
 requires verifying the container mount, permissions, token refresh, and
 failure behavior. Do not close T81 until feedback and privacy acceptance are
 completed as well.
+
+### Hosted Compose integration
+
+An optional `deploy/compose.gmail.yaml` override adds the token as a read-only
+bind mount and configures the backend's Gmail sender. Set
+`SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST` to the **absolute host path** of the
+protected token JSON before starting Compose with both files. The backend
+runs as UID 10001 by default, so the file must be readable by that UID.
+
+The base Compose deployment still requires the existing SMTP secret at
+configuration time, even when Gmail API is selected. Retain the current SMTP
+secret while transitioning; it is not used if the Gmail token path is set.
+
+The operator must explicitly include the override in the actual deployment
+command and in future updates; adding this file alone does not enable Gmail
+in production. Verify the merged release and Compose configuration before
+claiming hosted delivery is working.
