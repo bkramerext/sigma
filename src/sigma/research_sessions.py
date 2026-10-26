@@ -3003,6 +3003,43 @@ def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: st
         return _public(record)
 
 
+def _mock_artifact(record: dict[str, Any]) -> dict[str, Any]:
+    """A deliberately inconclusive, clearly labeled research fixture."""
+    strategy_id = record["strategy_id"]
+    claim = "SIMULATED: test whether the proposed approach survives a simple counterexample."
+    return {
+        "id": str(uuid4()), "project_id": record["project_id"],
+        "session_id": record["id"], "strategy_id": strategy_id,
+        "strategy_title": record["strategy_title"], "sequence": 1,
+        "strategy_cycle": 1, "created_at": _now(),
+        "claim_or_question": claim,
+        "method": "Deterministic UI fixture, not mathematical research",
+        "assumptions": ["No factual or mathematical validity is claimed."],
+        "evidence_status": "unverified",
+        "skeptic_response": "SIMULATED: the claim remains unverified.",
+        "objections": ["No independent evidence or proof was generated."],
+        "open_obligations": ["Validate the claim with genuine evidence."],
+        "investigator_output": {"claim": claim, "method": "Simulation only",
+                                "evidence_status": "unverified"},
+        "skeptic_output": {"response": "Simulation only; no verification performed."},
+        "reasoning_steps": [], "coordinator_decision": "stop_no_progress",
+        "next_question": "Replace the simulated finding with actual research.",
+        "note": "LOCAL MOCK DATA. No model calls, evidence, or real conclusions.",
+        "objective_review": {
+            "status": "not_achieved", "claim": "No research objective was established.",
+            "argument_summary": "Simulation produced no evidence.",
+            "argument_steps": [], "verification_status": "incomplete",
+            "unresolved_objections": ["No real verification was performed."],
+            "basis_artifact_ids": [],
+        },
+        "strategy_review": {
+            "assessment": "inconclusive", "rationale": "Synthetic UI fixture only.",
+            "basis_artifact_ids": [],
+        },
+        "simulated": True,
+    }
+
+
 def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
     """Advance one deterministic UI polling step without dispatching a worker."""
     if not record.get("simulated") or record.get("status") not in {"queued", "running"}:
@@ -3027,6 +3064,11 @@ def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
             "provider-error": "Simulated AI provider unavailable. No provider was called.",
             "exhausted": "Simulated sponsorship allowance exhausted. No provider was called.",
         }[scenario]
+        if not failed:
+            artifact = _mock_artifact(record)
+            record["artifacts"].append(artifact)
+            record["strategy_runs"][0]["artifacts"].append(artifact["id"])
+            record["strategy_runs"][0]["cycle"] = 1
         record["status"] = "failed" if failed else "ended"
         record["current_action"] = "Simulation finished"
         record["message"] = message
