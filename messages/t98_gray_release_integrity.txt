@@ -1,0 +1,24 @@
+GRAY — issue #98 release-integrity review
+
+Review base: integrated origin/main dd23fec65683cea72b39f95f952377cc41a84346 (PR #195). Review-only; no deployment files changed and no live VM access.
+
+Reviewed T129 image builder, deploy-gce-release.py, start-gce.sh, rollback-gce-release.sh, Docker Compose, systemd startup ordering, backup-state.sh, backup/restore services and verifier, operator runbook, and T173 release rehearsals.
+
+Findings:
+- Requested source SHA is a full lowercase commit SHA. Builder archives that Git tree, builds backend and frontend, and applies OCI revision labels; verification checks both labels. Production startup calls Compose with --no-build and records running container IDs, image IDs, and available RepoDigests.
+- This is source-SHA provenance and local image identity evidence. No signature or reproducible OCI build is claimed.
+- sigma.service requires and orders Docker and rootless sandbox services, and RequiresMountsFor=/srv/sigma-state. Compose gates edge on healthy backend/frontend. SIGMA data volume maps to the dedicated disk auth directory.
+- Deployment recovery restores the prior code checkout and release pin after candidate failure. Rollback helper gates on backup/schema assertions, mounted state, no active backup, and local target image availability; startup verifies candidate labels. Data and credentials are not modified.
+- Backup stops the service and checks no project containers remain, snapshots the dedicated disk, waits for READY before retention pruning, and restarts the service if previously active. Restore instructions require a separate disk and read-only verifier.
+- No current-main release-engineering code defect found. Production release remains blocked on owner-authorized live VM, rootless host, backup/restore, OAuth/isolation and public endpoint acceptance. No live VM, services, provider calls, or secrets were accessed.
+
+Executed checks:
+- uv run --locked --no-sync python tests/release_image.py — PASS, 3 tests.
+- uv run --locked --no-sync python tests/deployment_automation.py — PASS, includes candidate startup failure, old pin restoration, and persistent-state sentinel check.
+- uv run --locked --no-sync python tests/state_backup.py — PASS, 8 tests.
+- bash -n deploy/start-gce.sh deploy/rollback-gce-release.sh deploy/backup-state.sh — PASS.
+- T173 failed-build and source-SHA rehearsal scripts — PASS as part of ./sigma test.
+- First ./sigma test run — stopped at frontend typecheck because tsc was absent in clean worktree. Ran npm ci --prefix frontend from lockfile, then reran ./sigma test — PASS all steps including Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production build.
+- git diff --check — PASS.
+
+No browser check was run: this review made no UI changes. The implementation was not deployed; rehearsal checks are deterministic local evidence only.
