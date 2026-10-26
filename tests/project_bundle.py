@@ -198,13 +198,26 @@ def main() -> None:
             execution = {
                 "id": execution_id, "project_id": created.project.id,
                 "created_at": "2026-10-26T12:00:00+00:00",
-                "status": "completed", "runtime": "python",
-                "session_id": None, "strategy_id": None, "cycle": None,
+                "status": "running", "runtime": "python",
+                "session_id": str(uuid4()), "strategy_id": "strategy-1", "cycle": 1,
                 "source": "print('portable')",
             }
+            runtime_directory = _execution_directory(created.path)
+            _save_record(runtime_directory, execution)
+            duplicate = {
+                **execution, "id": str(uuid4()),
+            }
+            try:
+                _save_record(runtime_directory, duplicate)
+            except ProjectError as exc:
+                assert "already reserved" in str(exc)
+            else:
+                raise AssertionError("Duplicate execution reservation was accepted")
+            final_execution = {**execution, "status": "completed"}
             _save_record(
-                _execution_directory(created.path), execution,
+                runtime_directory, final_execution,
                 (("result.bin", "application/octet-stream", bytes(range(128))),),
+                finalizing=True,
             )
             saved_execution = get_execution(created.path, execution_id)
             assert saved_execution["status"] == "completed"
