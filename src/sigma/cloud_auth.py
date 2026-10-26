@@ -127,7 +127,11 @@ def config() -> Config:
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
     error = "Cloud authentication secret configuration is invalid." if secret_error else None
-    if not origin or not root or (not local and (not client_id or not client_secret or not admin_contact)):
+    if (
+        not origin
+        or not root
+        or (not local and (not client_id or not client_secret or not admin_contact))
+    ):
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
     try:
@@ -672,7 +676,8 @@ def login(
     )
     if invite:
         response.set_cookie(
-            _cookie_name(INVITE_INTENT_COOKIE, cfg), state,
+            _cookie_name(INVITE_INTENT_COOKIE, cfg),
+            state,
             **_cookie_options(cfg, INVITE_INTENT_COOKIE, max_age=FLOW_SECONDS),
         )
     else:
@@ -794,7 +799,9 @@ async def callback(
                 "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
                 (_hash(denied_token), email, subject, _now() + DENIED_SECONDS),
             )
-        response = RedirectResponse("/?access=denied&invite=1" if invite_intent else "/?access=denied", status_code=303)
+        response = RedirectResponse(
+            "/?access=denied&invite=1" if invite_intent else "/?access=denied", status_code=303
+        )
         _clear_cookie(response, cfg, FLOW_COOKIE)
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
         _clear_cookie(response, cfg, SESSION_COOKIE)
