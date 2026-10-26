@@ -124,6 +124,7 @@ async def verify():
                 "asyncio.run(execute_research_code(sys.argv[1], "
                 "'import time; time.sleep(6); print(42)'))\\n"
             )
+            prior_ids = {item["id"] for item in list_executions(path)}
             child = subprocess.Popen(
                 [sys.executable, "-c", child_code, str(path)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -132,7 +133,6 @@ async def verify():
             killed = False
             try:
                 deadline = time.monotonic() + 12
-                prior_ids = {item["id"] for item in list_executions(path)}
                 while time.monotonic() < deadline:
                     current = [item for item in list_executions(path)
                                if item["id"] not in prior_ids and item["status"] == "running"]
