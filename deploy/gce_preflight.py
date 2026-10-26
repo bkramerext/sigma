@@ -532,13 +532,7 @@ class Preflight:
         try:
             result = self.command(
                 ["docker", "info", "--format", "{{json .SecurityOptions}}"],
-                environment={
-                    "PATH": "/usr/bin:/bin",
-                    "HOME": "/root",
-                    "DOCKER_CONFIG": "/etc/docker",
-                    "DOCKER_HOST": "",
-                    "DOCKER_CONTEXT": "",
-                },
+                environment={"PATH": "/usr/bin:/bin", "HOME": "/root"},
             )
         except (OSError, subprocess.TimeoutExpired):
             self.add("Host Docker Engine", "BLOCKED", "Docker CLI or host daemon is unavailable")
@@ -581,7 +575,13 @@ class Preflight:
                     "--format",
                     "{{json .SecurityOptions}}",
                 ],
-                environment={"PATH": "/usr/bin:/bin", "HOME": "/root"},
+                environment={
+                    "PATH": "/usr/bin:/bin",
+                    "HOME": "/root",
+                    "DOCKER_CONFIG": "/etc/docker",
+                    "DOCKER_HOST": "",
+                    "DOCKER_CONTEXT": "",
+                },
             )
         except (OSError, subprocess.TimeoutExpired):
             self.add(
