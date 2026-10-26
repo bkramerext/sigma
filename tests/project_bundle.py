@@ -204,6 +204,9 @@ def main() -> None:
             }
             runtime_directory = _execution_directory(created.path)
             _save_record(runtime_directory, execution)
+            # An orphaned reservation is reported as interrupted, not rerun.
+            assert get_execution(created.path, execution_id)["status"] == "interrupted"
+            assert list_executions(created.path)[0]["status"] == "interrupted"
             duplicate = {
                 **execution, "id": str(uuid4()),
             }
@@ -221,6 +224,16 @@ def main() -> None:
             )
             saved_execution = get_execution(created.path, execution_id)
             assert saved_execution["status"] == "completed"
+            # Finalization failures cannot destroy the original reservation.
+            wrong_id = str(uuid4())
+            try:
+                _save_record(runtime_directory, {**execution, "id": wrong_id,
+                             "status": "completed"}, finalizing=True)
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Unreserved execution was finalized")
+            assert f"research-executions/{wrong_id}.json" not in list_files(created.path)
             assert [item["id"] for item in list_executions(created.path)] == [execution_id]
             contents, media_type = get_execution_artifact(created.path, execution_id, "result.bin")
             assert contents == bytes(range(128))
