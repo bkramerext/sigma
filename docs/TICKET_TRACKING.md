@@ -6,6 +6,7 @@
 |---|---|---|---|
 | T81 — Invitation Requests, Feedback, and Privacy | Green | Implemented; R4R · [PR #225](https://github.com/bkramerext/sigma/pull/225) | `green/t81-invitation-workflow` · [ticket](../tickets/t81.md) · [handoff](../messages/t81_green_invitation_workflow.txt) |
 | #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R · [PR #213](https://github.com/bkramerext/sigma/pull/213) | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |
+| T192 — Per-User Project Isolation | Codex | Implemented; R4R · [PR #223](https://github.com/bkramerext/sigma/pull/223) | `t192-per-user-project-isolation` · [ticket](../tickets/t192.md) · [handoff](../messages/t192_codex_handoff.txt) |
 
 **Snapshot:** October 23, 2026 (Days 0–3; updated during PR #11 integration review)
 **Scope:** Cumulative ticket and minor-work tracker. A status of `Done` indicates reported/verified implementation, not proof of research effectiveness. `Proposed` does not mean a Codex worker has started.
@@ -108,6 +109,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | T129 | Release-image SHA correctness and reproducibility | Gray · R4R, offline implementation only · [PR #182](https://github.com/bkramerext/sigma/pull/182) · [handoff](../messages/t129_gray_release_sha.txt) | — |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
 | Network-bound failure toast and safe recovery | Implemented in tested paths ([PR #1](https://github.com/bkramerext/sigma/pull/1)); broader error coverage remains to validate |
+| T215 | Request-toast 60-second expiry and downward exit | R4R · [PR #221 (T215)](https://github.com/bkramerext/sigma/pull/221) · [handoff](../messages/blue_t215_r4r.md) · automated fake-clock and Chrome checks passed · [issue #215](https://github.com/bkramerext/sigma/issues/215) |
 | Live cross-strategy research validation | Open (T17.8) |
 | Formal Lean proof verification | Future, not implemented |
 | LaTeX paper export workflow | **Done** (T20; [PR #5](https://github.com/bkramerext/sigma/pull/5)) |

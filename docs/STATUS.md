@@ -1,5 +1,25 @@
 # SIGMA status
 
+## Issue #215 — request-toast expiry (2026-10-26)
+
+Request-error toasts now expire after 60 seconds, slide downward before removal,
+and collapse their stack slot so remaining toasts reflow smoothly. Each toast
+has an independent timer; manual dismissal remains available, reduced-motion
+users receive immediate expiration, and the existing four-toast/mobile width
+limits remain intact.
+
+Seven fake-clock Node tests cover timing, independent lifetimes, manual and
+simultaneous dismissal, burst/cleanup behavior, reduced motion, and the CSS
+exit contract. A real-Chrome check verified the downward transform, stack
+reflow, reduced-motion mode, and 390px layout. The complete `./sigma test`
+passed, including Ruff, Pyright, frontend typecheck, and production build.
+After reconciliation, GitHub Actions passed SIGMA verification, Research
+Outcome browser acceptance, and T92 Recent Projects browser acceptance on
+`bdfe0acd2ae867866637e309648b314376140434`; coordinator correction `d625216`
+is preserved. No provider calls or research projects were involved. See [PR
+#221 (T215)](https://github.com/bkramerext/sigma/pull/221) and the [Blue
+handoff](../messages/blue_t215_r4r.md).
+
 ## Issue #217 administrator contact (2026-10-26)
 
 Updated the public administrator contact example to
@@ -33,6 +53,32 @@ build. The broader `browser_checks/t22_access_denied.py` stops at its stale
 “Explore Demo” guest-link assertion; current guest Home says “Explore SIGMA”.
 The focused invitation Chrome check passes. No paid provider calls,
 production configuration changes, or live OAuth occurred.
+
+## T86 — README integration preparation (2026-10-26)
+
+Reconciled the recovered README draft against current `main`. The README now
+describes current local product behavior and limitations, setup, optional AI
+configuration, the current `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` local Google
+administrator bootstrap, and links to the existing Product Rationale and
+primary product/engineering documentation. Setup and OAuth details were
+checked against `src/sigma/cli.py`, `src/sigma/ui.py`,
+`docs/CLOUD_DEPLOYMENT.md`, and `deploy/env.example`. The administrator
+bootstrap wording preserves the current behavior for fresh and existing local
+auth databases. WOLF was not modified.
+
+Two separate placements identify the pending owner-provided screenshots:
+SIGMA Home and a Riemann Hypothesis investigation. Neither image was generated
+or substituted. Brian's delivery of those two screenshots remains a documented
+follow-up dependency; no credentialed Google sign-in was exercised.
+
+Verification on the T86 branch: `./sigma setup` passed; `./sigma start` with
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` unset reached ready state, frontend and API
+health URLs returned HTTP 200, and `./sigma shutdown` completed. A local README
+link scan found 14 Markdown links and no missing local targets; `git diff
+--check` passed. `./sigma test` passed all scenarios, Ruff, formatting, Pyright
+(0 diagnostics), frontend typecheck, and production build (with the existing
+chunk-size advisory). No paid provider calls or live OAuth operations were
+performed.
 
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
@@ -5924,3 +5970,33 @@ email or hosted deployment was performed. Production notification delivery
 remains dependent on creating the approved SMTP Secret Manager resource and
 configuring the account identity in deployment settings. No mail credential
 was added to source control.
+## T192 — Per-User Project Isolation (2026-10-26)
+
+Audited the current-main Google OIDC subject-to-workspace flow, protected API
+dependency, project path resolver, authenticated project services, reports,
+papers/downloads, research execution artifacts, and Docker/Sage sandbox
+configuration. Existing implementation derives durable workspace mappings from
+the verified Google `sub`; no server-side identity header or caller-selected
+workspace ID controls project ownership. Local-mode project storage and Recents
+remain unchanged. Reused T43.2 / PR #222's independent release acceptance for
+fixture account switching and its broader browser acceptance; its explicitly
+unverified live OAuth boundary remains.
+
+Added cross-owner API regressions for project metadata update, text-source
+evidence writes, and research execution creation. Guessed victim paths are
+rejected with the same not-found response; project bytes and prior execution
+records remain unchanged, and no text-source directory is created. Existing
+tests continue to cover guessed IDs, strategy/session/evidence/report/paper and
+export reads, downloads, traversal and symlinks, forged headers, SQLite mapping
+durability, filesystem permissions, restart/restore, and unmounted sandbox
+commands.
+
+`python tests/cloud_workspaces.py`, `python tests/cloud_auth.py`,
+`python tests/python_sandbox.py`, and full `./sigma test` passed. The full run
+included Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and
+production build. The build retains the existing >500 kB chunk advisory. No
+production deployment, live OAuth, paid inference, or provider calls occurred.
+Production OAuth/account switching, hosted mount permissions, revocation, and
+runtime sandbox isolation still need live production verification; they were
+not tested under this assignment's constraints. See [T192](../tickets/t192.md).
+Implementation and regression tests are in [PR #223](https://github.com/bkramerext/sigma/pull/223), open against `main` and not merged.

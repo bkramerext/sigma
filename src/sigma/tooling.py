@@ -14,6 +14,8 @@ from sigma.projects import ROOT
 
 def _test_step_allowed(step: list[str]) -> bool:
     """Reject test plans that include commands outside the repository check set."""
+    if step == ["node", "--test", "frontend/src/request-toast-store.test.mjs"]:
+        return True
     if step[:3] == ["uv", "run", "--locked"] and len(step) >= 5:
         if step[3:4] == ["--no-sync"]:
             tool = step[4]
@@ -147,6 +149,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_registry.py"],
             [*python, "python", "tests/ui_orphans.py"],
+            ["node", "--test", "frontend/src/request-toast-store.test.mjs"],
             [
                 *python,
                 "ruff",
