@@ -121,6 +121,37 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_project_mutations_are_not_blanket_blocked(self):
+        with patch.dict(os.environ, {
+            "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+        }):
+            selected = self.client.post(
+                "/api/cloud-auth/mock/select?identity=member-a",
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertEqual(selected.status_code, 200)
+            # A normal project mutation may fail validation, but must not be
+            # rejected by the mock execution guard.
+            project = self.client.post(
+                "/api/projects/close",
+                json={"path": "/nonexistent/mock-project"},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertNotIn("research execution is disabled", project.text)
+            execution = self.client.post(
+                "/api/projects/research-sessions",
+                json={},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertEqual(execution.status_code, 403)
+            self.assertTrue(execution.json()["simulated"])
+            provider = self.client.get("/api/ai/connection")
+            self.assertEqual(provider.status_code, 403)
+
     def test_mock_members_receive_distinct_stable_workspaces(self):
         from sigma.cloud_workspaces import workspace_for_subject
 
