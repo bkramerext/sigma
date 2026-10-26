@@ -138,7 +138,8 @@ def main() -> None:
         # The candidate checkout must precede image build so tags cannot lie
         # about which source tree produced them.
         build_index = next(
-            index for index, argv in enumerate(calls)
+            index
+            for index, argv in enumerate(calls)
             if argv[:2] == ["python3", str(repo / "deploy/release_image.py")]
             and argv[2:] == ["build", str(repo), NEW]
         )
