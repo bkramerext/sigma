@@ -232,6 +232,19 @@ def main() -> None:
             }
             _save(created.path, record)
             assert _read(created.path, session_id) == record
+            # JSON session writes reject foreign ownership and invalid IDs.
+            for invalid in (
+                dict(record, project_id=str(uuid4())),
+                dict(record, project_path=str(root / "foreign.json")),
+                dict(record, id="../not-a-uuid"),
+            ):
+                try:
+                    _save(created.path, invalid)
+                except ProjectError:
+                    pass
+                else:
+                    raise AssertionError("Invalid session record was saved")
+            assert _read(created.path, session_id) == record
             assert _all(created.path) == [record]
             assert read_session_snapshot(created.path) == ([record], 0)
             from sigma.research_sessions import _worker_lock_path
@@ -253,6 +266,17 @@ def main() -> None:
                 _allocate_session_number, get_limits, save_limits, DEFAULT_LIMITS,
             )
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
+            # Existing malformed limits must never be mistaken for missing defaults.
+            from sigma.project_bundle import write_file
+            write_file(created.path, "research-sessions/limits.json", b"{invalid")
+            try:
+                get_limits(created.path)
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Corrupt limits were silently reset")
+            from sigma.project_bundle import delete_file
+            delete_file(created.path, "research-sessions/limits.json")
             assert _allocate_session_number(created.path, []) == 1
             assert _allocate_session_number(created.path, []) == 2
             # Two concurrent allocators must never issue the same session number.
