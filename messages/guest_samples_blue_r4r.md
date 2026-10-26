@@ -21,9 +21,9 @@ signed-in session, without the separate Welcome to SIGMA panel. The normal
 Recent/Samples toggle is present, and Samples is selected by default. Selecting
 Recent shows only “When you are signed in, you can save your projects”; it does
 not request or save project history. Recent and sample groups start collapsed.
-Browse Published Research is absent. Guest attempts to use AI from the connection
-pill or Generate action receive a clear signed-in-account message without
-starting a provider request.
+Browse Published Research is absent. The Guest sign-in pill uses the normal
+Google sign-in dialog and link. Attempts to generate a strategy receive a clear
+signed-in-account message without starting a provider request.
 About retains Privacy Policy as a lower-left action button. The privacy notice
 provides a top Return to SIGMA action. Google pill labels are shorter. Artwork
 credit is “Brian Kramer” / “& GPT Models”.
@@ -37,8 +37,8 @@ Verification:
 - `uv run pyright` on changed Python modules/tests — PASS, 0 diagnostics.
 - `uv run --with playwright python browser_checks/guest_samples.py` — PASS in
   real Chrome: standard Projects Home, static Recent message without a Recent
-  API request, default Samples selection and collapsed groups, AI-unavailable
-  feedback from both entry points, full sample project open, no authentication
+  API request, default Samples selection and collapsed groups, normal Google
+  sign-in action, Generate feedback, full sample project open, no authentication
   error, empty Recents, About Privacy Policy, and privacy-page Return to SIGMA.
 - `npm --prefix frontend run typecheck` and `npm --prefix frontend run build` —
   PASS; existing >500 kB chunk advisory remains.

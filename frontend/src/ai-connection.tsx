@@ -276,12 +276,9 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   }, [open]);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
-  const guestUnavailable = ai.info?.label === 'Unavailable in Guest mode';
   const serviceFunded = cloudFunding?.target === 'hosted';
   const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && cloudFunding.authenticationEnabled && !cloudFunding.authorized;
-  const projectHeaderLabel = guestUnavailable
-    ? 'AI unavailable in Guest mode'
-    : serviceFunded
+  const projectHeaderLabel = serviceFunded
     ? 'ChatGPT · SIGMA service'
     : localGoogleRequired
       ? 'ChatGPT sign-in · Google sign-in required'
@@ -290,7 +287,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
     : status === 'connected' && ai.info?.mode === 'api_key'
       ? 'OpenAI API connected'
       : `ChatGPT sign-in · ${label}`;
-  const interactionDisabled = (disabled || localGoogleRequired) && !guestUnavailable;
+  const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
   const roleLabel = googleAccount?.role === 'admin' ? 'Admin' : 'Member';
@@ -313,10 +310,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
       {googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
-      {guestUnavailable ? <>
-        <h2>AI unavailable in Guest mode</h2>
-        <p>AI features require a signed-in account. Your guest project remains available.</p>
-      </> : serviceFunded ? <>
+      {serviceFunded ? <>
         <h2>Model access</h2>
         <p>SIGMA checks its sponsored ChatGPT connection and charges usage to the SIGMA allowance shown here. A ChatGPT subscription is separate and does not provide API access.</p>
         {cloudFunding?.providerLoading && <p role="status">Checking sponsored provider authentication and model-catalog reachability. This check does not send a research prompt.</p>}
