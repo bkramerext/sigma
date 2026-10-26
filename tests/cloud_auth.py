@@ -301,7 +301,7 @@ class CloudAuthTests(TestCase):
                     "/api/cloud-auth/mock/select",
                     params={"identity": identity}, headers=origin,
                 )
-                self.assertEqual(selected.status_code, 200)
+                self.assertEqual(selected.status_code, 204)
                 created = self.client.post(
                     "/api/projects/create",
                     json={"title": "Mock isolation " + identity,
@@ -330,7 +330,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/mock/select",
                 params={"identity": "member-a"}, headers=origin,
             )
-            self.assertEqual(switched.status_code, 200)
+            self.assertEqual(switched.status_code, 204)
             self.assertEqual(
                 self.client.get("/api/projects/inspect", params={"path": member_a_path}).status_code,
                 200,
@@ -354,7 +354,7 @@ class CloudAuthTests(TestCase):
                     params={"identity": identity},
                     headers={"Origin": "http://127.0.0.1:5173"},
                 )
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, 204)
                 status = self.client.get("/api/cloud-auth/status")
                 self.assertEqual(status.status_code, 200)
                 self.assertTrue(status.json()["authenticated"])
@@ -378,7 +378,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/mock/select?identity=member-a",
                 headers={"Origin": "http://127.0.0.1:5173"},
             )
-            self.assertEqual(selected.status_code, 200)
+            self.assertEqual(selected.status_code, 204)
             # A normal project mutation may fail validation, but must not be
             # rejected by the mock execution guard.
             project = self.client.post(
@@ -1427,7 +1427,7 @@ class CloudAuthTests(TestCase):
         headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
         with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
             selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)
-        self.assertEqual(selected.status_code, 200, selected.text)
+        self.assertEqual(selected.status_code, 204, selected.text)
         self.assertEqual(selected.json()["mode"], "api_key")
         self.assertEqual(
             self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
@@ -1439,7 +1439,7 @@ class CloudAuthTests(TestCase):
             )
         self.assertEqual(exhausted.status_code, 409, exhausted.text)
         switched = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
-        self.assertEqual(switched.status_code, 200, switched.text)
+        self.assertEqual(switched.status_code, 204, switched.text)
         self.assertEqual(switched.json()["status"], "unavailable")
         refreshed = self.client.get("/api/cloud-auth/status").json()
         self.assertEqual(refreshed["account"]["model_access"]["mode"], "personal")
