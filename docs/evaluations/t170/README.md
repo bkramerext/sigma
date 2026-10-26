@@ -99,7 +99,7 @@ blocked; evidence artifacts persisted. The daemon again reported
 production rootless host requirement. Real Chrome packaged Compose acceptance
 also passed again; see [T173 smoke and rollback assessment](../t173/README.md).
 
-After Red's T128/PR #181 integration and the loopback Caddy update, PR #183 was
-updated to current `main` at `8acb54a`. The branch retains the T128 release-image,
-Caddy loopback, and host-preflight assertions. PR #184 is not included in this
-synchronization.
+PR #183 was first updated through Red's T128/PR #181 and T130/PR #185 at
+`8acb54a`, then through Green's merged PR #184 at `4f0339a`. The branch retains
+the T128 release-image/Caddy/preflight assertions and Green's project-creation
+and UI regression fixes.

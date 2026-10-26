@@ -5355,9 +5355,9 @@ minutes, ahead of the 45-minute target.
 ## T170 / T173 current-main acceptance follow-up (2026-10-26)
 
 T170/T173 acceptance evidence was gathered on `main` `8e8d979`; PR #183 was
-subsequently updated through current `main` `8acb54a` after Red's T128/PR #181
-and T130/PR #185 integrations. The review covered the T129/T130/T135/T136
-release controls, T132/T133 workflow evidence, T137 launch gate, T171 host audit,
+subsequently updated through `main` `8acb54a` after Red's T128/PR #181 and
+T130/PR #185, then through current `main` `4f0339a` after Green's PR #184.
+The review covered the T129/T130/T135/T136 release controls, T132/T133 workflow evidence, T137 launch gate, T171 host audit,
 T172 auth gate and T131 OAuth checklist. No paid calls or cloud changes were
 performed. The application is not deployed; public HTTPS currently serves the
 temporary readiness page as supplied in the assignment.
