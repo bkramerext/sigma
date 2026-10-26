@@ -1147,6 +1147,9 @@ def create_project(
     mode = _research_mode(research_mode)
     root = projects_root()
     destination = root / name
+    alternate = destination.with_suffix(".json")
+    if os.path.lexists(alternate):
+        raise ProjectError(f"A project or file already exists at {alternate}; choose another name")
     # Reject an existing destination before entering initialization. In particular,
     # never treat a pre-existing file or symlink as an empty project directory.
     if os.path.lexists(destination):
