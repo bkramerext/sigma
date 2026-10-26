@@ -3,9 +3,9 @@ BLUE R4R handoff — Guest sample projects and About privacy actions
 Branch: `fix/guest-samples-about-privacy`
 PR: https://github.com/bkramerext/sigma/pull/246 (open against `main`; not merged)
 Base: `main` at `6a607a488106f9c9233336eb940f0458024e527b`
-Implementation commit: `eabb1bcf0b3393f47c9dc879ce1d9d4e50290a2e`
-The PR branch will include this handoff-only follow-up commit after the code
-commit above. The final PR head SHA is in the R4R notice.
+Initial implementation commit: `eabb1bcf0b3393f47c9dc879ce1d9d4e50290a2e`
+Guest UI and AI feedback follow-up: `e11aa18286e08477f82ec300f44997773f9c6343`
+The final PR head SHA is in the R4R notice.
 
 Implemented temporary Guest workspaces with opaque, process-local tokens and
 eight-hour inactivity expiry. Guest sample copies and Guest-created projects
