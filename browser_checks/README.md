@@ -367,3 +367,24 @@ React's maximum-update-depth loop while exercising live strategy/session
 controls. The About check verifies the AI-assisted mathematical formatting
 description and dialog fit at desktop and narrow mobile widths. API behavior is
 fixture-backed; no real credentials or provider calls are used.
+
+
+## T95 stopped-session guidance regression
+
+Run the real-Chrome check with the local API and UI available:
+
+```sh
+uv run --with playwright python browser_checks/t95_paused_session.py
+```
+
+This fixture-backed check covers the current stopped-session explanation for backend interruption, manual stop, context, duration, cost, connection, project/strategy, and guarded cases. It verifies the saved explanation after browser reopen, the guarded-resume error, and desktop/narrow layout. The application presents paused work as stopped and does not automatically retry an ambiguous provider request. No provider call is made.
+
+## T125 saved AI papers library regression
+
+Run:
+
+```sh
+uv run --with playwright python browser_checks/t125_saved_paper_library.py
+```
+
+The isolated real-Chrome check covers per-version text/PDF downloads, inline PDF opening, collapsed safe HTML preview, visible removal confirmation, project-scoped deletion, and mobile layout using saved fixtures. It does not author a new paper or make provider calls.
