@@ -82,6 +82,9 @@ Pyright, frontend typecheck and separate frontend production build passed.
 Focused `tests/state_backup.py` (8 tests) and `tests/public_endpoint.py` (7
 tests) also passed with local fixtures. The image source/tag mismatch means the
 T129 candidate is not release-ready regardless of these local PASS results.
+GitHub Actions run #614 on the T173 PR also failed at the same single
+`tests/gce_host.py` mount-contract assertion; the later full verification job
+was skipped by the workflow.
 See [`T173 release rehearsal`](T173_RELEASE_REHEARSAL.md) for exact commands,
 first-deployment checklist and stop/go criteria.
 
