@@ -3649,7 +3649,7 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
         {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
         {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
         {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Sign in with Google</a>}
+        {!cloud?.authenticated && canSignIn && <div className="cloud-denied-actions cloud-entry-actions"><a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a><a className="cloud-secondary-button" href="/api/cloud-auth/login?invite=1">Invite Me</a><button type="button" className="cloud-text-button" onClick={close}>Continue as Guest</button><a className="cloud-text-button" href="/privacy">Privacy notice</a></div>}
         {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
       </>}
       {error && <p role="alert">{error}</p>}
