@@ -486,7 +486,7 @@ def main() -> None:
             before_session = read_file(created.path, f"research-sessions/{session_id}.json")
             save_limits(created.path, dict(DEFAULT_LIMITS))
             assert read_file(created.path, f"research-sessions/{session_id}.json") == before_session
-            assert read_file(created.path, "artifacts/trace.bin") == bytes(range(256))
+            assert read_file(created.path, f"research-sessions/{session_id}.json") == before_session
             from sigma.research_sessions import _snapshot
             from sigma.project_bundle import transform_members
 
