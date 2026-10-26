@@ -2918,13 +2918,13 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
   </div>;
 }
 
-function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
+function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, playButtonRef }: { controls: ProcessControls; disabled: boolean; guest?: boolean; onGuestPlay?: () => void; playButtonRef?: React.RefObject<HTMLButtonElement | null> }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
         <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
-      <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
+      <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || (!guest && controls.playDisabled)} onClick={guest ? onGuestPlay : controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
       </button>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Stop research session" title="Stop research session" data-tooltip="Stop research session" disabled={controls.stopDisabled || disabled} onClick={controls.stop}>
@@ -2932,6 +2932,30 @@ function ProcessControlsView({ controls, disabled }: { controls: ProcessControls
       </button>
       </>}
   </span>;
+}
+
+function GuestPlayDialog({ onClose, playButtonRef }: { onClose: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null> }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const signIn = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    signIn.current?.focus();
+  }, []);
+  function dismiss() {
+    if (dialog.current?.open) dialog.current.close();
+    onClose();
+    requestAnimationFrame(() => playButtonRef.current?.focus());
+  }
+  return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
+    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
+    <div className="settings-body">
+      <p id="guest-research-message">Sign in to run a research session. You can explore sample projects as a guest.</p>
+      <div className="settings-actions">
+        <a ref={signIn} className="cloud-auth-button guest-play-signin" href="/api/cloud-auth/login">Sign In</a>
+        <button type="button" className="settings-cancel" onClick={dismiss}>Not Now</button>
+      </div>
+    </div>
+  </dialog>;
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
@@ -3146,8 +3170,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, stop: () => {}, playDisabled: true, stopDisabled: true, playLabel: 'Start a new research session' });
+  const [guestPlayOpen, setGuestPlayOpen] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
+  const playButton = useRef<HTMLButtonElement>(null);
   const introPane = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ pointer: number; y: number; height: number } | null>(null);
   const [introHeight, setIntroHeight] = useState<number | null>(null);
@@ -3363,7 +3389,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <div className="strategies-heading-right">
           <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
+          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
         </div>
       </header>
       {guestAiNotice && <p className="hint guest-ai-notice" role="status">{guestAiNotice}</p>}
@@ -3425,6 +3451,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
+    {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} playButtonRef={playButton}/>}
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
       const current = settingsOf(view);
       if (current.show_advanced_outcome_details) return;

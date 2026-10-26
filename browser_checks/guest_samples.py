@@ -131,9 +131,34 @@ def exercise(ui_url: str, root: Path) -> None:
         opened_projects: list[dict] = []
         recent_responses: list[str] = []
         paper_requests: list[str] = []
+        mutation_requests: list[str] = []
+        research_dispatch_requests: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
-        page.on("response", lambda response: recent_responses.append(response.url) if response.url.endswith("/api/projects/recent") else None)
-        page.on("request", lambda request: paper_requests.append(request.url) if "/api/projects/papers" in request.url else None)
+        page.on(
+            "response",
+            lambda response: (
+                recent_responses.append(response.url)
+                if response.url.endswith("/api/projects/recent")
+                else None
+            ),
+        )
+
+        def capture_request(request):
+            if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+                mutation_requests.append(request.url)
+            if any(
+                part in request.url
+                for part in (
+                    "/api/projects/proposals/config",
+                    "/api/projects/research-limits",
+                    "/api/projects/research-sessions/start",
+                )
+            ):
+                research_dispatch_requests.append(request.url)
+            if "/api/projects/papers" in request.url:
+                paper_requests.append(request.url)
+
+        page.on("request", capture_request)
 
         def capture(response):
             if response.url.endswith("/api/projects/samples/open"):
@@ -164,7 +189,9 @@ def exercise(ui_url: str, root: Path) -> None:
         sign_in = page.get_by_role("link", name="Sign in with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
         page.keyboard.press("Escape")
-        sample_group = page.locator("details.sample-type-group").filter(has_text="Did Jesus Use Cannabis?")
+        sample_group = page.locator("details.sample-type-group").filter(
+            has_text="Did Jesus Use Cannabis?"
+        )
         sample_group.evaluate("element => { element.open = true; }")
         expect(sample_group.locator("button.sample-open")).to_be_visible()
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
@@ -189,8 +216,29 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(tex_dialog).to_contain_text("Sign in to export your research as TeX.")
         assert len(paper_requests) == papers_before_dialog, paper_requests
         tex_dialog.get_by_role("button", name="Close").click()
+        play = page.get_by_role("button", name="Start a new research session", exact=True)
+        expect(play).to_be_enabled()
+        mutations_before_play = len(mutation_requests)
+        dispatches_before_play = len(research_dispatch_requests)
+        play.click()
+        play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
+        expect(play_dialog).to_contain_text(
+            "Sign in to run a research session. You can explore sample projects as a guest."
+        )
+        expect(play_dialog.get_by_role("link", name="Sign In")).to_have_attribute(
+            "href", "/api/cloud-auth/login"
+        )
+        assert len(mutation_requests) == mutations_before_play, mutation_requests
+        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        play_dialog.get_by_role("button", name="Not Now").click()
+        expect(play_dialog).to_have_count(0)
+        expect(play).to_be_focused()
+        assert len(mutation_requests) == mutations_before_play, mutation_requests
+        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         page.get_by_role("button", name="Generate", exact=True).click()
-        expect(page.get_by_role("status").filter(has_text="AI features require a signed-in account.")).to_be_visible()
+        expect(
+            page.get_by_role("status").filter(has_text="AI features require a signed-in account.")
+        ).to_be_visible()
         expect(page.get_by_role("button", name="Back to home").first).to_be_visible()
         assert opened_projects
         assert Path(opened_projects[-1]["path"]).is_dir()

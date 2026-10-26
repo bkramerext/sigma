@@ -6138,3 +6138,27 @@ authentication flow, credentials, or saved research were changed. Handoff:
 The change is included in [PR #246](https://github.com/bkramerext/sigma/pull/246)
 against `main` due to overlap with the active Guest connection UI branch; it is
 open and not merged.
+
+## Guest research-session Play sign-in prompt (2026-10-26)
+
+Guest Play now opens an accessible “Ready to investigate?” dialog with the
+message “Sign in to run a research session. You can explore sample projects as a
+guest.” Sign In uses the existing `/api/cloud-auth/login` route; Not Now and
+Escape dismiss the dialog and restore focus to Play. Guests can activate Play
+even when normal session-start preconditions would disable it, but that path only
+changes dialog UI state. It does not call the research start handler, read
+provider configuration/limits, reserve budget, or mutate the project. Signed-in
+Play continues to use the existing handler.
+
+Verification: `uv run --with playwright python browser_checks/guest_samples.py`
+passed in real Chrome, including assertions that Play and Not Now issue no
+research/configuration/limits requests or write requests, and that focus returns
+to Play. Frontend typecheck and production build passed. `./sigma test` ran to
+completion; all reached tests including ChatGPT and cloud auth passed, while
+four pre-existing checks failed: the admin-contact warning assertion, Gmail
+delivery Ruff findings, formatting in CLI/Gmail/UI instance files, and the
+Gmail test `.decode` Pyright error. The suite skipped its build after these
+failures; the standalone production build passed. Handoff:
+[`messages/blue_guest_play_signin_r4r.md`](../messages/blue_guest_play_signin_r4r.md).
+The change is included in [PR #246](https://github.com/bkramerext/sigma/pull/246)
+against `main` on the active Guest implementation branch; open and not merged.
