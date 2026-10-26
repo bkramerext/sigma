@@ -63,8 +63,9 @@ was made.
 - Branch: `green/t88-combined-sign-in`
 - Starting base: T200 merge `48fe9a1fee87a23c1af1665f1f30723ef39d9e97`
 - Reconciled current `main`: `6f6a910a64efd29268b5898b2e8f3e8c8791934a`
-- Integrated head before handoff update: `184d1a3c8ef3b517f19db1013c235d79a99698e9`
-- Final head: recorded by the enclosing commit; will be filled after this handoff update.
+- Tested implementation head after main reconciliation:
+  `184d1a3c8ef3b517f19db1013c235d79a99698e9`
+- Final PR head, including this handoff commit, is reported in the R4R notice.
 - PR: [#248](https://github.com/bkramerext/sigma/pull/248)
 - The same `./sigma test` and real Chrome browser check passed again after
   merging current `main`; merge had no conflicts.
