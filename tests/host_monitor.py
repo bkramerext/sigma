@@ -201,9 +201,9 @@ class HostMonitorTests(unittest.TestCase):
         app_unit = (ROOT / "deploy/systemd/sigma.service").read_text()
         backup_timer = (ROOT / "deploy/systemd/sigma-backup.timer").read_text()
         monitor_timer = (ROOT / "deploy/systemd/sigma-monitor.timer").read_text()
-        self.assertIn(
-            "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount", app_unit
-        )
+        self.assertIn("Requires=docker.service sigma-sandbox.service", app_unit)
+        self.assertIn("After=docker.service sigma-sandbox.service", app_unit)
+        self.assertIn("RequiresMountsFor=/srv/sigma-state", app_unit)
         self.assertIn("Restart=on-failure", app_unit)
         self.assertIn("Persistent=true", backup_timer)
         self.assertIn("OnUnitActiveSec=15min", monitor_timer)

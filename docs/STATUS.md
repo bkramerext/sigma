@@ -1,5 +1,38 @@
 # SIGMA status
 
+## T128 GCE host readiness and runtime security review (2026-10-26)
+
+**Readiness: BLOCKED for production activation.** Reviewed current `main`
+(`8e8d979`), the host preflight/installer, state disk path, systemd services,
+production Compose policy, runtime-check command, and operator runbooks. Source
+inspection supports the intended boundaries: a separate rootless
+`sigma-sandbox` daemon, unprivileged isolated research containers, and backend
+state mounted only from `/srv/sigma-state/auth`. These are not live-host
+observations. No SSH, cloud/provider calls, installer, service activation,
+reboot, or infrastructure change occurred. Supplied host status, IP, DNS, and
+TLS facts were not independently checked.
+
+Reconciled the three stale deployment assertions in `tests/deployment_package.py`,
+`tests/gce_host.py`, and `tests/host_monitor.py`: current `sigma.service` uses
+`RequiresMountsFor=/srv/sigma-state`, with explicit Docker and rootless-sandbox
+`Requires`/`After` ordering. The production package also defines its own Caddy
+edge publishing 80/443 on all interfaces by default, which conflicts with the
+operator-reported active host Caddy. Production must select one edge or add a
+reviewed loopback upstream mode before activation. Detailed verified facts,
+limits, and pending read-only commands are in
+[`T128 host readiness`](T128_HOST_READINESS.md).
+
+Baseline `./sigma test` completed all scenarios through static analysis but
+failed on the three stale assertions and absent frontend `tsc`; the frontend
+build was skipped after failures. After correcting the assertions and running
+`npm ci --prefix frontend`, focused deployment-package, GCE-host (17 tests),
+and host-monitor (9 tests) checks passed. Final `./sigma test` passed all
+offline scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend
+typecheck, and production build (existing large-chunk advisory). Local Docker
+was not rootless; Compose v2 and `systemd-analyze` were unavailable. No real
+browser check applied to this configuration/documentation change. No provider
+calls or costs occurred. PR handoff is recorded below when available.
+
 ## T171 GCE host readiness audit (2026-10-26)
 
 **Overall: BLOCKED for production start.** The audit began from fresh current

@@ -1,0 +1,67 @@
+T128 — GCE host readiness and runtime security review
+
+Branch: red/t128-readiness-review
+Base: main at 8e8d979
+PR: pending
+
+Readiness: BLOCKED for production activation. I reviewed current host
+installer/preflight code, systemd units, persistent state path, sandbox command,
+Compose runtime policy, Caddy routing, and existing host evidence. I did not
+connect to GCE, make provider calls, run the installer, start SIGMA, reboot,
+change infrastructure, or make paid calls.
+
+Verified by source inspection:
+- `sigma.service` orders after/requires the system Docker and sandbox services,
+  and `RequiresMountsFor=/srv/sigma-state` supplies the mount dependency/order.
+  Preflight runs before guarded startup.
+- State storage maps only `/srv/sigma-state/auth` to the backend; startup sets
+  it to UID/GID 10001 mode 0700. The sandbox account is intended to lack access
+  to the root-owned mode-0700 state root.
+- Research jobs use UID 65532, `--network=none`, read-only root, no
+  capabilities, `no-new-privileges`, bounded memory/CPU/PIDs/time, and receive
+  no state or daemon socket mount. The app backend does have the separate
+  rootless daemon socket, so security depends on the sandbox user's limited
+  host permissions.
+- T171's preflight change enforces Compose service security/resource settings
+  and edge port policy. The package's Caddy edge publishes host 80/443 on
+  `0.0.0.0` by default. This conflicts with the operator-reported existing host
+  Caddy on the same ports; choose one edge or implement a reviewed loopback
+  upstream mode before production startup.
+
+Existing repository host evidence is older, operator-reported T127 evidence:
+IAP SSH worked; a separate ext4 disk with UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5` was mounted at `/srv/sigma-state`, root
+was `root:root 700`, and that mount was reported after a 2026-10-25 reboot.
+The saved `findmnt` flags were only `rw,relatime`; current mount flags,
+ownership, host services, rootless denial, and application recovery remain
+unverified. The current hostname, TLS and placeholder page are operator
+supplied for this review, not independently checked.
+
+Tests actually run:
+- Baseline `./sigma test`: failed on the three stale mount assertions and
+  missing frontend `tsc`; frontend build was skipped. Ruff, format, Pyright,
+  and all nonfailing scenarios completed.
+- Corrected `tests/deployment_package.py`: passed.
+- Corrected `tests/gce_host.py`: 17 tests passed.
+- Corrected `tests/host_monitor.py`: 9 tests passed.
+- `npm ci --prefix frontend`: passed; 125 packages audited, no vulnerabilities.
+- Final `./sigma test`: passed all offline scenarios, Ruff, format, Pyright
+  (0 diagnostics), frontend typecheck and production build (existing large
+  chunk warning).
+- `git diff --check`: passed.
+- Local daemon is not rootless; Docker Compose v2 and `systemd-analyze` are
+  unavailable. These are environment limits, not GCE observations.
+- No real-browser check applied to these deployment tests/docs.
+
+Pending: exact read-only GCE/IAP checks and expected results are in
+`docs/T128_HOST_READINESS.md`. Required before activation: inspect current disk
+UUID and hardened flags, root/sandbox/backend ownership, daemons/socket and
+unit validity, run the target preflight to PASS, resolve the host Caddy port
+collision, verify merged Compose and running container inspection, and perform
+an separately approved application-path Python/Sage isolation probe. Keep
+`sigma.service` inactive until the operator authorizes launch. Reboot and
+provider-backed OAuth/research acceptance are also outside this assignment.
+
+Handoff: `docs/T128_HOST_READINESS.md`, `docs/STATUS.md`, and `tickets/t128.md`.
+Elapsed: about 20 minutes from initial repository inspection through test and
+documentation work. No paid calls or provider costs.

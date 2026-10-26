@@ -67,8 +67,9 @@ def main() -> None:
     assert "wget -q -O /dev/null http://127.0.0.1:8080/" in frontend
     assert "wget -q -O /dev/null http://127.0.0.1:2019/config/" in compose
     assert "depends_on:" in compose and "condition: service_healthy" in compose
-    assert "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
-    assert "After=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
+    assert "Requires=docker.service sigma-sandbox.service" in systemd
+    assert "After=docker.service sigma-sandbox.service" in systemd
+    assert "RequiresMountsFor=/srv/sigma-state" in systemd
     assert 'mountpoint -q "$disk"' in startup
     assert 'chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$disk/auth"' in startup
     assert 'chmod 0700 "$disk/auth"' in startup
