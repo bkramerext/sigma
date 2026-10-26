@@ -6091,3 +6091,17 @@ deterministic local fixtures; no provider calls or costs occurred. See the
 [issue #228 handoff](../messages/issue228_gray_sponsorship_allowance.txt).
 Implementation is in [PR #232](https://github.com/bkramerext/sigma/pull/232),
 open against `main`, current and mergeable, and not merged.
+
+## Issue #200 reconciliation with current main
+
+PR #230 reconciled with main `6a607a4`; both #200 and #228 status records and
+all main invitation/Gmail/guest changes were preserved. Hosted personal
+ChatGPT credential work remains Green's T88 scope. Current guest-startup test
+expectations and inherited Ruff/type-check failures were corrected without
+changing launcher or invitation behavior. Focused sponsor, cloud-auth, GCE,
+Gmail and dual-provider research API tests, frontend typecheck/build, Ruff and
+Pyright passed. The model-availability and Recent Chromium workflows passed;
+Research Outcome passed on the merge tree. Full local verification was limited by the environment denying AF_UNIX sockets;
+GitHub SIGMA verification run 40399333103 passed on validated code head
+`aea3365434a3c5fb708749724c132d303649815b`. Hosted sponsor provisioning and
+acceptance remain unverified. See the issue #200 handoff.

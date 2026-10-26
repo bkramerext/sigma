@@ -47,3 +47,39 @@ UNVERIFIED: protected sponsor authorization/provisioning on GCE, deployed
 catalog success, actual ChatGPT plan inference, #201/#202 original-project
 acceptance. The new SIGMA account has no Recent projects. Keep #200 open until
 hosted acceptance; this PR must not auto-close #201/#202.
+
+## Reconciliation with current main (2026-10-26)
+
+Validated code head: aea3365434a3c5fb708749724c132d303649815b
+Merged main: 6a607a488106f9c9233336eb940f0458024e527b
+Merge commit on PR: f9a56ea47919bc0a47f8e9883994bfe2491f1f29
+
+The only textual conflict was the concurrent append to docs/STATUS.md. Both
+#200 sponsor evidence and main's #228 sponsorship-allowance evidence were
+retained. The merged Google authentication code preserves the main invitation
+and guest flows and the #200 read-only model access guard; hosted personal
+ChatGPT credential selection remains out of scope for Green's T88.
+
+Current-main regressions encountered during verification were reconciled without
+changing guest behavior: the launcher test now asserts main's guest-by-default
+configuration; pre-existing Ruff formatting and Gmail fixture lint/type errors
+were corrected. Gmail tests pass and the error remains sanitized.
+
+Focused tests: cloud sponsor 8/8, cloud auth 28/28, GCE host 21/21, Gmail 3/3,
+and hosted sponsored API fixtures passed in API-key and ChatGPT streaming modes.
+Frontend typecheck and production build passed (existing chunk-size advisory).
+Ruff and formatting passed; Pyright reported 0 diagnostics. No real provider
+calls, paid work, production provisioning, or user credential access occurred.
+
+GitHub real Chromium acceptance passed for T200 model availability and T92
+Recent Projects on the validated code head. Research Outcome acceptance passed
+on the merge tree before the later launcher-test/format-only corrections.
+The local full suite was run; this execution environment denies AF_UNIX socket
+creation, affecting instance_ownership.py and ui_registry.py. Both failures
+were reproduced on unchanged main in this environment. GitHub SIGMA verification
+run 40399333103 passed on the validated code head, including the full suite.
+The final handoff-only commit is the PR head shown by GitHub and does not alter
+the validated code tree.
+
+Hosted sponsor OAuth provisioning, deployed catalog verification and real plan
+inference remain UNVERIFIED. No merge, deployment, or ticket closure is claimed.
