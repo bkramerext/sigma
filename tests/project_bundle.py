@@ -236,6 +236,20 @@ def main() -> None:
             )
             saved_execution = get_execution(created.path, execution_id)
             assert saved_execution["status"] == "completed"
+            try:
+                get_execution(created.path, execution_id.upper())
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Noncanonical execution identifier was accepted")
+            try:
+                _save_record(runtime_directory, {**execution, "id": str(uuid4()),
+                             "project_id": "foreign-project"})
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Foreign project execution was accepted")
+
             # Finalization failures cannot destroy the original reservation.
             wrong_id = str(uuid4())
             try:
