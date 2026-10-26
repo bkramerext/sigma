@@ -1,10 +1,11 @@
 """Executable round-trip and rejection checks for project bundles."""
 
+import base64
 import json
 import tempfile
 from pathlib import Path
 
-from sigma.project_bundle import BundleError, delete_file, encode, list_files, migrate, read_file, restore, snapshot, transform_file, update_files, write_file
+from sigma.project_bundle import BundleError, delete_file, download_bytes, encode, import_bundle, list_files, migrate, read_bundle, read_file, restore, snapshot, transform_file, update_files, write_file
 
 
 def main() -> None:
@@ -115,6 +116,49 @@ def main() -> None:
         else:
             raise AssertionError("Boolean schema version accepted")
         assert not (root / "bad-schema.sigma").exists()
+        # Ten regression checks for the portable project interchange boundary.
+        assert read_bundle(migrated)["format"] == bundle["format"]
+        assert json.loads(download_bytes(migrated)) == read_bundle(migrated)
+        assert read_bundle(migrated)["files"]["artifacts/evidence.bin"] == base64.b64encode(original_evidence).decode("ascii")
+        imported = root / "imported.json"
+        assert import_bundle(read_bundle(migrated), imported) == imported
+        assert read_bundle(imported) == read_bundle(migrated)
+        assert read_file(imported, "research-sessions/second.json") == b'{"status":"reviewed"}'
+        assert read_file(imported, "artifacts/evidence.bin") == original_evidence
+        try:
+            import_bundle(read_bundle(migrated), imported)
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Import overwrote an existing project")
+        assert read_bundle(imported) == read_bundle(migrated)
+        try:
+            import_bundle({**bundle, "files": {**bundle["files"], "../escape": "YQ=="}}, root / "unsafe.json")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Import accepted a traversal path")
+        assert not (root / "unsafe.json").exists()
+        try:
+            import_bundle(bundle, root / "not-json.sigma")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Import accepted a non-JSON destination")
+        assert not (root / "not-json.sigma").exists()
+        try:
+            read_bundle(source / "project.json")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Legacy document misidentified as complete bundle")
+        try:
+            import_bundle({**bundle, "version": True}, root / "bad-version.json")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Boolean bundle version accepted")
+        assert not (root / "bad-version.json").exists()
         symlink_source = root / "symlink.sigma"
         symlink_source.mkdir()
         (symlink_source / "project.json").write_text('{"schema_version":9}')
