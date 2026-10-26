@@ -8,6 +8,7 @@ can verify round trips before migrating project paths.
 from __future__ import annotations
 
 import base64
+import fcntl
 import json
 import os
 import stat
@@ -104,3 +105,47 @@ def restore(bundle: dict[str, Any], destination: str | Path) -> None:
         if temporary.exists():
             import shutil
             shutil.rmtree(temporary)
+
+
+def migrate(directory: str | Path, destination: str | Path) -> Path:
+    """Publish a verified, immutable single-file snapshot without deleting source.
+
+    A cooperative exclusive lock prevents another migration from publishing the
+    same destination concurrently. Callers must quiesce live research writers
+    before migrating: a directory snapshot cannot freeze independent writers.
+    """
+    source = Path(directory)
+    target = Path(destination)
+    if target.suffix != ".json" or target.is_symlink():
+        raise BundleError("Migration destination must be a regular JSON path")
+    if not target.parent.is_dir() or target.parent.is_symlink():
+        raise BundleError("Migration destination parent is unavailable")
+    lock = target.with_name("." + target.name + ".migration.lock")
+    with lock.open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        if os.path.lexists(target):
+            raise BundleError("Migration destination already exists")
+        before = _files(source)
+        contents = (json.dumps({"format": FORMAT, "version": VERSION, "files": before},
+                               sort_keys=True, indent=2) + "\\n").encode("utf-8")
+        fd, name = tempfile.mkstemp(prefix=".sigma-migrate-", dir=target.parent)
+        staged = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as output:
+                output.write(contents)
+                output.flush()
+                os.fsync(output.fileno())
+            decoded = _decode(json.loads(staged.read_text(encoding="utf-8")))
+            if decoded != {key: base64.b64decode(value) for key, value in before.items()}:
+                raise BundleError("Migration verification failed")
+            if _files(source) != before:
+                raise BundleError("Project changed during migration")
+            os.link(staged, target)
+            directory_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            staged.unlink(missing_ok=True)
+    return target
