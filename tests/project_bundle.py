@@ -249,6 +249,12 @@ def main() -> None:
                 else:
                     raise AssertionError("Invalid session record was saved")
             assert _read(created.path, session_id) == record
+            try:
+                _save(created.path, dict(record, project_path=str(root / "other.json")))
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Session project path was changed")
             # Existing session identity is immutable even if a caller attempts
             # to overwrite the same UUID with a different session number.
             try:
@@ -314,6 +320,11 @@ def main() -> None:
             ] == 28
             assert save_limits(created.path, dict(DEFAULT_LIMITS)) == dict(DEFAULT_LIMITS)
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
+            # Limits writes preserve unrelated session and artifact members.
+            before_session = read_file(created.path, f"research-sessions/{session_id}.json")
+            save_limits(created.path, dict(DEFAULT_LIMITS))
+            assert read_file(created.path, f"research-sessions/{session_id}.json") == before_session
+            assert read_file(created.path, "artifacts/trace.bin") == bytes(range(256))
             from sigma.research_sessions import _snapshot
             from sigma.project_bundle import transform_members
 
