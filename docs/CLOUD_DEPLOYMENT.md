@@ -1102,10 +1102,13 @@ backup; decide on recovery, shutdown, or paid continuation before trial end.
 configuration only when explicitly run as root on Ubuntu 24.04 amd64;
 `deploy/gce_preflight.py` is read-only. Neither runs `gcloud`, contacts Google,
 accesses credential contents, pushes images, changes DNS, nor calls providers.
-The install script was not run on the authoring workstation. Linux-only
-verification commands are the preflight above, `systemd-analyze verify`,
-`systemctl status docker sigma-sandbox sigma`, and the rootless runtime command
-below; use them on the actual Ubuntu VM before production launch.
+For T128 host health without T129 credentials, use the documented
+[host-readiness and reboot-recovery procedure](T128_HOST_READINESS.md),
+including `--host-readiness` before production setup and `--after-reboot`
+following an actual reboot. The regular preflight remains the T129 production
+gate. The installer was not run on the authoring workstation. Live Linux
+service recovery, disk identity, and runtime isolation still require checks on
+the actual Ubuntu VM; local tests do not establish hosted acceptance.
 
 - [gcloud budgets create](https://cloud.google.com/sdk/gcloud/reference/billing/budgets/create)
 - [gcloud VM create](https://cloud.google.com/sdk/gcloud/reference/compute/instances/create)
@@ -1353,26 +1356,10 @@ or unsafe metadata, valid session records, running jobs and every call
 reservation are preserved. Claimed work is reconciled to paused/interrupted
 with an unknown attempt; it is not replayed.
 
-The shared cloud key is deliberately restricted to bounded, owner-authorized
-research work. Research sessions, one-shot proposals, agentic proposals,
-paper generation, and text conversion use the same durable cloud reservation
-ledger before provider dispatch. Provider attempts are attributed to the
-authenticated workspace and project; each attempt has a conservative cost and
-token reservation, confirmed usage is settled from the provider response, and
-uncertain outcomes remain held and are not replayed. Agentic generation
-reserves each provider call separately. These routes never fall back to a
-personal or checkout credential in cloud mode. Local mode keeps the existing
-provider selection and routes. Deterministic coverage for these hosted API
-paths is in `tests/cloud_research_api.py` and
-`tests/cloud_research_sponsored_api.py`; the tests use fake provider transports
-and do not establish live provider or hosted deployment acceptance.
-
-Cloud sessions have the stricter session envelope above ($0.25, six model
-calls, 15 minutes). The other sponsored operations use their own bounded
-request, output, and timeout limits together with the shared user/global spend,
-token, queue, and concurrency controls. A failed or interrupted request whose
-provider dispatch status is uncertain must be treated as potentially charged:
-inspect its saved ledger state and do not retry it as an acceptance shortcut.
+The shared cloud key is deliberately restricted to bounded research sessions.
+Standalone proposal, agentic-proposal, paper-generation, and text-conversion
+inference routes return 403 in cloud mode until they receive their own durable
+budget accounting. Local mode keeps the existing provider selection and routes.
 
 Automated tests use local RSA signing keys and mocked Google endpoints. They do
 not make network requests or paid model calls. No Google OAuth client, client
