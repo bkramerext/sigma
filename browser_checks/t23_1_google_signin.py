@@ -302,7 +302,16 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             expect(page.get_by_role("button", name="Sign in with Google")).to_be_visible()
+            expect(page.locator(".account-model-status")).to_have_count(0)
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
+            page.get_by_role("button", name="Sign in with Google").click()
+            guest_dialog = page.get_by_role("dialog")
+            expect(guest_dialog).to_contain_text("Connect your Google account")
+            expect(guest_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+                "href", "/api/cloud-auth/login"
+            )
+            page.keyboard.press("Escape")
+            expect(guest_dialog).to_have_count(0)
             page.goto(ui_url + "/demo", wait_until="networkidle")
             expect(
                 page.get_by_role("heading", name="Explore a SIGMA research project")
