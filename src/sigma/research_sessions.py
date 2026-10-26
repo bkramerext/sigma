@@ -2247,28 +2247,36 @@ HUMAN_INTERVENTION_GUIDANCE = (
 
 def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
     if project_path(path).suffix == ".json":
-        from sigma.project_bundle import BundleError, read_file, write_file
+        from sigma.project_bundle import transform_members
 
-        current = max((item.get("session_number", 0) for item in records), default=0) + 1
-        try:
-            stored = json.loads(read_file(path, "research-sessions/sequence.json"))
-        except BundleError:
-            stored = None
-        if stored is not None:
-            if (not isinstance(stored, dict)
-                or stored.get("project_id") != inspect_project(path).project.id
-                or type(stored.get("next_session_number")) is not int
-                or stored["next_session_number"] < 1):
-                raise ProjectError("Research session sequence file is unreadable")
-            current = max(current, stored["next_session_number"])
-        payload = {
-            "schema_version": 1,
-            "project_id": inspect_project(path).project.id,
-            "next_session_number": current + 1,
-        }
-        write_file(path, "research-sessions/sequence.json",
-                   (json.dumps(payload, sort_keys=True) + "\n").encode())
-        return current
+        project_id = inspect_project(path).project.id
+        allocated: list[int] = []
+
+        def allocate(members: dict[str, bytes]) -> dict[str, bytes]:
+            current = max((item.get("session_number", 0) for item in records), default=0) + 1
+            counter = members.get("research-sessions/sequence.json")
+            if counter is not None:
+                try:
+                    stored = json.loads(counter)
+                    if (not isinstance(stored, dict)
+                        or stored.get("project_id") != project_id
+                        or type(stored.get("next_session_number")) is not int
+                        or stored["next_session_number"] < 1):
+                        raise ValueError("Invalid session sequence")
+                    current = max(current, stored["next_session_number"])
+                except (ValueError, TypeError) as exc:
+                    raise ProjectError("Research session sequence file is unreadable") from exc
+            allocated.append(current)
+            payload = {
+                "schema_version": 1,
+                "project_id": project_id,
+                "next_session_number": current + 1,
+            }
+            return {"research-sessions/sequence.json":
+                    (json.dumps(payload, sort_keys=True) + "\n").encode()}
+
+        transform_members(path, allocate)
+        return allocated[0]
     directory = _directory(path)
     counter = directory / "sequence.json"
     if counter.is_symlink():
