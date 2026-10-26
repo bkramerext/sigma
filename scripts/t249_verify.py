@@ -104,7 +104,7 @@ def main() -> int:
         print("Report committed locally; push failed:", push["stderr"], file=sys.stderr)
         return 6
     print("Verification report pushed to", BRANCH)
-    return 0 if checks["bundle_simulation"]["exit_code"] == 0 else 1
+    return 0 if not report["failing_or_unavailable"] else 1
 
 
 if __name__ == "__main__":
