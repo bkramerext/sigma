@@ -2274,11 +2274,15 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
                 if name in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
                     continue
                 try:
+                    if str(UUID(name.removeprefix("research-sessions/").removesuffix(".json"))) != name.removeprefix("research-sessions/").removesuffix(".json"):
+                        continue
                     stored_record = json.loads(data)
                     number = stored_record.get("session_number") if isinstance(stored_record, dict) else None
-                    if type(number) is int and number > 0:
+                    if (isinstance(stored_record, dict)
+                        and stored_record.get("project_id") == project_id
+                        and type(number) is int and number > 0):
                         current = max(current, number + 1)
-                except (ValueError, UnicodeDecodeError, TypeError):
+                except (ValueError, UnicodeDecodeError, TypeError, AttributeError):
                     continue
             counter = members.get("research-sessions/sequence.json")
             if counter is not None:
@@ -2734,6 +2738,8 @@ def _save(path: str, record: dict[str, Any]) -> None:
             raise ProjectError("Research session does not belong to this project")
         if type(record.get("session_number")) is not int or record["session_number"] < 1:
             raise ProjectError("Research session number must be a positive integer")
+        if not isinstance(record.get("status"), str):
+            raise ProjectError("Research session status must be a string")
         member = f"research-sessions/{session_id}.json"
 
         def update(members: dict[str, bytes]) -> dict[str, bytes]:
@@ -2745,6 +2751,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
                     raise ProjectError("Existing research session record is unreadable") from exc
                 if (not isinstance(previous, dict)
                     or previous.get("project_id") != view.project.id
+                    or previous.get("project_path") != view.path
                     or previous.get("id") != session_id
                     or previous.get("session_number") != record["session_number"]):
                     raise ProjectError("Research session identity cannot change")
@@ -2801,7 +2808,7 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
         from sigma.project_bundle import BundleError, read_file
 
         try:
-            if str(UUID(session_id)) != session_id:
+            if not isinstance(session_id, str) or str(UUID(session_id)) != session_id:
                 raise ValueError("Noncanonical session ID")
             raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
         except (ValueError, BundleError, TypeError) as exc:
@@ -2809,7 +2816,9 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
         if (not isinstance(raw, dict)
             or raw.get("id") != session_id
             or raw.get("project_path") != str(project_path(path))
-            or raw.get("project_id") != inspect_project(path).project.id):
+            or raw.get("project_id") != inspect_project(path).project.id
+            or type(raw.get("session_number")) is not int
+            or raw["session_number"] < 1):
             raise ProjectError("Research session record does not match this project")
         return raw
     try:
@@ -2887,7 +2896,9 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
                     raise ValueError("Noncanonical session ID")
                 if (not isinstance(raw, dict) or raw.get("id") != stem
                     or raw.get("project_id") != view.project.id
-                    or raw.get("project_path") != view.path):
+                    or raw.get("project_path") != view.path
+                    or type(raw.get("session_number")) is not int
+                    or raw["session_number"] < 1):
                     raise ValueError("Session does not match project")
                 records.append(raw)
             except (ValueError, OSError, TypeError, UnicodeDecodeError):
