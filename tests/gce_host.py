@@ -27,7 +27,7 @@ class GceHostToolingTests(unittest.TestCase):
             self.assertEqual(preflight._sandbox_socket(), "/run/user/1001/docker.sock")
         self.assertEqual(preflight.values, {})
 
-    def test_rootless_checks_ignore_inherited_docker_context(self) -> None:
+    def test_rootless_checks_use_sandbox_identity_and_ignore_inherited_context(self) -> None:
         calls: list[tuple[list[str], dict[str, str]]] = []
         preflight = gce_preflight.Preflight(host_readiness=True)
 
@@ -49,11 +49,16 @@ class GceHostToolingTests(unittest.TestCase):
 
         self.assertEqual([result.status for result in preflight.results], ["PASS", "PASS", "PASS"])
         self.assertEqual(len(calls), 3)
-        for _, environment in calls:
-            self.assertEqual(environment["DOCKER_CONFIG"], "/etc/docker")
-            self.assertEqual(environment["DOCKER_HOST"], "")
-            self.assertEqual(environment["DOCKER_CONTEXT"], "")
-            self.assertEqual(environment["HOME"], "/root")
+        for argv, environment in calls:
+            self.assertEqual(argv[:4], ["/usr/sbin/runuser", "--user", "sigma-sandbox", "--"])
+            self.assertIn("HOME=/home/sigma-sandbox", argv)
+            self.assertIn("XDG_RUNTIME_DIR=/run/user/1001", argv)
+            self.assertIn("DOCKER_CONFIG=/etc/docker", argv)
+            self.assertIn("DOCKER_HOST=", argv)
+            self.assertIn("DOCKER_CONTEXT=", argv)
+            self.assertEqual(environment, {"PATH": "/usr/bin:/bin", "HOME": "/root"})
+            self.assertIn("docker", argv)
+            self.assertIn("unix:///run/user/1001/docker.sock", argv)
 
     def test_host_readiness_reboot_gate_requires_enabled_daemons_but_not_app(self) -> None:
         calls: list[list[str]] = []

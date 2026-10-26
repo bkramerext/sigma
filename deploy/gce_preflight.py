@@ -567,21 +567,8 @@ class Preflight:
             return
         try:
             result = self.command(
-                [
-                    "docker",
-                    "--host",
-                    socket,
-                    "info",
-                    "--format",
-                    "{{json .SecurityOptions}}",
-                ],
-                environment={
-                    "PATH": "/usr/bin:/bin",
-                    "HOME": "/root",
-                    "DOCKER_CONFIG": "/etc/docker",
-                    "DOCKER_HOST": "",
-                    "DOCKER_CONTEXT": "",
-                },
+                self._rootless_docker_argv(socket, "info", "--format", "{{json .SecurityOptions}}"),
+                environment={"PATH": "/usr/bin:/bin", "HOME": "/root"},
             )
         except (OSError, subprocess.TimeoutExpired):
             self.add(
@@ -676,15 +663,31 @@ class Preflight:
         for image in ("sigma-research-python:0.1", "sigma-research-sage:10.8"):
             self._command(
                 "Rootless image " + image,
-                ["docker", "--host", socket, "image", "inspect", image],
-                env={
-                    "PATH": "/usr/bin:/bin",
-                    "HOME": "/root",
-                    "DOCKER_CONFIG": "/etc/docker",
-                    "DOCKER_HOST": "",
-                    "DOCKER_CONTEXT": "",
-                },
+                self._rootless_docker_argv(socket, "image", "inspect", image),
+                env={"PATH": "/usr/bin:/bin", "HOME": "/root"},
             )
+
+    @staticmethod
+    def _rootless_docker_argv(socket: str, *arguments: str) -> list[str]:
+        """Run rootless Docker as its socket owner with inherited contexts cleared."""
+        uid = _sandbox_uid()
+        return [
+            "/usr/sbin/runuser",
+            "--user",
+            SANDBOX_USER,
+            "--",
+            "/usr/bin/env",
+            "PATH=/usr/bin:/bin",
+            "HOME=/home/sigma-sandbox",
+            f"XDG_RUNTIME_DIR=/run/user/{uid}",
+            "DOCKER_CONFIG=/etc/docker",
+            "DOCKER_HOST=",
+            "DOCKER_CONTEXT=",
+            "docker",
+            "--host",
+            f"unix://{socket}",
+            *arguments,
+        ]
 
     def check_compose(self) -> None:
         if not self.values:
