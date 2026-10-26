@@ -3580,7 +3580,7 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 function MockAuthSelector() {
   const cloud = useCloudIdentity();
   const [busy, setBusy] = useState(false);
-  const [funding, setFunding] = useState<{ mode: string; allowance: { scenario: string; remaining_usd: number } } | null>(null);
+  const [funding, setFunding] = useState<{ mode: string; allowance: { scenario: string; remaining_usd: number }; provider: string } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     if (!cloud?.mock_auth || !cloud.authenticated) { setFunding(null); return; }
@@ -3605,7 +3605,7 @@ function MockAuthSelector() {
       setError(errorMessage(err)); setBusy(false);
     }
   }
-  async function update(kind: 'model-access' | 'allowance', value: string) {
+  async function update(kind: 'model-access' | 'allowance' | 'provider', value: string) {
     setBusy(true); setError('');
     try {
       const parameter = kind === 'model-access' ? 'mode' : 'scenario';
@@ -3636,7 +3636,10 @@ function MockAuthSelector() {
       <select aria-label="Mock sponsorship allowance" disabled={busy} value={funding.allowance.scenario} onChange={event => void update('allowance', event.target.value)}>
         <option value="available">Available</option><option value="low">Low</option><option value="exhausted">Exhausted</option>
       </select>
-      <span aria-live="polite">Simulated allowance: ${funding.allowance.remaining_usd.toFixed(2)} remaining</span>
+      <select aria-label="Mock provider state" disabled={busy} value={funding.provider} onChange={event => void update('provider', event.target.value)}>
+        <option value="connected">Provider connected</option><option value="unavailable">Provider unavailable</option><option value="error">Provider error</option>
+      </select>
+      <span aria-live="polite">Simulated allowance: ${funding.allowance.remaining_usd.toFixed(2)} remaining · Provider: {funding.provider} · Research execution disabled</span>
     </>}
     {error && <span role="alert">{error}</span>}
   </span>;
