@@ -1087,12 +1087,9 @@ def create_project(
     mode = _research_mode(research_mode)
     root = projects_root()
     destination = root / name
-    reserved = False
     with _title_registry_lock(root):
         _require_available_title(title, root)
         try:
-            destination.mkdir(mode=0o700)  # Never overwrite files or existing research.
-            reserved = True
             view = initialize_project(
                 destination,
                 title,
@@ -1113,12 +1110,6 @@ def create_project(
             ) from exc
         except OSError as exc:
             raise ProjectError(f"Cannot create project: {exc}") from exc
-        finally:
-            if reserved:
-                try:
-                    destination.rmdir()
-                except OSError:
-                    pass
 
 
 def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
