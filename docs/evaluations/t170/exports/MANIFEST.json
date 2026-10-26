@@ -1,0 +1,49 @@
+{
+  "source_project_id": "1d33446e-8148-4fe0-8308-68631f2aeaed",
+  "source_session_id": "1a9a0c44-48ae-49e7-8bea-0e8d47297f9d",
+  "source_paper_id": "4d0f00caff7c2bcb53d2b3b8ef0896ec",
+  "capture_commit": "b33e9945ec2c18d149ad5e8a45b2da6fa70849b9",
+  "application": "local packaged Compose and real Chrome; simulated identities and deterministic sample data",
+  "provider_calls": 0,
+  "exports": {
+    "project_audit": {
+      "file": "t91-project.json",
+      "bytes": 308896,
+      "sha256": "d2aa51233e8abf0aa2dc37b90622a6c403f303cf5ba9da6eef409281bcd0728e"
+    },
+    "text_report": {
+      "file": "t91-project.txt",
+      "bytes": 49744,
+      "sha256": "88bd0cef5c6d3dd200d929abb2342342e72bfa5d85afb89f11cff9d018443876"
+    },
+    "html_report": {
+      "file": "t91-project.html",
+      "bytes": 74781,
+      "sha256": "14110b4c5263c210ba0c6ff6e9a186571dbd825dd46b3a4299dba81568ca53e7"
+    },
+    "tex": {
+      "file": "t91-paper.tex",
+      "bytes": 124,
+      "sha256": "8fda943436f64e25485bc8117152efb82f7240e1bd17564386591b928dd4d8db"
+    },
+    "pdf": {
+      "file": "t91-paper.pdf",
+      "bytes": 4781,
+      "sha256": "7b3daa6551a353d78306afee922edff223c6f0dbf19aef4b93be60e5805ee799"
+    }
+  },
+  "activity": [
+    "created project as a copy from the stock sample",
+    "edited project and strategy",
+    "reopened project",
+    "reviewed saved session and Outcome",
+    "downloaded audit/text/HTML reports",
+    "compiled fixture TeX, downloaded and parsed PDF",
+    "recreated backend and verified persisted IDs and hashes"
+  ],
+  "limitations": [
+    "simulated Google identities; no OAuth",
+    "deterministic sample session and fixture-authored paper; no live provider",
+    "local Colima storage; not GCE or production persistent-disk mount"
+  ]
+}
