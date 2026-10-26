@@ -158,8 +158,10 @@ def execution_tool_fixture(python_available: bool):
 async def wait_for(path, session_id, terminal=True):
     for _ in range(300):
         current = research_sessions.get_session(str(path), session_id)
+        worker = research_sessions._tasks.get(session_id)
+        settled = worker is None or worker.done()
         if (
-            (current["status"] in {"completed", "ended", "failed", "stopped", "paused"})
+            (current["status"] in {"completed", "ended", "failed", "stopped", "paused"} and settled)
             if terminal
             else current["calls_used"]
         ):
