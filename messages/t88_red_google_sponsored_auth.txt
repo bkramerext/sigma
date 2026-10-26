@@ -4,8 +4,8 @@ Issue: https://github.com/bkramerext/sigma/issues/88
 Base: main at 2c409e6b4e045e75a84b369c12f545cb8a969e32
 Branch: red/t88-google-sponsored-auth
 PR: https://github.com/bkramerext/sigma/pull/214
-Reviewed PR head before handoff refresh: 6cc47e30bc231f5d49260a2a502e88721f03b4d9
-Final PR head: recorded in the R4R response (handoff-only update follows the reviewed head).
+Current reviewed PR head: 22304afc4d2542c10b2e9907f2955693aa572140
+Final PR head after this handoff refresh: recorded in the R4R response.
 
 Implementation
 
@@ -42,11 +42,11 @@ Verification
   uninvited access, and no page errors.
 - Static/frontend: Ruff, Ruff format, Pyright, npm frontend typecheck and
   production build.
-- Full suite: `./sigma test` passed all repository scenarios, Ruff, Ruff format,
-  Pyright, frontend typecheck and production build at implementation head
-  `0497aeec661d9e099cae039362aa84116cf3861a`. A final rerun covering the
-  subsequent documentation-only commits is recorded in the PR Actions and
-  R4R response. Vite reports the existing 511.79 kB main JavaScript chunk
+- Full suite: `./sigma test` passed all repository scenarios, Ruff, Ruff format, Pyright, frontend
+  typecheck and production build on the final handoff content before commit.
+  The tested tree is the content of current reviewed head
+  `22304afc4d2542c10b2e9907f2955693aa572140` plus the SHA/handoff refresh;
+  the exact committed head is reported in the R4R response. Vite reports the existing 511.79 kB main JavaScript chunk
   warning; build succeeded.
 - The first full-suite pass exposed a pre-existing Ruff B023/format failure in
   browser_checks/model_availability.py. Fixed its closure capture with a bound
