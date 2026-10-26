@@ -9,7 +9,7 @@ PR: pending
 
 Audited ownership, API access, storage durability, restart behavior, and sandbox command construction. No server-side implementation bypass was confirmed, so production code was left unchanged. Existing controls bind each protected request's verified Google OIDC `Principal.subject` to the private workspace. The change adds regression assertions for cross-owner project update, text-source evidence write, and execution creation using a guessed victim path. Each returns the generic 404 and leaves project bytes, saved execution records, and evidence-source storage unchanged.
 
-Created the missing canonical `tickets/t192.md` and recorded audit results in `docs/STATUS.md` and `docs/TICKET_TRACKING.md`. T43.2 / PR #166 acceptance evidence was reused for fixture account switching, with its live OAuth limitations preserved.
+Created the missing canonical `tickets/t192.md` and recorded audit results in `docs/STATUS.md` and `docs/TICKET_TRACKING.md`. Reused T43.2 / PR #222's independent release acceptance for fixture account switching and broad browser acceptance; no browser run was duplicated. Its live OAuth limitations are preserved.
 
 ## Checks run
 

@@ -5898,8 +5898,9 @@ papers/downloads, research execution artifacts, and Docker/Sage sandbox
 configuration. Existing implementation derives durable workspace mappings from
 the verified Google `sub`; no server-side identity header or caller-selected
 workspace ID controls project ownership. Local-mode project storage and Recents
-remain unchanged. Reused the T43.2 / PR #166 fixture account-switching evidence
-and its explicitly unverified live OAuth boundary.
+remain unchanged. Reused T43.2 / PR #222's independent release acceptance for
+fixture account switching and its broader browser acceptance; its explicitly
+unverified live OAuth boundary remains.
 
 Added cross-owner API regressions for project metadata update, text-source
 evidence writes, and research execution creation. Guessed victim paths are
