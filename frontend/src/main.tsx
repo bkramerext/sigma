@@ -1354,7 +1354,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
         setError(requestDispatched && providerCallsAttempted === 0
-          ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
+          ? `${message} No provider request was made for this attempt, and it did not change saved versions or research evidence. Review the current research, then select Generate again to retry.`
           : requestDispatched
             ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
           : message);

@@ -1,0 +1,11 @@
+T202 local paper preflight follow-up
+
+Base: main 5f4f7d806d00630bbb905f9b8df06e95ea3e928e. The original hosted project and historical provider usage were not accessed.
+
+The prior fix ignored the elapsed_seconds projection, but a real saved-session fixture exposed a second false conflict: the public Outcome's derived session-file-size metric changed when the same record was harmlessly rewritten. Paper fingerprints now exclude that derived storage metric and the derived wall-clock metric, while preserving the underlying research and session records and all substantive evidence. This normalization uses a deep copy and does not mutate saved or exported research.
+
+A real saved-session regression verifies stable preflight across an elapsed/serialization-only rewrite, successful fake-provider generation, a genuine saved finding change causing a pre-provider conflict with zero calls and byte-identical existing versions, and a fresh-preflight retry producing a second version. A change during PDF compilation now causes a final evidence check to discard the draft before publication; this can occur after a provider call, so usage is not represented as zero. The check does not claim atomic exclusion of concurrent writers after the final snapshot.
+
+The UI conflict message identifies the next action accurately: review current research and choose Generate again, which fetches a fresh preflight. The real Chromium fixture exercises an existing version, a genuine intervening saved finding change, zero provider calls on conflict, version/evidence preservation and a successful fake-provider retry. The provider uses MockTransport, and the PDF compiler is an explicit deterministic fixture; it does not prove actual TeX compilation. No paid provider calls, deployment or production changes.
+
+Focused paper tests passed locally. Full local and GitHub CI/browser results are recorded in the PR. Historical hosted usage and the original incident remain unverified; no assertion is made that the original hosted attempt was free.

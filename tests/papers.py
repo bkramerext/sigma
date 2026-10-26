@@ -8,10 +8,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
 from unittest.mock import patch
+from uuid import uuid4
 
 import httpx
 
-from sigma import papers
+from sigma import papers, research_sessions
 from sigma.api import app
 from sigma.plan_stream import completed
 from sigma.projects import ProjectError, initialize_project, inspect_project
@@ -129,6 +130,120 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
     assert "elapsed_seconds" not in session_source["data"]
     assert original["research_sessions"][0]["artifacts"][0]["claim"] == "Saved claim"
     assert first_claim == "Saved claim"
+
+
+def test_saved_history_preflight_conflict_and_retry(path: Path) -> None:
+    """Exercise real saved files, not just a mocked snapshot or an invented hash."""
+    view = initialize_project(path, "Paper preflight fixture", "A bounded research question")
+    archive = json.loads(
+        Path(
+            "docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
+        ).read_text()
+    )
+    session = archive["research_sessions"][0]
+    session_id = str(uuid4())
+    session.update(
+        id=session_id, project_path=str(path), project_id=view.project.id, status="ended"
+    )
+    for artifact in session["artifacts"]:
+        artifact.update(id=str(uuid4()), session_id=session_id, project_id=view.project.id)
+    research_sessions._save(str(path), session)
+    saved_session = path / "research-sessions" / f"{session_id}.json"
+    credential = {"identity": "fixture", "mode": "api_key", "token": "fixture"}
+    config = {
+        "available": True,
+        "binding": "fixture",
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+    }
+    provider_calls = []
+
+    async def fake_provider(package, *_args):
+        provider_calls.append(package)
+        return draft(f"project:{view.project.id}"), config["model"]
+
+    async def auth():
+        return credential
+
+    async def configuration(**_kwargs):
+        return config
+
+    async def exercise():
+        with (
+            patch.object(papers, "auth_context", new=auth),
+            patch.object(papers, "configuration", new=configuration),
+            patch.object(papers, "_provider", new=fake_provider),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nfixture\n%%EOF"),
+        ):
+            first = papers.preflight(str(path))["snapshot_sha256"]
+            saved = json.loads(saved_session.read_text())
+            saved["elapsed_seconds"] = 999999
+            saved_session.write_text(json.dumps(saved))
+            assert papers.preflight(str(path))["snapshot_sha256"] == first
+            await papers.generate(
+                str(path), "fixture", view.project.id, expected_snapshot_sha256=first
+            )
+            versions = {p.name: p.read_bytes() for p in (path / "papers").glob("*") if p.is_file()}
+            assert len(versions) == 2 and len(provider_calls) == 1
+
+            preflight = papers.preflight(str(path))["snapshot_sha256"]
+            saved = json.loads(saved_session.read_text())
+            saved["artifacts"][0]["claim_or_question"] += " Changed durable evidence."
+            saved_session.write_text(json.dumps(saved))
+            changed = saved_session.read_bytes()
+            try:
+                await papers.generate(
+                    str(path), "fixture", view.project.id, expected_snapshot_sha256=preflight
+                )
+            except papers.PaperSnapshotConflict as exc:
+                assert exc.provider_calls_attempted == 0
+            else:
+                raise AssertionError("Changed saved evidence must invalidate preflight")
+            assert len(provider_calls) == 1 and saved_session.read_bytes() == changed
+            assert {
+                p.name: p.read_bytes() for p in (path / "papers").glob("*") if p.is_file()
+            } == versions
+
+            refreshed = papers.preflight(str(path))["snapshot_sha256"]
+            assert refreshed != preflight
+            await papers.generate(
+                str(path), "fixture", view.project.id, expected_snapshot_sha256=refreshed
+            )
+            assert len(provider_calls) == 2 and saved_session.read_bytes() == changed
+            assert all(
+                (path / "papers" / name).read_bytes() == value for name, value in versions.items()
+            )
+            assert len(list((path / "papers").glob("*.json"))) == 2
+
+            before_compile = {
+                p.name: p.read_bytes() for p in (path / "papers").glob("*") if p.is_file()
+            }
+            current_hash = papers.preflight(str(path))["snapshot_sha256"]
+
+            def changing_compile(*_args, **_kwargs):
+                value = json.loads(saved_session.read_text())
+                value["artifacts"][0]["claim_or_question"] += " Changed during compilation."
+                saved_session.write_text(json.dumps(value))
+                return b"%PDF-1.4\nfixture\n%%EOF"
+
+            with patch.object(papers, "_compile_pdf", side_effect=changing_compile):
+                try:
+                    await papers.generate(
+                        str(path), "fixture", view.project.id, expected_snapshot_sha256=current_hash
+                    )
+                except ProjectError as exc:
+                    assert "changed while the paper was being compiled" in str(exc)
+                else:
+                    raise AssertionError(
+                        "Changed research during compilation must not be published"
+                    )
+            assert len(provider_calls) == 3  # The draft was generated before the change.
+            assert {
+                p.name: p.read_bytes() for p in (path / "papers").glob("*") if p.is_file()
+            } == before_compile
+            assert b"Changed during compilation." in saved_session.read_bytes()
+
+    asyncio.run(exercise())
 
 
 def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
@@ -779,6 +894,7 @@ def main() -> None:
     test_api_paper_stream_reports_progress_and_completion()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:
+        test_saved_history_preflight_conflict_and_retry(Path(temporary) / "preflight.sigma")
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
         test_api_disconnect_cancels_paper_before_publication(cancelled_path)

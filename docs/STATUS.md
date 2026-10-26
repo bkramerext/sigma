@@ -6333,3 +6333,12 @@ Availability, Guest samples/Play, and T81 legal-page browser checks passed in
 real Chrome. Ruff check/format and `./sigma test` passed, including Pyright,
 typecheck, and production build. PR #246 is updated and open for review, not
 merged. See the [Blue R4R handoff](../messages/blue_guest_play_signin_r4r.md).
+
+## T202 local paper preflight follow-up (2026-10-26)
+
+Paper snapshots omit volatile display-only session storage and wall-time metrics
+while retaining underlying evidence. Saved-file regression covers incidental
+rewrites, a genuine preflight conflict, preserved versions and retry; another
+check rejects evidence changes during PDF compilation before publication.
+See [the T202 handoff](../messages/issue_202_local_preflight.txt). Original
+hosted project and historical provider usage remain unverified.

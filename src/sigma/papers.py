@@ -9,6 +9,7 @@ import os
 import re
 import stat
 from collections.abc import Awaitable, Callable, Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -367,11 +368,25 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
             {"id": f"strategy:{strategy.get('id')}", "kind": "strategy", "data": strategy}
         )
     for session in data.get("research_sessions", []):
-        session_data = dict(session)
+        session_data = deepcopy(session)
         # elapsed_seconds is a live UI projection. It changes while a session
         # is paused even though its saved research is unchanged, so it cannot
         # participate in the paper evidence fingerprint.
         session_data.pop("elapsed_seconds", None)
+        # These display metrics are recomputed from elapsed time and the
+        # current serialized file size. Neither is research evidence, and a
+        # harmless rewrite of the same saved record must not change preflight.
+        outcome = session_data.get("outcome")
+        metrics = outcome.get("metrics") if isinstance(outcome, dict) else None
+        operational = metrics.get("operational") if isinstance(metrics, dict) else None
+        if isinstance(operational, list):
+            metrics["operational"] = [
+                item
+                for item in operational
+                if not isinstance(item, dict)
+                or item.get("label")
+                not in {"Artifacts and storage", "Wall-clock / agent call time"}
+            ]
         artifacts = session_data.pop("artifacts", [])
         sources.append(
             {"id": f"session:{session.get('id')}", "kind": "session", "data": session_data}
@@ -2192,6 +2207,14 @@ async def generate(
             )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
+        # Compilation can be slow. Check again before publishing so research
+        # changed during compilation is not silently presented as current.
+        _latest_package, latest_hash = _snapshot(path)
+        if inspect_project(path).project.id != view.project.id or latest_hash != snapshot_hash:
+            raise ProjectError(
+                "Research changed while the paper was being compiled; draft discarded. "
+                "Review current evidence and regenerate"
+            )
         # Keep the exact source that produced this version's PDF alongside the
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
         record["tex_source"] = tex

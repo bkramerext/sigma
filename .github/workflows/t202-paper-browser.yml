@@ -1,0 +1,61 @@
+name: T202 paper preflight browser acceptance
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'src/sigma/papers.py'
+      - 'browser_checks/t202_*.py'
+      - '.github/workflows/t202-paper-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      SIGMA_CLOUD_AUTH_ENABLED: 'false'
+      SIGMA_T202_INFO: /tmp/sigma-t202-info.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: ./sigma setup
+      - run: uv run --with playwright python -m playwright install --with-deps chromium
+      - name: Exercise paper preflight with a fake provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn browser_checks.t202_paper_fixture:app --host 127.0.0.1 --port 8000 >/tmp/t202-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix frontend run dev -- --port 5173 --strictPort >/tmp/t202-ui.log 2>&1 &
+          ui_pid=$!
+          trap 'kill "$api_pid" "$ui_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null && curl -fsS http://127.0.0.1:8000/openapi.json >/dev/null && test -s "$SIGMA_T202_INFO"; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/openapi.json >/dev/null
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/t202_paper_preflight.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t202-paper-evidence
+          path: |
+            /tmp/sigma-t202-paper.png
+            /tmp/t202-api.log
+            /tmp/t202-ui.log
+          if-no-files-found: warn
