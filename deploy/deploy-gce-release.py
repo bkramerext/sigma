@@ -193,6 +193,8 @@ class Deployment:
         # source-SHA labels; never build a requested tag from the active checkout.
         service_stopped = False
         candidate_started = False
+        candidate_checkout_changed = False
+        release_pin_changed = False
         try:
             _call(
                 self.runner,
@@ -216,6 +218,15 @@ class Deployment:
             if initial:
                 _call(self.runner, ["systemctl", "enable", "sigma.service"])
         except DeployFailure as failure:
+            # A build failure occurs before the active checkout, release pin, or
+            # service changes. Leave the running release entirely untouched.
+            if not (
+                service_stopped
+                or candidate_started
+                or candidate_checkout_changed
+                or release_pin_changed
+            ):
+                raise
             # Restore the code and release pin atomically, preserving every other
             # deploy.env byte. Existing disk state and credentials are untouched.
             try:
