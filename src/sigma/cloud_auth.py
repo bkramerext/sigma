@@ -713,6 +713,9 @@ def mock_select(request: Request, identity: str):
     # Do not allow a cross-origin page to switch the active local identity.
     if request.headers.get("origin") != cfg.origin:
         raise HTTPException(403, "Request origin is not authorized.")
+    # Never accept mock identity changes through a remote-facing listener.
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock authentication requires a loopback client.")
     old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     with _db(cfg) as db:
