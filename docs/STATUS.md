@@ -1,6 +1,36 @@
 # SIGMA status
 
+## Issue #186 single administrator/contact setting follow-up (2026-10-26)
+
+Follow-up to [PR #187](https://github.com/bkramerext/sigma/pull/187) per the
+updated product requirement: `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is now the single
+configured address for invitation contact and initial administrator identity.
+Its first verified Google sign-in binds the email to that immutable Google
+subject and receives admin; later admin authorization still requires both the
+configured address and the bound subject. Nonmatching email/subject identities
+remain denied. The old variable is no longer read or accepted by active auth or
+deployment configuration; regression tests verify that stale deployment files
+using it are rejected.
+
+Documented the upgrade path in Cloud Deployment: remove the old line and set the
+single setting to the exact prior administrator address to preserve the existing
+database's subject binding. Changing the address does not transfer the stored
+binding. Local development, Compose, GCE preflight, browser setup guidance, and
+auth regression coverage now use the single setting. Focused cloud auth (17),
+tooling, deployment-package, and GCE host/preflight (18) checks passed. The first
+full-suite run found two Ruff format differences; after formatting,
+`env -u SIGMA_CLOUD_ADMIN_CONTACT_EMAIL ./sigma test` passed all scenarios,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
+build (existing large-chunk advisory). A focused real-Chrome setup-panel check
+passed and confirmed the single setting is shown without starting OAuth. The
+broader T43.1 Chrome script stopped earlier at its unrelated existing artwork
+credit text assertion. No provider calls, live production configuration, or
+cloud resources were touched.
+
 ## Issue #186 bootstrap administrator versus admin contact (2026-10-26)
+
+Historical entry for the initial review; its two-setting recommendation was
+superseded by the follow-up product requirement above.
 
 Reviewed the auth service and deployment preflight. `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`
 is an authorization input: the first verified Google identity matching it is

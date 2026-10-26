@@ -106,9 +106,8 @@ class CloudAuthTests(TestCase):
                 "GOOGLE_OIDC_CLIENT_ID": CLIENT_ID,
                 "GOOGLE_OIDC_CLIENT_SECRET": "fixture-secret",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": ORIGIN,
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.org",
                 "SIGMA_CLOUD_AUTH_HOME": str(self.root),
-                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "access@example.org",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
                 "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
                 "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
                 "SIGMA_CLOUD_DEMO_AUDIT": str(
@@ -176,7 +175,7 @@ class CloudAuthTests(TestCase):
             status["user"],
             {"email": "admin@example.org", "role": "admin"},
         )
-        self.assertEqual(status["admin_contact_email"], "access@example.org")
+        self.assertEqual(status["admin_contact_email"], "admin@example.org")
         self.assertNotIn("grants", status)
         self.assertNotIn("denied_email", status)
         # Exercise the real verified Principal -> workspace dependency path,
@@ -247,19 +246,20 @@ class CloudAuthTests(TestCase):
         stale.cookies.set(cloud_auth.SESSION_COOKIE, raw)
         self.assertEqual(stale.get("/api/projects/recent").status_code, 401)
 
-    def test_admin_contact_does_not_grant_bootstrap_admin_role(self):
-        # The contact is intentionally distinct from the configured bootstrap
-        # identity. It is public contact metadata, never an authorization rule.
-        response = self.finish(email="access@example.org", subject="contact-subject")
+    def test_admin_contact_is_designated_admin_and_subject_binding_is_enforced(self):
+        response = self.finish(email="admin@example.org", subject="first-admin-subject")
         self.assertEqual(response.status_code, 303)
-        self.assertEqual(response.headers["location"], "/?access=denied")
-        self.assertNotIn(cloud_auth.SESSION_COOKIE, response.cookies)
-        self.client.cookies.set(
-            cloud_auth.DENIED_COOKIE, response.cookies[cloud_auth.DENIED_COOKIE]
+        self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)
+
+        second_context = TestClient(app)
+        second_client = second_context.__enter__()
+        self.addCleanup(second_context.__exit__, None, None, None)
+        denied = self.finish(
+            email="admin@example.org", subject="different-google-subject", client=second_client
         )
-        self.assertEqual(self.client.get("/api/cloud-auth/denied").status_code, 200)
-        self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
-        self.assertFalse((self.root / "workspaces").exists())
+        self.assertEqual(denied.status_code, 303)
+        self.assertEqual(denied.headers["location"], "/?access=denied")
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
@@ -702,7 +702,6 @@ class CloudAuthTests(TestCase):
                 "GOOGLE_OIDC_CLIENT_ID": "",
                 "GOOGLE_OIDC_CLIENT_SECRET": "",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": "",
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
                 "SIGMA_CLOUD_AUTH_HOME": "",
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
             },
@@ -713,21 +712,21 @@ class CloudAuthTests(TestCase):
             self.assertFalse(self.client.get("/api/cloud-auth/status").json()["enabled"])
             self.assertEqual(self.client.get("/api/research-tools").status_code, 200)
 
-    def test_local_status_reports_missing_bootstrap_without_exposing_credentials(self):
+    def test_local_status_reports_missing_admin_contact_without_exposing_credentials(self):
         with patch.dict(
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "false",
                 "GOOGLE_OIDC_CLIENT_ID": CLIENT_ID,
                 "GOOGLE_OIDC_CLIENT_SECRET": "local-test-secret",
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
             },
         ):
             response = self.client.get("/api/cloud-auth/status")
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertFalse(body["enabled"])
-        self.assertEqual(body["local_setup_missing"], ["SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"])
+        self.assertEqual(body["local_setup_missing"], ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"])
         self.assertNotIn("local-test-secret", response.text)
         self.assertNotIn("admin@example.org", response.text)
 

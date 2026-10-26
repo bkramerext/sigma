@@ -33,17 +33,17 @@ secret as the named Secret Manager secret
 `sigma-google-oauth-client-secret`, grant the runtime identity access only to
 that secret, and expose it to the backend through the existing secret-file
 path. Never put the secret in this repository, a PR, screenshots, logs, or
-chat. Configure `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` as the exact verified
-email for the authorized initial administrator and
-`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` as the approved invitation contact. The
+chat. Configure `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` as the exact verified
+email for the authorized initial administrator; this is also the approved
+invitation contact. The
 deployment sets `SIGMA_CLOUD_PUBLIC_ORIGIN` from the HTTPS hostname and enables
 hosted auth; do not enable local auth fallback.
 
 These are application requirements, not proof that the settings have been
 saved. The owner should verify the OAuth client project, type, origin, callback,
 consent-screen audience/test-user status, client ID association, secret
-availability, and bootstrap identity in their approved consoles. Do not export
-or share secret values.
+availability, and designated administrator identity in their approved
+consoles. Do not export or share secret values.
 
 ## Repeatable desktop procedure
 

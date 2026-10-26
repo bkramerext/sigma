@@ -49,7 +49,6 @@ class Config:
     client_id: str | None
     client_secret: str | None
     origin: str | None
-    bootstrap_email: str | None
     admin_contact_email: str | None
     database: Path | None
     error: str | None
@@ -108,7 +107,7 @@ def config() -> Config:
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().lower() in {"1", "true", "yes"}
     local = enabled and _local_mode()
     if not enabled:
-        return Config(False, None, None, None, None, None, None, None, False)
+        return Config(False, None, None, None, None, None, None, False)
     client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip() or None
     secret_error = False
     try:
@@ -117,18 +116,10 @@ def config() -> Config:
         client_secret = None
         secret_error = True
     origin = os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").strip().rstrip("/") or None
-    bootstrap = os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip()
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
     error = "Cloud authentication secret configuration is invalid." if secret_error else None
-    if (
-        not client_id
-        or not client_secret
-        or not origin
-        or not bootstrap
-        or not root
-        or not admin_contact
-    ):
+    if not client_id or not client_secret or not origin or not root or not admin_contact:
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
     try:
@@ -157,7 +148,6 @@ def config() -> Config:
     database = None
     if not error:
         try:
-            email = _normalize_email(bootstrap)
             admin_contact = _normalize_email(admin_contact)
             path = Path(root)
             if not path.is_absolute():
@@ -184,15 +174,13 @@ def config() -> Config:
                     _initialize(database)
                     current = database.stat()
                     _SCHEMA_READY.add((str(database), current.st_dev, current.st_ino))
-            bootstrap = email
         except (OSError, sqlite3.Error, ValueError):
-            error = "Cloud authentication storage or bootstrap configuration is invalid."
+            error = "Cloud authentication storage or admin configuration is invalid."
     return Config(
         True,
         client_id,
         client_secret,
         origin,
-        bootstrap or None,
         admin_contact or None,
         database,
         error,
@@ -296,14 +284,14 @@ def _authorization_in_db(
     db: sqlite3.Connection, cfg: Config, subject: str, email: str
 ) -> str | None:
     bound = db.execute(
-        "SELECT subject FROM bootstrap_subject WHERE email=?", (cfg.bootstrap_email,)
+        "SELECT subject FROM bootstrap_subject WHERE email=?", (cfg.admin_contact_email,)
     ).fetchone()
     if bound:
-        if bound["subject"] == subject and email == cfg.bootstrap_email:
+        if bound["subject"] == subject and email == cfg.admin_contact_email:
             return "admin"
-        if email == cfg.bootstrap_email:
+        if email == cfg.admin_contact_email:
             return None
-    elif email == cfg.bootstrap_email:
+    elif email == cfg.admin_contact_email:
         db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
         return "admin"
     explicit = db.execute(
@@ -397,7 +385,7 @@ def status(request: Request):
             for key in (
                 "GOOGLE_OIDC_CLIENT_ID",
                 "GOOGLE_OIDC_CLIENT_SECRET",
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
             )
             if not os.environ.get(key, "").strip()
         ]
@@ -827,7 +815,7 @@ def list_grants():
             if grant["allowance_usd"] is not None
             else _configured_default_allowance()
         )
-    return {"grants": grants, "sessions": users, "bootstrap_admin": cfg.bootstrap_email}
+    return {"grants": grants, "sessions": users, "bootstrap_admin": cfg.admin_contact_email}
 
 
 @router.post("/admin/grants")
@@ -906,8 +894,8 @@ def update_grants(body: GrantUpdatesRequest, request: Request):
             raise HTTPException(422, str(exc)) from None
         if update.kind == "domain" and update.role == "admin":
             raise HTTPException(422, "Domains cannot grant administrator access.")
-        if update.kind == "email" and value == cfg.bootstrap_email and update.role != "admin":
-            raise HTTPException(409, "The bootstrap administrator role cannot be changed here.")
+        if update.kind == "email" and value == cfg.admin_contact_email and update.role != "admin":
+            raise HTTPException(409, "The configured administrator role cannot be changed here.")
         key = (update.kind, value)
         if key in keys:
             raise HTTPException(422, "An authorization entry may be updated only once per save.")
@@ -942,8 +930,8 @@ def revoke_grant(kind: str, value: str, request: Request):
         normalized = _normalize_email(value) if kind == "email" else _normalize_domain(value)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
-    if kind == "email" and normalized == cfg.bootstrap_email:
-        raise HTTPException(409, "The bootstrap administrator cannot be revoked here.")
+    if kind == "email" and normalized == cfg.admin_contact_email:
+        raise HTTPException(409, "The configured administrator cannot be revoked here.")
     actor: Principal = request.state.cloud_principal
     with _db(cfg) as db:
         row = db.execute(

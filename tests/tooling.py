@@ -156,7 +156,7 @@ def check_ui() -> None:
     with patch.dict(
         "os.environ",
         {
-            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
             "GOOGLE_OIDC_CLIENT_ID": "",
             "GOOGLE_OIDC_CLIENT_SECRET": "",
         },
@@ -240,7 +240,7 @@ def check_local_google_startup() -> None:
         patch.dict(
             "os.environ",
             {
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "owner@gmail.com",
                 "GOOGLE_OIDC_CLIENT_ID": "client-id",
                 "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
                 "SIGMA_CLOUD_AUTH_ENABLED": "false",
@@ -267,12 +267,12 @@ def check_local_google_startup() -> None:
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
         "SIGMA_CLOUD_AUTH_LOCAL": "true",
         "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
-        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "owner@gmail.com",
     }.items():
         assert backend_env[key] == value
     assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
-    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" not in frontend_env
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
 
 
@@ -282,13 +282,13 @@ def check_local_google_setup_warning() -> None:
         {
             "GOOGLE_OIDC_CLIENT_ID": "client-id",
             "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
-            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
         },
         clear=True,
     ):
         warning = local_google_configuration_warning()
     assert warning is not None
-    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in warning
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in warning
     assert "source ~/.bashrc" in warning
     assert "server-secret" not in warning
     with patch.dict(
@@ -296,7 +296,7 @@ def check_local_google_setup_warning() -> None:
         {
             "GOOGLE_OIDC_CLIENT_ID": "client-id",
             "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
-            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "owner@gmail.com",
         },
         clear=True,
     ):
@@ -316,7 +316,7 @@ def check_partial_google_startup_warns_without_enabling_auth() -> None:
             {
                 "GOOGLE_OIDC_CLIENT_ID": "client-id",
                 "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
             },
             clear=True,
         ),
@@ -334,7 +334,7 @@ def check_partial_google_startup_warns_without_enabling_auth() -> None:
         redirect_stderr(warning_output),
     ):
         assert run_ui() == 0
-    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in warning_output.getvalue()
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in warning_output.getvalue()
     backend_env = launch.call_args_list[0].kwargs["env"]
     assert "SIGMA_CLOUD_AUTH_ENABLED" not in backend_env
     assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"

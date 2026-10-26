@@ -147,7 +147,7 @@ def compose(*args: str) -> subprocess.CompletedProcess[str]:
     command = [
         "env",
         "-u",
-        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
+        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
         COMPOSE,
         *COMPOSE_PREFIX,
         "--project-name",

@@ -37,7 +37,6 @@ SIGMA_RELEASE=local-check
 SIGMA_DOMAIN=localhost
 SIGMA_CADDY_SCHEME=http
 SIGMA_TLS_EMAIL=local@example.test
-SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL=admin@example.test
 SIGMA_CLOUD_ADMIN_CONTACT_EMAIL=admin@example.test
 GOOGLE_OIDC_CLIENT_ID=local-check.apps.googleusercontent.com
 SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE=$secret_google
@@ -59,7 +58,7 @@ SIGMA_HTTPS_BIND=127.0.0.1
 SIGMA_HTTPS_PORT=18443
 EOF
 
-compose=(env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "${compose_command[@]}" --project-name "$project" --env-file "$environment" -f "$root/deploy/compose.yaml")
+compose=(env -u SIGMA_CLOUD_ADMIN_CONTACT_EMAIL "${compose_command[@]}" --project-name "$project" --env-file "$environment" -f "$root/deploy/compose.yaml")
 cleanup() {
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
   while IFS= read -r restore_volume; do

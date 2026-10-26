@@ -203,7 +203,7 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("tooltip")).to_have_count(0)
     page.locator(".project-google-signin").click()
     expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_be_visible()
-    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in " ".join(
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in " ".join(
         page.locator(".google-setup-missing code").all_text_contents()
     )
     page.keyboard.press("Escape")

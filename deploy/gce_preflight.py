@@ -30,7 +30,6 @@ ALLOWED_ENV_KEYS = {
     "SIGMA_DOMAIN",
     "SIGMA_CADDY_SCHEME",
     "SIGMA_TLS_EMAIL",
-    "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
     "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
     "GOOGLE_OIDC_CLIENT_ID",
     "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
@@ -98,7 +97,6 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         "SIGMA_RELEASE",
         "SIGMA_DOMAIN",
         "SIGMA_TLS_EMAIL",
-        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
         "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
         "GOOGLE_OIDC_CLIENT_ID",
         "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
@@ -118,7 +116,6 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         return None, "Caddy scheme is invalid"
     for key in (
         "SIGMA_TLS_EMAIL",
-        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
         "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
     ):
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", values[key]):

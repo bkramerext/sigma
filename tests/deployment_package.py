@@ -51,6 +51,8 @@ def main() -> None:
     assert "SIGMA_RESEARCH_DOCKER_HOST" in compose
     assert "GOOGLE_OIDC_CLIENT_SECRET_FILE" in compose
     assert "SIGMA_CLOUD_AUTH_LOCAL" not in compose
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in compose
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" not in compose
     assert "SIGMA_SANDBOX_DOCKER_SOCKET" in compose
     assert cloud_runtime_check._require_rootless(["name=rootless"], False) is True
     assert cloud_runtime_check._require_rootless(["name=seccomp"], True) is False
@@ -96,7 +98,6 @@ def main() -> None:
             "SIGMA_CLOUD_AUTH_LOCAL": "false",
             "SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.example.test",
             "SIGMA_CLOUD_AUTH_HOME": str(auth_root),
-            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.test",
             "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.test",
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "GOOGLE_OIDC_CLIENT_SECRET_FILE": str(path),

@@ -303,7 +303,7 @@ Red should provide meaningful real-Chrome acceptance, not only screenshot inspec
 | Responsive | Real Chrome at desktop (e.g. 1440px viewport), 390px and 320px; no clipping, overlapping connector text or horizontal overflow |
 | Visual consistency | Home metallic copper remains the dominant design; internal agent blue stays subordinate and legible; reduced motion works |
 | Regression | Existing About intro, features, Close button, scrollability, headers, sign-in pill and Green's Outcome/Preferences changes untouched |
-| Build | Frontend typecheck/build and `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` pass |
+| Build | Frontend typecheck/build and `env -u SIGMA_CLOUD_ADMIN_CONTACT_EMAIL ./sigma test` pass |
 
 Capture **collapsed and expanded** screenshots at desktop and mobile, plus expanded strategy and tooltip states. Record the tested branch SHA and any genuine limitations. Use the current About dialog's actual viewport width, not a standalone page mockup.
 

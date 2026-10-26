@@ -35,8 +35,7 @@ services:
       SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces
       SIGMA_CLOUD_DEMO_AUDIT: /opt/sigma/demo/handshake-demo-audit.json
       SIGMA_CLOUD_PUBLIC_ORIGIN: https://${SIGMA_DOMAIN:?set SIGMA_DOMAIN}
-      SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL: ${SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL:?set initial administrator}
-      SIGMA_CLOUD_ADMIN_CONTACT_EMAIL: ${SIGMA_CLOUD_ADMIN_CONTACT_EMAIL:?set administrator contact}
+      SIGMA_CLOUD_ADMIN_CONTACT_EMAIL: ${SIGMA_CLOUD_ADMIN_CONTACT_EMAIL:?set designated admin and contact email}
       GOOGLE_OIDC_CLIENT_ID: ${GOOGLE_OIDC_CLIENT_ID:?set production OAuth client id}
       GOOGLE_OIDC_CLIENT_SECRET_FILE: /run/secrets/google_oidc_client_secret
       SIGMA_CLOUD_OPENAI_API_KEY_FILE: /run/secrets/cloud_openai_api_key

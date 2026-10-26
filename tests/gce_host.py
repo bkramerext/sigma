@@ -450,13 +450,19 @@ class GceHostToolingTests(unittest.TestCase):
             values, detail = gce_preflight._parse_env(path)
             self.assertIsNone(values)
             self.assertIn("unsupported", detail)
+            path.write_text(
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL=old-admin@example.org\n",
+                encoding="utf-8",
+            )
+            values, detail = gce_preflight._parse_env(path)
+            self.assertIsNone(values)
+            self.assertIn("unsupported", detail)
 
     def test_parser_accepts_the_nonsecret_production_environment_shape(self) -> None:
         values = {
             "SIGMA_RELEASE": "a" * 40,
             "SIGMA_DOMAIN": "sigma-research.duckdns.org",
             "SIGMA_TLS_EMAIL": "ops@example.org",
-            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.org",
             "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "ops@example.org",
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE": "/run/sigma-secrets/google-oauth-client-secret",

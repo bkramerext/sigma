@@ -74,11 +74,11 @@ def local_google_configuration_warning() -> str | None:
         os.environ.get(key, "").strip()
         for key in ("GOOGLE_OIDC_CLIENT_ID", "GOOGLE_OIDC_CLIENT_SECRET")
     )
-    if has_client_setting and not os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip():
+    if has_client_setting and not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip():
         return (
             "Google OAuth client settings were found, but local Google sign-in is disabled "
-            "because SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL is missing from this launch "
-            "environment. Export the operator's actual Gmail address before starting SIGMA; "
+            "because SIGMA_CLOUD_ADMIN_CONTACT_EMAIL is missing from this launch "
+            "environment. Export the designated administrator's actual Gmail address before starting SIGMA; "
             "if it is in ~/.bashrc, run `source ~/.bashrc` in the launching shell, then "
             "restart with `./sigma start --nav`."
         )
@@ -111,7 +111,7 @@ def run_ui(*, navigate: bool = False) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
-        local_google_auth = bool(os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip())
+        local_google_auth = bool(os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip())
         if local_google_auth:
             if not os.environ.get("GOOGLE_OIDC_CLIENT_ID") or not os.environ.get(
                 "GOOGLE_OIDC_CLIENT_SECRET"
@@ -120,10 +120,10 @@ def run_ui(*, navigate: bool = False) -> int:
                     "Local Google sign-in needs GOOGLE_OIDC_CLIENT_ID and "
                     "GOOGLE_OIDC_CLIENT_SECRET configured."
                 )
-            if not os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"):
+            if not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"):
                 raise RuntimeError(
-                    "Local Google sign-in needs SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "
-                    "set to the operator's actual Google account."
+                    "Local Google sign-in needs SIGMA_CLOUD_ADMIN_CONTACT_EMAIL "
+                    "set to the designated administrator's actual Google account."
                 )
         elif warning := local_google_configuration_warning():
             print(warning, file=sys.stderr, flush=True)
@@ -160,10 +160,6 @@ def run_ui(*, navigate: bool = False) -> int:
                     child_env.setdefault(
                         "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                     )
-                    child_env.setdefault(
-                        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
-                        child_env["SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"],
-                    )
                 else:
                     child_env.pop("SIGMA_CLOUD_AUTH_LOCAL", None)
                     child_env.pop("SIGMA_CLOUD_AUTH_ENABLED", None)
@@ -184,7 +180,6 @@ def run_ui(*, navigate: bool = False) -> int:
                                         "REFRESH_TOKEN",
                                         "ID_TOKEN",
                                         "GOOGLE_OIDC_CLIENT_SECRET",
-                                        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
                                         "SIGMA_CLOUD_AUTH_HOME",
                                         "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
                                     }
