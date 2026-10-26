@@ -28,7 +28,11 @@ link, responsive layout, and administrator feedback/invitation review.
 No production deployment, live email, Google/OAuth call, or paid provider call
 was performed. Hosted deployment requires `SIGMA_INVITATION_SMTP_USERNAME` and
 `SIGMA_INVITATION_SMTP_PASSWORD_FILE`; the approved credential is not
-provisioned or tested here.
+provisioned or tested here. Implementation was validated at
+`756ae45b866f353e307596f5770dcd37ad06aeaa` on `green/t81-feedback`. The branch
+is pushed; PR creation is pending a refreshed GitHub connection after the PR
+connector returned 401 `token_revoked` (`gh` is unavailable). Issue #81 remains
+open. See the [Green handoff](../messages/t81_green_feedback_privacy.txt).
 
 ## Issue #215 — request-toast expiry (2026-10-26)
 
