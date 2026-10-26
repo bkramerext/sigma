@@ -5143,3 +5143,34 @@ Assessment checks:
   additionally hit a `tests/research_sessions.py` shared worker-active lock;
   the focused auth/workspace/storage scenarios still passed.
 - `git diff --check`: PASS. No authentication source or T163 files changed.
+
+## T128 — live GCE host readiness attempt (2026-10-25)
+
+Fetched current `main` at `a335f3f` (merged T171) and followed
+[`T171_HOST_READINESS.md`](T171_HOST_READINESS.md). Live inspection was
+**BLOCKED**: `gcloud` is not installed/available, there is no GCE connector,
+`gcloud` access was unavailable, `sigma-gce-01` has no local DNS answer, and
+`ssh -o BatchMode=yes -o ConnectTimeout=8 sigma-gce-01 true` exited 255 with
+`Could not resolve hostname sigma-gce-01`. No host preflight or inspection ran.
+VM identity/OS/architecture/IP, mounted disk identity/options/permissions,
+rootless daemon/socket/isolation, installed systemd state, deployed container
+policy, and effective GCE ingress (including 80/443 and IAP SSH) therefore
+remain **BLOCKED/unknown**. No new live security defect could be assessed. The
+full checks, access prerequisites, exact next read-only commands, and launch
+gates are in [T128 live readiness](T128_LIVE_READINESS.md). No production
+credentials, installer, infrastructure changes, service start, reboot, or
+state-changing host test were used.
+
+`./sigma test` on current main completed with four failures: the three
+previously documented T128 assertions in `tests/deployment_package.py`,
+`tests/gce_host.py`, and `tests/host_monitor.py` still expect an explicit
+`srv-sigma\\x2dstate.mount` dependency, while the current unit uses
+`RequiresMountsFor=/srv/sigma-state`; these known coordinator-owned corrections
+were not duplicated. Frontend typecheck also failed because `tsc` is absent;
+production build was skipped after prior failures. Other listed scenarios,
+Ruff check/format, and Pyright (0 diagnostics) passed. No frontend dependency
+installation was performed. The packaged runtime check and real-browser host
+check were not run: the former writes a temporary project/runs jobs, and the
+latter requires the unavailable deployed host. No code correction was
+warranted by available evidence. Verification session elapsed time: about 10
+minutes from initial fetch to test completion.
