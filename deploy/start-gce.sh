@@ -22,9 +22,23 @@ fi
 chmod 0700 "$disk/auth"
 chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$disk/auth"
 export SIGMA_STATE_DISK_MOUNT="$disk"
-exec docker compose \
-  --project-name sigma \
-  --env-file "${SIGMA_DEPLOY_ENV_FILE:-/etc/sigma/deploy.env}" \
-  -f deploy/compose.yaml \
-  -f deploy/compose.gce.yaml \
-  up -d
+env_file=${SIGMA_DEPLOY_ENV_FILE:-/etc/sigma/deploy.env}
+if [ -L "$env_file" ] || [ ! -f "$env_file" ]; then
+  echo "Deployment environment file is missing or unsafe." >&2
+  exit 1
+fi
+release=$(sed -n 's/^SIGMA_RELEASE=//p' "$env_file")
+release_count=$(grep -c '^SIGMA_RELEASE=' "$env_file" || true)
+if [ "$release_count" -ne 1 ]; then
+  echo "SIGMA_RELEASE must be set exactly once; refusing to start." >&2
+  exit 1
+fi
+python3 /opt/sigma/current/deploy/release_image.py verify "$release"
+compose() {
+  docker compose --project-name sigma --env-file "$env_file" \
+    -f deploy/compose.yaml -f deploy/compose.gce.yaml "$@"
+}
+compose up -d --no-build
+python3 /opt/sigma/current/deploy/release_image.py record "$release" \
+  --backend-container "$(compose ps -q backend)" \
+  --frontend-container "$(compose ps -q frontend)"

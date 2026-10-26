@@ -96,6 +96,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | T43.1 third-pass operator acceptance fixes | [PR #63](https://github.com/bkramerext/sigma/pull/63) R4R; consolidated Google/ChatGPT pill polish and responsive Chrome checks passed; live operator OAuth round trip and third manual pass remain required |
 | T43.2 / issue #66 multi-account sign-in acceptance | [PR #166](https://github.com/bkramerext/sigma/pull/166) R4R; deterministic two-account API/Chrome coverage passed; distinct live identities and hosted OAuth remain unverified |
 | T172 pre-deployment authentication and account-isolation gate | Assessment **BLOCKED for production launch**; fixture API/Chrome checks passed, hosted OAuth and two-identity acceptance remain unverified · [assessment](T172_AUTH_READINESS.md) |
+| T129 | Release-image SHA correctness and reproducibility | Gray · offline implementation in progress; hosted deployment explicitly out of scope | — |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
 | Network-bound failure toast and safe recovery | Implemented in tested paths ([PR #1](https://github.com/bkramerext/sigma/pull/1)); broader error coverage remains to validate |
 | Live cross-strategy research validation | Open (T17.8) |
