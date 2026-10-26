@@ -496,6 +496,28 @@ async def research_session_view(session_id: str, path: str):
     return research_sessions.get_session(path, session_id)
 
 
+@app.post("/api/projects/research-sessions/mock")
+def mock_research_start_view(body: ResearchStartRequest, request: Request, scenario: str = "completed"):
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if (
+        not cloud_auth._mock_enabled(cfg)
+        or not isinstance(principal, cloud_auth.Principal)
+        or not principal.subject.startswith("mock:")
+    ):
+        raise HTTPException(404, "Not found")
+    account = cloud_auth._persist_user_state(cfg, principal)
+    allowance = cloud_auth._mock_allowance(cfg, principal.subject)
+    provider = cloud_auth._mock_provider(cfg, principal.subject)
+    if account["model_access"]["mode"] == "sponsored" and allowance["scenario"] == "exhausted":
+        scenario = "exhausted"
+    elif provider in {"unavailable", "error"}:
+        scenario = "provider-error"
+    if inspect_project(body.path).project.id != body.expected_project_id:
+        raise HTTPException(409, "Project changed; reopen it before starting research")
+    return research_sessions.mock_session(body.path, body.strategy_id, body.idempotency_key, scenario)
+
+
 @app.post("/api/projects/research-sessions/start")
 async def research_start_view(body: ResearchStartRequest):
     return await research_sessions.start_session(
