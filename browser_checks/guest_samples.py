@@ -225,11 +225,11 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(play_dialog).to_contain_text(
             "Sign in to run a research session. You can explore sample projects as a guest."
         )
-        expect(play_dialog.get_by_role("button", name="Sign in now.")).to_be_visible()
+        expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
         expect(play_dialog.get_by_role("button", name="Cancel")).to_be_visible()
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
-        play_dialog.get_by_role("button", name="Sign in now.").click()
+        play_dialog.get_by_role("button", name="Sign in now").click()
         expect(play_dialog).to_have_count(0)
         google_dialog = page.get_by_role("dialog", name="Connect your Google account")
         expect(google_dialog).to_be_visible()

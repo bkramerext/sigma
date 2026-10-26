@@ -2954,9 +2954,9 @@ function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => 
     <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
     <div className="settings-body">
       <p id="guest-research-message">Sign in to run a research session. You can explore sample projects as a guest.</p>
-      <div className="settings-actions">
-        <button ref={signIn} type="button" className="settings-submit guest-play-signin" onClick={startSignIn}>Sign in now.</button>
-        <button type="button" className="settings-cancel" onClick={dismiss}>Cancel</button>
+      <div className="settings-actions session-remove-confirm-actions">
+        <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in now</button>
+        <button type="button" className="text-view-link" onClick={dismiss}>Cancel</button>
       </div>
     </div>
   </dialog>;

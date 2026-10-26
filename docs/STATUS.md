@@ -6143,7 +6143,7 @@ open and not merged.
 
 Guest Play now opens an accessible “Ready to investigate?” dialog with the
 message “Sign in to run a research session. You can explore sample projects as a
-guest.” The “Sign in now.” action opens the existing Google sign-in pill, whose
+guest.” The “Sign in now” action opens the existing Google sign-in pill, whose
 Google link starts the established login workflow. “Cancel” and Escape dismiss
 the dialog and restore focus to Play. Guests can activate Play
 even when normal session-start preconditions would disable it, but that path only
