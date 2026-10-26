@@ -586,6 +586,13 @@ def _save_record(
 
         identifier = _metadata_id(str(record.get("id", "")), "execution")
         assert identifier
+        if record.get("id") != identifier:
+            raise ProjectError("Research execution identifier must be canonical")
+        if record.get("project_id") != inspect_project(bundle_path).project.id:
+            raise ProjectError("Research execution does not belong to this project")
+        filenames = [filename for filename, _, _ in artifacts]
+        if len(filenames) != len(set(filenames)):
+            raise ProjectError("Research output artifact filenames must be unique")
         member = _bundle_execution_member(identifier)
 
         def update(members: dict[str, bytes]) -> dict[str, bytes | None]:
