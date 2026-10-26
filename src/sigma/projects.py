@@ -935,6 +935,18 @@ def _update_project(
 ) -> ProjectView:
     view = inspect_project(value)
     path = Path(view.path)
+    if path.suffix == ".json":
+        if text_edit is not None:
+            raise ProjectError("Text-view editing is not yet supported for single-file projects")
+        from sigma.project_bundle import transform_file
+
+        def transform(previous: bytes) -> bytes:
+            project = _decode(json.loads(previous))
+            updated = update(project)
+            return _document(updated)
+
+        contents = transform_file(path, STATE, transform)
+        return ProjectView(str(path), _decode(json.loads(contents)))
     temporary: Path | None = None
     backup_temporary: Path | None = None
     try:
