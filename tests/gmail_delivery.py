@@ -57,9 +57,9 @@ class GmailDeliveryTests(TestCase):
                 message = message_from_bytes(base64.urlsafe_b64decode(raw))
                 self.assertEqual(message["From"], "zetacontinuation@gmail.com")
                 self.assertEqual(message["To"], "zetacontinuation@gmail.com")
-                decoded_payload = message.get_payload(decode=True)
-                assert isinstance(decoded_payload, bytes)
-                self.assertIn("applicant@example.com", decoded_payload.decode())
+                payload = message.get_payload(decode=True)
+                assert isinstance(payload, bytes)
+                self.assertIn("applicant@example.com", payload.decode())
                 return FakeResponse({"id": "message-id"})
 
             env = {

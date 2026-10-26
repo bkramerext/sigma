@@ -123,3 +123,38 @@ The exact final PR head, including this handoff update, is recorded in PR #242's
 description because a commit cannot contain its own object ID. R4R criteria
 have been met on the validated code head. No deployment, self-merge, or issue
 closure.
+
+T81 current-main reconciliation (2026-10-26)
+
+Reconciled with `origin/main` at
+`48fe9a1fee87a23c1af1665f1f30723ef39d9e97`, including merged PR #230
+(`T200: Fix hosted model discovery and sponsor session`). Merge conflicts were
+in `tests/tooling.py` and `tests/gmail_delivery.py`:
+- Retained #230's `check_partial_google_startup_remains_guest_without_admin`
+  coverage, including no warning, local guest mode, and backend-only OAuth
+  credential handling.
+- Retained T81's configured `--signin` test, which asserts local auto-admin and
+  keeps credentials out of the frontend.
+- Added the T81 missing-admin `--signin` friendly-error test, asserting no
+  launcher or server starts.
+- Kept the equivalent current-main bytes-narrowed Gmail payload assertion,
+  preserving Pyright safety.
+- `src/sigma/cloud_auth.py` merged automatically with #230; its current-main
+  sponsor/auth changes and existing Ruff formatter layout remain intact. No
+  manual conflict resolution was needed in that file.
+
+Verification after reconciliation:
+- `uv run --locked python tests/tooling.py`: PASS.
+- `uv run --locked python tests/gmail_delivery.py`: PASS (3 tests).
+- Focused Ruff check/format for `tests/tooling.py`, `tests/gmail_delivery.py`,
+  and `src/sigma/cloud_auth.py`: PASS.
+- `uv run --locked pyright`: 0 errors, warnings, or informations.
+- `./sigma test`: PASS, all scenarios, Ruff, formatting, Pyright, frontend
+  typecheck, and build (existing >500 kB chunk advisory).
+- Local real Chrome legal-page check: PASS for signed-out direct navigation
+  and refresh at `/privacy` and `/tos`, draft labels, About Privacy, and no
+  `/tos` app link.
+- No deployment, self-merge, issue closure, or provider calls.
+
+The exact merge-result PR head SHA and hosted CI results are recorded in PR #242
+after the reconciliation commit is pushed.

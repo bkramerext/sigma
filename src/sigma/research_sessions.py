@@ -2919,7 +2919,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 branch["status"] = "paused"
                 branch["current_action"] = "Interrupted after backend restart"
         record["current_action"] = "Paused after backend restart"
-        if record.get("mode") == "api_key" and any(
+        if (record.get("mode") == "api_key" or record.get("cloud_sponsored") is True) and any(
             step.get("failure_kind") == "interrupted" for step in record.get("steps", [])
         ):
             record["cost_status"] = "unavailable"
@@ -3546,16 +3546,18 @@ async def start_session(
                 raise ProjectError(
                     "No reviewed published price is available for this model; a cost-limited session cannot start"
                 )
+            from sigma.openai_connection import cloud_credential
+
             if cloud_workspaces.enabled() and (
-                credential["mode"] != "api_key"
+                not cloud_credential(credential)
                 or limits["maximum_estimated_cost_usd"] is None
                 or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
                 raise ProjectError(
-                    "Cloud research requires the server API credential, a configured per-session cost limit, and a model with a reviewed price."
+                    "Cloud research requires the configured sponsor credential, a per-session cost limit, and a model with a reviewed price."
                 )
             if limits.get("maximum_input_tokens_per_session") is not None and (
-                credential["mode"] != "api_key"
+                (credential["mode"] != "api_key" and not cloud_workspaces.enabled())
                 or limits.get("maximum_estimated_cost_usd") is None
                 or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
@@ -3652,9 +3654,13 @@ async def start_session(
                 "token_usage_status": "pending",
                 "tokens_reserved": 0,
                 "maximum_estimated_cost_usd": limits["maximum_estimated_cost_usd"],
-                "estimated_cost_usd": 0.0 if credential["mode"] == "api_key" else None,
+                "cloud_sponsored": cloud_workspaces.enabled(),
+                "estimated_cost_usd": 0.0
+                if credential["mode"] == "api_key" or cloud_workspaces.enabled()
+                else None,
                 "cost_status": "available"
-                if credential["mode"] == "api_key" and config["model"] in TOKEN_PRICES_PER_MILLION
+                if (credential["mode"] == "api_key" or cloud_workspaces.enabled())
+                and config["model"] in TOKEN_PRICES_PER_MILLION
                 else "unavailable",
                 "cycle": 0,
                 "current_question": (
@@ -6743,9 +6749,8 @@ async def _portfolio_role_call(
                 _save(path, record)
                 return False
             if (
-                record.get("mode") == "api_key"
-                and record.get("maximum_estimated_cost_usd") is not None
-            ):
+                record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+            ) and record.get("maximum_estimated_cost_usd") is not None:
                 if not isinstance(hard_ledger, dict):
                     reserve = _reserve_cost(record, context, role)
                 current_cost = record.get("estimated_cost_usd")
@@ -7105,7 +7110,7 @@ async def _portfolio_role_call(
                 record["terminal_reason"] = "Hard request budget could not be settled."
                 record["message"] = budget_error
             _refresh_token_accounting(record)
-            if record.get("mode") == "api_key":
+            if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 if step.get("cost_reserve") is not None:
                     record["estimated_cost_reserved_usd"] = max(
@@ -8179,7 +8184,9 @@ async def _worker(session_id: str, path: str) -> None:
                     return
                 request_audit = _role_input_audit(record, role, context, credential.get("token"))
                 maximum_cost = record.get("maximum_estimated_cost_usd")
-                if record.get("mode") == "api_key" and maximum_cost is not None:
+                if (
+                    record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+                ) and maximum_cost is not None:
                     reserve = _reserve_cost(record, context, role)
                     current_estimate = record.get("estimated_cost_usd")
                     if (
@@ -8269,7 +8276,7 @@ async def _worker(session_id: str, path: str) -> None:
                 record["terminal_reason"] = "Hard request budget could not be settled."
                 record["message"] = budget_error
             _refresh_token_accounting(record)
-            if record.get("mode") == "api_key":
+            if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 if estimate is None:
                     record["cost_status"] = "unavailable"

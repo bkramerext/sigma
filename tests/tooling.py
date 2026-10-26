@@ -304,16 +304,21 @@ def check_local_google_setup_warning() -> None:
         assert local_google_configuration_warning() is None
 
 
-def check_guest_startup_without_admin_contact() -> None:
+def check_partial_google_startup_remains_guest_without_admin() -> None:
     backend, frontend = Mock(), Mock()
     backend.poll.return_value = None
     frontend.poll.return_value = None
     owner = MagicMock()
     owner.__enter__.return_value.replacement_request.return_value = None
+    warning_output = StringIO()
     with (
         patch.dict(
             "os.environ",
-            {},
+            {
+                "GOOGLE_OIDC_CLIENT_ID": "client-id",
+                "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
+            },
             clear=True,
         ),
         patch("sigma.ui.Instance", return_value=owner),
@@ -327,14 +332,18 @@ def check_guest_startup_without_admin_contact() -> None:
         patch("sigma.ui.ready", return_value=True),
         patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
         patch("sigma.ui.stop_servers"),
+        redirect_stderr(warning_output),
     ):
         assert run_ui() == 0
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in warning_output.getvalue()
     backend_env = launch.call_args_list[0].kwargs["env"]
     assert backend_env["SIGMA_CLOUD_AUTH_ENABLED"] == "true"
     assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
     assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
-    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in backend_env
-    assert "GOOGLE_OIDC_CLIENT_SECRET" not in backend_env
+    assert backend_env["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] == ""
+    assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+    frontend_env = launch.call_args_list[1].kwargs["env"]
+    assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
 
 
 def check_signin_without_admin_contact_fails_before_launch() -> None:
@@ -431,7 +440,7 @@ def main() -> None:
         check_ui()
         check_local_google_startup()
         check_local_google_setup_warning()
-        check_guest_startup_without_admin_contact()
+        check_partial_google_startup_remains_guest_without_admin()
         check_signin_without_admin_contact_fails_before_launch()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):

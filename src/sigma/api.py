@@ -117,16 +117,14 @@ async def require_cloud_inference_binding(
     view = inspect_project(path)
     if expected_project_id is not None and expected_project_id != view.project.id:
         raise HTTPException(404, "Project not found or access denied.")
-    if expected_binding != "cloud_service_api_key" or (require_project and not expected_project_id):
+    credential = await auth_context()
+    if expected_binding != credential["identity"] or (require_project and not expected_project_id):
         raise HTTPException(
             403, "Cloud inference requires the current sponsored account and project binding."
         )
-    credential = await auth_context()
-    if (
-        credential["identity"] != "cloud_service_api_key"
-        or credential["mode"] != "api_key"
-        or not credential["token"]
-    ):
+    from sigma.openai_connection import cloud_credential
+
+    if not cloud_credential(credential):
         raise HTTPException(503, "Sponsored cloud inference is not configured.")
 
 
