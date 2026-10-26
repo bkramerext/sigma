@@ -376,7 +376,7 @@ def main() -> None:
             assert startup.returncode == 0, startup.stdout
             docker_args = docker_log.read_text(encoding="utf-8").splitlines()
             assert docker_args[docker_args.index("--env-file") + 1] == "/etc/sigma/deploy.env"
-            assert docker_args[-2:] == ["up", "-d"]
+            assert docker_args[-3:] == ["up", "--detach", "--no-build"]
             corrupted = base / "corrupted-disk"
             shutil.copytree(root, corrupted)
             corrupted.chmod(0o700)

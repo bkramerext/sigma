@@ -27,4 +27,4 @@ exec docker compose \
   --env-file "${SIGMA_DEPLOY_ENV_FILE:-/etc/sigma/deploy.env}" \
   -f deploy/compose.yaml \
   -f deploy/compose.gce.yaml \
-  up -d
+  up --detach --no-build

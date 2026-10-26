@@ -39,6 +39,47 @@ are actual preflight PASS, current persistent disk identity/permissions,
 rootless daemon and container inspect, target runtime probes, and approved
 reboot recovery. Installer failure can leave partial host state and needs
 inspection before retry.
+## T173 — Pre-deployment release smoke test and rollback rehearsal (2026-10-26)
+
+Started from current `main` at `b33e9945ec2c18d149ad5e8a45b2da6fa70849b9`
+in an isolated worktree. Reviewed T129/T130/T135/T136 and their deployment,
+public-endpoint, backup/restore, rollback and monitoring implementations. No
+coordinator-owned T129 integration or T163 conflict work was changed.
+
+Found that Compose had release-tagged images and build contexts together, so
+missing target images could be built implicitly from the currently staged
+checkout. Added `deploy/build-release-images.sh`: requires exact full SHA and a
+clean tree, builds both backend/frontend staging tags before promoting final
+release tags, and labels each image with its source revision. Production
+startup now uses `--no-build`. Docker base images remain digest-pinned and
+application inputs lockfile-pinned; bit-for-bit image identity across builders
+is not claimed.
+Runbook now gives a first-deployment checklist, explicit go/no-go gates, DNS/
+HTTPS requirements and rollback triggers. Full evidence and limits are in
+[`T173 release rehearsal`](T173_RELEASE_REHEARSAL.md).
+
+The temporary Git/fake-Docker rehearsal passed: simulated frontend build exit
+17 caused the build gate to fail without announcing an activatable release;
+dirty source was rejected before Docker. No GCE, live DNS, production
+credential, public endpoint, or paid provider was contacted. Existing rollback
+guard tests and state backup/restore fixture coverage were included in
+validation. Live host image build, health failure, rollback, before/after data
+comparison, actual snapshot/restore, and DNS/TLS remain **BLOCKED** pending the
+provisioned VM and owner-authorized live evidence.
+
+`bash deploy/validate-local.sh` also passed against packaged containers with
+real Chrome: saved project/strategy, 5 sessions, Outcome and report downloads,
+Tectonic/PDF output, backend recreation, fresh-volume restore with preserved
+IDs/hashes, and user isolation all passed. OAuth and inference were skipped;
+temporary Compose resources were cleaned up. This does not test GCE, live
+persistent-disk mounts, rollback helper execution, GCE snapshots or public TLS.
+
+Final `./sigma test` exits 1 only at the three stale systemd mount expectations
+in deployment package, GCE host and monitor tests; coordinator T163 integration
+owns those. The storage scenario and new release rehearsal pass. Ruff check/
+format, Pyright and frontend typecheck pass. Frontend build passes separately
+after the runner skips it due to those earlier test failures. Full details are
+in the T173 rehearsal assessment.
 
 ## T43.2 / issue #66 multi-account sign-in acceptance (2026-10-25)
 

@@ -251,12 +251,57 @@ restore the 14-point retention invariant.
 
 ## 4. Application release / update
 
-1. Confirm candidate Git SHA, reviewed PR, verified tests/browser evidence, and known migrations. Ensure backup/restore point is current.
-2. Stage new checkout and approved images; inspect pinned image versions and any schema/data migrations. If the sandbox image source changed, rebuild the rootless Python/Sage images.
-3. Announce maintenance; stop production via `sudo systemctl stop sigma.service` before a consistent data snapshot (see next section).
-4. Update `SIGMA_RELEASE` in protected `/etc/sigma/deploy.env` and stage corresponding images/code. Do not change state volume mapping or delete Compose volumes.
-5. Run preflight; start via `sudo systemctl start sigma.service`; verify auth, existing users, project/session persistence, bounded research, exports and HTTPS.
-6. If verification fails, use rollback below. Record SHA, downtime, tests and outcome.
+### First production deployment release gate
+
+1. Confirm a reviewed PR merged to `main`, full candidate SHA, clean source
+   checkout at exactly that SHA, passing `./sigma test`, required browser
+   acceptance, known migration behavior, and reviewed pinned base images and
+   lockfiles. On the host, record current SHA and preserve the prior release
+   checkout and images. Do not build from a moving branch.
+2. Confirm `/srv/sigma-state` is the expected attached disk and a fresh `READY`
+   snapshot exists. For first deployment, verify its contents read-only with
+   `deploy/verify-state-restore.py` on an isolated fixture or recovery host;
+   production acceptance still requires a separate-disk live restore drill.
+   Backups and restore verification are hard go/no-go gates.
+3. Stage the exact source commit and run
+   `sudo /opt/sigma/current/deploy/build-release-images.sh FULL_40_CHAR_SHA`.
+   This requires a clean checkout whose `HEAD` exactly matches the supplied
+   SHA, builds both application images under `-staging` tags, and promotes
+   both to final SHA tags only after both builds succeed. Each image is labeled
+   with that revision. A failed build is a stop: no final candidate tags are
+   promoted; leave the existing `SIGMA_RELEASE` unchanged and do not restart.
+   Dockerfiles pin base images by digest and application dependencies by
+   lockfiles; this fixes build inputs but does not promise byte-identical image
+   digests across builder environments.
+4. Announce downtime. Stop `sigma.service` before taking a consistent snapshot
+   when one is needed. Keep the persistent disk mounted and never move, empty,
+   recreate, or format its bind path. Preserve old release images and env.
+5. Atomically update only `SIGMA_RELEASE` in root-owned mode-0600
+   `/etc/sigma/deploy.env` after both images exist. Run
+   `/usr/local/libexec/sigma/gce_preflight.py --json`; require exit 0. Start
+   with `sudo systemctl start sigma.service`. Startup uses `--no-build`, so
+   missing prebuilt images or failing healthchecks fail closed instead of
+   building from a checkout implicitly.
+6. Require backend and frontend health `healthy`, edge `running` and healthy,
+   authenticated API readiness, valid public HTTPS/DNS and redirect, saved
+   project/session/artifact visibility, user/workspace separation, and
+   accounting/reservation continuity. A local rehearsal or local TLS fixture
+   cannot satisfy the public DNS/HTTPS gate.
+7. On any startup healthcheck timeout, unhealthy service, wrong SHA, missing
+   state mount, failed HTTPS/API, or persistent-data mismatch: stop the
+   cutover, preserve logs and the state disk, and trigger the guarded code
+   rollback below only after confirming a verified recovery point and schema
+   compatibility. If data integrity is uncertain or schema compatibility is
+   unknown, stop writes and use an isolated restore investigation; do not try
+   code rollback as data recovery. Record SHA, downtime, evidence, and outcome.
+
+**Stop/go:** Go only when all six runtime services/endpoint/data gates above
+pass and a known-good release plus verified recovery point remain available.
+Any FAIL, unknown schema compatibility, missing backup, missing image, failed
+preflight, startup timeout, invalid certificate, DNS mismatch, or lost project
+or accounting record is STOP. Rollback triggers are candidate build failure
+(no activation), startup/preflight/health failure, public endpoint failure, or
+data mismatch; retain both releases, env records, logs and disk for review.
 
 ## 5. Daily state-disk backup
 
