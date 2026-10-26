@@ -1154,6 +1154,8 @@ Set these deployment environment values to enable cloud authentication:
 | `SIGMA_CLOUD_AUTH_HOME=/var/lib/sigma-auth` | Absolute, service-owned private directory; mode 0700. The SQLite database is mode 0600. |
 | `SIGMA_CLOUD_DEMO_AUDIT=/opt/sigma/cloud-demo/handshake-demo-audit.json` | Absolute path to the curated, server-owned, read-only Project Audit v2 snapshot served to guests. It is separate from private project storage and required for the public Demo. |
 
+The current hosted Compose configuration also requires `SIGMA_INVITATION_SMTP_USERNAME` and `SIGMA_INVITATION_SMTP_PASSWORD_FILE`; deployment startup fails if either is absent. The password file must contain the owner-approved authenticated SMTP credential. Invitation notification delivery has not been verified until that credential is provisioned and exercised. Never put the credential in the repository or browser configuration.
+
 This setting supplies the public invitation contact. On a fresh auth database,
 the first verified sign-in matching the configured address establishes the
 initial administrator and binds its email to a Google subject. Once present,

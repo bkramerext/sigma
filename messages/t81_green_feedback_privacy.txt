@@ -1,0 +1,38 @@
+T81 remaining feedback/privacy increment — Green handoff
+
+Branch: `green/t81-feedback`
+Base: current `main`, including PR #227 (`e62d808c78573dc2e6289fcbf4b461a2ad739c28`)
+Validated implementation head: `756ae45b866f353e307596f5770dcd37ad06aeaa`
+PR: not created. The GitHub connector rejected creation because its OAuth token was revoked (401 `token_revoked`); `gh` CLI is unavailable. The pushed branch is ready at:
+https://github.com/bkramerext/sigma/tree/green/t81-feedback
+Create-PR URL:
+https://github.com/bkramerext/sigma/pull/new/green/t81-feedback
+
+Implemented:
+- Added `feedback_requests` and rate-limit tables to the existing private cloud-auth SQLite database.
+- Public same-origin feedback POST accepts 10–4,000 characters and optional normalized contact email. Extra browser identity fields are rejected. If a valid Google session exists, subject/email are derived from that verified server session. Signed-out requests remain anonymous.
+- Rate limiting permits five feedback records per 24 hours per verified subject or anonymous browser token. Feedback success and recoverable failure states are shown; failure leaves the form available. Feedback content is not sent through AI or email delivery.
+- Admin-only feedback list/status APIs use the existing cloud-auth admin gate and write status changes to the audit table. Admins can review and close submissions. Non-admin GET/PUT and anonymous review attempts are rejected.
+- Feedback is discoverable in About for hosted signed-in users and on signed-out Guest and Access Not Granted surfaces. The Request Invitation action remains in its existing Access Not Granted location.
+- Added `/privacy`, which renders without querying auth status, and links at feedback/invitation collection points. The page is labeled proposed v1.0 / awaiting owner approval. Proposed wording and implementation audit are in `docs/PRIVACY_NOTICE_DRAFT_v1.md`.
+- Updated deployment guidance: hosted Compose requires `SIGMA_INVITATION_SMTP_USERNAME` and `SIGMA_INVITATION_SMTP_PASSWORD_FILE`; startup fails without them. No SMTP credential was created or used.
+
+Verification on implementation head `756ae45b866f353e307596f5770dcd37ad06aeaa`:
+- `./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production build. Existing >500 kB bundle advisory remains.
+- 27 cloud-auth tests passed, including feedback validation, optional contact, ignored/spoofed identity, durable persistence, verified session attribution, five-per-day rate limit, origin checks, and anonymous/non-admin access denial.
+- Real Chrome passed public `/privacy` access without auth API calls; signed-out and signed-in feedback success; simulated 503 with form retained; responsive layout; Access Not Granted invitation position and privacy link; Demo navigation; and admin feedback/invitation review.
+- No production deployment, Google/OAuth exchange, live SMTP/email, or paid provider call occurred.
+
+Proposed notice submission for Brian:
+Please review `docs/PRIVACY_NOTICE_DRAFT_v1.md` before it is published as operative public policy. The page is visibly labeled as a draft. The notice makes no unverified retention, deletion, encryption-at-rest, or provider-policy guarantees.
+
+Unresolved owner decisions listed in the draft:
+- Legal/operator identity, privacy contact, and access/correction/deletion request process.
+- Applicable jurisdictions and audience.
+- Actual hosted region and application/host/edge/provider log fields and retention.
+- Whether disk snapshots are active and actual configured retention/deletion behavior.
+- Intended retention/deletion policy for feedback, invitations, auth/audit, usage, workspaces, artifacts, and backups.
+- Applicable current Google/OpenAI/SMTP/hosting terms.
+- Approval of optional feedback contact storage and the five-per-24-hour limit.
+
+Issue #81 remains open. No deployment or merge was performed. PR creation needs a refreshed authenticated GitHub connection; the attempted connector operation failed with a revoked token, and no authenticated GitHub CLI is installed.

@@ -1,5 +1,39 @@
 # SIGMA status
 
+## T81 remaining feedback and privacy increment (2026-10-26)
+
+Continues T81 after invitation PR #225 merged at
+`f45ada5aac3380a5b02e6d7727f0790e90e4a38e`, starting from current `main` at
+`e62d808` (including PR #227). Added durable feedback records in the private
+cloud-auth SQLite database, optional validated contact email, signed-in
+verified-account attribution, a five-per-24-hour per-account/browser rate
+limit, and admin-only review/status updates. Feedback is not sent to AI or mail
+providers. Feedback entry is available in About for hosted signed-in users and
+on signed-out guest/denied screens; Request Invitation remains on Access Not
+Granted.
+
+Added an unauthenticated `/privacy` page linked at feedback and invitation
+collection points. It identifies itself as proposed version 1.0 and remains
+subject to Brian's approval before publication as operative policy. The
+proposed text and repository evidence are in
+[PRIVACY_NOTICE_DRAFT_v1.md](PRIVACY_NOTICE_DRAFT_v1.md). Open retention, deletion,
+contact, jurisdiction, infrastructure-log, backup, and provider-policy
+questions are listed there; no unsupported guarantees are made.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build. Real Chrome passed public privacy
+access without auth calls, signed-out and signed-in feedback success, retained
+feedback after a simulated 503, denied-screen invitation placement/privacy
+link, responsive layout, and administrator feedback/invitation review.
+No production deployment, live email, Google/OAuth call, or paid provider call
+was performed. Hosted deployment requires `SIGMA_INVITATION_SMTP_USERNAME` and
+`SIGMA_INVITATION_SMTP_PASSWORD_FILE`; the approved credential is not
+provisioned or tested here. Implementation was validated at
+`756ae45b866f353e307596f5770dcd37ad06aeaa` on `green/t81-feedback`. The branch
+is pushed; PR creation is pending a refreshed GitHub connection after the PR
+connector returned 401 `token_revoked` (`gh` is unavailable). Issue #81 remains
+open. See the [Green handoff](../messages/t81_green_feedback_privacy.txt).
+
 ## Issue #215 — request-toast expiry (2026-10-26)
 
 Request-error toasts now expire after 60 seconds, slide downward before removal,
@@ -6038,3 +6072,22 @@ accounting and durable admission reservations. The production API fixture passes
 in both API-key and ChatGPT SSE modes, including completed six-call sessions,
 saved Outcomes/exports, budget exhaustion, failure holds and owner isolation.
 No live provider inference was used for these tests.
+## Issue #228 — Sponsorship allowance column alignment (2026-10-26)
+
+Renamed the authorized-users column to **Sponsorship Allowance** and centered its
+heading, currency/input unit, and effective-allowance text on the same column
+axis. Preserved the four-column widths, copper/navy colors, and existing
+horizontal scroll behavior. No allowance or backend behavior changed.
+
+Real Chrome check `uv run --with playwright python
+browser_checks/issue228_sponsorship_allowance.py` passed at 1440px and 390px.
+It verifies the exact heading, absence of the old heading, column-center
+alignment, effective amount, horizontal scrolling at 390px, and no page-level
+horizontal overflow. Screenshots: `/tmp/sigma-issue228-admin-1440.png` and
+`/tmp/sigma-issue228-admin-390.png`. `./sigma test` passed, including Ruff,
+formatting, Pyright (0 diagnostics), frontend typecheck, and production build;
+the build reports the existing >500 kB chunk advisory. The test used only
+deterministic local fixtures; no provider calls or costs occurred. See the
+[issue #228 handoff](../messages/issue228_gray_sponsorship_allowance.txt).
+Implementation is in [PR #232](https://github.com/bkramerext/sigma/pull/232),
+open against `main`, current and mergeable, and not merged.

@@ -431,6 +431,152 @@ class CloudAuthTests(TestCase):
         self.assertEqual(response.status_code, 409)
         deliver.assert_not_called()
 
+    def test_feedback_persists_optional_contact_and_verified_account_for_admin_review(self):
+        response = self.finish(email="admin@example.org", subject="feedback-admin")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, response.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        visitor_context = TestClient(app)
+        visitor = visitor_context.__enter__()
+        self.addCleanup(visitor_context.__exit__, None, None, None)
+        submitted = visitor.post(
+            "/api/cloud-auth/feedback",
+            json={
+                "message": "Please make the saved session list easier to scan.",
+                "contact_email": " Visitor@Example.org ",
+                "subject": "forged-subject",
+                "account_email": "forged@example.org",
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(submitted.status_code, 422)
+        accepted = visitor.post(
+            "/api/cloud-auth/feedback",
+            json={
+                "message": "Please make the saved session list easier to scan.",
+                "contact_email": " Visitor@Example.org ",
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json()["status"], "received")
+        cookie = accepted.cookies[cloud_auth.FEEDBACK_RATE_COOKIE]
+        self.assertIn("HttpOnly", accepted.headers["set-cookie"])
+        self.assertIn("Secure", accepted.headers["set-cookie"])
+        self.assertIn("SameSite=lax", accepted.headers["set-cookie"])
+        with cloud_auth._db(cloud_auth.config()) as db:
+            stored = db.execute(
+                "SELECT * FROM feedback_requests WHERE id=?", (accepted.json()["id"],)
+            ).fetchone()
+            rate_row = db.execute("SELECT key_hash FROM feedback_rate_limits").fetchone()
+        self.assertEqual(stored["contact_email"], "visitor@example.org")
+        self.assertIsNone(stored["subject"])
+        self.assertIsNone(stored["account_email"])
+        self.assertNotEqual(rate_row["key_hash"], cookie)
+        self.assertEqual(visitor.get("/api/cloud-auth/admin/feedback").status_code, 401)
+        inbox = self.client.get("/api/cloud-auth/admin/feedback")
+        self.assertEqual(inbox.status_code, 200)
+        row = inbox.json()["feedback"][0]
+        self.assertEqual(row["id"], accepted.json()["id"])
+        self.assertEqual(row["contact_email"], "visitor@example.org")
+        self.assertIsNone(row["account_email"])
+        updated = self.client.put(
+            f"/api/cloud-auth/admin/feedback/{row['id']}",
+            json={"status": "reviewed"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(
+            visitor.put(
+                f"/api/cloud-auth/admin/feedback/{row['id']}",
+                json={"status": "closed"},
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            401,
+        )
+
+    def test_feedback_records_only_verified_session_identity_and_rate_limits(self):
+        signed_in = self.finish(email="admin@example.org", subject="feedback-member")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        for index in range(6):
+            response = self.client.post(
+                "/api/cloud-auth/feedback",
+                json={"message": f"Feedback message {index} with enough characters."},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(response.status_code, 429 if index == 5 else 200)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            rows = db.execute("SELECT subject,account_email FROM feedback_requests").fetchall()
+            buckets = db.execute("SELECT COUNT(*) AS n FROM feedback_rate_limits").fetchone()["n"]
+        self.assertEqual(len(rows), 5)
+        self.assertTrue(all(row["subject"] == "feedback-member" for row in rows))
+        self.assertTrue(all(row["account_email"] == "admin@example.org" for row in rows))
+        self.assertEqual(buckets, 1)
+
+    def test_feedback_validates_fields_and_requires_same_origin(self):
+        for payload in (
+            {"message": "short"},
+            {"message": "A message with enough characters.", "contact_email": "bad-email"},
+            {"message": "A message with enough characters.", "identity": "admin@example.org"},
+        ):
+            response = self.client.post(
+                "/api/cloud-auth/feedback", json=payload, headers={"Origin": ORIGIN}
+            )
+            self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            self.client.post(
+                "/api/cloud-auth/feedback",
+                json={"message": "A message with enough characters."},
+                headers={"Origin": "https://attacker.example"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/cloud-auth/feedback", json={"message": "A message with enough characters."}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/feedback").status_code, 401)
+
+    def test_non_admin_cannot_review_or_read_feedback(self):
+        signed_in = self.finish(email="admin@example.org", subject="feedback-review-admin")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        grant = self.client.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "email", "value": "member@example.org", "role": "member"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(grant.status_code, 200)
+        member_context = TestClient(app)
+        member = member_context.__enter__()
+        self.addCleanup(member_context.__exit__, None, None, None)
+        member_login = self.finish(
+            email="member@example.org", subject="feedback-review-member", client=member
+        )
+        member.cookies.set(
+            cloud_auth.SESSION_COOKIE, member_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        submitted = member.post(
+            "/api/cloud-auth/feedback",
+            json={"message": "Please clarify the recent projects panel."},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(submitted.status_code, 200)
+        self.assertEqual(member.get("/api/cloud-auth/admin/feedback").status_code, 403)
+        self.assertEqual(
+            member.put(
+                f"/api/cloud-auth/admin/feedback/{submitted.json()['id']}",
+                json={"status": "closed"},
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            403,
+        )
+
     def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)

@@ -140,7 +140,7 @@ COMMAND_DETAILS = {
     ),
     "start": (
         "Start or safely restart this checkout's browser UI.",
-        "./sigma start --navigate",
+        "./sigma start --navigate --signin",
         "Uses SIGMA local configuration and the configured UI ports; `--navigate` opens a browser tab.",
     ),
     "shutdown": (
@@ -268,6 +268,9 @@ def main() -> None:
         commands, "start", help="Start or safely restart this checkout's browser UI"
     )
     ui_command.add_argument(
+        "--signin", action="store_true", help="Start with a local admin identity from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+    )
+    ui_command.add_argument(
         "--navigate",
         "--nav",
         dest="navigate",
@@ -331,7 +334,7 @@ def main() -> None:
             sys.exit(2)
         sys.exit(0)
     if args.command == "start":
-        sys.exit(run_ui(navigate=args.navigate))
+        sys.exit(run_ui(navigate=args.navigate, signin=args.signin))
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:

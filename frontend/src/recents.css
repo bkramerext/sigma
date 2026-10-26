@@ -103,6 +103,18 @@
 .home-cloud-denied .cloud-denied-actions .cloud-text-button { border-color: transparent; background: transparent; text-decoration: underline; }
 .cloud-auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; color: #d5dce2; background: radial-gradient(ellipse at 48% 40%, #192432, #07111c 68%); }
 .cloud-auth-card, .cloud-access-dialog { width: min(100%, 520px); padding: 32px; border: 1px solid #a96548; border-radius: 9px; background: linear-gradient(145deg, #16212c, #0b141e); box-shadow: 0 24px 65px #0008; }
+.cloud-auth-card .about-feedback-disclosure { margin-top: 16px; border: 1px solid #70543a; border-radius: 6px; background: #101820; }
+.cloud-auth-card .about-feedback-disclosure > summary { padding: 10px 12px; color: #e0aa8b; cursor: pointer; }
+.cloud-auth-card .about-feedback-disclosure .about-disclosure-content { padding: 0 12px 12px; }
+.cloud-auth-card .about-feedback-form { display: grid; gap: 10px; }
+.cloud-auth-card .about-feedback-form label { display: grid; gap: 5px; color: #e2c49e; font-size: 12px; }
+.cloud-auth-card .about-feedback-form label span { color: #aeb9c4; }
+.cloud-auth-card .about-feedback-form textarea, .cloud-auth-card .about-feedback-form input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 9px 10px; border: 1px solid #59636e; border-radius: 4px; background: #080f17; color: #e5ebf0; font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+.cloud-auth-card .about-feedback-form textarea { resize: vertical; }
+.cloud-auth-card .about-feedback-form :focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.cloud-auth-card .about-feedback-form a, .cloud-auth-card > p a { color: #e0aa8b; text-underline-offset: 3px; }
+.cloud-auth-card .about-feedback-form [role="alert"] { color: #f1aaa0; }
+.cloud-auth-card .about-feedback-form [role="status"] { color: #c7dfc7; }
 .cloud-auth-card h1, .cloud-access-dialog h2 { margin: 6px 0 12px; color: #e5ad8f; font: 400 32px/1.2 Georgia, serif; }
 .cloud-auth-card p, .cloud-access-dialog p { color: #bcc5cc; line-height: 1.6; }
 .cloud-auth-kicker { margin: 0; color: #d8a17f !important; text-transform: uppercase; letter-spacing: .13em; font: 10px/1.5 Inter, sans-serif; }
@@ -113,6 +125,10 @@
 .cloud-text-button { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .cloud-secondary-button:disabled { opacity: .55; cursor: default; }
 .cloud-auth-footnote { margin-top: 23px; font-size: 12px; }
+.admin-feedback-table .admin-feedback-message { min-width: 250px; max-width: 460px; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
+.admin-feedback-table .admin-feedback-message small { display: block; margin-top: 6px; color: #aeb9c4; font-weight: 400; }
+.admin-feedback-table td { vertical-align: top; }
+.privacy-notice-card { box-sizing: border-box; }
 @media (max-width: 560px) { .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } }
 
 .home-page .home-samples .sample-type-group { border-bottom: 1px solid #a965483d; }
@@ -212,6 +228,9 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .admin-usage-table { min-width: 840px; margin-top: 8px; }
 .admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 8px 9px; border-bottom: 1px solid #a9654844; vertical-align: middle; }
 .admin-grants-table thead th, .admin-usage-table thead th { color: #e0b387; font-size: 10px; font-weight: 600; letter-spacing: .04em; }
+.admin-grants-table .admin-allowance-heading, .admin-grants-table .admin-allowance-cell { text-align: center; }
+.admin-grants-table .admin-allowance-cell .admin-allowance-input { justify-content: center; }
+.admin-grants-table .admin-allowance-cell small { text-align: center; }
 .admin-grants-table tbody th, .admin-usage-table tbody th { color: #f0eee8; font-weight: 500; }
 .admin-grants-table tbody th small, .admin-grants-table td small { display: block; margin-top: 4px; color: #aeb9c4; font-size: 10px; }
 .admin-grants-table .admin-entry-value { overflow-wrap: anywhere; }

@@ -35,8 +35,14 @@ if [ "$release_count" -ne 1 ]; then
 fi
 python3 /opt/sigma/current/deploy/release_image.py verify "$release"
 compose() {
-  docker compose --project-name sigma --env-file "$env_file" \
-    -f deploy/compose.yaml -f deploy/compose.gce.yaml "$@"
+  if grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
+    docker compose --project-name sigma --env-file "$env_file" \
+      -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+      -f deploy/compose.gmail.yaml "$@"
+  else
+    docker compose --project-name sigma --env-file "$env_file" \
+      -f deploy/compose.yaml -f deploy/compose.gce.yaml "$@"
+  fi
 }
 compose up -d --no-build
 python3 /opt/sigma/current/deploy/release_image.py record "$release" \
