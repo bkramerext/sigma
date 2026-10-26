@@ -183,3 +183,7 @@ snapshot IAM and metadata credential isolation; successful `READY` GCE backup
 and isolated separate-disk restore; public DNS, firewall, Caddy certificate
 and external endpoint checks; and owner-authorized hosted OAuth/workspace/
 research acceptance. None is implied by these local fixture results.
+
+## Coordinator follow-up (2026-10-26)
+
+The initial rehearsal correctly identified that PR #161 could tag images built from the previously checked-out source with the requested candidate SHA. The coordinator integration candidate replaces that path with the repository's existing archive-based `deploy/release_image.py build` operation, then verifies source labels and records immutable image IDs/digests after healthy startup. The focused rehearsal was updated to assert that the requested SHA is passed to the archive builder. This is a code-level correction awaiting CI and integration review, not live GCE evidence; production remains NO-GO until CI passes and host/OAuth/backup/network acceptance is observed.
