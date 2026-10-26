@@ -4993,3 +4993,45 @@ Started from current `main` at T146 merge `13a63c470e42d5d1fb478ba32641d291f117e
 The baseline's turn-2 false missing-input critique is attributable to the T146 evaluation harness: the frozen task includes all eligibility and precedence data and was sent in turn 1, but the preserved stateless turn-2 request contained only the prior assistant answer and the turn instruction, with no task payload or prior-response chain. The harness caused missing context; the response is not evidence of spontaneous model failure while the full task was present. T146 evidence remains untouched. No benchmark-specific harness change was made; future comparisons must correct and freeze/hash context continuity before separately authorized use.
 
 [Full diagnosis](evaluations/increment_23/diagnosis.md). Verification: `./sigma test` ran the full offline lifecycle through Ruff, format, Pyright (0 diagnostics), and frontend typecheck; the three existing T128 deployment assertions failed because they expect `srv-sigma\\x2dstate.mount` while current `main` uses `RequiresMountsFor=/srv/sigma-state`. The suite skipped frontend production build after those failures. The research-session scenario passed, including the unresolved-stop/achieved-objective regression. `git diff --check` and all 12 frozen T146 manifest hashes passed. No browser workflow changed. No provider calls or Cloud operations occurred.
+
+## Issue #163 — Local UI regressions (2026-10-26)
+
+Started from current `main` at `537c198` and reproduced the reported create
+contract defect before edits: `/api/projects/create` returned HTTP 422
+`extra_forbidden` when sent `show_advanced_outcome_details`. The New Project
+dialog had omitted the field, so that payload mismatch was hidden and the
+Outcome preference could not be set on creation. The create request model and
+shared project creation service now accept and persist the value; the browser
+form forwards its current preference. API/service regression coverage verifies
+true survives disk reload and the omitted/default value remains false.
+
+The disabled local ChatGPT connection was caused by gating every local project
+header on Google authorization regardless of whether local auth was enabled.
+Repository product guidance says local mode does not require an administrator
+account, while configured local OIDC continues to require sign-in. The gate now
+checks the explicit auth-enabled status. Default local ChatGPT UI and the
+existing configured local Google sign-in browser scenario pass; hosted access
+gating was not changed.
+
+The project render loop came from rebuilding the active strategy array on every
+render. That invalidated `ResearchWorkspace` memoized values and repeatedly
+published new process-control callbacks to the parent. The derived list is now
+memoized against the project view and preview order. Real Chrome confirmed no
+React maximum-update-depth error and exercised strategy disabling/session
+confirmation controls. Repeating that Chrome scenario against unmodified
+`537c198` failed with the page execution context being destroyed during the
+fixture project-create/open sequence, matching the reported unstable render
+cycle; the updated branch passes the complete sequence.
+
+Verification: `tests/project_creation.py`, Chrome checks
+`browser_checks/project_create_contract.py`,
+`browser_checks/t43_1_strategy_selection.py`, and the existing local OAuth
+browser check `browser_checks/t23_1_google_signin.py` passed. The production
+frontend build passed separately (Vite retains its existing >500 kB chunk
+advisory). `./sigma test` passed its offline checks, Ruff check/format, Pyright
+(0 diagnostics), and frontend typecheck, but failed the three known T128 mount
+contract assertions in `tests/deployment_package.py`, `tests/gce_host.py`, and
+`tests/host_monitor.py`: they expect `srv-sigma\\x2dstate.mount`, while current
+main uses `RequiresMountsFor=/srv/sigma-state`. Its frontend build step was
+skipped after those failures and was run separately. No live OAuth, paid
+provider, cloud, or production operation was performed.

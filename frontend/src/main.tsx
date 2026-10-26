@@ -2397,6 +2397,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         ai_model: values.ai_model,
         reasoning_effort: values.reasoning_effort,
         difficulty: values.difficulty,
+        show_advanced_outcome_details: values.show_advanced_outcome_details,
       };
       const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
       if (!initial) {
@@ -3156,6 +3157,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     expandStrategies(); setGenerating(true);
     requestAnimationFrame(() => document.getElementById('proposal-seed')?.focus());
   }
+  const strategies = useMemo(() => {
+    if (!view) return [];
+    const project = view.project;
+    const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
+    return (previewOrder ?? project.active_order).map(id => byId.get(id)!);
+  }, [view, previewOrder]);
   if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
     <p>Close this project to choose another directory.</p>
@@ -3164,7 +3171,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const introMaximum = Math.max(160, Math.min(Math.round(window.innerHeight * .75), 800));
   const clampIntro = (height: number) => Math.max(120, Math.min(introMaximum, Math.round(height)));
   const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
-  const strategies = (previewOrder ?? project.active_order).map(id => byId.get(id)!);
   function forkFromFindings(session: ResearchSession) {
     if (!enterMode('new-strategy')) return;
     const parent = byId.get(session.strategy_id);
@@ -3412,7 +3418,7 @@ function App() {
 type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
-type CloudFunding = { target: 'local' | 'hosted'; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -3805,7 +3811,7 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
-  const funding: CloudFunding = { target: status?.target ?? 'local', budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated };
+  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;

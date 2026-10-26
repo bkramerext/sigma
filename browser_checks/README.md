@@ -359,7 +359,11 @@ SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 uv run --with playwright python bro
 ```
 
 The project-creation check intercepts the create request and verifies the
-frontend sends only fields accepted by the strict API; it creates no project.
-The About check verifies the AI-assisted mathematical formatting description
-and dialog fit at desktop and narrow mobile widths. All APIs are mocked and no
-provider calls are made.
+frontend sends the Outcome preference in its successful create payload. It
+also confirms the default local ChatGPT control is enabled; the existing
+`t23_1_google_signin.py` check covers the configured local OAuth gate. The
+`t43_1_strategy_selection.py` check also guards the Project workspace against
+React's maximum-update-depth loop while exercising live strategy/session
+controls. The About check verifies the AI-assisted mathematical formatting
+description and dialog fit at desktop and narrow mobile widths. API behavior is
+fixture-backed; no real credentials or provider calls are used.

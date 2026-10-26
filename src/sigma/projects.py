@@ -648,6 +648,7 @@ def initialize_project(
     ai_model: str | None = None,
     reasoning_effort: str = "high",
     difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
 ) -> ProjectView:
     mode = _research_mode(research_mode)
     selected_difficulty = _difficulty(difficulty)
@@ -681,6 +682,7 @@ def initialize_project(
             ai_model=resolved_model,
             reasoning_effort=reasoning_effort,
             difficulty=selected_difficulty,
+            show_advanced_outcome_details=show_advanced_outcome_details,
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -1077,6 +1079,7 @@ def create_project(
     ai_model: str | None = None,
     reasoning_effort: str = "high",
     difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
 ) -> ProjectView:
     """Reserve a unique project name beneath the configured root."""
     title, name = _project_name(title)
@@ -1091,7 +1094,14 @@ def create_project(
             destination.mkdir(mode=0o700)  # Never overwrite files or existing research.
             reserved = True
             view = initialize_project(
-                destination, title, problem, mode, ai_model, reasoning_effort, difficulty
+                destination,
+                title,
+                problem,
+                mode,
+                ai_model,
+                reasoning_effort,
+                difficulty,
+                show_advanced_outcome_details,
             )
             from sigma.recents import record_access
 
