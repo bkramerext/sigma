@@ -577,15 +577,17 @@ def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
 
 
 def test_local_limits_remain_unmodified(root: Path) -> None:
-    legacy = cloud_research.evaluation_session_limits(
-        {
-            "research_rounds": 1,
-            "model_calls": 1,
-            "session_duration_minutes": 30,
-            "maximum_estimated_cost_usd": None,
-        }
-    )
-    assert legacy["model_calls"] == 2 and legacy["research_rounds"] == 1
+    for user_cost_limit in (None, 0.01, 1.0):
+        sponsored = cloud_research.evaluation_session_limits(
+            {
+                "research_rounds": 1,
+                "model_calls": 1,
+                "session_duration_minutes": 30,
+                "maximum_estimated_cost_usd": user_cost_limit,
+            }
+        )
+        assert sponsored["maximum_estimated_cost_usd"] == cloud_research.MAX_SESSION_SPEND_USD
+        assert sponsored["model_calls"] == 2 and sponsored["research_rounds"] == 1
     project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
     limits = {
         "research_rounds": 5,

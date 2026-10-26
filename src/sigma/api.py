@@ -418,7 +418,11 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             result = await task
             yield "data: " + json.dumps({"type": "complete", "result": result}) + "\n\n"
         except ProjectError as exc:
-            yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\n\n"
+            event: dict[str, str | int] = {"type": "error", "error": str(exc)}
+            provider_calls_attempted = getattr(exc, "provider_calls_attempted", None)
+            if type(provider_calls_attempted) is int:
+                event["provider_calls_attempted"] = provider_calls_attempted
+            yield "data: " + json.dumps(event) + "\n\n"
         finally:
             if not task.done():
                 task.cancel()

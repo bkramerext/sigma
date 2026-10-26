@@ -53,6 +53,12 @@ _CITATION_LIKE = re.compile(
 )
 
 
+class PaperSnapshotConflict(ProjectError):
+    """A changed evidence snapshot rejected before this attempt used a provider."""
+
+    provider_calls_attempted = 0
+
+
 class PaperClaim(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^C[1-9][0-9]{0,2}$")
@@ -362,6 +368,10 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
         )
     for session in data.get("research_sessions", []):
         session_data = dict(session)
+        # elapsed_seconds is a live UI projection. It changes while a session
+        # is paused even though its saved research is unchanged, so it cannot
+        # participate in the paper evidence fingerprint.
+        session_data.pop("elapsed_seconds", None)
         artifacts = session_data.pop("artifacts", [])
         sources.append(
             {"id": f"session:{session.get('id')}", "kind": "session", "data": session_data}
@@ -2030,7 +2040,7 @@ async def generate(
             raise ProjectError(config["message"])
         package, snapshot_hash = _snapshot(path)
         if expected_snapshot_sha256 and expected_snapshot_sha256 != snapshot_hash:
-            raise ProjectError(
+            raise PaperSnapshotConflict(
                 "Research changed after paper preflight. Review the updated snapshot and start again."
             )
         if progress:
