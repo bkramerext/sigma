@@ -1907,11 +1907,18 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     project_path_value = record.get("project_path")
     session_id = record.get("id")
     if isinstance(project_path_value, str) and isinstance(session_id, str):
-        target = Path(project_path_value) / "research-sessions" / f"{session_id}.json"
         try:
-            if not target.is_symlink() and target.is_file():
-                research_artifact_bytes = target.stat().st_size
-        except OSError:
+            if Path(project_path_value).suffix == ".json":
+                from sigma.project_bundle import read_file
+
+                research_artifact_bytes = len(
+                    read_file(project_path_value, f"research-sessions/{session_id}.json")
+                )
+            else:
+                target = Path(project_path_value) / "research-sessions" / f"{session_id}.json"
+                if not target.is_symlink() and target.is_file():
+                    research_artifact_bytes = target.stat().st_size
+        except (OSError, ValueError):
             pass
     storage_label = (
         f"{len(artifacts)} finding(s) · {python_storage_label} · "
