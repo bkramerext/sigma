@@ -96,3 +96,23 @@ Run `./sigma --help` for CLI commands. Offline project and repository checks are
 ## About development
 
 SIGMA is built through human-directed, AI-assisted software engineering. Brian sets product direction and evaluates the running application; ChatGPT and Codex contribute design, implementation, testing, and review. [WOLF](WOLF.md) describes this collaboration and distinguishes SIGMA's research agents from the engineering process used to build it.
+
+## Local mock-auth walkthrough
+
+The mock-auth selector is a development-only tool for manually inspecting the hosted identity UI without Google OAuth. It must only be used with a loopback development server. It is not an authentication method for deployment and does not emulate Google's identity verification or OpenAI inference.
+
+For a dedicated local checkout, set these variables in that checkout's ignored .env file:
+
+```dotenv
+SIGMA_CLOUD_AUTH_ENABLED=true
+SIGMA_CLOUD_AUTH_LOCAL=true
+SIGMA_MOCK_AUTH=1
+SIGMA_CLOUD_PUBLIC_ORIGIN=http://127.0.0.1:5173
+SIGMA_CLOUD_AUTH_HOME=/absolute/path/to/a/private/local/mock-auth-state
+```
+
+Use an absolute, user-owned directory with permissions restricted to the current user. Start SIGMA using the usual local development command and open http://127.0.0.1:5173. The Home page and project view show **MOCK AUTH · LOCAL ONLY** when the server confirms that all gates are satisfied.
+
+Available identities are Guest, Member A, Member B, Administrator, and Uninvited. Selecting one replaces the current server-side session. Guest clears authenticated access; Uninvited opens the existing access-denied/invitation screen. Mock invitation requests are recorded locally and do not send email.
+
+**Limitations:** this is not a full hosted-service simulator. Mock users do not receive hosted sponsorship eligibility, and model/provider actions are not globally stubbed by this feature. Do not start research sessions or select a provider expecting inference to be simulated or free. Funding/allowance exhaustion and provider-failure walkthroughs remain future work. Never set these variables on a public or deployed server.
