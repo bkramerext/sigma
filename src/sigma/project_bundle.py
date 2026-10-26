@@ -230,3 +230,66 @@ def write_file(bundle_path: str | Path, relative_path: str, contents: bytes) -> 
                 os.close(directory_fd)
         finally:
             staged.unlink(missing_ok=True)
+
+
+def list_files(bundle_path: str | Path) -> tuple[str, ...]:
+    """Enumerate all persisted members of a single-file project."""
+    path = Path(bundle_path)
+    if path.is_symlink() or not path.is_file():
+        raise BundleError("Project JSON must be a regular file")
+    try:
+        members = _decode(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError) as exc:
+        raise BundleError("Cannot inspect project bundle") from exc
+    return tuple(sorted(members))
+
+
+def delete_file(bundle_path: str | Path, relative_path: str) -> None:
+    """Remove a member without losing unrelated session or evidence files.
+
+    The project document is mandatory and cannot be removed.
+    """
+    path = Path(bundle_path)
+    if relative_path == "project.json":
+        raise BundleError("Cannot remove the project document")
+    if (
+        not isinstance(relative_path, str)
+        or not relative_path
+        or chr(92) in relative_path
+        or relative_path.startswith("/")
+        or any(part in ("", ".", "..") for part in relative_path.split("/"))
+    ):
+        raise BundleError("Unsafe bundle path")
+    if path.is_symlink() or not path.is_file():
+        raise BundleError("Project JSON must be a regular file")
+    lock = path.with_name("." + path.name + ".write.lock")
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(lock, flags, 0o600)
+    with os.fdopen(fd, "a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        if path.is_symlink() or not path.is_file():
+            raise BundleError("Project JSON is no longer a regular file")
+        members = _decode(json.loads(path.read_text(encoding="utf-8")))
+        if relative_path not in members:
+            raise BundleError("Project member does not exist")
+        del members[relative_path]
+        payload = {
+            "format": FORMAT, "version": VERSION,
+            "files": {name: base64.b64encode(data).decode("ascii")
+                      for name, data in sorted(members.items())},
+        }
+        fd, name = tempfile.mkstemp(prefix=".sigma-delete-", dir=path.parent)
+        staged = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as output:
+                output.write((json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(staged, path)
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            staged.unlink(missing_ok=True)
