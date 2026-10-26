@@ -201,6 +201,15 @@ async def check(path):
             )
             assert no_suggestion.status_code == 200 and no_suggestion.json()["markdown"] is None
             assert (path / "project.json").read_bytes() == before_suggestion
+            suggestion_output["markdown"] = (
+                "## Existing direction\n\nRepeat the already saved strategy."
+            )
+            duplicate = api.post(
+                "/api/projects/strategy-suggestions",
+                json={"path": str(path), "expected_project_id": inspect_project(path).project.id},
+            )
+            assert duplicate.status_code == 200 and duplicate.json()["markdown"] is None
+            assert (path / "project.json").read_bytes() == before_suggestion
             assert (
                 api.get(
                     "/api/projects/continuations/proposal",
@@ -239,7 +248,7 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(calls) == 5
+        assert len(calls) == 6
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",

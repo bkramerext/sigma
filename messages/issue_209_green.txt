@@ -25,7 +25,7 @@ Requirement disposition:
 - MET by source inspection: nested placement, no dialog/Close action, safe
   Markdown rendering, shared clipboard button, explicit provider request,
   project/account binding, bounded context, disabled strategy inclusion,
-  duplicate suppression, null/no-new-strategy response, and no strategy
+  duplicate suppression (including disabled strategies), null/no-new-strategy response, and no strategy
   mutation. Tests verify two-session synthesis/evidence inclusion, disabled
   strategy input, no-new-strategy, nonmutation, and legacy proposal route 404.
 - MET by real Chrome with the strategy suggestion endpoint mocked: button
@@ -39,7 +39,9 @@ Requirement disposition:
 
 Checks actually run:
 - `uv run --locked --no-sync python tests/proposals.py` — passed on final code;
-  deterministic mock transport only.
+  deterministic mock transport only. It checks two-session context, disabled
+  strategy inclusion, duplicate suppression, a null/no-new-strategy result,
+  provider failures, and project nonmutation.
 - Focused Ruff check and format, Pyright (0 diagnostics), frontend typecheck,
   and `npm --prefix frontend run build` — passed.
 - Final `./sigma test` run — all scenarios passed; command exited 1 at
