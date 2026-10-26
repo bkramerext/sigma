@@ -1,5 +1,38 @@
 # SIGMA status
 
+## Issue #217 administrator contact (2026-10-26)
+
+Updated the public administrator contact example to
+`zetacontinuation@gmail.com`. The application already centralizes invitation
+requests through `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`; the denied-access link
+continues to build a `mailto:` draft from the API's configured contact. The
+About dialog and privacy copy contain no administrator contact address, and
+there are no administrator-address email templates or static contact links to
+update. Generic example addresses in deterministic auth/deployment fixtures and
+the unrelated Caddy TLS operator contact remain unchanged.
+
+The current auth implementation had tied the public contact value to the
+non-revocable bootstrap identity. It now keeps an established administrator's
+email and Google subject binding from the auth database authoritative after a
+contact change. New installations still use the configured address to establish
+their first administrator. A regression test changes the contact after binding,
+confirms the original admin session/role and management identity remain intact,
+and confirms the new contact cannot claim admin. No OAuth settings, account
+grants, secrets, or stored identity data were changed.
+
+Verification: `tests/cloud_auth.py` passed (18 tests). Real Chrome confirmed the
+configured contact in the invitation `mailto:` link and no horizontal overflow
+at 1280px and 390px. `npm --prefix frontend run typecheck` and
+`npm --prefix frontend run build` passed (the build retains its existing large
+chunk advisory). `./sigma test` ran all scenario checks successfully, then
+exited 1 at the unchanged `browser_checks/model_availability.py` Ruff B023
+closure diagnostic and its existing format differences; Pyright and frontend
+typecheck passed, and the runner skipped its build after the earlier failure.
+The separate build passed. The broader `browser_checks/t22_access_denied.py`
+stopped at its earlier expectation for an “Explore Demo” guest link, absent in
+the current guest Home UI; the focused invitation Chrome check passed. No paid
+provider calls, production configuration changes, or live OAuth occurred.
+
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
 Replaced the “Continue from Saved Evidence” control with an explicitly

@@ -261,6 +261,34 @@ class CloudAuthTests(TestCase):
         self.assertEqual(denied.headers["location"], "/?access=denied")
         self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
 
+    def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
+        response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
+        self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)
+        os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
+
+        admin_client_context = TestClient(app)
+        admin_client = admin_client_context.__enter__()
+        self.addCleanup(admin_client_context.__exit__, None, None, None)
+        admin_client.cookies.set(
+            cloud_auth.SESSION_COOKIE, response.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        status = admin_client.get("/api/cloud-auth/status").json()
+        self.assertEqual(status["admin_contact_email"], "zetacontinuation@gmail.com")
+        self.assertEqual(status["user"], {"email": "admin@example.org", "role": "admin"})
+        self.assertEqual(
+            admin_client.get("/api/cloud-auth/admin/grants").json()["bootstrap_admin"],
+            "admin@example.org",
+        )
+
+        denied_context = TestClient(app)
+        denied_client = denied_context.__enter__()
+        self.addCleanup(denied_context.__exit__, None, None, None)
+        denied = self.finish(
+            email="zetacontinuation@gmail.com", subject="new-contact-subject", client=denied_client
+        )
+        self.assertEqual(denied.headers["location"], "/?access=denied")
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)

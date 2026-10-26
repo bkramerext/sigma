@@ -1,0 +1,35 @@
+GREEN R4R — issue #217 administrator contact
+
+Branch: `green/issue-217-admin-contact`
+Base: current `main` at `2847c5a`
+PR: pending creation
+
+Changed the centralized public contact value in `deploy/env.example` to
+`zetacontinuation@gmail.com`. The denied-access invitation uses the existing
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` status value to build its mailto link. Audited
+About/privacy copy, documentation, templates, and contact links; no separate
+administrator address is present in About/privacy or email templates. Updated
+the operator/deployment docs that previously treated the contact as an identity
+setting.
+
+The existing implementation used the contact value as the non-revocable
+bootstrap administrator key. It now resolves an established bootstrap email
+from the auth database and keeps its bound Google subject stable when the
+contact changes. The contact still establishes the initial admin on a fresh
+auth database. Regression coverage proves the old admin retains access and the
+new contact cannot claim admin after a contact update. No OAuth configuration,
+grants, secrets, stored identity, account roles, or permissions were migrated.
+
+Checks actually run:
+
+- `uv run python tests/cloud_auth.py` — passed, 18 tests.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 uv run --with playwright python browser_checks/t22_access_denied.py` — stopped at its pre-existing assertion expecting an “Explore Demo” link on the anonymous Home view; the current Home view shows a sign-in prompt.
+- One-off real Chrome check against the current UI — passed; confirmed `mailto:zetacontinuation@gmail.com`, invitation subject/body, and no horizontal overflow at 1280px and 390px. Screenshot: `/tmp/sigma-issue217-contact-mobile.png`.
+- `./sigma test` — all scenario checks passed; command exited 1 at pre-existing Ruff findings in unchanged `browser_checks/model_availability.py` (B023 loop closure and formatting). Pyright and frontend typecheck passed. The harness skipped the frontend build after Ruff failed.
+- `npm --prefix frontend run build` — passed; existing large-chunk advisory only.
+- `git diff --check` — passed.
+
+No paid provider calls, OAuth sign-in, production configuration edits, or cloud
+operations occurred. Copper/black stylesheets and responsive rules were not
+changed. Full `./sigma test` remains blocked only by the unrelated Ruff findings
+above.
