@@ -3,7 +3,7 @@ GRAY R4R handoff — GitHub issue #228
 PR: https://github.com/bkramerext/sigma/pull/232 (open; do not merge).
 Branch: gray/admin-sponsorship-allowance
 Base: main at 913b208f5534807329dea38b44f997f36c77c6c4
-Head: dc731a67e69551c1a1935e71e5ce9b925c547be5 (includes clean merge of the
+Head: 729c5e4ceb38deef694d9426f2325fe9f6347825 (includes clean merge of the
 base advance after the original implementation commit).
 
 Changed the Authorized users heading to the exact text “Sponsorship Allowance.”
@@ -22,6 +22,8 @@ Verification:
 - `./sigma test` — PASS, including Ruff, format check, Pyright (0 diagnostics),
   frontend typecheck, and production build. Build has the existing >500 kB
   chunk advisory.
+- After cleanly integrating the current `main` advance, the real-Chrome check
+  and complete `./sigma test` were rerun and passed on the updated branch.
 - `git diff --check` and Ruff check/format for changed files — PASS.
 
 The browser UI and API data were deterministic local fixtures. No provider

@@ -6026,3 +6026,5 @@ formatting, Pyright (0 diagnostics), frontend typecheck, and production build;
 the build reports the existing >500 kB chunk advisory. The test used only
 deterministic local fixtures; no provider calls or costs occurred. See the
 [issue #228 handoff](../messages/issue228_gray_sponsorship_allowance.txt).
+Implementation is in [PR #232](https://github.com/bkramerext/sigma/pull/232),
+open against `main`, current and mergeable, and not merged.
