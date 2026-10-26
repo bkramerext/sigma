@@ -5179,3 +5179,40 @@ passed. The frontend production build was skipped after earlier failures. No
 real-browser check was run because no browser workflow changed; fixture and
 Chrome evidence remains the previously recorded T172 result, not this hosted
 configuration review. `git diff --check` is recorded in the handoff.
+
+## T129 — Release-image SHA correctness and reproducibility (2026-10-26)
+
+Confirmed the release mismatch: production Compose selected image tags from
+`SIGMA_RELEASE` while retaining a `build:` context rooted at the mutable
+`/opt/sigma/current` checkout. `start-gce.sh` ran Compose `up` without
+`--no-build`, so startup could build working-tree contents and still apply the
+operator's requested SHA tag. The operator runbook did not bind image contents
+to that SHA. Rollback changes the same SHA pin and preserves existing state,
+preflight, restart and health gates.
+
+Added `deploy/release_image.py`: it accepts only a full lowercase commit SHA,
+requires Git to resolve that exact object, exports the commit tree via
+`git archive`, and builds both `linux/amd64` images from the exported context
+with an OCI source-revision label. Production startup verifies both image
+labels before Compose, uses `up --no-build`, and records the source SHA,
+container IDs, actual immutable image IDs and available repository digests
+under `/var/lib/sigma/releases/SHA.json`. Rollback candidates without matching
+provenance labels fail closed. Deterministic tests cover a dirty tree with a
+different HEAD, unresolved/malformed SHA, source-label mismatch, and digest
+recording. The storage startup fixture now supplies a deterministic release
+pin and stubs the verifier.
+
+Focused checks passed: `tests/release_image.py` (3 tests), `tests/storage.py`,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, `bash -n
+deploy/start-gce.sh`, and `git diff --check`. `./sigma test` ran the full
+suite but exited 1 on three pre-existing systemd dependency assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`;
+they expect `srv-sigma\\x2dstate.mount`, while current `main` uses
+`RequiresMountsFor=/srv/sigma-state`. All other scenarios passed. Frontend
+production build was skipped by the suite after those failures. No live cloud
+operation, deployment, paid provider call, or browser workflow was performed.
+
+Offline implementation is R4R in [PR #182](https://github.com/bkramerext/sigma/pull/182);
+the full evidence handoff is in [T129 Gray handoff](../messages/t129_gray_release_sha.txt).
+Hosted release behavior and rollback with actual production images remain
+unverified.

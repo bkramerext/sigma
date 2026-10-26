@@ -21,6 +21,7 @@ def main() -> None:
     caddy = (ROOT / "deploy/Caddyfile").read_text(encoding="utf-8")
     gce_compose = (ROOT / "deploy/compose.gce.yaml").read_text(encoding="utf-8")
     startup = (ROOT / "deploy/start-gce.sh").read_text(encoding="utf-8")
+    release = (ROOT / "deploy/release_image.py").read_text(encoding="utf-8")
     systemd = (ROOT / "deploy/systemd/sigma.service").read_text(encoding="utf-8")
 
     for digest in (
@@ -70,6 +71,8 @@ def main() -> None:
     assert "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
     assert "After=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
     assert 'mountpoint -q "$disk"' in startup
+    assert "release_image.py verify" in startup and "up -d --no-build" in startup
+    assert "org.opencontainers.image.revision" in release
     assert 'chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$disk/auth"' in startup
     assert 'chmod 0700 "$disk/auth"' in startup
     assert "gcloud" not in backend.lower() and "OPENAI_API_KEY=" not in compose
