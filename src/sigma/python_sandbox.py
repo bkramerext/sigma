@@ -648,8 +648,16 @@ def _save_record(
             if len(encoded_record) > MAX_ARTIFACT_BYTES:
                 raise ProjectError("Research execution artifact exceeded its storage limit")
             changes[member] = encoded_record
-            total = sum(len(value) for name, value in members.items() if name not in changes)
-            total += sum(len(value) for value in changes.values() if value is not None)
+            # The execution quota applies to execution members, not the
+            # unrelated project document, research sessions or reports.
+            total = sum(
+                len(value) for name, value in members.items()
+                if name.startswith("research-executions/") and name not in changes
+            )
+            total += sum(
+                len(value) for name, value in changes.items()
+                if name.startswith("research-executions/") and value is not None
+            )
             if total > MAX_STORAGE_BYTES:
                 raise ProjectError("Research execution storage limit reached")
             return changes
