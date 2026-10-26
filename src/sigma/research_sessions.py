@@ -3090,7 +3090,7 @@ async def ensure_queued_workers(path: str) -> None:
         raise ProjectError(str(exc)) from exc
     async with _manager_lock:
         for record in _all(path):
-            if record.get("status") != "queued" or record["id"] in _tasks:
+            if record.get("simulated") or record.get("status") != "queued" or record["id"] in _tasks:
                 continue
             event = asyncio.Event()
             _control[record["id"]] = event
