@@ -229,6 +229,7 @@ def main() -> None:
                 "project_path": created.path,
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "status": "paused",
+                "session_number": 1,
             }
             _save(created.path, record)
             assert _read(created.path, session_id) == record
@@ -237,6 +238,8 @@ def main() -> None:
                 dict(record, project_id=str(uuid4())),
                 dict(record, project_path=str(root / "foreign.json")),
                 dict(record, id="../not-a-uuid"),
+                dict(record, session_number=0),
+                dict(record, session_number=True),
             ):
                 try:
                     _save(created.path, invalid)
@@ -245,6 +248,14 @@ def main() -> None:
                 else:
                     raise AssertionError("Invalid session record was saved")
             assert _read(created.path, session_id) == record
+            # Existing session identity is immutable even if a caller attempts
+            # to overwrite the same UUID with a different session number.
+            try:
+                _save(created.path, dict(record, session_number=99))
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Session identity was overwritten")
             assert _all(created.path) == [record]
             assert read_session_snapshot(created.path) == ([record], 0)
             from sigma.research_sessions import _worker_lock_path
