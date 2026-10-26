@@ -25,3 +25,12 @@ Maybe this work bites off more than it can chew, but the goal really was to buil
 ---
 
 *Authorship note: I wrote my original essay myself. This essay was developed in collaboration with ChatGPT.*
+
+
+## What I learned about working with AI
+
+I haven't been writing the code, but that doesn't mean my software engineering experience has been sitting idle. I've used it to set direction, decide what matters, organize phases, and keep the work moving toward a coherent product. Without that guidance, there's a risk of the inmates running the asylum: lots of activity, but no steady course. Constraints and priorities matter, even when AI is doing the implementation.
+
+At the same time, I've learned when to give AI a lot of room. Sometimes my instruction is essentially, "I don't know, and I don't particularly care how you solve this. Figure it out." Often it does, and the result isn't just plausible-looking code. The interesting part is what happens as you keep turning the crank. A mental map of the system gradually emerges for me, even though I'm not the one constructing every piece. The cloud deployment was the clearest example. AI laid out the plan and divided it into tasks; I largely approved the direction. We solved those tasks one at a time, sometimes in an order that seemed arbitrary to me. I didn't always understand how the pieces would fit until they did. That was impressive, and it changed how I think about the relationship between directing engineering work and understanding the system being built.
+
+The four-worker setup taught me something else. These agents can move between tasks, pick up work another agent started, or be reassigned as priorities change. They don't have the same ownership boundaries, specialization costs, or coordination habits that human teams develop. That flexibility is a genuine advantage, although it puts more responsibility on the coordinator to preserve context, keep interfaces stable, and make sure the pieces still fit together.
