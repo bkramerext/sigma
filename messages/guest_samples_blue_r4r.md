@@ -21,8 +21,8 @@ Guest Home uses the same standard Projects layout as a signed-in session, withou
 the separate Welcome to SIGMA panel. Guest New/Open project actions are hidden.
 The normal
 Recent/Samples toggle is present, and Samples is selected by default. Selecting
-Recent shows only the two-line message “When you are signed in, / you can save
-your projects”, styled in the Projects header font at a smaller size; it does not
+Recent shows only the two-line message “Sign in to create and / save your own
+projects.”, styled in the Projects header font at a smaller size; it does not
 request or save project history. Recent and sample groups start collapsed.
 Browse Published Research is absent. The Guest sign-in pill uses the normal
 Google sign-in dialog and link. Attempts to generate a strategy receive a clear

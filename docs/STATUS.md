@@ -6068,7 +6068,7 @@ open against `main`, current and mergeable, and not merged.
 Guest Home now uses the normal Projects layout and existing sample catalog;
 New/Open project actions are hidden. The normal Recent/Samples toggle is present, Recent is
 selectable, and Samples is selected by default. Selecting Recent shows only the
-static, two-line message “When you are signed in, / you can save your projects”
+static, two-line message “Sign in to create and / save your own projects.”
 styled with the Projects header font at a smaller size; it does not
 load or save project history. Recent and sample groups start collapsed. Opening
 or creating a guest project uses

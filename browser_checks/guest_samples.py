@@ -149,8 +149,8 @@ def exercise(ui_url: str, root: Path) -> None:
         assert page.locator("details.sample-type-group[open]").count() == 0
         page.get_by_role("tab", name="Recent").click()
         message = page.locator(".guest-recent-message")
-        expect(message.locator("span").nth(0)).to_have_text("When you are signed in,")
-        expect(message.locator("span").nth(1)).to_have_text("you can save your projects")
+        expect(message.locator("span").nth(0)).to_have_text("Sign in to create and")
+        expect(message.locator("span").nth(1)).to_have_text("save your own projects.")
         typography = message.evaluate("element => getComputedStyle(element)")
         assert typography["fontFamily"].startswith("Georgia"), typography
         assert typography["fontSize"] == "18px", typography
