@@ -21,6 +21,17 @@ release SHA, and all ten checks `NOT RUN`. Hosted T131/T134/T133 flows and
 operator T135/T136 restore/recovery steps remain to be performed and reviewed.
 Focused implementation elapsed approximately 10 minutes; hosted acceptance is
 unfinished by design and remains with the authorized owner/coordinator.
+
+Reconciliation follow-up (2026-10-26): merged current `main` at
+`13a63c4` into the PR branch and preserved the mainline T146/T132 STATUS
+entries. Focused `tests/cloud_acceptance.py` and standalone production frontend
+build passed. `./sigma test` completed but exited 1 in three mainline systemd
+assertions in `tests/deployment_package.py`, `tests/gce_host.py`, and
+`tests/host_monitor.py`: they expect the former explicit
+`srv-sigma\x2dstate.mount` Requires dependency, while main now uses
+`RequiresMountsFor=/srv/sigma-state`. Ruff, format, Pyright (0 diagnostics),
+frontend typecheck, and the separate production build passed. No T128 files
+were changed to mask these unrelated mainline failures.
 ## T146 Increment 22 authorized live comparison (2026-10-26)
 
 Executed the one owner-authorized OpenAI API comparison after a successful
