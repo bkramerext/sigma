@@ -15,7 +15,7 @@ reflow, reduced-motion mode, and 390px layout. The complete `./sigma test`
 passed, including Ruff, Pyright, frontend typecheck, and production build.
 After reconciliation, GitHub Actions passed SIGMA verification, Research
 Outcome browser acceptance, and T92 Recent Projects browser acceptance on
-`bdfe0acd2ae867866637e309648b314376140434`; coordinator correction `d625216`
+`9d1510b61979938ed21a8974ecb3101e6e00fded`; coordinator correction `d625216`
 is preserved. No provider calls or research projects were involved. See [PR
 #221 (T215)](https://github.com/bkramerext/sigma/pull/221) and the [Blue
 handoff](../messages/blue_t215_r4r.md).

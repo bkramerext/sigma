@@ -10,7 +10,7 @@
 
 **Reconciled code head:** `7f89dcb` (merge of current `main` `084e23b`)
 
-**GitHub-CI-verified PR head:** `bdfe0acd2ae867866637e309648b314376140434`
+**GitHub-CI-verified PR head:** `9d1510b61979938ed21a8974ecb3101e6e00fded`
 
 ## Delivered
 
@@ -44,8 +44,10 @@
   reduced-motion mode and 390px layout verified.
 
 GitHub Actions passed on the verified PR head above: SIGMA verification run
-729, Research Outcome browser acceptance run 120, and T92 Recent Projects
-browser acceptance run 51. The PR remains open and is not self-merged.
+737, Research Outcome browser acceptance run 122, and T92 Recent Projects
+browser acceptance run 53. This handoff-only documentation update follows that
+verified implementation/reconciliation state. The PR remains open and is not
+self-merged.
 
 ## Limitations
 
