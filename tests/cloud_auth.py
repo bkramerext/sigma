@@ -117,7 +117,7 @@ class CloudAuthTests(TestCase):
         )
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.context = TestClient(app, base_url="http://127.0.0.1")
+        self.context = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 12345))
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
