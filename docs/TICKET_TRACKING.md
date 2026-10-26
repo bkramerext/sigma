@@ -93,6 +93,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | Session controls, elapsed time and reports | Done |
 | T43 manual acceptance fixes | [PR #62](https://github.com/bkramerext/sigma/pull/62) R4R; deterministic real-Chrome acceptance passed; live Google/ChatGPT OAuth remains unverified |
 | T43.1 third-pass operator acceptance fixes | [PR #63](https://github.com/bkramerext/sigma/pull/63) R4R; consolidated Google/ChatGPT pill polish and responsive Chrome checks passed; live operator OAuth round trip and third manual pass remain required |
+| T43.2 / issue #66 multi-account sign-in acceptance | [PR #166](https://github.com/bkramerext/sigma/pull/166) R4R; deterministic two-account API/Chrome coverage passed; distinct live identities and hosted OAuth remain unverified |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
 | Network-bound failure toast and safe recovery | Implemented in tested paths ([PR #1](https://github.com/bkramerext/sigma/pull/1)); broader error coverage remains to validate |
 | Live cross-strategy research validation | Open (T17.8) |
