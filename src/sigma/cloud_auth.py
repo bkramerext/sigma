@@ -852,7 +852,13 @@ def denied_identity(request: Request):
 
 
 def _deliver_invitation(email: str, requested_at: int) -> None:
-    """Send through an authenticated TLS SMTP account; sender is its login identity."""
+    """Send via Gmail API when configured, otherwise use the existing SMTP transport."""
+    if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
+        from sigma.gmail_delivery import send_invitation
+
+        send_invitation(email, requested_at, recipient=INVITATION_RECIPIENT)
+        return
+
     raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
     try:
         username = _normalize_email(raw_username)
