@@ -279,3 +279,51 @@ def delete_file(bundle_path: str | Path, relative_path: str) -> None:
             raise BundleError("Project member does not exist")
         del members[relative_path]
         _publish_members(path, members, ".sigma-delete-")
+
+
+def update_files(
+    bundle_path: str | Path,
+    changes: dict[str, bytes | None],
+) -> None:
+    """Apply a group of member writes/deletions in one atomic JSON replacement.
+
+    None means delete; project.json must always remain present. This is the
+    transaction boundary for saving a session alongside its evidence.
+    """
+    path = Path(bundle_path)
+    if path.is_symlink() or not path.is_file() or path.suffix != ".json":
+        raise BundleError("Project JSON must be a regular file")
+    if not isinstance(changes, dict):
+        raise BundleError("Bundle changes must be a dictionary")
+    for name, value in changes.items():
+        if (
+            not isinstance(name, str)
+            or not name
+            or chr(92) in name
+            or name.startswith("/")
+            or any(part in ("", ".", "..") for part in name.split("/"))
+        ):
+            raise BundleError("Unsafe bundle path")
+        if value is not None and not isinstance(value, bytes):
+            raise BundleError("Project member contents must be bytes or None")
+        if name == "project.json" and value is None:
+            raise BundleError("Cannot remove the project document")
+    lock = path.with_name("." + path.name + ".write.lock")
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(lock, flags, 0o600)
+    with os.fdopen(fd, "a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        if path.is_symlink() or not path.is_file():
+            raise BundleError("Project JSON is no longer a regular file")
+        members = _decode(json.loads(path.read_text(encoding="utf-8")))
+        for name, value in changes.items():
+            if value is None:
+                members.pop(name, None)
+            else:
+                members[name] = value
+        _decode({
+            "format": FORMAT, "version": VERSION,
+            "files": {name: base64.b64encode(data).decode("ascii")
+                      for name, data in members.items()},
+        })
+        _publish_members(path, members, ".sigma-transaction-")
