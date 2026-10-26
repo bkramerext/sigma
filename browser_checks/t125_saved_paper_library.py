@@ -176,7 +176,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
             expect(dialog).to_be_visible()
             row = dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
-            expect(row.get_by_role("button", name="Expand saved paper: Saved fixture 1")).to_be_visible()
+            expect(row.get_by_role("button", name="Saved fixture 1")).to_be_visible()
             expect(row).to_contain_text("Version 2")
             expect(row.get_by_role("link", name="Download text file")).to_be_visible()
             expect(row.get_by_role("link", name="Download PDF")).to_be_visible()
@@ -192,7 +192,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             assert page.evaluate("window.__paperXss ?? false") is False
 
             with page.expect_download() as download_info:
-                row.get_by_role("link", name="Download .txt").click()
+                row.get_by_role("link", name="Download text file").click()
             text_download = download_info.value
             text_content = Path(text_download.path()).read_text(encoding="utf-8")
             assert (
@@ -201,7 +201,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             )
 
             with page.expect_download() as download_info:
-                row.get_by_role("link", name="Download .pdf").click()
+                row.get_by_role("link", name="Download PDF").click()
             pdf_download = download_info.value
             assert Path(pdf_download.path()).read_bytes() == pdf_bytes
 
@@ -221,27 +221,33 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             row.get_by_role("button", name="Remove").click()
             confirmation = row.get_by_role("group", name="Confirm removal of Saved fixture 1")
             expect(confirmation).to_be_visible()
-            expect(confirmation).to_contain_text(
-                "Other versions and research history will remain"
-            )
+            expect(confirmation).to_contain_text("Other versions and research history will remain")
             confirmation.get_by_role("button", name="Cancel").click()
             expect(row).to_be_visible()
             row.get_by_role("button", name="Remove").click()
             row.get_by_role("group", name="Confirm removal of Saved fixture 1").get_by_role(
                 "button", name="Confirm remove"
             ).click()
-            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
-            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')).to_have_count(1)
+            expect(
+                dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
+            ).to_have_count(0)
+            expect(
+                dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')
+            ).to_have_count(1)
             assert not (project_path / "papers" / f"{identifiers[0]}.json").exists()
             assert not (project_path / "papers" / f"{identifiers[0]}.pdf").exists()
             assert (project_path / "papers" / f"{identifiers[1]}.json").exists()
             assert (project_path / "papers" / f"{identifiers[1]}.pdf").exists()
 
             page.set_viewport_size({"width": 390, "height": 844})
-            second_row = dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')
-            expect(second_row.get_by_role("link", name="Download .txt")).to_be_visible()
-            expect(second_row.get_by_role("link", name="Open .pdf in browser")).to_be_visible()
-            expect(dialog.locator(f'li[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
+            second_row = dialog.locator(
+                f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]'
+            )
+            expect(second_row.get_by_role("link", name="Download text file")).to_be_visible()
+            expect(second_row.get_by_role("link", name="Open PDF in browser")).to_be_visible()
+            expect(
+                dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
+            ).to_have_count(0)
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.screenshot(path="/tmp/sigma-t125-paper-library-mobile.png", full_page=True)
             assert not generation_posts, generation_posts
