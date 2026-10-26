@@ -188,6 +188,24 @@ class SponsorTests(IsolatedAsyncioTestCase):
         self.assertEqual(context["status"], "reauth_required")
         self.assertEqual(context["token"], "")
 
+    async def test_dispatch_rejects_local_accounts_and_billing_mode_mismatch(self):
+        valid = {
+            "mode": "chatgpt",
+            "identity": "cloud_sponsor:fixture",
+            "status": "connected",
+            "token": "fixture",
+        }
+        self.assertTrue(openai_connection.cloud_credential(valid))
+        for changes in (
+            {"identity": "chatgpt:local"},
+            {"mode": "api_key"},
+            {"status": "reauth_required"},
+            {"token": ""},
+        ):
+            self.assertFalse(openai_connection.cloud_credential(valid | changes))
+        with patch.dict(os.environ, {"SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key"}):
+            self.assertFalse(openai_connection.cloud_credential(valid))
+
     async def test_private_import_and_explicit_mode_required(self):
         source = self.source()
         source.chmod(0o644)

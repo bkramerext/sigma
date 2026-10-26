@@ -254,9 +254,10 @@ def _transaction() -> Iterator[sqlite3.Connection]:
 def prepare_job(record: dict[str, Any]) -> None:
     """Atomically reserve a bounded queue slot for a persisted session ID."""
     owner = _workspace_id()
-    if record.get("mode") != "api_key":
+    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    if record.get("mode") != provider or provider not in {"api_key", "chatgpt"}:
         raise CloudResearchUnavailable(
-            "Cloud research requires an explicitly configured server API credential; plan credentials are not shared across identities."
+            "Cloud research requires the explicitly configured sponsor provider."
         )
     if record.get("maximum_estimated_cost_usd") is None or record.get("cost_status") != "available":
         raise CloudResearchUnavailable(
@@ -385,7 +386,7 @@ def begin_standalone_inference(project_id: str, project_path: str) -> str:
     prepare_job(
         {
             "id": session_id,
-            "mode": "api_key",
+            "mode": os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key"),
             "project_id": project_id,
             "project_path": project_path,
             "idempotency_key": str(uuid4()),

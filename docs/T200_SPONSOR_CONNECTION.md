@@ -18,6 +18,9 @@ create this authorization.
 - Import verifies the OpenAI ID token signature, issuer/audience/expiry and
   verified identity, granted plan scopes, token metadata and access expiry.
   Only the selected registration is imported. The VM host ID is preserved.
+- A shared explicit-provider validator gates research, proposals, agentic
+  generation, papers, and text conversion; stale account/project bindings fail
+  before dispatch. Hosted readiness accepts the configured sponsor identity.
 - Existing durable user/global token, concurrency, and spending guards still
   apply to ChatGPT-funded requests. Dollar allowances are SIGMA admission
   estimates, not a measurement of the sponsor's remaining ChatGPT plan usage.

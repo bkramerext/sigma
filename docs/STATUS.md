@@ -6020,7 +6020,7 @@ the VM host ID, imports only the selected registration, and preserves prior
 state on rejection. Existing serialized refresh and cloud admission guards
 remain in use. ChatGPT mode never falls back to local accounts or API billing.
 
-Focused checks passed: sponsor (7), cloud auth (24), GCE host (21), and sponsored
+Focused checks passed: sponsor (8), cloud auth (24), GCE host (21), and sponsored
 API workflow. Ruff/format, Pyright (0 diagnostics), and frontend build passed.
 The full suite is limited by AF_UNIX socket creation denied in this environment;
 `instance_ownership.py` and `ui_registry.py` reproduce that failure on unchanged
@@ -6030,3 +6030,11 @@ was performed. See [handoff](../messages/issue_200_sponsor_fix.txt) and
 [provisioning procedure](T200_SPONSOR_CONNECTION.md). Live sponsor provisioning,
 deployment, catalog verification and #201/#202 original-project retests remain
 UNVERIFIED; issue #200 remains open.
+
+The #200 dispatch follow-up replaces API-key-only inference guards with a shared
+explicit-provider validator across research, proposals, agentic generation,
+papers and text conversion. ChatGPT-funded cloud research keeps estimated-cost
+accounting and durable admission reservations. The production API fixture passes
+in both API-key and ChatGPT SSE modes, including completed six-call sessions,
+saved Outcomes/exports, budget exhaustion, failure holds and owner isolation.
+No live provider inference was used for these tests.

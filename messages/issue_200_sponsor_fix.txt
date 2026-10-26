@@ -16,16 +16,21 @@ Changes:
   pinned verified email, protected VM importer, existing serialized refresh.
   No personal/local credential reuse and no API-key fallback in ChatGPT mode.
 - Non-sensitive status guidance and precise provisioning/deployment notes.
-- Existing cloud budget/concurrency/token guards preserved.
+- Shared explicit-provider validation now gates research, proposals, agentic
+  generation, paper generation/revision and text conversion. API request bindings
+  and readiness recognize the provisioned sponsor identity.
+- ChatGPT cloud research records retain estimated-cost accounting and durable
+  cloud budget/concurrency/token guards; local ChatGPT behavior is unchanged.
 
 Verification:
-- tests/cloud_sponsor.py: 7 passed. Private import/atomic rejection, selected
+- tests/cloud_sponsor.py: 8 passed. Private import/atomic rejection, selected
   registration only, VM host ID retention, verified email/scope checks,
   sponsor-token catalog discovery, no identity/token in public response,
   rotating-token refresh and terminal-revocation/no-fallback paths.
 - tests/cloud_auth.py: 24 passed, including authenticated catalog access,
   unauthenticated denial and blocked hosted auth mutations.
-- tests/cloud_research_sponsored_api.py: passed, including no personal key,
+- tests/cloud_research_sponsored_api.py: passed in BOTH API-key and ChatGPT SSE
+  modes, including six-call sessions, saved outcomes/exports, no personal key,
   durable budgets, failure holds, idempotency and cross-workspace isolation.
 - tests/gce_host.py: 21 passed, including explicit provider/email validation.
 - Ruff check and format passed; Pyright 0 diagnostics; frontend build passed.

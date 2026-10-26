@@ -225,6 +225,27 @@ async def auth_context() -> AuthContext:
     )
 
 
+def cloud_credential(context: Mapping[str, Any]) -> bool:
+    """Accept only the explicitly selected server provider; never a local account."""
+    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+    return (
+        bool(context.get("token"))
+        and context.get("status") == "connected"
+        and (
+            (
+                provider == "api_key"
+                and context.get("mode") == "api_key"
+                and context.get("identity") == "cloud_service_api_key"
+            )
+            or (
+                provider == "chatgpt"
+                and context.get("mode") == "chatgpt"
+                and str(context.get("identity", "")).startswith("cloud_sponsor:")
+            )
+        )
+    )
+
+
 PLAN_MESSAGES = {
     "disconnected": (
         "Connect AI",
