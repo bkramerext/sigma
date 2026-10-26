@@ -678,18 +678,33 @@ async def middleware(request: Request, call_next):
         # Keep normal project CRUD available for UI acceptance testing.
         # Fail closed for AI and research execution until the deterministic
         # mock executor is implemented. These checks are server-side.
-        segments = set(path.lower().split("/"))
-        execution_segments = {
-            "ai", "research", "research-sessions", "sessions",
-            "runs", "execute", "execution", "generate", "explore",
-            "challenge", "decide", "resume", "fork-run",
-            "research-executions", "proposals", "strategy-suggestions",
-            "papers", "convert", "agentic", "restart",
+        # Explicitly allow known provider-free project mutations. New routes
+        # fail closed until reviewed, instead of relying on name heuristics.
+        safe_project_writes = {
+            "/api/projects/open",
+            "/api/projects/init",
+            "/api/projects/close",
+            "/api/projects/create",
+            "/api/projects/update",
+            "/api/projects/research-limits",
+            "/api/projects/strategies",
+            "/api/projects/strategies/remove",
+            "/api/projects/strategies/edit",
+            "/api/projects/strategies/enabled",
+            "/api/projects/strategies/stage",
+            "/api/projects/strategies/reorder",
+            "/api/projects/text/source",
+            "/api/projects/recent/forget",
+            "/api/projects/samples/open",
         }
+        project_write = (
+            path.startswith("/api/projects/")
+            and request.method not in {"GET", "HEAD", "OPTIONS"}
+        )
         if (
             path.startswith("/api/ai/")
-            or (request.method not in {"GET", "HEAD", "OPTIONS"}
-                and bool(segments & execution_segments))
+            or path.startswith("/api/cloud-research/")
+            or (project_write and path not in safe_project_writes)
         ):
             scenario = _mock_allowance(cfg, principal.subject)
             mode = model_access_for_subject(principal.subject)
