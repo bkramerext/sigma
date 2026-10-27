@@ -4,7 +4,7 @@
 - **Branch:** `green/issue-280-invited-welcome`
 - **Base:** `integration/t279-t280` at combined commit `5971d35e42cfecdb21c5879b07d3b7cb407e10c8`
 - **Pull request:** [#284](https://github.com/bkramerext/sigma/pull/284)
-- **Implementation commit:** `387725dfc53d419f1c29bb7b5a5207347c185e61` (PR branch also contains the handoff metadata update)
+- **Implementation commit:** `163220bbe865793ae1118e343d526db038856a17`
 - **Production flag:** unchanged; `SIGMA_CLOUD_FORCE_SPONSORED_MODE` remains default-off unless explicitly configured by an operator.
 
 ## Changes
@@ -63,6 +63,7 @@ selected from the user's supplied list once per page load.
 - `uv run --with playwright python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; allowance, welcome dismissal/reload/centering, Invite me placement for both signed-in and guest accounts, transparent underlined Close after title, 2.5x lower sign-in spacing, lower-left Privacy Notice and return paths, automatic invite-intent submission, single-error Try again recovery, invitation Add action with wider account column/no Status, duplicate-rule preference, and artwork pre-render verified.
 - `npm --prefix frontend run typecheck` — PASS.
 - `./sigma test` — PASS, all steps, including Ruff (282 files), Pyright, frontend typecheck/build and deployment checks. The first run detected `deploy/gce_preflight.py` tracked without executable permission despite its shebang; corrected mode to `100755`, then the full rerun passed.
+- `browser_checks/t40_cloud_ui.py` — could not complete against the already-running service on port 5173: the check expected its sign-in fixture, while that service served the public guest home. The isolated real-Chrome acceptance above passed with deterministic mocked admin APIs and exercised the invitation Add and duplicate-display behavior.
 - No provider calls, paid inference, or production changes.
 - The real Google OAuth challenge for the supplied personal account was not run from this environment; the browser check simulates the verified callback and invitation API response. Any actual Google-consent or mail-delivery failure remains deployment/account dependent.
 
