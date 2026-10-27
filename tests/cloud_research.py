@@ -601,6 +601,27 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert saved == limits
         assert research_sessions.get_limits(project.path) == limits
 
+    # Local sponsored sessions need the durable spend ledger, but the hosted
+    # evaluation call cap must not silently rewrite their project setting.
+    sponsored_limits = {
+        **limits,
+        "research_rounds": 3,
+        "model_calls": 12,
+        "session_duration_minutes": 15,
+        "maximum_estimated_cost_usd": 0.25,
+    }
+    with (
+        patch.object(cloud_workspaces, "enabled", return_value=False),
+        patch.object(cloud_research, "billing_enabled", return_value=True),
+    ):
+        saved = research_sessions.save_limits(project.path, sponsored_limits)
+        assert saved == sponsored_limits
+        assert research_sessions.get_limits(project.path) == sponsored_limits
+        assert cloud_research.session_call_ceiling() == cloud_research.MAX_LOCAL_SESSION_CALLS
+
+    with patch.object(cloud_workspaces, "enabled", return_value=True):
+        assert cloud_research.session_call_ceiling() == cloud_research.MAX_SESSION_CALLS
+
 
 def main() -> None:
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:

@@ -2195,13 +2195,21 @@ class CloudAuthTests(TestCase):
                         json={
                             "path": path,
                             "research_rounds": 1,
-                            "model_calls": 2,
+                            "model_calls": 12,
                             "session_duration_minutes": 15,
                             "output_tokens_per_call": 256,
                             "maximum_estimated_cost_usd": 0.25,
                         },
                     )
                     self.assertEqual(limits.status_code, 200, limits.text)
+                    self.assertEqual(limits.json()["model_calls"], 12, limits.text)
+                    reloaded_limits = member.get(
+                        "/api/projects/research-limits", params={"path": path}
+                    )
+                    self.assertEqual(reloaded_limits.status_code, 200, reloaded_limits.text)
+                    self.assertEqual(
+                        reloaded_limits.json()["model_calls"], 12, reloaded_limits.text
+                    )
                     config = member.get("/api/projects/proposals/config", params={"path": path})
                     self.assertEqual(config.status_code, 200, config.text)
                     self.assertTrue(config.json()["available"], config.text)

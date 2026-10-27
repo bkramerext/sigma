@@ -7048,7 +7048,7 @@ access. The normal connected-pill action still starts a personal ChatGPT
 connection. Real-Chrome acceptance covers the member flow, and the focused
 auth regression verifies eligible access, ineligible denial, and admin access.
 `./sigma test` passed all steps. The running app was restarted on the updated
-branch; no OAuth completion or inference call has yet been made.
+branch.
 
 Pill-click correction: the allowance amount is a nested button that stops
 click propagation so it can show its tooltip. In sponsor `reauth_required`
@@ -7057,3 +7057,36 @@ clicking the pill label. The Chrome regression uses the amount button, verifies
 the `/api/ai/sponsor-auth/begin` request and checks that no extra message appears
 under the pill. The real-Chrome check passed, and `./sigma test` passed all
 steps on this fix. No paid request is sent.
+
+Live connection verification: the member completed sponsor OAuth as
+`zetacontinuation@gmail.com`. The diagnostic log recorded `sponsor_oauth
+status=started` then `connected`. Metadata confirms an access token, refresh
+token, and required plan scopes on the designated account; values were not
+printed. The member's fresh server auth context is `chatgpt/connected`, model
+catalog verification returned `connected`, and `gpt-6.1-sol` is available.
+The `$0.25` allowance remains fully available with `$0` estimated and held
+usage. No inference call has been made; the user was told to click Play.
+
+## Local sponsored project-call setting (2026-10-27)
+
+The sponsored Play preflight reported that five enabled strategies required ten
+calls while the project allowed six. The cause was a policy mix-up: local
+sponsored users use the durable sponsored-spend ledger, and the project settings
+service treated that as hosted billing and silently applied the hosted
+six-call cap. The backend admission gate also applied that hosted cap, so
+changing Maximum agent calls in the local dialog appeared to have no effect.
+
+Local sponsored limits now retain the saved project call count up to 30. The
+hosted six-call cap remains unchanged. Local sponsored sessions remain capped
+at 15 minutes and $0.25 per session; per-account allowance reservation and
+spend checks are unchanged. The settings dialog now describes the local cap
+separately from hosted limits. `tests/cloud_auth.py` exercises an authenticated
+local sponsored member saving, re-reading, and starting a fake-provider session
+with a 12-call limit. `tests/cloud_research.py` covers both local and hosted
+call ceilings. `browser_checks/local_sponsored_limits.py` uses real Chrome and
+a deterministic API fixture to save 12 in Project Settings and verify the
+value after reload. The full `./sigma test` passed, including Ruff, formatting,
+Pyright, frontend typecheck, and production build. The local SIGMA service was
+restarted from the corrected tree, and the authenticated browser reopened the
+active Xenopus project. The saved call limit is 12. No live provider call or
+production configuration change was made.

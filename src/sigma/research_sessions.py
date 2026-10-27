@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research
+from sigma import cloud_research, cloud_workspaces
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
@@ -623,6 +623,14 @@ def _directory(path: str | Path) -> Path:
     return directory
 
 
+def _effective_limits(limits: dict[str, Any]) -> dict[str, Any]:
+    if cloud_workspaces.enabled():
+        return cloud_research.evaluation_session_limits(limits)
+    if cloud_research.billing_enabled():
+        return cloud_research.local_sponsored_session_limits(limits)
+    return limits
+
+
 def get_limits(path: str) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
         import base64
@@ -652,20 +660,12 @@ def get_limits(path: str) -> dict[str, Any]:
                             raise current_error
             except ValueError as exc:
                 raise ProjectError("Research limits are invalid") from exc
-        return (
-            cloud_research.evaluation_session_limits(limits)
-            if cloud_research.billing_enabled()
-            else limits
-        )
+        return _effective_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
         limits = dict(DEFAULT_LIMITS)
-        return (
-            cloud_research.evaluation_session_limits(limits)
-            if cloud_research.billing_enabled()
-            else limits
-        )
+        return _effective_limits(limits)
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
         raise ProjectError("Research limits file is unsafe or too large")
     try:
@@ -684,11 +684,7 @@ def get_limits(path: str) -> dict[str, Any]:
                 limits = _validate_legacy_limits(raw)
             except ProjectError:
                 raise current_error
-    return (
-        cloud_research.evaluation_session_limits(limits)
-        if cloud_research.billing_enabled()
-        else limits
-    )
+    return _effective_limits(limits)
 
 
 def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -2681,8 +2677,7 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
-        if cloud_research.billing_enabled():
-            limits = cloud_research.evaluation_session_limits(limits)
+        limits = _effective_limits(limits)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         try:
             transform_members(
@@ -2695,8 +2690,7 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
     limits = _validate_limits(raw)
-    if cloud_research.billing_enabled():
-        limits = cloud_research.evaluation_session_limits(limits)
+    limits = _effective_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     with _project_manager_lock(path):

@@ -28,6 +28,7 @@ MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("15.00")
 MAX_SESSION_SPEND_USD = 0.25
 MAX_SESSION_CALLS = 6
+MAX_LOCAL_SESSION_CALLS = 30
 MAX_SESSION_MINUTES = 15
 
 
@@ -210,6 +211,28 @@ def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def local_sponsored_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
+    """Bound local sponsored work without applying the hosted six-call cap."""
+    result = dict(limits)
+    calls = min(max(int(result["model_calls"]), 2), MAX_LOCAL_SESSION_CALLS)
+    result["model_calls"] = calls
+    result["research_rounds"] = min(max(int(result["research_rounds"]), 1), calls // 2)
+    result["session_duration_minutes"] = min(
+        int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
+    )
+    result["maximum_estimated_cost_usd"] = MAX_SESSION_SPEND_USD
+    return result
+
+
+def session_call_ceiling() -> int:
+    """Keep the hosted evaluation cap local to hosted workspaces.
+
+    Local sponsored inference still uses the durable per-account spend ledger,
+    but its project call limit is governed by the saved project setting.
+    """
+    return MAX_SESSION_CALLS if cloud_workspaces.enabled() else MAX_LOCAL_SESSION_CALLS
+
+
 def _database() -> Path:
     try:
         root = cloud_workspaces.storage_root()
@@ -328,17 +351,22 @@ def prepare_job(record: dict[str, Any]) -> None:
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")
     maximum_cost = record.get("maximum_estimated_cost_usd")
+    call_ceiling = session_call_ceiling()
     if (
         type(call_limit) is not int
-        or not 2 <= call_limit <= MAX_SESSION_CALLS
+        or not 2 <= call_limit <= call_ceiling
         or type(duration_limit) is not int
         or not 1 <= duration_limit <= MAX_SESSION_MINUTES
         or type(maximum_cost) not in {int, float}
         or not isinstance(maximum_cost, (int, float))
         or not 0.01 <= maximum_cost <= MAX_SESSION_SPEND_USD
     ):
+        if cloud_workspaces.enabled():
+            raise CloudResearchUnavailable(
+                "Hosted cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+            )
         raise CloudResearchUnavailable(
-            "Cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+            "Local sponsored research sessions are capped at 30 calls, 15 minutes, and $0.25. Update Project Settings → Limits."
         )
     workspace = _ledger_workspace()
     if workspace is None:

@@ -186,10 +186,42 @@ existing designated sponsor registration; ineligible and unauthenticated
 members remain denied, and this does not grant admin settings access. The
 pill's normal click still starts a personal ChatGPT sign-in when the sponsor
 connection is healthy. Real-Chrome coverage verifies the member reconnect
-path. Live sponsor OAuth and inference have not been attempted.
+path. Live OAuth was initially pending; the completion evidence is below.
 
 Pill interaction correction: the allowance amount button stops propagation for
 its tooltip. While sponsor ChatGPT needs reauthorization, that button now
 starts sponsor reconnect too. Real Chrome verifies the amount click reaches
 `/api/ai/sponsor-auth/begin` and renders no stray text below the pill.
 `./sigma test` passed all steps on this fix.
+
+Live connection evidence: member sponsor OAuth completed successfully for
+`zetacontinuation@gmail.com` (`sponsor_oauth started`, then `connected`). The
+server auth context is `chatgpt/connected`; model catalog verification reports
+`gpt-6.1-sol` available. The `$0.25` member allowance remains fully available.
+No inference call has been made yet.
+
+## Local sponsored Play limit correction
+
+The user's project had five enabled strategies, so session preflight required
+ten calls. The local settings API returned six because `billing_enabled()` was
+being used to identify hosted policy; local sponsored requests also use the
+durable spending ledger, so this silently applied the hosted six-call cap. The
+local `prepare_job` gate separately rejected call limits above six.
+
+The settings service now distinguishes hosted workspace caps from local
+sponsored ledger enforcement. Local sponsored settings preserve the saved
+call count up to 30; the $0.25 per-session ceiling, 15-minute cap, and member
+allowance ledger remain enforced. Hosted sessions remain capped at six calls.
+
+Verification:
+- `tests/cloud_auth.py` — passed; authenticated local sponsored member saves,
+  re-reads, and starts a fake-provider session with `model_calls=12`.
+- `tests/cloud_research.py` — passed; hosted six-call cap and local 30-call
+  ceiling remain distinct.
+- `browser_checks/local_sponsored_limits.py` — passed in real Chrome; Limits
+  dialog saves 12 and reloads with 12 from deterministic fixture API.
+- `./sigma test` — passed all steps after the final regression assertion,
+  including Ruff, formatting, Pyright, frontend typecheck, and production build.
+- SIGMA was restarted from this branch; the authenticated browser reopened the
+  Xenopus project successfully, and its saved limit file reads 12. No live
+  provider call or production configuration change occurred.
