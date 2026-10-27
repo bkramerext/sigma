@@ -1,6 +1,6 @@
 """T249 reproducible verification: run locally, commit and push a diagnostic report.
 
-Run from the SIGMA checkout on fix/t249-single-file-projects:
+Run from the SIGMA checkout on fix/t249-clean-integration:
     python3 scripts/t249_verify.py
 Only docs/evaluations/t249/local-verification.json is staged by this script.
 """
@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-BRANCH = "fix/t249-single-file-projects"
+BRANCH = "fix/t249-clean-integration"
 REPORT = Path("docs/evaluations/t249/local-verification.json")
 
 
