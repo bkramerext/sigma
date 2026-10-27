@@ -6536,4 +6536,9 @@ logo navigation. Corrected the guest research “Sign in now” action to activa
 the existing Google sign-in link; real-Chrome guest acceptance intercepts the
 local login route and verifies no research or project mutations. The T201,
 T257, guest-samples, legal-page, and full local verification suites pass after
-these corrections. GitHub CI for the next pushed head remains to be checked.
+these corrections. All six GitHub Actions workflows passed on implementation
+head `57cdea354c752723a930ef45f3dddcd1c9982281`: SIGMA verification run
+`40462919527` (#1037), T201 recovery `40462919422` (#197), T249 project
+verification `40462919506` (#80), T200 availability `40462919443` (#212), T92
+Recent Projects `40462919425` (#299), and Research Outcome `40462919416` (#368).
+No live OAuth or provider calls, paid inference, or cloud changes occurred.

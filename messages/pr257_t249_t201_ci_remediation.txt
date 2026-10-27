@@ -60,8 +60,17 @@ were used; cost was $0.
   current logo navigation, and guest research access checks pass in real Chrome.
 - **MET:** T257 mock-auth regression coverage passes in real Chrome.
 - **UNMET:** None identified in local scope.
-- **UNVERIFIED:** GitHub workflows for the new head are pending after the
-  guest-samples correction. Live OAuth, hosted inference, and deployed-service
-  behavior were not exercised or required.
+- **MET:** All six GitHub Actions workflows passed on implementation head
+  `57cdea354c752723a930ef45f3dddcd1c9982281`:
+  - SIGMA verification — run `40462919527` (#1037).
+  - T201 obligation recovery browser acceptance — run `40462919422` (#197).
+  - T249 integrated project verification — run `40462919506` (#80).
+  - T200 Model availability browser acceptance — run `40462919443` (#212).
+  - T92 Recent Projects browser acceptance — run `40462919425` (#299).
+  - Research Outcome browser acceptance — run `40462919416` (#368).
+- **UNVERIFIED:** Live OAuth, hosted inference, and deployed-service behavior
+  were not exercised or required.
 
-See the PR's current head and checks for the final commit SHA and CI state.
+No criteria remain unmet in this remediation scope. No live OAuth or provider
+calls, paid inference, or cloud changes occurred; cost was $0. This is ready for
+independent review (R4R), not approval or merge.
