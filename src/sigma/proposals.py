@@ -149,9 +149,7 @@ def _project_input_digest(path: str) -> str:
         names = set(list_files(project))
         members = [("project.json", "project.json")]
         if "artifacts/text-representations.json" in names:
-            members.append(
-                ("text-representations.json", "artifacts/text-representations.json")
-            )
+            members.append(("text-representations.json", "artifacts/text-representations.json"))
         for label, member in members:
             contents = read_file(project, member)
             digest.update(label.encode())
