@@ -69,7 +69,11 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
         except (OSError, ValueError) as exc:
             try:
                 bundle = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(bundle, dict) and isinstance(bundle.get("files"), dict) and member not in bundle["files"]:
+                if (
+                    isinstance(bundle, dict)
+                    and isinstance(bundle.get("files"), dict)
+                    and member not in bundle["files"]
+                ):
                     return _empty(project)
             except (OSError, ValueError):
                 pass
@@ -345,7 +349,11 @@ def save_source(
 
 
 def _lock(path: Path):
-    lock_path = path.with_name("." + path.name + ".text-representations.lock") if path.suffix == ".json" else path / ".write.lock"
+    lock_path = (
+        path.with_name("." + path.name + ".text-representations.lock")
+        if path.suffix == ".json"
+        else path / ".write.lock"
+    )
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     lock = os.fdopen(fd, "rb")
     if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
