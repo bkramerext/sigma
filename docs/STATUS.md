@@ -6386,7 +6386,7 @@ real Chrome. Ruff check/format and `./sigma test` passed, including Pyright,
 typecheck, and production build. PR #246 is updated and open for review, not
 merged. See the [Blue R4R handoff](../messages/blue_guest_play_signin_r4r.md).
 
-## T252 — Samples/Recent click tooltip (2026-10-27)
+## PR #259 (T252) — Samples/Recent click tooltip (2026-10-27)
 
 Changed the shared tooltip manager to display focus-triggered tooltips only for
 `:focus-visible` elements. Mouse-driven focus during Samples/Recent switching no
@@ -6401,4 +6401,4 @@ hovering each tab still displays its expected tooltip. No page errors occurred.
 frontend typecheck, and production build. The build retains the existing >500 kB
 chunk advisory; the Python suite emits the existing Starlette/httpx deprecation
 and test-fixture resource warnings. No live sign-in, provider calls, or costs
-occurred. See the [T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).
+occurred. See the [PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).

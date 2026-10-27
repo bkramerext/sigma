@@ -1,0 +1,38 @@
+BLUE R4R — PR #259 (T252), Samples/Recent tooltip on click
+
+PR: https://github.com/bkramerext/sigma/pull/259
+Ticket: T252 / GitHub issue #252
+Branch: fix/t252-samples-recent-click-tooltip
+Base: main at 14612ff553dd684db993e25c4aedaf83155465ff
+Head: f21ff22185d83eaaac431320de2b0e81b0232ab2 before this handoff commit
+State: open for review; not merged. Do not self-merge.
+
+Changed the shared FloatingTooltip focus handler to display focus-triggered
+tooltips only when the target matches `:focus-visible`. Mouse-driven focus
+during Samples/Recent switching no longer triggers hover text. The existing
+delayed pointer-hover behavior and keyboard-visible focus hints remain. View
+switching and tab semantics are unchanged; no T88 or unrelated Home behavior
+was modified.
+
+Verification:
+- `uv run --project . --with playwright python browser_checks/t252_samples_recent_tooltip.py`
+  — PASS in real Chrome against isolated local guest fixtures. Clicked Recent
+  and Samples, verified each selected panel and no tooltip after 600 ms, then
+  hovered each control and verified its expected tooltip. No page errors.
+- `./sigma test` — PASS all scenarios, Ruff check/format, Pyright (0
+  diagnostics), frontend typecheck, and production build. The existing >500 kB
+  chunk advisory remains. The suite reports existing Starlette/httpx
+  deprecation and test-fixture resource warnings.
+- `git diff --check`, focused Ruff check/format — PASS.
+- Initial full-suite attempt caught a formatting issue in the new browser check
+  and skipped the build; the file was formatted and the complete suite rerun
+  successfully. The focused Chrome check was rerun afterward and passed.
+- No live sign-in, provider calls, costs, or production changes.
+
+Acceptance: click switching without a tooltip — MET; both view switches work —
+MET; actual hover tooltip behavior remains — MET; UI regression check and full
+suite — MET. No known dependencies or conflicts. No remaining unverified
+criteria.
+
+R4R. The reproducible browser check is committed at
+`browser_checks/t252_samples_recent_tooltip.py`.
