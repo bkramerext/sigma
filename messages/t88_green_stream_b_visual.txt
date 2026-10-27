@@ -88,5 +88,5 @@ This handoff is R4R for independent review, not approval or merge.
   live AI/provider and other research execution routes. No runtime code or
   behavior changed.
 - The final head also includes this handoff update; its SHA is reported in the
-  R4R notice. No local tests were rerun for the comment-only source correction;
-  current-head GitHub CI was allowed to run before reporting.
+  R4R notice. No local tests were rerun for the comment-only source correction.
+  Final-head GitHub CI was skipped per the user's instruction and is unverified.
