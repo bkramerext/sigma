@@ -3,7 +3,8 @@
 - **Ticket:** Issue #280
 - **Branch:** `green/issue-280-invited-welcome`
 - **Base:** `integration/t279-t280` at combined commit `5971d35e42cfecdb21c5879b07d3b7cb407e10c8`
-- **Pull request:** pending creation
+- **Pull request:** [#284](https://github.com/bkramerext/sigma/pull/284)
+- **Implementation commit:** `387725dfc53d419f1c29bb7b5a5207347c185e61` (PR branch also contains the handoff metadata update)
 - **Production flag:** unchanged; `SIGMA_CLOUD_FORCE_SPONSORED_MODE` remains default-off unless explicitly configured by an operator.
 
 ## Changes
@@ -37,5 +38,4 @@ Production configuration was not changed and the flag was not enabled.
 
 ## Review notes
 
-Please review base ancestry against the combined integration commit. No known
-conflicts. No self-merge performed.
+No known conflicts. R4R: ready for independent review. No self-merge performed.
