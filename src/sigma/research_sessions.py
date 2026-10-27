@@ -48,7 +48,7 @@ from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
-MAX_RECORD = 512_000
+MAX_RECORD = 2_000_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 32_000
 MAX_PRIOR_FAILURES = 12
@@ -60,7 +60,7 @@ MAX_CONTEXT_ARTIFACTS = 24
 MAX_CONCLUSION_CHARACTERS = 20_000
 MAX_CONTEXT_STRATEGIES = 24
 MAX_PEER_CONTEXT_ARTIFACTS = 12
-MAX_CONTEXT_OBLIGATIONS = 64
+MAX_CONTEXT_OBLIGATIONS = 128
 MAX_CONTEXT_OMISSION_POINTERS = 32
 MAX_CONTEXT_MANIFEST_BYTES = 12_000
 MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
@@ -2989,6 +2989,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         not in {
             "project_path",
             "guard_hash",
+            "guard_state_hash",
             "identity_hash",
             "idempotency_key",
             "outcome_conclusion_version",
@@ -3773,6 +3774,133 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
+def _project_guard_state(project: Any) -> str:
+    """Hash persisted project semantics without its append-only audit history."""
+    state = {
+        "id": project.id,
+        "title": project.title,
+        "problem": project.problem,
+        "investigation_type": project.investigation_type.value,
+        "ai_model": project.ai_model,
+        "reasoning_effort": project.reasoning_effort,
+        "difficulty": project.difficulty.value if project.difficulty else None,
+        "show_advanced_outcome_details": project.show_advanced_outcome_details,
+        "active_order": list(project.active_order),
+        "strategies": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "approach": item.approach,
+                "author_kind": item.author_kind,
+                "created_at": item.created_at,
+                "removed_at": item.removed_at,
+                "stage": item.stage.value,
+                "summary": item.summary,
+                "provenance": (
+                    {
+                        "provider": item.provenance.provider,
+                        "model": item.provenance.model,
+                        "reasoning_effort": item.provenance.reasoning_effort,
+                    }
+                    if item.provenance
+                    else None
+                ),
+                "enabled": item.enabled,
+            }
+            for item in project.strategies
+        ],
+    }
+    return _digest(json.dumps(state, sort_keys=True, separators=(",", ":")))
+
+
+def _legacy_resume_state_matches(record: dict[str, Any], project: Any) -> bool:
+    """Conservatively recognize pre-semantic-guard sessions after safe migrations.
+
+    Older session records did not retain a full project state. Their audit trail
+    must therefore prove that only eligibility toggles occurred after start,
+    and the saved problem, eligibility list, and selected strategy text must
+    still match exactly.
+    """
+    started_at = record.get("started_at") or record.get("created_at")
+    if not isinstance(started_at, str):
+        return False
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return False
+    if started.tzinfo is None:
+        return False
+    if project.id != record.get("project_id") or project.problem != record.get("problem"):
+        return False
+    recorded_type = record.get("investigation_type")
+    if recorded_type is not None and recorded_type != project.investigation_type.value:
+        return False
+
+    snapshot = record.get("strategy_snapshot")
+    if not isinstance(snapshot, list):
+        return False
+    current_snapshot = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "eligibility": "disabled" if not item.enabled else "eligible",
+        }
+        for item in sorted(
+            (item for item in project.strategies if item.removed_at is None),
+            key=lambda item: (
+                project.active_order.index(item.id)
+                if item.id in project.active_order
+                else len(project.active_order)
+            ),
+        )
+    ]
+    if current_snapshot != snapshot:
+        return False
+
+    selected_ids = record.get("strategy_ids", [record.get("strategy_id")])
+    if not isinstance(selected_ids, list) or not selected_ids:
+        return False
+    saved_texts = {
+        item.get("strategy_id"): (item.get("strategy_title"), item.get("strategy_text"))
+        for item in record.get("strategy_runs", [])
+        if isinstance(item, dict)
+    }
+    saved_texts.setdefault(
+        record.get("strategy_id"),
+        (record.get("strategy_title"), record.get("strategy_text")),
+    )
+    current_strategies = {item.id: item for item in project.strategies}
+    for identifier in selected_ids:
+        current = current_strategies.get(identifier)
+        if (
+            current is None
+            or identifier not in saved_texts
+            or saved_texts[identifier] != (current.title, current.approach)
+        ):
+            return False
+
+    for event in project.events:
+        try:
+            event_time = datetime.fromisoformat(event.timestamp)
+        except (TypeError, ValueError):
+            return False
+        if event_time.tzinfo is None:
+            return False
+        if event_time <= started:
+            continue
+        change = event.enabled_change
+        if (
+            event.kind != "strategy.enabled_changed"
+            or event.strategy_id not in current_strategies
+            or change is None
+            or type(change.previous) is not bool
+            or type(change.enabled) is not bool
+            or change.previous == change.enabled
+        ):
+            return False
+    return True
+
+
 def _finding_source_readiness(finding: dict[str, Any]) -> dict[str, Any]:
     """Describe what a bounded saved source contains, not whether its claim is true.
 
@@ -4160,6 +4288,7 @@ async def start_session(
                 "mode": credential["mode"],
                 "identity_hash": _digest(credential["identity"]),
                 "guard_hash": guard,
+                "guard_state_hash": _project_guard_state(view.project),
                 "idempotency_key": idempotency_key,
                 "status": "queued",
                 "outcome_conclusion_version": 1,
@@ -4408,7 +4537,16 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         return _public(record)
     view, guard = _snapshot(record["project_path"])
     credential = await auth_context()
-    if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+    guard_state_hash = _project_guard_state(view.project)
+    guard_matches = guard == record.get("guard_hash")
+    if not guard_matches:
+        saved_state_hash = record.get("guard_state_hash")
+        guard_matches = (
+            saved_state_hash == guard_state_hash
+            if isinstance(saved_state_hash, str)
+            else _legacy_resume_state_matches(record, view.project)
+        )
+    if not guard_matches or view.project.id != record["project_id"]:
         record["message"] = "Project or strategy changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
@@ -4453,6 +4591,13 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
+            _, locked_guard = _snapshot(record["project_path"])
+            if locked_guard != guard:
+                record["message"] = "Project or strategy changed; research remains paused."
+                _save(record["project_path"], record)
+                raise ProjectError(record["message"])
+            record["guard_hash"] = guard
+            record["guard_state_hash"] = guard_state_hash
             others = [
                 _recover(item)
                 for item in _all(path)
@@ -5803,14 +5948,14 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
     for key, count, limit in (
         ("assumptions", 8, 300),
         ("objections", 12, 600),
-        ("open_obligations", 12, 600),
+        ("open_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
     ):
         if key in result:
             result[key] = _bounded_notes(result[key], count, limit)
     for key, count, limit in (
         ("assumptions", 8, 300),
         ("objections", 12, 600),
-        ("open_obligations", 12, 600),
+        ("open_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
     ):
         raw = source.get(key)
         if isinstance(raw, list) and (
@@ -5860,7 +6005,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
             result["extract_truncated_fields"].append("skeptic_output.response")
         for key, count, limit in (
             ("objections", 12, 600),
-            ("remaining_obligations", 12, 600),
+            ("remaining_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
             ("proof_obligations", 12, 600),
             ("unresolved_objections", 12, 600),
             ("assumptions_reviewed", 8, 300),
