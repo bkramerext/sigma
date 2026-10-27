@@ -594,6 +594,12 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
         pdf_name = f"artifacts/papers/{identifier}.pdf"
         if json_name in names or pdf_name in names:
             raise ProjectError("Paper version identifier already exists")
+        count = sum(
+            name.startswith("artifacts/papers/")
+            and name.endswith(".json")
+            and "/" not in name[len("artifacts/papers/") :]
+            for name in names
+        )
         if count >= MAX_PAPERS:
             raise ProjectError("This project has reached the 50 paper version limit")
         from sigma.projects import save_project_artifacts
