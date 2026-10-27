@@ -61,15 +61,33 @@ def _empty(project: Project) -> dict[str, Any]:
 
 
 def _load(path: Path, project: Project) -> dict[str, Any]:
-    state = path / STATE
-    if not state.exists() and not state.is_symlink():
-        return _empty(project)
-    if state.is_symlink() or not state.is_file():
-        raise ProjectError("Text representations must be a regular file")
-    try:
-        raw = json.loads(state.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise ProjectError("Text representations are corrupt") from exc
+    if path.suffix == ".json":
+        member = "artifacts/" + STATE
+        try:
+            from sigma.project_bundle import read_file
+            contents = read_file(path, member)
+        except (OSError, ValueError) as exc:
+            try:
+                bundle = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(bundle, dict) and isinstance(bundle.get("files"), dict) and member not in bundle["files"]:
+                    return _empty(project)
+            except (OSError, ValueError):
+                pass
+            raise ProjectError("Text representations are corrupt") from exc
+        try:
+            raw = json.loads(contents)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ProjectError("Text representations are corrupt") from exc
+    else:
+        state = path / STATE
+        if not state.exists() and not state.is_symlink():
+            return _empty(project)
+        if state.is_symlink() or not state.is_file():
+            raise ProjectError("Text representations must be a regular file")
+        try:
+            raw = json.loads(state.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ProjectError("Text representations are corrupt") from exc
     if (
         not isinstance(raw, dict)
         or set(raw) != {"schema_version", "project_id", "entries"}
@@ -156,8 +174,11 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
 
 
 def _save(path: Path, project: Project, raw: dict[str, Any]) -> None:
-    # Publish atomically under the caller's project lock.
     contents = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
+    if path.suffix == ".json":
+        from sigma.projects import save_project_artifacts
+        save_project_artifacts(path, {"artifacts/" + STATE: contents})
+        return
     staged = _stage(path, contents)
     try:
         state = path / STATE
@@ -324,7 +345,8 @@ def save_source(
 
 
 def _lock(path: Path):
-    fd = os.open(path / ".write.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    lock_path = path.with_name("." + path.name + ".write.lock") if path.suffix == ".json" else path / ".write.lock"
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     lock = os.fdopen(fd, "rb")
     if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
         lock.close()
