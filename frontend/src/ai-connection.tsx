@@ -240,18 +240,24 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding }: { proj
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const dotActive = !projectHeader && status === 'connected' && providerActive;
+  const hosted = cloudFunding?.target === 'hosted';
+  const sponsoredSelected = hosted && cloudFunding?.selectedConnection === 'sponsored';
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
-  const connected = status === 'connected' && !googleRequired;
-  const disabled = ai.connecting || ai.transitioning || googleRequired;
-  const dotStatus = projectHeader ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+  const hostedConnected = hosted && sponsoredSelected && cloudFunding?.provider?.status === 'connected';
+  const connected = (hosted ? hostedConnected : status === 'connected') && !googleRequired;
+  const disabled = (!hosted && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
+  const dotStatus = projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
+  const visibleLabel = hosted
+    ? connected ? 'SIGMA-sponsored API connected' : cloudFunding?.selectingConnection || cloudFunding?.providerLoading ? 'Connecting to SIGMA API…' : 'Use SIGMA-sponsored API'
+    : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   async function connect() {
     if (ai.connecting || ai.transitioning) return;
     try {
-      if (cloudFunding?.target === 'hosted' && cloudFunding.selectedConnection === 'sponsored') {
-        await cloudFunding.selectConnection?.('personal');
+      if (hosted) {
+        await cloudFunding?.selectConnection?.('sponsored');
+        return;
       }
       await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted' });
     } catch {
@@ -259,7 +265,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding }: { proj
     }
   }
   return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || ai.connecting || !!ai.handoff}>
-    <summary aria-label={visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (connected) void ai.disconnect(); else void connect(); }}>
+    <summary aria-label={visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted)) return; if (connected) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span>
     </summary>
     {ai.connecting && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>} <button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel</button></p>}
