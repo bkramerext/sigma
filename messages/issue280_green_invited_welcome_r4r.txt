@@ -1,0 +1,41 @@
+# Green R4R — Issue #280 invitation welcome follow-up
+
+- **Ticket:** Issue #280
+- **Branch:** `green/issue-280-invited-welcome`
+- **Base:** `integration/t279-t280` at combined commit `5971d35e42cfecdb21c5879b07d3b7cb407e10c8`
+- **Pull request:** pending creation
+- **Production flag:** unchanged; `SIGMA_CLOUD_FORCE_SPONSORED_MODE` remains default-off unless explicitly configured by an operator.
+
+## Changes
+
+Newly invited eligible accounts now get a centered “You have been invited!”
+dialog after sign-in, including reloads before acknowledgment. The allowance
+copy uses the effective allowance for the signed-in account when it is $1.00 or
+less. A new account gets “We will start you off with a $X.XX allowance.”;
+accounts with usage or holds get “We added a $X.XX allowance to your account.”
+One of 100 distinct curiosity/research-themed lines is selected per dialog.
+Escape and the acknowledgment button dismiss it, and dismissal is persisted
+server-side exactly once. A database migration gives existing accounts a
+default of no pending welcome. Browser state does not carry allowance across
+account switches.
+
+The existing force-sponsored-mode flag configuration and rollback procedure
+are documented in `docs/CLOUD_DEPLOYMENT.md` (section “Hosted sponsored-mode
+selection”): the flag defaults off, only applies alongside sponsored access,
+and rollback sets it to false followed by the guarded release/start procedure.
+Production configuration was not changed and the flag was not enabled.
+
+## Verification
+
+- `uv run python tests/cloud_auth.py` — PASS, 50 tests, including invite eligibility, denial, migration, persistent dismissal and repeat sign-in.
+- `uv run ruff check src/sigma/cloud_auth.py tests/cloud_auth.py browser_checks/hosted_sponsored_connection.py` — PASS.
+- `npm --prefix frontend run typecheck` — PASS.
+- `npm --prefix frontend run build` — PASS; existing non-failing Vite chunk-size advisory.
+- `uv run python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; dialog content, $0.75 allowance wording, one-time dismissal/reload and centered placement verified.
+- `./sigma test` — PASS, all steps, including Ruff (282 files), Pyright, frontend typecheck/build and deployment checks. The first run detected `deploy/gce_preflight.py` tracked without executable permission despite its shebang; corrected mode to `100755`, then the full rerun passed.
+- No provider calls, paid inference, or production changes.
+
+## Review notes
+
+Please review base ancestry against the combined integration commit. No known
+conflicts. No self-merge performed.

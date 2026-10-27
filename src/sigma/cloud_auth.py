@@ -257,6 +257,8 @@ def _initialize(path: Path) -> None:
                 model_access TEXT NOT NULL CHECK(model_access IN ('personal','sponsored')),
                 model_connection_status TEXT NOT NULL DEFAULT 'checking'
                     CHECK(model_connection_status IN ('checking','connected','unconfigured','disconnected','unauthorized','forbidden','limited','unavailable','invalid_response','reauth_required')),
+                invitation_welcome_pending INTEGER NOT NULL DEFAULT 0
+                    CHECK(invitation_welcome_pending IN (0,1)),
                 updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS flows (
@@ -305,6 +307,11 @@ def _initialize(path: Path) -> None:
         columns = {row["name"] for row in db.execute("PRAGMA table_info(grants)")}
         if "allowance_usd" not in columns:
             db.execute("ALTER TABLE grants ADD COLUMN allowance_usd REAL")
+        user_state_columns = {row["name"] for row in db.execute("PRAGMA table_info(user_state)")}
+        if "invitation_welcome_pending" not in user_state_columns:
+            db.execute(
+                "ALTER TABLE user_state ADD COLUMN invitation_welcome_pending INTEGER NOT NULL DEFAULT 0 CHECK(invitation_welcome_pending IN (0,1))"
+            )
         denied_columns = {row["name"] for row in db.execute("PRAGMA table_info(denied_access)")}
         if "subject" not in denied_columns:
             db.execute("ALTER TABLE denied_access ADD COLUMN subject TEXT")
@@ -436,7 +443,7 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 (principal.subject,),
             )
         row = db.execute(
-            "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status FROM user_state WHERE subject=?",
+            "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status,invitation_welcome_pending FROM user_state WHERE subject=?",
             (principal.subject,),
         ).fetchone()
     assert row is not None
@@ -451,6 +458,7 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 not cfg.local and force_sponsored_mode_enabled() and row["sponsorship_eligible"]
             ),
         },
+        "invitation_welcome_pending": bool(row["invitation_welcome_pending"]),
     }
 
 
@@ -1272,6 +1280,19 @@ async def callback(
             raise HTTPException(503, "Private workspace is unavailable.") from exc
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
+        existing_account = db.execute(
+            "SELECT 1 FROM user_state WHERE subject=?", (subject,)
+        ).fetchone()
+        bootstrap_email = _bootstrap_admin_email(db, cfg)
+        bootstrap_identity = email == bootstrap_email
+        domain = email.rsplit("@", 1)[1]
+        explicit_invite = db.execute(
+            "SELECT 1 FROM grants WHERE active=1 AND ((kind='email' AND value=?) OR (kind='domain' AND value=?)) LIMIT 1",
+            (email, domain),
+        ).fetchone()
+        newly_invited = (
+            existing_account is None and not bootstrap_identity and explicit_invite is not None
+        )
         db.execute(
             "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
             (subject, email, _now()),
@@ -1290,6 +1311,11 @@ async def callback(
             if not cfg.local and sponsored_access_enabled() and force_sponsored_mode_enabled()
             else "personal",
         )
+        if newly_invited:
+            db.execute(
+                "UPDATE user_state SET invitation_welcome_pending=1 WHERE subject=?",
+                (subject,),
+            )
         db.execute(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
@@ -1306,6 +1332,27 @@ async def callback(
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+@router.post("/welcome")
+def dismiss_invitation_welcome(request: Request):
+    """Persist the authenticated user's one-time invitation welcome dismissal."""
+    cfg = config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if not isinstance(principal, Principal):
+        raise HTTPException(401, "Authentication required.")
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
+    if not cfg.enabled or cfg.error:
+        raise HTTPException(503, "Invitation welcome state is unavailable.")
+    with _db(cfg) as db:
+        changed = db.execute(
+            "UPDATE user_state SET invitation_welcome_pending=0,updated_at=? WHERE subject=? AND access_active=1",
+            (_now(), principal.subject),
+        ).rowcount
+    if changed != 1:
+        raise HTTPException(403, "Invitation welcome state is unavailable.")
+    return {"dismissed": True}
 
 
 @router.get("/denied")

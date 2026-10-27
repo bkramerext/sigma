@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1051,6 +1052,95 @@ class CloudAuthTests(TestCase):
             True,
         )
         self.assertEqual(deliver.call_count, 1)
+
+    def test_invited_user_welcome_is_persisted_once_and_scoped_to_identity(self):
+        admin_login = self.finish(email="admin@example.org", subject="welcome-admin")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        initial_admin = self.client.get("/api/cloud-auth/status").json()
+        self.assertFalse(initial_admin["account"]["invitation_welcome_pending"])
+        grant = self.client.post(
+            "/api/cloud-auth/admin/grants",
+            headers={"Origin": ORIGIN},
+            json={
+                "kind": "email",
+                "value": "welcome-member@example.org",
+                "role": "member",
+                "allowance_usd": 0.75,
+            },
+        )
+        self.assertEqual(grant.status_code, 200, grant.text)
+
+        member_login = self.finish(email="welcome-member@example.org", subject="welcome-member")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, member_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        invited = self.client.get("/api/cloud-auth/status").json()
+        self.assertTrue(invited["account"]["invitation_welcome_pending"])
+
+        cross_origin = self.client.post(
+            "/api/cloud-auth/welcome", headers={"Origin": "https://other.test"}
+        )
+        self.assertEqual(cross_origin.status_code, 403)
+        dismissed = self.client.post("/api/cloud-auth/welcome", headers={"Origin": ORIGIN})
+        self.assertEqual(dismissed.status_code, 200, dismissed.text)
+        self.assertEqual(dismissed.json(), {"dismissed": True})
+        self.assertFalse(
+            self.client.get("/api/cloud-auth/status").json()["account"][
+                "invitation_welcome_pending"
+            ]
+        )
+
+        # A new verified callback and subsequent reload do not repeat a dismissed welcome.
+        repeated_login = self.finish(email="welcome-member@example.org", subject="welcome-member")
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, repeated_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        self.assertFalse(
+            self.client.get("/api/cloud-auth/status").json()["account"][
+                "invitation_welcome_pending"
+            ]
+        )
+
+        self.client.cookies.clear()
+        guest_attempt = self.client.post("/api/cloud-auth/welcome", headers={"Origin": ORIGIN})
+        self.assertEqual(guest_attempt.status_code, 401)
+
+    def test_invitation_welcome_schema_migrates_existing_user_state(self):
+        path = self.root / "legacy-auth.sqlite3"
+        db = sqlite3.connect(path)
+        try:
+            db.execute(
+                """CREATE TABLE user_state (
+                    subject TEXT PRIMARY KEY, email TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('member','admin')),
+                    access_active INTEGER NOT NULL CHECK(access_active IN (0,1)),
+                    workspace_id TEXT,
+                    sponsorship_eligible INTEGER NOT NULL CHECK(sponsorship_eligible IN (0,1)),
+                    model_access TEXT NOT NULL CHECK(model_access IN ('personal','sponsored')),
+                    model_connection_status TEXT NOT NULL DEFAULT 'checking',
+                    updated_at INTEGER NOT NULL
+                )"""
+            )
+            db.execute(
+                "INSERT INTO user_state VALUES('legacy-subject','legacy@example.org','member',1,NULL,0,'personal','checking',123)"
+            )
+            db.commit()
+        finally:
+            db.close()
+        path.chmod(0o600)
+        cloud_auth._initialize(path)
+        db = sqlite3.connect(path)
+        try:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(user_state)")}
+            self.assertIn("invitation_welcome_pending", columns)
+            pending = db.execute(
+                "SELECT invitation_welcome_pending FROM user_state WHERE subject='legacy-subject'"
+            ).fetchone()[0]
+        finally:
+            db.close()
+        self.assertEqual(pending, 0)
 
     def test_invitation_request_fails_closed_when_notification_unconfigured(self):
         denied = self.finish(email="visitor@example.org", subject="request-retry")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import time
@@ -69,16 +70,22 @@ def main() -> None:
 
 
 def exercise(origin: str) -> None:
+    phrase_source = (ROOT / "frontend/src/invitation-welcome-phrases.ts").read_text(
+        encoding="utf-8"
+    )
+    phrases = re.findall(r"^  '(.+)',?$", phrase_source, re.MULTILINE)
+    assert len(phrases) == 100 and len(set(phrases)) == 100, (len(phrases), len(set(phrases)))
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         selected = {"mode": "personal"}
         forced = {"value": False}
+        welcome_pending = {"value": True}
         funding = {
-            "allowance_usd": 2,
-            "estimated_usage_usd": 0.25,
-            "held_usd": 0.25,
-            "remaining_usd": 1.5,
+            "allowance_usd": 0.75,
+            "estimated_usage_usd": 0,
+            "held_usd": 0,
+            "remaining_usd": 0.75,
         }
         posts: list[tuple[str, dict]] = []
         failures: list[str] = []
@@ -105,6 +112,7 @@ def exercise(origin: str) -> None:
                         "workspace": {"available": True, "id": "workspace-test"},
                         "model_access": {"mode": selected["mode"], "connection": "connected"},
                         "sponsorship": {"eligible": True, "forced": forced["value"]},
+                        "invitation_welcome_pending": welcome_pending["value"],
                     },
                     "admin_contact_email": "admin@example.test",
                 }
@@ -143,6 +151,9 @@ def exercise(origin: str) -> None:
                     "ttl_seconds": 0,
                     "accounts": [],
                 }
+            elif path.endswith("/api/cloud-auth/welcome") and method == "POST":
+                welcome_pending["value"] = False
+                payload = {"dismissed": True}
             elif path.endswith(("/api/projects/samples", "/api/projects/recent")):
                 payload = {"projects": []}
             elif path.endswith("/api/ui-instance"):
@@ -151,6 +162,26 @@ def exercise(origin: str) -> None:
 
         page.route("**/api/**", mock_api)
         page.goto(origin + "/", wait_until="networkidle")
+        welcome = page.locator("#invitation-welcome-dialog")
+        expect(welcome).to_be_visible()
+        expect(welcome.get_by_role("heading", name="You have been invited!")).to_be_visible()
+        expect(welcome).to_contain_text("We will start you off with a $0.75 allowance.")
+        expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
+        welcome_box = welcome.bounding_box()
+        assert welcome_box is not None
+        assert abs(welcome_box["x"] + welcome_box["width"] / 2 - 720) < 30, welcome_box
+        assert abs(welcome_box["y"] + welcome_box["height"] / 2 - 450) < 30, welcome_box
+        welcome.get_by_role("button", name="Let's get started").click()
+        expect(welcome).to_have_count(0)
+        page.reload(wait_until="domcontentloaded")
+        expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
+        funding.update(
+            allowance_usd=2,
+            estimated_usage_usd=0.25,
+            held_usd=0.25,
+            remaining_usd=1.5,
+        )
+        page.evaluate("window.dispatchEvent(new Event('sigma-sponsored-budget-refresh'))")
         pill = page.locator(".api-connection > summary")
         expect(pill).to_be_visible()
         expect(pill).to_contain_text("SIGMA-sponsored GPT Usage")

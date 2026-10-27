@@ -110,6 +110,27 @@ frontend typecheck/build, and deployment checks. A build-size advisory remains
 the existing non-failing Vite warning. No live provider calls, paid inference,
 or production changes occurred. See the [Issue #280 R4R handoff](../messages/issue280_green_sponsored_allowance_r4r.txt).
 
+### Issue #280 follow-up — one-time invitation welcome (2026-10-27)
+
+On integration commit `5971d35e`, newly invited eligible accounts receive a
+centered, one-time “You have been invited!” dialog after sign-in/reload. The
+dialog shows the account's effective remaining sponsored allowance when it is
+$1.00 or less, uses the appropriate new-account/credited-account wording, and
+chooses one of 100 curiosity-themed messages. It supports Escape and a visible
+acknowledgment button; dismissal is persisted server-side, so reloads do not
+repeat it. The account state migration defaults existing users to no pending
+welcome. Account switching does not reuse another user's allowance.
+
+Focused validation passed: `tests/cloud_auth.py` (50 tests), Ruff, frontend
+typecheck/build, and `browser_checks/hosted_sponsored_connection.py` in real
+Chrome with mocked API, including the one-time behavior, message, amount, and
+centering. `./sigma test` passed all steps, including Ruff, Pyright, frontend
+typecheck/build, and deployment checks. The full run exposed a tracked
+executable-mode issue in `deploy/gce_preflight.py`; its shebang/mode is now
+consistent with Ruff and scripts that invoke it directly. No paid provider
+calls or production configuration changes occurred.
+See [invitation welcome R4R handoff](../messages/issue280_green_invited_welcome_r4r.txt).
+
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)
 
 The public 0.1.1 Home UI at `3f2426c6fa83866c655cb1b601a7e2df78e5e459`

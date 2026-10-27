@@ -11,6 +11,7 @@ import './copper-controls.css';
 import './text-views.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
+import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // Prospective navigation rail; keep implementation available for later activation.
@@ -3594,7 +3595,7 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { mock_auth?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
@@ -4005,6 +4006,7 @@ function CloudAuthGate() {
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
   const [deniedInvitationStatus, setDeniedInvitationStatus] = useState<string | null>(null);
   const [budget, setBudget] = useState<CloudResearchBudget | null>(null);
+  const [budgetEmail, setBudgetEmail] = useState<string | null>(null);
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [budgetError, setBudgetError] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<{ status: string; guidance: string } | null>(null);
@@ -4050,6 +4052,8 @@ function CloudAuthGate() {
   }, []);
   useEffect(() => {
     const target = status?.target ?? 'hosted';
+    const email = status?.user?.email ?? null;
+    setBudget(null); setBudgetEmail(null); setBudgetError(null);
     if (!status?.enabled || !status.authenticated || target !== 'hosted') {
       setBudget(null); setBudgetLoading(false); setBudgetError(null); return;
     }
@@ -4060,7 +4064,7 @@ function CloudAuthGate() {
         const response = await fetch('/api/cloud-research/budget', { credentials: 'same-origin', cache: 'no-store' });
         if (!response.ok) throw await cloudFailure(response, 'ChatGPT allowance is unavailable.');
         const result = await response.json() as CloudResearchBudget;
-        if (active) { setBudget(result); setBudgetError(null); }
+        if (active) { setBudget(result); setBudgetEmail(email); setBudgetError(null); }
       } catch (cause) { if (active) setBudgetError(cause instanceof Error ? cause.message : 'ChatGPT allowance is unavailable.'); }
       finally { if (active) setBudgetLoading(false); }
     };
@@ -4069,7 +4073,7 @@ function CloudAuthGate() {
     window.addEventListener('focus', fetchBudget);
     window.addEventListener('sigma-sponsored-budget-refresh', fetchBudget);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', fetchBudget); window.removeEventListener('sigma-sponsored-budget-refresh', fetchBudget); };
-  }, [status?.enabled, status?.authenticated, status?.target]);
+  }, [status?.enabled, status?.authenticated, status?.target, status?.user?.email]);
   const refreshSponsoredConnection = useCallback(async () => {
     if (!status?.enabled || !status.authenticated || status.target !== 'hosted') return;
     setProviderLoading(true);
@@ -4148,7 +4152,46 @@ function CloudAuthGate() {
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   if (!status.authenticated && window.location.pathname === '/project') window.history.replaceState(null, '', '/');
-  return <CloudIdentityContext.Provider value={context}><AIProvider unavailable={!status.authenticated}><App/></AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}>
+    <AIProvider unavailable={!status.authenticated}><App/></AIProvider>
+    {status.authenticated && status.account?.invitation_welcome_pending && <InvitationWelcomeDialog
+      allowance={budgetEmail === status.user?.email ? budget?.allowance_usd ?? null : null}
+      allowanceUsed={budgetEmail === status.user?.email && budget ? budget.estimated_usage_usd + budget.held_usd : 0}
+      allowanceLoading={budgetLoading && budgetEmail !== status.user?.email}
+      onDismiss={refresh}
+    />}
+    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
+  </CloudIdentityContext.Provider>;
+}
+
+function InvitationWelcomeDialog({ allowance, allowanceUsed, allowanceLoading, onDismiss }: { allowance: number | null; allowanceUsed: number; allowanceLoading: boolean; onDismiss: () => Promise<void> }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
+  useEffect(() => {
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+    return () => { if (dialog.current?.open) dialog.current.close(); };
+  }, []);
+  async function dismiss() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/cloud-auth/welcome', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!response.ok) throw await cloudFailure(response, 'Your invitation welcome could not be saved.');
+      await onDismiss();
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <dialog id="invitation-welcome-dialog" ref={dialog} className="google-account-dialog invitation-welcome-dialog" aria-labelledby="invitation-welcome-heading" aria-describedby="invitation-welcome-phrase" onCancel={event => { event.preventDefault(); void dismiss(); }}>
+    <p className="cloud-auth-kicker">Welcome to SIGMA</p>
+    <h2 id="invitation-welcome-heading">You have been invited!</h2>
+    {allowance !== null && allowance <= 1 && <p className="invitation-welcome-allowance">{allowanceUsed > 0 ? `We added a $${allowance.toFixed(2)} allowance to your account.` : `We will start you off with a $${allowance.toFixed(2)} allowance.`}</p>}
+    {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
+    <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
+    {error && <p role="alert">{error}</p>}
+    <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : "Let's get started"}</button>
+  </dialog>;
 }
 
 function PrivacyNoticePage() {
