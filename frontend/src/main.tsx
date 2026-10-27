@@ -4163,30 +4163,6 @@ function TermsOfServicePage() {
   </article></main>;
 }
 
-function AccessNotGranted({ email }: { email: string }) {
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('invite') === '1') {
-      window.history.replaceState(null, '', '/?access=denied');
-      void submit();
-    }
-  }, []);
-  async function submit() {
-    setBusy(true); setError('');
-    try {
-      const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({})) as { detail?: string; error?: string };
-        throw new Error(result.detail || result.error || 'Your request could not be sent. Please try again later.');
-      }
-      setSent(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.'); }
-    finally { setBusy(false); }
-  }
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Welcome to SIGMA</h1><p role="status">Your Google account is not yet invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! We'll get back to you!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Invite Me'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Continue as Guest</a><a className="cloud-text-button" href="/privacy">Proposed privacy notice · v1</a></div>{error && <p role="alert">{error}</p>}</section>;
-}
 
 installRequestErrorToasts();
 createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : window.location.pathname === '/tos' ? <TermsOfServicePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);
