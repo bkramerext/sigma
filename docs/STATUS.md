@@ -6706,3 +6706,14 @@ email, paid work, or production changes occurred. See
 PR #281 is open against `main` at `918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad`,
 mergeable, and not merged. Its pushed implementation and R4R handoff are on
 `blue/issue-279-invite-me`.
+
+### Issue #279 human-requested allowance-zero correction
+
+The guest pill now reads **Invite me!**. When the current hosted allowance
+reports `remaining_usd <= 0`, signed-in users see **Reload me!** in the same
+header-actions slot used by **Admin**. The action reloads the page; the existing
+budget refresh updates the zero-allowance state. The extended real-Chrome check
+passed at desktop and mobile widths, including positive-to-zero transition,
+slot placement, page reload, and mobile overflow. Frontend typecheck and a fresh
+`./sigma test` passed. This correction is part of PR #281; no live or paid
+provider work was run.

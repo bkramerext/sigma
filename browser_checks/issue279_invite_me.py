@@ -54,7 +54,7 @@ with sync_playwright() as playwright:
     )
     page.goto(BASE_URL, wait_until="networkidle")
     expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-    invite_pill = page.get_by_role("button", name="Invite me")
+    invite_pill = page.get_by_role("button", name="Invite me!")
     invite_pill.click()
     guest_invite_dialog = page.get_by_role("dialog", name="Request an invitation")
     expect(guest_invite_dialog).to_be_visible()
@@ -111,7 +111,7 @@ with sync_playwright() as playwright:
             exact=True,
         )
     ).to_be_visible()
-    expect(page.get_by_role("button", name="Invite me")).to_have_count(0)
+    expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
     assert posts == [
         {"method": "POST", "body": {}},
         {"method": "POST", "body": {}},
@@ -130,6 +130,7 @@ with sync_playwright() as playwright:
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
     member_page = browser.new_page(viewport={"width": 1280, "height": 850})
+    allowance = {"remaining_usd": 1.0}
     member_page.route(
         "**/api/cloud-auth/status",
         lambda route: route.fulfill(
@@ -142,15 +143,45 @@ with sync_playwright() as playwright:
                     "authenticated": True,
                     "user": {"email": "member@example.org", "role": "member"},
                     "admin_contact_email": "zetacontinuation@gmail.com",
+                    "target": "hosted",
+                }
+            ),
+        ),
+    )
+    member_page.route(
+        "**/api/cloud-research/budget",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "allowance_usd": 1,
+                    "estimated_usage_usd": 1 - allowance["remaining_usd"],
+                    "held_usd": 0,
+                    "reserved_and_estimated_usd": 1 - allowance["remaining_usd"],
+                    "remaining_usd": allowance["remaining_usd"],
+                    "unknown_provider_attempts": 0,
                 }
             ),
         ),
     )
     member_page.goto(BASE_URL, wait_until="networkidle")
-    expect(member_page.get_by_role("button", name="Invite me")).to_have_count(0)
+    expect(member_page.get_by_role("button", name="Invite me!")).to_have_count(0)
     expect(member_page.get_by_role("button", name="Sign out of Google")).to_be_visible()
+    expect(member_page.get_by_role("button", name="Reload me!")).to_have_count(0)
+    allowance["remaining_usd"] = 0
+    member_page.evaluate("window.dispatchEvent(new Event('focus'))")
+    reload_button = member_page.get_by_role("button", name="Reload me!")
+    expect(reload_button).to_be_visible()
+    expect(reload_button.locator("xpath=..")).to_have_class("home-header-actions")
+    with member_page.expect_navigation(wait_until="domcontentloaded"):
+        reload_button.click()
+    expect(member_page.get_by_role("button", name="Reload me!")).to_be_visible()
+    member_page.set_viewport_size({"width": 390, "height": 844})
+    expect(member_page.get_by_role("button", name="Reload me!")).to_be_visible()
+    assert member_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     browser.close()
 
 print(
-    "PASS issue #279 real Chrome desktop/mobile guest invite, verified invitation error/retry/confirmation, pill removal, and member access"
+    "PASS issue #279 real Chrome desktop/mobile invitation, retry/reload persistence, zero-allowance Reload me!, and member access"
 )

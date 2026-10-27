@@ -14,11 +14,13 @@
 - Submission is disabled while pending. Failures remain retryable. Success uses the established T81 confirmation and removes the pill.
 - The denied-identity endpoint now reports the invitation status belonging to that verified subject. A recorded request remains confirmed, without a second submission or pill, after refresh. This reuses the existing invitation table and admin workflow.
 - Authorized members/admins do not see **Invite me**. Existing sign-in, membership enforcement, guest Samples, and model controls are unchanged.
+- The guest pill is labeled **Invite me!**. When a hosted signed-in user's remaining allowance reaches zero, **Reload me!** appears in the Admin header slot and reloads SIGMA.
 
 ## Verification evidence
 
 - **MET:** `uv run python tests/cloud_auth.py` — 47 tests passed. Includes denied identity, durable invitation request status, membership controls, duplicate/idempotency and authorization paths.
 - **MET:** `uv run --with playwright python browser_checks/issue279_invite_me.py` — passed in installed Chrome. Deterministic API routes exercised desktop/mobile layout, guest sign-in explanation and intent URL, verified invitation dialog and privacy link, keyboard submission, recoverable mocked failure/retry, success, pill removal after submission and reload, and member visibility.
+- **MET:** The same real-Chrome check verifies the **Reload me!** control stays hidden with positive allowance, appears in the Admin slot at zero, reloads, and fits at mobile width.
 - **MET:** `npm run typecheck` in `frontend/` passed.
 - **MET:** `npm --prefix frontend run build` passed; the existing advisory for a JavaScript chunk above 500 kB remains.
 - **MET:** `./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production build.
