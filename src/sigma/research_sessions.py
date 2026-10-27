@@ -2782,19 +2782,25 @@ def _save(path: str, record: dict[str, Any]) -> None:
                     previous = json.loads(existing)
                 except (ValueError, UnicodeDecodeError) as exc:
                     raise ProjectError("Existing research session record is unreadable") from exc
-                if (not isinstance(previous, dict)
+                if (
+                    not isinstance(previous, dict)
                     or previous.get("project_id") != view.project.id
                     or previous.get("project_path") != view.path
                     or previous.get("id") != session_id
-                    or previous.get("session_number") != record["session_number"]):
+                    or previous.get("session_number") != record["session_number"]
+                ):
                     raise ProjectError("Research session identity cannot change")
             total = sum(
-                len(data) for name, data in members.items()
-                if name.startswith("research-sessions/") and name.endswith(".json")
+                len(data)
+                for name, data in members.items()
+                if name.startswith("research-sessions/")
+                and name.endswith(".json")
                 and name != member
             )
             if total + len(encoded) > MAX_TOTAL:
-                raise ProjectError("Research session storage limit reached; session paused without dropping artifacts")
+                raise ProjectError(
+                    "Research session storage limit reached; session paused without dropping artifacts"
+                )
             return {member: encoded}
 
         transform_members(path, update)
