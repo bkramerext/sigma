@@ -20,6 +20,7 @@ grants = [
         "value": BOOTSTRAP,
         "role": "admin",
         "active": 1,
+        "updated_at": 100,
         "allowance_usd": 2.0,
         "effective_allowance_usd": 2.0,
     },
@@ -28,9 +29,27 @@ grants = [
         "value": "reviewers.example",
         "role": "member",
         "active": 1,
+        "updated_at": 100,
         "allowance_usd": 3.0,
         "effective_allowance_usd": 3.0,
     },
+    {
+        "kind": "domain",
+        "value": "REVIEWERS.EXAMPLE.",
+        "role": "member",
+        "active": 1,
+        "updated_at": 50,
+        "allowance_usd": 1.0,
+        "effective_allowance_usd": 1.0,
+    },
+]
+invitation_requests = [
+    {
+        "subject": "new-invitee",
+        "email": "new-invitee@example.org",
+        "requested_at": 1_798_000_000,
+        "status": "notified",
+    }
 ]
 status = {
     "target": "local",
@@ -122,14 +141,46 @@ def main() -> None:
                     )
                 elif path == "grants" and route.request.method == "POST":
                     item = json.loads(route.request.post_data or "{}")
-                    grants.append(
-                        {
-                            **item,
-                            "active": 1,
-                            "effective_allowance_usd": item["allowance_usd"] or 2.0,
-                        }
+                    normalized_value = item["value"].strip().lower().removesuffix(".")
+                    existing = next(
+                        (
+                            grant
+                            for grant in grants
+                            if grant["kind"] == item["kind"]
+                            and grant["value"].strip().lower().removesuffix(".") == normalized_value
+                        ),
+                        None,
                     )
+                    if existing:
+                        existing.update(
+                            **item,
+                            active=1,
+                            updated_at=200,
+                            effective_allowance_usd=item["allowance_usd"] or 2.0,
+                        )
+                    else:
+                        grants.append(
+                            {
+                                **item,
+                                "active": 1,
+                                "updated_at": 200,
+                                "effective_allowance_usd": item["allowance_usd"] or 2.0,
+                            }
+                        )
                     route.fulfill(status=201, content_type="application/json", body="{}")
+                elif path == "invitation-requests" and route.request.method == "GET":
+                    route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        body=json.dumps({"requests": invitation_requests}),
+                    )
+                elif path.startswith("invitation-requests/") and route.request.method == "PUT":
+                    subject = unquote(path.removeprefix("invitation-requests/"))
+                    body = json.loads(route.request.post_data or "{}")
+                    for request in invitation_requests:
+                        if request["subject"] == subject:
+                            request["status"] = body["status"]
+                    route.fulfill(status=200, content_type="application/json", body="{}")
                 elif path == "grants/updates" and route.request.method == "PUT":
                     for update in json.loads(route.request.post_data or "{}")["updates"]:
                         for grant in grants:
@@ -402,7 +453,21 @@ def main() -> None:
             assert ordered.evaluate_all(
                 "rows => { const values = rows.map(row => row.querySelector('th').innerText.split('\\n')[0]); return values.length === 2 && values.every((value, index) => index === 0 || values[index - 1].localeCompare(value, undefined, {sensitivity: 'base'}) <= 0); }"
             )
-            grants_table = dialog.locator(".admin-grants-table")
+            invitation_requests_table = dialog.locator(".admin-grants-table").first
+            grants_table = dialog.locator(".admin-grants-table").nth(1)
+            requested_account = invitation_requests_table.locator("tbody tr").filter(
+                has_text="new-invitee@example.org"
+            )
+            expect(requested_account.get_by_role("button", name="Add", exact=True)).to_be_enabled()
+            requested_account.get_by_role("button", name="Add", exact=True).click()
+            added_invitee = grants_table.locator("tbody tr").filter(
+                has_text="new-invitee@example.org"
+            )
+            expect(added_invitee).to_be_visible()
+            expect(
+                requested_account.get_by_role("button", name="Added", exact=True)
+            ).to_be_disabled()
+            assert added_invitee.count() == 1
             table_before_new = grants_table.bounding_box()
             dialog.locator(".admin-grants-table").get_by_role(
                 "button", name="New", exact=True

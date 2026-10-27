@@ -82,6 +82,45 @@ def exercise(origin: str) -> None:
         forced = {"value": False}
         welcome_pending = {"value": True}
         guest_mode = {"value": False}
+        admin_mode = {"value": False}
+        admin_grants = [
+            {
+                "kind": "email",
+                "value": "admin@example.test",
+                "role": "admin",
+                "active": 1,
+                "updated_at": 100,
+                "allowance_usd": None,
+                "effective_allowance_usd": 2.0,
+            },
+            {
+                "kind": "email",
+                "value": "New.Member@example.test",
+                "role": "member",
+                "active": 1,
+                "updated_at": 10,
+                "allowance_usd": 1.0,
+                "effective_allowance_usd": 1.0,
+            },
+            {
+                "kind": "email",
+                "value": "new.member@example.test",
+                "role": "member",
+                "active": 1,
+                "updated_at": 20,
+                "allowance_usd": 2.0,
+                "effective_allowance_usd": 2.0,
+            },
+        ]
+        admin_invitation_requests = [
+            {
+                "subject": "new-invitee",
+                "email": "new-invitee@example.test",
+                "requested_at": 1_798_000_000,
+                "status": "notified",
+            }
+        ]
+        invitation_failures = {"remaining": 0}
         funding = {
             "allowance_usd": 0.75,
             "estimated_usage_usd": 0,
@@ -108,7 +147,12 @@ def exercise(origin: str) -> None:
                     "authenticated": not guest_mode["value"],
                     "user": None
                     if guest_mode["value"]
-                    else {"email": "member@example.test", "role": "member"},
+                    else {
+                        "email": "admin@example.test"
+                        if admin_mode["value"]
+                        else "member@example.test",
+                        "role": "admin" if admin_mode["value"] else "member",
+                    },
                     "account": None
                     if guest_mode["value"]
                     else {
@@ -162,7 +206,36 @@ def exercise(origin: str) -> None:
             elif path.endswith("/api/cloud-auth/denied"):
                 payload = {"email": "new-guest@example.test", "invitation_status": None}
             elif path.endswith("/api/cloud-auth/invitation-request") and method == "POST":
+                if invitation_failures["remaining"]:
+                    invitation_failures["remaining"] -= 1
+                    route.fulfill(
+                        status=503,
+                        content_type="application/json",
+                        body=json.dumps(
+                            {"error": "Your request could not be sent. Please try again later."}
+                        ),
+                    )
+                    return
                 payload = {"status": "notified", "duplicate": False}
+            elif path.endswith("/api/cloud-auth/admin/grants") and method == "GET":
+                payload = {
+                    "bootstrap_admin": "admin@example.test",
+                    "grants": admin_grants,
+                    "sessions": [],
+                }
+            elif path.endswith("/api/cloud-auth/admin/grants") and method == "POST":
+                entry = body.copy()
+                entry.update(
+                    active=1,
+                    updated_at=max(grant["updated_at"] for grant in admin_grants) + 1,
+                    effective_allowance_usd=2.0,
+                )
+                admin_grants.append(entry)
+                payload = entry
+            elif path.endswith("/api/cloud-auth/admin/invitation-requests"):
+                payload = {"requests": admin_invitation_requests}
+            elif path.endswith("/api/cloud-auth/admin/feedback"):
+                payload = {"feedback": []}
             elif path.endswith(("/api/projects/samples", "/api/projects/recent")):
                 payload = {"projects": []}
             elif path.endswith("/api/ui-instance"):
@@ -171,12 +244,17 @@ def exercise(origin: str) -> None:
 
         page.route("**/api/**", mock_api)
         page.goto(origin + "/", wait_until="networkidle")
-        assert page.locator("html").evaluate(
-            "element => getComputedStyle(element).backgroundColor"
-        ) == "rgb(2, 7, 17)"
-        assert page.locator("body").evaluate(
-            "element => getComputedStyle(element).backgroundColor"
-        ) == "rgb(2, 7, 17)"
+        assert (
+            page.locator("html").evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgb(2, 7, 17)"
+        )
+        assert (
+            page.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgb(2, 7, 17)"
+        )
+        assert "sigma-home-background-copper.png" in page.locator("body").evaluate(
+            "element => getComputedStyle(element).backgroundImage"
+        )
         credit = page.locator(".home-art-credit")
         expect(credit).to_be_visible()
         credit_lines = [line.strip() for line in credit.inner_text().splitlines() if line.strip()]
@@ -280,6 +358,18 @@ def exercise(origin: str) -> None:
         invitation_dialog = page.locator("#google-invitation-dialog")
         expect(invitation_dialog).to_be_visible()
         expect(invitation_dialog.get_by_role("link", name="Privacy Notice")).to_be_visible()
+        signin_box = invitation_dialog.locator(".google-invitation-signin").bounding_box()
+        signin_intro_box = invitation_dialog.locator(":scope > p").first.bounding_box()
+        invitation_footer_box = invitation_dialog.locator(
+            ".google-invitation-footer"
+        ).bounding_box()
+        assert signin_box and signin_intro_box and invitation_footer_box
+        gap_above_signin = signin_box["y"] - (signin_intro_box["y"] + signin_intro_box["height"])
+        gap_below_signin = invitation_footer_box["y"] - (signin_box["y"] + signin_box["height"])
+        assert abs(gap_below_signin / gap_above_signin - 2.5) <= 0.3, (
+            gap_above_signin,
+            gap_below_signin,
+        )
         heading_box = invitation_dialog.locator(".google-invitation-heading h2").bounding_box()
         close_box = invitation_dialog.get_by_role("button", name="Close").bounding_box()
         assert heading_box and close_box
@@ -328,6 +418,67 @@ def exercise(origin: str) -> None:
         assert sum(path.endswith("/api/cloud-auth/invitation-request") for path, _ in posts) == 1, (
             posts
         )
+        invitation_failures["remaining"] = 1
+        posts.clear()
+        page.goto(origin + "/?access=denied&invite=1", wait_until="domcontentloaded")
+        invitation_dialog = page.locator("#google-invitation-dialog")
+        expect(invitation_dialog).to_be_visible()
+        expect(invitation_dialog.get_by_role("alert")).to_have_count(1)
+        expect(invitation_dialog.get_by_role("alert")).to_have_text(
+            "Your request could not be sent. Please try again later."
+        )
+        retry = invitation_dialog.get_by_role("button", name="Try again")
+        expect(retry).to_be_visible()
+        assert retry.evaluate("element => getComputedStyle(element).backgroundColor") != (
+            "rgba(0, 0, 0, 0)"
+        )
+        retry.click()
+        expect(invitation_dialog).not_to_be_visible()
+        assert sum(path.endswith("/api/cloud-auth/invitation-request") for path, _ in posts) == 2, (
+            posts
+        )
+
+        # The administrator can grant a notified request directly. Legacy
+        # case variants collapse to one Authorized users row, selecting the
+        # most recently updated rule.
+        guest_mode["value"] = False
+        admin_mode["value"] = True
+        page.goto(origin + "/", wait_until="domcontentloaded")
+        page.get_by_role("link", name="Administrator settings").click()
+        admin_dialog = page.get_by_role("dialog", name="Administrator Settings")
+        expect(admin_dialog).to_be_visible()
+        authorized_heading = admin_dialog.get_by_role("heading", name="Authorized users")
+        authorized_table = authorized_heading.locator("xpath=following::table[1]")
+        expect(authorized_table).to_contain_text("admin@example.test")
+        duplicate_rows = authorized_table.locator("tbody tr").filter(
+            has_text="new.member@example.test"
+        )
+        assert duplicate_rows.count() == 1, authorized_table.inner_text()
+        expect(duplicate_rows).to_contain_text("new.member@example.test")
+        expect(duplicate_rows).to_contain_text("$2.00")
+        invitation_row = (
+            admin_dialog.locator(".admin-access-panel table")
+            .first.locator("tbody tr")
+            .filter(has_text="new-invitee@example.test")
+        )
+        invitation_table = admin_dialog.locator(".admin-invitation-table")
+        expect(invitation_table.get_by_role("columnheader", name="Status")).to_have_count(0)
+        invitation_columns = invitation_table.locator("colgroup col")
+        assert invitation_columns.count() == 3
+        first_column_width = invitation_columns.nth(0).evaluate(
+            "element => element.getBoundingClientRect().width"
+        )
+        table_width = invitation_table.evaluate("element => element.getBoundingClientRect().width")
+        assert abs(first_column_width / table_width - 1 / 3) < 0.01, (
+            first_column_width,
+            table_width,
+        )
+        invitation_row.get_by_role("button", name="Add", exact=True).click()
+        granted_row = authorized_table.locator("tbody tr").filter(
+            has_text="new-invitee@example.test"
+        )
+        expect(granted_row).to_be_visible()
+        expect(invitation_row.get_by_role("button", name="Added", exact=True)).to_be_disabled()
         browser.close()
 
 

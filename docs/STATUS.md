@@ -129,9 +129,10 @@ a verified, server-issued denied-login cookie before it records a request.
 After a Google challenge started from that action, an uninvited verified
 identity submits the invitation request automatically; success closes the
 dialog and removes the action. On delivery failure, the request dialog opens
-with the error so the user can retry. The invitation dialog has an underlined,
-transparent Close action after its title and a lower-left **Privacy Notice**
-link. Closing the privacy page returns to the invitation dialog; the About
+with one error message and a standard **Try again** button. The invitation
+dialog has an underlined, transparent Close action after its title, a Google
+sign-in pill with the lower gap 2.5 times the upper gap, and a lower-left
+**Privacy Notice** link. Closing the privacy page returns to the invitation dialog; the About
 dialog's Privacy Notice link likewise returns to About. The notice body now
 describes SIGMA's stored identity, access, invitation, feedback, project, and
 sponsored-usage data and remains version 1.0. The artwork credit reads
@@ -148,9 +149,15 @@ consistent with Ruff and scripts that invoke it directly. No paid provider
 calls, live Google OAuth challenge, or production configuration changes
 occurred; the supplied personal account's actual Google challenge therefore
 remains unverified.
-The browser and application canvas now start at `#020711`, matching the fixed
-home artwork's dark fallback, to prevent a light default page flash before the
-artwork renders.
+The browser canvas now uses the home artwork itself as its pre-render startup
+background, with `#020711` as its matching dark fallback, to prevent a light
+default page flash before the app renders.
+In Administrator Settings, the Invitation requests table now removes Status
+and widens the verified-account column by one third. Its **Add** action grants
+the verified email as a member using the configured default allowance;
+existing active email rules show **Added**. The Authorized users table
+collapses case/trailing-dot variants and displays the most recently updated
+rule, preferring normalized spelling when update times tie.
 See [invitation welcome R4R handoff](../messages/issue280_green_invited_welcome_r4r.txt).
 
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)

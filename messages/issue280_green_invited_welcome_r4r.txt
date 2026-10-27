@@ -38,6 +38,15 @@ Invite me. Delivery errors open the request dialog with a retry path. The
 request dialog's underlined, transparent Close follows its title; Privacy
 Notice is at lower left. Closing that notice returns to the invitation dialog,
 and the About link returns to About. Both locations display **Privacy Notice**.
+The sign-in pill's lower gap is 2.5 times the upper gap. Failed invitation
+requests show one error and a standard **Try again** pill; a successful retry
+closes the dialog and removes Invite me.
+Administrator Settings now offers **Add** beside invitation requests. It adds
+the verified email as a member using the configured default allowance and
+changes the action to **Added** for an active email rule. The request table
+omits Status and gives the verified-account column one third more width. The
+Authorized users table collapses case/trailing-dot duplicates and shows the
+most recently updated rule, preferring normalized spelling when timestamps tie.
 The live notice now describes identity/access state, session cookies,
 invitation and feedback records, per-account workspace content, sponsored
 accounting, provider/mail sharing, and the current retention controls. It
@@ -51,7 +60,7 @@ selected from the user's supplied list once per page load.
 - `uv run ruff check src/sigma/cloud_auth.py tests/cloud_auth.py browser_checks/hosted_sponsored_connection.py` — PASS.
 - `npm --prefix frontend run typecheck` — PASS.
 - `npm --prefix frontend run build` — PASS; existing non-failing Vite chunk-size advisory.
-- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; allowance, welcome dismissal/reload/centering, Invite me placement for both signed-in and guest accounts, transparent underlined Close after title, lower-left Privacy Notice, return to invitation and About dialogs, automatic invite-intent submission/removal, and dark pre-render canvas verified.
+- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; allowance, welcome dismissal/reload/centering, Invite me placement for both signed-in and guest accounts, transparent underlined Close after title, 2.5x lower sign-in spacing, lower-left Privacy Notice and return paths, automatic invite-intent submission, single-error Try again recovery, invitation Add action with wider account column/no Status, duplicate-rule preference, and artwork pre-render verified.
 - `npm --prefix frontend run typecheck` — PASS.
 - `./sigma test` — PASS, all steps, including Ruff (282 files), Pyright, frontend typecheck/build and deployment checks. The first run detected `deploy/gce_preflight.py` tracked without executable permission despite its shebang; corrected mode to `100755`, then the full rerun passed.
 - No provider calls, paid inference, or production changes.

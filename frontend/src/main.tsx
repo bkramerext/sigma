@@ -3633,7 +3633,7 @@ function App() {
 }
 
 type CloudStatus = { mock_auth?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
-type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
+type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
@@ -3833,9 +3833,9 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       {deniedEmail
         ? invitationRecorded
           ? <p role="status">{cloud?.deniedInvitationStatus === 'sending' ? 'Your invitation request is already recorded and being processed.' : "Glad you're interested! Your request has been sent along to the right person!"}</p>
-          : <InvitationRequestControls onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}/>
+          : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); dialog.current?.close(); }}/>
         : <a className="project-google-signin google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google to continue</a>}
-      {error && <p role="alert">{error}</p>}
+      {error && !deniedEmail && <p role="alert">{error}</p>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>
   </>;
@@ -3856,23 +3856,20 @@ function HomeInvitationAction() {
   return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}><span className="connection-dot" aria-hidden="true"/>Invite me!</button>;
 }
 
-function InvitationRequestControls({ onRecorded }: { onRecorded: () => void }) {
+function InvitationRequestControls({ error, onError, onRecorded }: { error: string; onError: (error: string) => void; onRecorded: () => void }) {
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState('');
   async function requestInvitation() {
-    setBusy(true); setError('');
+    setBusy(true); onError('');
     try {
       const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
-      setSent(true);
       onRecorded();
-    } catch (cause) { setError(errorMessage(cause)); }
+    } catch (cause) { onError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
   return <div className="google-invitation-actions">
-    {sent ? <p role="status">Glad you're interested! Your request has been sent along to the right person!</p> : <button type="button" className="google-text-action" disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : 'Invite me'}</button>}
     {error && <p role="alert">{error}</p>}
+    <button type="button" className="project-google-signin google-invitation-signin" aria-busy={busy} disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : error ? 'Try again' : 'Invite me'}</button>
   </div>;
 }
 
@@ -3987,7 +3984,16 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       requestAnimationFrame(() => removeButtons.current.get(confirmRemoveKey)?.focus());
     };
   }, [confirmRemoveKey]);
-  const ordered = grants.filter(grant => grant.active === 1).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
+  const uniqueGrants = new Map<string, CloudGrant>();
+  grants.forEach(grant => {
+    const normalizedValue = grant.value.trim().toLowerCase().replace(/\.$/, '');
+    const key = `${grant.kind}:${normalizedValue}`;
+    const current = uniqueGrants.get(key);
+    const currentIsCanonical = current ? current.value === current.value.trim().toLowerCase().replace(/\.$/, '') : false;
+    const grantIsCanonical = grant.value === grant.value.trim().toLowerCase().replace(/\.$/, '');
+    if (!current || grant.updated_at > current.updated_at || (grant.updated_at === current.updated_at && grantIsCanonical && !currentIsCanonical)) uniqueGrants.set(key, grant);
+  });
+  const ordered = [...uniqueGrants.values()].filter(grant => grant.active === 1).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
   const changed = ordered.filter(grant => {
     const key = `${grant.kind}:${grant.value}`; const draft = drafts[key];
     return grant.active === 1 && draft && (draft.role !== grant.role || draft.allowance.trim() !== allowanceInput(grant.allowance_usd));
@@ -4025,6 +4031,12 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     try { await onRevoke(grant); setConfirmRemoveKey(''); setMessage(''); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be revoked.'); }
   }
+  async function addInvitation(item: CloudInvitationRequest) {
+    try {
+      await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: null });
+      setMessage(`Added ${item.email} as an authorized member.`);
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
+  }
   const currency = (value: number | null | undefined) => value === null || value === undefined ? '—' : `$${value.toFixed(2)}`;
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2><button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
@@ -4041,7 +4053,10 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
       <div className="admin-table-heading"><h3>Invitation requests</h3></div>
-      {invitationRequests.length ? <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{invitationRequests.map(item => <tr key={item.subject}><th scope="row">{item.email}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td>{item.status}</td><td>{item.status === 'notified' && <><button type="button" className="admin-text-action" disabled={busy} onClick={() => void onUpdateInvitation(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateInvitation(item, 'declined')}>Decline</button></>}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
+      {invitationRequests.length ? <div className="admin-table-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{invitationRequests.map(item => {
+        const alreadyAdded = grants.some(grant => grant.kind === 'email' && grant.active === 1 && grant.value.trim().toLowerCase() === item.email.trim().toLowerCase());
+        return <tr key={item.subject}><th scope="row">{item.email}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><button type="button" className="admin-text-action" disabled={busy || alreadyAdded} onClick={() => void addInvitation(item)}>{alreadyAdded ? 'Added' : 'Add'}</button>{item.status === 'notified' && <><button type="button" className="admin-text-action" disabled={busy} onClick={() => void onUpdateInvitation(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateInvitation(item, 'declined')}>Decline</button></>}</td></tr>;
+      })}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
       <div className="admin-table-heading"><h3>Product feedback</h3></div>
       {feedbackRequests.length ? <div className="admin-table-scroll"><table className="admin-grants-table admin-feedback-table"><thead><tr><th scope="col">Feedback</th><th scope="col">Contact</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}{item.account_email && <small>Signed-in account: {item.account_email}</small>}</th><td>{item.contact_email || 'Not provided'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td>{item.status !== 'closed' && <><button type="button" className="admin-text-action" disabled={busy || item.status === 'reviewed'} onClick={() => void onUpdateFeedback(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateFeedback(item, 'closed')}>Close</button></>}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
       <div className="admin-table-heading"><h3>Authorized users</h3></div>
