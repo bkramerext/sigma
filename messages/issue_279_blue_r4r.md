@@ -28,4 +28,4 @@
 
 ## Scope notes
 
-No dependencies or conflicts found. Pre-existing untracked `gmail_test.py` and `smtp_test.py` were left untouched. The handoff itself will be committed after the verified implementation commit.
+No dependencies or conflicts found. Pre-existing untracked `gmail_test.py` and `smtp_test.py` were left untouched. The handoff and tracker updates are committed and pushed after the verified implementation commit.
