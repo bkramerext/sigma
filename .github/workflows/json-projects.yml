@@ -1,0 +1,17 @@
+name: JSON project regressions
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  json-projects:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Python dependencies
+        run: uv sync --frozen
+      - name: Run project bundle and creation simulations
+        run: uv run python scripts/test_t249_integration.py
