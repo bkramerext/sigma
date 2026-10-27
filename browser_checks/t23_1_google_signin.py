@@ -492,15 +492,16 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             page.get_by_role("button", name="Sign in with Google").click()
             expect(page.get_by_role("dialog")).to_contain_text("Connect your Google account")
             page.get_by_role("dialog").get_by_role("link", name="Sign in with Google").click()
-            expect(
-                page.get_by_text("Your Google account is not yet invited to SIGMA.")
-            ).to_be_visible()
-            expect(page.get_by_text(ACCOUNTS["denied"]["email"], exact=True)).to_be_visible()
+            expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
+            expect(page.get_by_role("button", name="Invite Me", exact=True)).to_have_count(0)
+            page.get_by_role("button", name="Sign in with Google").click()
+            denied_dialog = page.get_by_role("dialog")
+            expect(denied_dialog).to_contain_text("Access is not granted")
+            expect(denied_dialog).to_contain_text(ACCOUNTS["denied"]["email"])
             assert api_request("GET", "/api/projects/recent").status_code == 401
-            page.get_by_role("button", name="Invite Me", exact=True).click()
-            expect(
-                page.get_by_text("Glad you're interested! We'll get back to you!", exact=True)
-            ).to_be_visible()
+            denied_dialog.get_by_role("button", name="Request invitation").click()
+            expect(denied_dialog).to_contain_text("Invitation requested. We'll get back to you.")
             assert invitation_requests == [{"method": "POST", "body": "{}"}]
             assert login_attempts == ["A", "B", "denied"]
             assert not errors, errors
