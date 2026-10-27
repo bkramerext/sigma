@@ -57,9 +57,9 @@ async def verify():
             artifact_run = await execute_research_code(path, artifact_source)
             assert artifact_run["status"] == "completed", artifact_run
             assert artifact_run["exit_code"] == 0, artifact_run
-            assert any(
-                item["filename"] == "proof.bin" for item in artifact_run["artifacts"]
-            ), artifact_run
+            assert any(item["filename"] == "proof.bin" for item in artifact_run["artifacts"]), (
+                artifact_run
+            )
             artifact_bytes, media_type = get_execution_artifact(
                 path, artifact_run["id"], "proof.bin"
             )
@@ -71,9 +71,8 @@ async def verify():
             imported = root / "imported.json"
             import_bundle(exported, imported)
             assert get_execution(imported, first["id"])["stdout"] == first["stdout"]
-            assert (
-                get_execution_artifact(imported, artifact_run["id"], "proof.bin")[0]
-                == bytes(range(256))
+            assert get_execution_artifact(imported, artifact_run["id"], "proof.bin")[0] == bytes(
+                range(256)
             )
             assert any(item["id"] == first["id"] for item in list_executions(imported))
             print("PASS export/import execution persistence")
@@ -117,7 +116,7 @@ async def verify():
             from sigma.project_bundle import read_file, write_file
             member = f"research-executions/{artifact_run['id']}.artifacts/proof.bin"
             original = read_file(path, member)
-            tampered = bytes([original[0] ^ 0xff]) + original[1:]
+            tampered = bytes([original[0] ^ 0xFF]) + original[1:]
             write_file(path, member, tampered)
             from sigma.projects import ProjectError
             try:
@@ -153,8 +152,11 @@ async def verify():
             try:
                 deadline = time.monotonic() + 12
                 while time.monotonic() < deadline:
-                    current = [item for item in list_executions(path)
-                               if item["id"] not in prior_ids and item["status"] == "running"]
+                    current = [
+                        item
+                        for item in list_executions(path)
+                        if item["id"] not in prior_ids and item["status"] == "running"
+                    ]
                     if current:
                         doomed_id = current[0]["id"]
                         child.kill()
