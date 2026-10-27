@@ -236,15 +236,17 @@ async def main() -> None:
             assert opened.project.title.endswith("v1")
             assert len(opened.project.strategies) == 2
             copied_sessions = research_sessions.list_sessions(opened.path)
-            assert {item["id"] for item in copied_sessions} == {success_id, failed_id}, (
-                [item["id"] for item in copied_sessions],
-                success_id,
-                failed_id,
+            assert len(copied_sessions) == 2
+            copied_success = next(
+                item for item in copied_sessions if item["status"] in {"ended", "completed"}
             )
+            copied_failure = next(item for item in copied_sessions if item["status"] == "failed")
+            assert copied_success["id"] not in {success_id, failed_id}
+            assert copied_failure["id"] not in {success_id, failed_id}
             by_id = {item["id"]: item for item in copied_sessions}
-            assert by_id[success_id]["status"] in {"ended", "completed"}
-            assert by_id[failed_id]["status"] == "failed"
-            success = by_id[success_id]
+            success = by_id[copied_success["id"]]
+            assert success["status"] in {"ended", "completed"}
+            assert copied_failure["status"] == "failed"
             source_outcome = next(
                 item["outcome"] for item in export["research_sessions"] if item["id"] == success_id
             )
