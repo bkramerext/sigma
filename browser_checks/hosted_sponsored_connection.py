@@ -73,6 +73,13 @@ def exercise(origin: str) -> None:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         selected = {"mode": "personal"}
+        forced = {"value": False}
+        funding = {
+            "allowance_usd": 2,
+            "estimated_usage_usd": 0.25,
+            "held_usd": 0.25,
+            "remaining_usd": 1.5,
+        }
         posts: list[tuple[str, dict]] = []
         failures: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
@@ -97,17 +104,14 @@ def exercise(origin: str) -> None:
                         "access": {"status": "invited", "role": "member"},
                         "workspace": {"available": True, "id": "workspace-test"},
                         "model_access": {"mode": selected["mode"], "connection": "connected"},
-                        "sponsorship": {"eligible": True},
+                        "sponsorship": {"eligible": True, "forced": forced["value"]},
                     },
                     "admin_contact_email": "admin@example.test",
                 }
             elif path.endswith("/api/cloud-research/budget"):
-                payload = {
-                    "allowance_usd": 2,
-                    "estimated_usage_usd": 0,
-                    "held_usd": 0,
-                    "reserved_and_estimated_usd": 0,
-                    "remaining_usd": 2,
+                payload = funding | {
+                    "reserved_and_estimated_usd": funding["estimated_usage_usd"]
+                    + funding["held_usd"],
                     "unknown_provider_attempts": 0,
                 }
             elif path.endswith("/api/cloud-research/connection"):
@@ -149,9 +153,28 @@ def exercise(origin: str) -> None:
         page.goto(origin + "/", wait_until="networkidle")
         pill = page.locator(".api-connection > summary")
         expect(pill).to_be_visible()
-        expect(pill).to_contain_text("Use SIGMA-sponsored API")
+        expect(pill).to_contain_text("SIGMA-sponsored GPT Usage")
+        allowance = page.get_by_role("button", name="Sponsored allowance details")
+        allowance.hover()
+        allowance_text = page.locator(".sponsored-allowance-tooltip")
+        expect(allowance_text).to_contain_text("$1.50 remaining of $2.00 per-user allowance")
+        expect(allowance_text).to_contain_text("$0.25 estimated and $0.25 held")
+        allowance.focus()
+        expect(allowance_text).to_be_visible()
+        pill.focus()
+        expect(allowance_text).to_be_visible()
+        funding.update(remaining_usd=1.25, estimated_usage_usd=0.50)
+        page.evaluate("window.dispatchEvent(new Event('sigma-sponsored-budget-refresh'))")
+        expect(allowance_text).to_contain_text("$1.25 remaining")
+        page.set_viewport_size({"width": 390, "height": 844})
+        allowance.click()
+        expect(allowance).to_have_attribute("aria-expanded", "true")
+        expect(allowance_text).to_be_visible()
+        allowance.click()
+        expect(allowance).to_have_attribute("aria-expanded", "false")
         pill.click()
-        expect(pill).to_contain_text("SIGMA-sponsored API connected")
+        expect(pill).to_contain_text("SIGMA-sponsored GPT Usage")
+        expect(allowance_text).to_contain_text("Sponsored model connection: connected")
         expect(page.get_by_text("Request Failed", exact=True)).to_have_count(0)
         assert any(
             path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
@@ -163,6 +186,26 @@ def exercise(origin: str) -> None:
         ), posts
         expect(page.get_by_text("Samples", exact=True)).to_be_visible()
         assert not failures, failures
+
+        # A forced member keeps the required state through reload and the pill
+        # cannot initiate a change request.
+        selected["mode"] = "sponsored"
+        forced["value"] = True
+        posts.clear()
+        page.reload(wait_until="domcontentloaded")
+        forced_pill = page.locator(".api-connection > summary")
+        expect(forced_pill).to_contain_text("SIGMA-sponsored GPT Usage")
+        expect(forced_pill).to_have_attribute(
+            "aria-label", "SIGMA-sponsored GPT Usage; sponsored mode is required; connected"
+        )
+        forced_pill.hover()
+        expect(allowance_text).to_contain_text("Sponsored mode is required for this account")
+        forced_pill.click()
+        assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
+        page.reload(wait_until="domcontentloaded")
+        expect(page.locator(".api-connection > summary")).to_contain_text(
+            "SIGMA-sponsored GPT Usage"
+        )
         browser.close()
 
 
