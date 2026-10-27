@@ -231,6 +231,7 @@ def main() -> None:
                 get_execution_artifact,
                 list_executions,
             )
+
             execution_id = str(uuid4())
             execution = {
                 "id": execution_id,
@@ -353,6 +354,7 @@ def main() -> None:
             from types import SimpleNamespace
 
             from sigma.python_sandbox import execute_research_code
+
             async def fake_execute(source: str, runtime_name: str = "python"):
                 assert source == "print('integration')"
                 return SimpleNamespace(
@@ -367,6 +369,7 @@ def main() -> None:
                     stderr_base64=None,
                     artifacts=(("integration.bin", "application/octet-stream", b"evidence"),),
                 )
+
             with patch("sigma.python_sandbox.execute", side_effect=fake_execute):
                 integrated = asyncio.run(
                     execute_research_code(created.path, "print('integration')")
@@ -516,6 +519,7 @@ def main() -> None:
             assert read_session_snapshot(created.path)[1] == 1
             delete_file(created.path, f"research-sessions/{foreign_id}.json")
             from sigma.research_sessions import _worker_lock_path
+
             assert _worker_lock_path(created.path, session_id).parent == Path(created.path).parent
             assert not (Path(created.path) / "research-sessions").exists()
             wrong = dict(record, project_id=str(uuid4()))
@@ -537,6 +541,7 @@ def main() -> None:
                 get_limits,
                 save_limits,
             )
+
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             # Existing malformed limits must never be mistaken for missing defaults.
             write_file(created.path, "research-sessions/limits.json", b"{invalid")
@@ -713,9 +718,7 @@ def main() -> None:
                 assert any(
                     item["id"] == lifecycle_id for item in read_session_snapshot(created.path)[0]
                 )
-            removed = remove_session(
-                created.path, lifecycle_id, lifecycle["updated_at"]
-            )
+            removed = remove_session(created.path, lifecycle_id, lifecycle["updated_at"])
             assert removed["removed"] and removed["session_number"] == 28
             assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
             assert _allocate_session_number(created.path, []) == 28
