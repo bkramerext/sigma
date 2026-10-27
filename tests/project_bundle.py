@@ -5,7 +5,22 @@ import json
 import tempfile
 from pathlib import Path
 
-from sigma.project_bundle import BundleError, delete_file, download_bytes, encode, import_bundle, list_files, migrate, read_bundle, read_file, restore, snapshot, transform_file, update_files, write_file
+from sigma.project_bundle import (
+    BundleError,
+    delete_file,
+    download_bytes,
+    encode,
+    import_bundle,
+    list_files,
+    migrate,
+    read_bundle,
+    read_file,
+    restore,
+    snapshot,
+    transform_file,
+    update_files,
+    write_file,
+)
 
 
 def main() -> None:
@@ -172,6 +187,7 @@ def main() -> None:
     # Exercise the four public project-layer entry points with isolated storage.
     import os
     from unittest.mock import patch
+
     from sigma.projects import (
         ProjectError, create_json_project, export_complete_project,
         inspect_project, list_json_projects, migrate_project,
@@ -189,11 +205,15 @@ def main() -> None:
             assert inspect_project(created.path).project == created.project
             # Execution records and binary outputs are stored as bundle members;
             # only transient liveness locks use the private sidecar directory.
-            from sigma.python_sandbox import (
-                _execution_directory, _save_record, get_execution,
-                get_execution_artifact, list_executions,
-            )
             from uuid import uuid4
+
+            from sigma.python_sandbox import (
+                _execution_directory,
+                _save_record,
+                get_execution,
+                get_execution_artifact,
+                list_executions,
+            )
             execution_id = str(uuid4())
             execution = {
                 "id": execution_id, "project_id": created.project.id,
@@ -293,6 +313,7 @@ def main() -> None:
             # without requiring a Docker daemon or invoking untrusted code.
             import asyncio
             from types import SimpleNamespace
+
             from sigma.python_sandbox import execute_research_code
             async def fake_execute(source: str, runtime_name: str = "python"):
                 assert source == "print('integration')"
@@ -367,7 +388,8 @@ def main() -> None:
             assert Path(migrated.path).is_file()
             # Research session records use the same authoritative JSON file.
             from uuid import uuid4
-            from sigma.research_sessions import _save, _read, _all, read_session_snapshot
+
+            from sigma.research_sessions import _all, _read, _save, read_session_snapshot
 
             session_id = str(uuid4())
             record = {
@@ -455,7 +477,10 @@ def main() -> None:
             write_file(created.path, f"research-sessions/{session_id}.json",
                        json.dumps(record).encode())
             from sigma.research_sessions import (
-                _allocate_session_number, get_limits, save_limits, DEFAULT_LIMITS,
+                DEFAULT_LIMITS,
+                _allocate_session_number,
+                get_limits,
+                save_limits,
             )
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             # Existing malformed limits must never be mistaken for missing defaults.
@@ -487,8 +512,8 @@ def main() -> None:
             save_limits(created.path, dict(DEFAULT_LIMITS))
             assert read_file(created.path, f"research-sessions/{session_id}.json") == before_session
             assert read_file(created.path, f"research-sessions/{session_id}.json") == before_session
-            from sigma.research_sessions import _snapshot
             from sigma.project_bundle import transform_members
+            from sigma.research_sessions import _snapshot
 
             view, guard = _snapshot(created.path)
             assert view.project.id == created.project.id
@@ -499,7 +524,7 @@ def main() -> None:
             })
             assert read_file(created.path, "artifacts/proof.bin") == bytes(range(256))
             assert read_file(created.path, "evidence/notes.txt") == b"independent evidence"
-            from sigma.projects import save_project_artifacts, read_project_artifact
+            from sigma.projects import read_project_artifact, save_project_artifacts
 
             save_project_artifacts(created.path, {
                 "artifacts/report.html": b"<html>report</html>",
