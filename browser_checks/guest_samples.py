@@ -240,7 +240,7 @@ def exercise(ui_url: str, root: Path) -> None:
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         play_dialog.get_by_role("button", name="Sign in now").click()
         expect(play_dialog).to_have_count(0)
-        google_dialog = page.get_by_role("dialog", name="Connect your Google account")
+        google_dialog = page.get_by_role("dialog", name="Account and model settings")
         expect(google_dialog).to_be_visible()
         expect(google_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
