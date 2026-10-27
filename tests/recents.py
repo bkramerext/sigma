@@ -146,7 +146,7 @@ def check(root: Path, base: Path) -> None:
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
     from sigma import research_sessions
 
-    active = created[-1]
+    active = first  # Legacy directory project exercises worker-lock status reads.
     idle = created[-2]
     idle_directory = Path(idle.path) / "research-sessions"
     assert not idle_directory.exists()
@@ -154,7 +154,7 @@ def check(root: Path, base: Path) -> None:
     assert not idle_directory.exists(), "Home status must not create session storage"
 
     directory = Path(active.path) / "research-sessions"
-    directory.mkdir()
+    directory.mkdir(exist_ok=True)
     session_id = str(uuid4())
     session_file = directory / f"{session_id}.json"
     record = {
@@ -191,20 +191,20 @@ def check(root: Path, base: Path) -> None:
     actual = recent_projects()["projects"]
     running_project = created[-1]
     session_id = str(uuid4())
-    session_dir = Path(running_project.path) / "research-sessions"
-    session_dir.mkdir(exist_ok=True)
-    session_path = session_dir / f"{session_id}.json"
-    session_path.write_text(
+    from sigma.project_bundle import write_file
+
+    write_file(
+        running_project.path,
+        f"research-sessions/{session_id}.json",
         json.dumps(
             {
                 "id": session_id,
                 "project_id": running_project.project.id,
                 "project_path": running_project.path,
-                "status": "running",
+                "status": "stopped",
             }
-        )
+        ).encode("utf-8"),
     )
-    session_path.write_text(session_path.read_text().replace('"running"', '"stopped"'))
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])
     ]
