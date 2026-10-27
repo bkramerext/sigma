@@ -7,7 +7,7 @@
         "tests/project_bundle.py"
       ],
       "exit_code": 0,
-      "seconds": 0.33,
+      "seconds": 0.34,
       "stderr": "",
       "stdout": "Project bundle round-trip and safety checks passed\n"
     },
@@ -33,7 +33,7 @@
         "{{.Repository}}:{{.Tag}}"
       ],
       "exit_code": 0,
-      "seconds": 0.17,
+      "seconds": 0.18,
       "stderr": "",
       "stdout": "sigma-frontend:local-check\nsigma-backend:local-check\nsigma-t100-local:check\nsigma-t100-backend:latest\nsigma-backend:t99\nsigma-research-python:0.1\nsigma-api:t22-deployment-final\nsigma-api:t22-deployment-test\nsigma-research-sage:10.8\ncloudflare-dev/fastapi:b75662b5\nsigma-t221-fastapi:spike\npython:3.13-slim-bookworm\npython:3.13-slim-bookworm\nalpine:3.21\ncloudflare/cloudflared:2026.10.0\nghcr.io/astral-sh/uv:0.12.17\ncloudflare/proxy-everything:<none>\nsagemath/sagemath:<none>\nnode:22.14.0-bookworm-slim\ndocker:27.5.1-cli\nnginx:1.27.4-alpine\npython:3.12.8-slim\npython:3.12.8-slim\ncaddy:<none>\ndocker/compose:latest\n"
     },
@@ -55,7 +55,7 @@
         "tests/t249_docker_lifecycle.py"
       ],
       "exit_code": 0,
-      "seconds": 1.47,
+      "seconds": 1.62,
       "stderr": "",
       "stdout": "PASS real Docker execution and JSON-backed record persistence\nPASS real Docker binary artifact capture and integrity\nPASS export/import execution persistence\nPASS interrupted reservation remains inspectable after lock loss\nPASS interruption evidence survives export/import\nPASS corrupted artifact rejected without losing valid evidence\nPASS real SIGMA worker termination preserves uncertain execution\n"
     },
@@ -65,7 +65,7 @@
         "tests/project_creation.py"
       ],
       "exit_code": 0,
-      "seconds": 3.96,
+      "seconds": 3.99,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS all research types serialized/reopened, destination preview, collision and strategy integrity\nPASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection\nPASS publication rollback, concurrent data preservation and exclusive name reservation\nPASS API create/preview/errors and both CLI research modes\nPASS v1/v2/v3 default-mode reads without rewriting and retained history on writes\nPASS explicit default/configured roots, missing parents, ownership and root symlinks\nAll project-creation scenarios passed.\n"
     },
@@ -75,7 +75,7 @@
         "tests/project_reports.py"
       ],
       "exit_code": 0,
-      "seconds": 0.27,
+      "seconds": 0.26,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS empty and populated reports, lifecycle/outcome distinction, UTF-8 and escaping\nPASS report API formats and unchanged Project Audit export\n"
     },
@@ -95,7 +95,7 @@
         "tests/python_sandbox.py"
       ],
       "exit_code": 0,
-      "seconds": 0.5,
+      "seconds": 0.51,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API\n"
     },
@@ -105,9 +105,9 @@
         "tests/research_sessions.py"
       ],
       "exit_code": 0,
-      "seconds": 40.46,
+      "seconds": 40.44,
       "stderr": "",
-      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.758s\nPersistent research session scenarios passed.\n"
+      "stdout": "PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.765s\nPersistent research session scenarios passed.\n"
     },
     "simulation:sage_execution.py": {
       "command": [
@@ -115,7 +115,7 @@
         "tests/sage_execution.py"
       ],
       "exit_code": 0,
-      "seconds": 0.67,
+      "seconds": 0.66,
       "stderr": "/Users/admin/sigma_blue/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\n",
       "stdout": "PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery\n"
     }
@@ -136,7 +136,7 @@
     "simulation:sage_execution.py"
   ],
   "python": "/Users/admin/sigma_blue/.venv/bin/python",
-  "tested_head": "5aa4a9d0fe7bdedc489c343c8f5423bdec4460b5",
+  "tested_head": "1f4ec268ef07b29e5eb4e4381d5f2d822e96589c",
   "ticket": "T249",
-  "utc": "2026-10-27T00:17:49.103216+00:00"
+  "utc": "2026-10-27T00:20:05.845797+00:00"
 }
