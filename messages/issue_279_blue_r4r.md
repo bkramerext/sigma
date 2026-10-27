@@ -4,7 +4,7 @@
 **Branch:** `blue/issue-279-invite-me`  
 **Base:** `main` at `918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad`  
 **Verified implementation commit:** `e118694` (`T279: add invitation request to sign-in pills`)  
-**PR:** will be linked here after creation.  
+**PR:** [#281](https://github.com/bkramerext/sigma/pull/281), open against `main`, mergeable, not merged. The PR was opened at branch head `be0722bc0fcd1ac1a7a6fb09b30af77a1b7c6b2e`; the follow-up tracker/handoff link update is documentation only.
 **Merge:** not performed.
 
 ## Implemented

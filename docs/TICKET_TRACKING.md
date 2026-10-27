@@ -4,7 +4,7 @@
 
 | Issue | Owner | Status | Branch / handoff |
 |---|---|---|---|
-| T279 — Invite me from sign-in pill | Blue | Implemented; verification passed; R4R, PR pending | [ticket](../tickets/t279.md) · [issue #279](https://github.com/bkramerext/sigma/issues/279) · [handoff](../messages/issue_279_blue_r4r.md) |
+| T279 — Invite me from sign-in pill | Blue | Implemented; local verification passed; R4R · [PR #281](https://github.com/bkramerext/sigma/pull/281) open, not merged | [ticket](../tickets/t279.md) · [issue #279](https://github.com/bkramerext/sigma/issues/279) · [handoff](../messages/issue_279_blue_r4r.md) |
 | T277 — Hosted TeX generation HTTP 400 | Red (proposed) | **PROPOSED — not dispatched**; live generation unverified | [ticket](../tickets/t277.md) · [issue #277](https://github.com/bkramerext/sigma/issues/277) |
 | T81 — Invitation Requests, Feedback, and Privacy | Green | Invitation PR #225 merged at `f45ada5`; feedback/privacy code R4R on `green/t81-feedback`, validated head `756ae45b866f353e307596f5770dcd37ad06aeaa`; PR creation pending refreshed GitHub auth | [ticket](../tickets/t81.md) · [handoff](../messages/t81_green_feedback_privacy.txt) · [proposed privacy notice v1](../docs/PRIVACY_NOTICE_DRAFT_v1.md) · issue #81 remains open |
 | #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R · [PR #213](https://github.com/bkramerext/sigma/pull/213) | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |

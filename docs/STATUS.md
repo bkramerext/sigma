@@ -6702,3 +6702,7 @@ typecheck, and production build. Existing Starlette/httpx deprecation and
 resource warnings were emitted; no checks failed. No provider calls, live OAuth,
 email, paid work, or production changes occurred. See
 [issue #279 handoff](../messages/issue_279_blue_r4r.md).
+
+PR #281 is open against `main` at `918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad`,
+mergeable, and not merged. Its pushed implementation and R4R handoff are on
+`blue/issue-279-invite-me`.
