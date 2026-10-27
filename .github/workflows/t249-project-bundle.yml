@@ -39,9 +39,9 @@ jobs:
       - name: Verify Docker lifecycle and artifact persistence
         run: python tests/t249_docker_lifecycle.py
       - name: Verify cloud workspace paper storage and isolation
-        run: uv run --locked --no-sync python tests/cloud_workspaces.py
+        run: python tests/cloud_workspaces.py
       - name: Verify cloud research API artifact persistence
-        run: uv run --locked --no-sync python tests/cloud_research_api.py
+        run: python tests/cloud_research_api.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
