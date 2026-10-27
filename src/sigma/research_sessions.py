@@ -2852,12 +2852,14 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
             raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
         except (ValueError, BundleError, TypeError) as exc:
             raise ProjectError("Research session not found or unreadable") from exc
-        if (not isinstance(raw, dict)
+        if (
+            not isinstance(raw, dict)
             or raw.get("id") != session_id
             or raw.get("project_path") != str(project_path(path))
             or raw.get("project_id") != inspect_project(path).project.id
             or type(raw.get("session_number")) is not int
-            or raw["session_number"] < 1):
+            or raw["session_number"] < 1
+        ):
             raise ProjectError("Research session record does not match this project")
         return raw
     try:
@@ -2934,11 +2936,14 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
                 raw = json.loads(data)
                 if str(UUID(stem)) != stem:
                     raise ValueError("Noncanonical session ID")
-                if (not isinstance(raw, dict) or raw.get("id") != stem
+                if (
+                    not isinstance(raw, dict)
+                    or raw.get("id") != stem
                     or raw.get("project_id") != view.project.id
                     or raw.get("project_path") != view.path
                     or type(raw.get("session_number")) is not int
-                    or raw["session_number"] < 1):
+                    or raw["session_number"] < 1
+                ):
                     raise ValueError("Session does not match project")
                 records.append(raw)
             except (ValueError, OSError, TypeError, UnicodeDecodeError):
