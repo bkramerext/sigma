@@ -560,9 +560,7 @@ def _read_one(path: str, identifier: str) -> dict[str, Any]:
         from sigma.projects import read_project_artifact
 
         try:
-            contents = read_project_artifact(
-                target, f"artifacts/papers/{identifier}.json"
-            )
+            contents = read_project_artifact(target, f"artifacts/papers/{identifier}.json")
             if len(contents) > MAX_PAPER_BYTES:
                 raise ProjectError("Paper record is missing or unsafe")
             record = json.loads(contents)
