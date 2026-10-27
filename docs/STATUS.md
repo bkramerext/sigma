@@ -1,3 +1,41 @@
+## T277 hosted TeX generation HTTP 400 (2026-10-27)
+
+Read-only IAP inspection found production `sigma.service` active and release pin
+`0ab399f024f939fa08a1ded215878669639a25e2`. The VM Git HEAD was not read because
+Git rejected the SSH principal's ownership context; no safe-directory setting
+was changed. Filtered systemd and backend container logs retained no provider
+error code/parameter for the reported HTTP 400, so its cause remains
+**UNVERIFIED** (request schema, model access, and billing are not distinguished).
+
+T277's isolated branch adds safe API error classification: only allowlisted
+provider codes and parameter names can appear in diagnostics; raw messages,
+arbitrary values, and research content remain suppressed. Known schema/request,
+model-access, and quota/billing classes receive distinct wording, while unknown
+400s are explicitly unclassified. Neither the request, selected model/provider,
+automatic provider retry behavior, nor spending safeguards changed. `tests/papers.py` covers both
+one-shot and long-form request payloads with mocked HTTP 400, asserting strict
+Pydantic JSON Schema, selected model/reasoning, `store: false`, bounded output,
+and one call per path with no retry. Focused paper and model-connection tests
+passed. The full `./sigma test` passed for the final code/test head, including
+Ruff, Pyright, frontend typecheck, and production build. Two real-Chrome A20
+attempts did not reach paper generation because the isolated mock API returns
+404 for `/api/samples`, leaving the expected sample-open control absent;
+browser acceptance is UNVERIFIED. No
+live provider calls, paid inference, credential inspection,
+production configuration changes, or redeployment occurred. See
+`messages/t277_red_paper_api_400.txt`.
+
+Follow-up fault-tolerance improvement: one-shot papers now persist an
+evidence-validated structured draft in the existing project-private checkpoint
+store before TeX compilation. The checkpoint is bound to project ID, frozen
+snapshot hash, provider identity/mode, selected model, reasoning effort, and
+authoring mode. After compiler failure, an explicit Generate retry recompiles
+from that draft with zero additional provider calls; successful publication
+removes the checkpoint. Explicit restart archives prior attempt counts. A new
+regression injects a compiler failure and verifies one mock inference total,
+successful PDF publication on retry, and zero remaining calls in preflight.
+Focused paper tests and frontend typecheck pass; the full `./sigma test` passes.
+
 ## Hosted sponsored API restoration and release repair (2026-10-27)
 
 Production is configured for SIGMA-sponsored OpenAI API inference with

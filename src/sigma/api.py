@@ -312,6 +312,7 @@ class PaperRestartRequest(OpenRequest):
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     confirm_restart: Literal[True]
+    long_form: bool = False
 
 
 @app.get("/api/projects/papers")
@@ -348,6 +349,7 @@ async def papers_restart_view(body: PaperRestartRequest):
         body.expected_binding,
         body.expected_snapshot_sha256,
         body.confirm_restart,
+        body.long_form,
     )
 
 

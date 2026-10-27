@@ -1352,7 +1352,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
       finishProvider = beginProviderRequest('ai-paper');
-      setPhase('Generating paper…');
+      setPhase(preflight.draft_recovery_available
+        ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
+        : 'Generating paper…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false }) });
@@ -1382,7 +1384,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
             setPhase(event.stage === 'compile' ? 'Compiling PDF…'
-              : event.stage === 'snapshot' ? 'Preparing research evidence…'
+              : event.stage === 'snapshot' ? (preflight.draft_recovery_available
+                ? 'Reusing the validated draft from the previous attempt…'
+                : 'Preparing research evidence…')
               : 'Writing paper…');
           }
         }
