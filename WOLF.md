@@ -29,15 +29,40 @@ Maybe this work bites off more than it can chew, but the goal really was to buil
 
 ## What I learned about working with AI
 
-I haven't been writing the code, but that doesn't mean my software engineering experience has been sitting idle. I've used it to set direction, decide what matters, organize phases, and keep the work moving toward a coherent product. Without that guidance, there's a risk of the inmates running the asylum: lots of activity, but no steady course. Constraints and priorities matter, even when AI is doing the implementation.
+### Engineering with AI
 
-At the same time, I've learned when to give AI a lot of room. Sometimes my instruction is essentially, "I don't know, and I don't particularly care how you solve this. Figure it out." Often it does, and the result isn't just plausible-looking code. The interesting part is what happens as you keep turning the crank. A mental map of the system gradually emerges for me, even though I'm not the one constructing every piece. The cloud deployment was the clearest example. AI laid out the plan and divided it into tasks; I largely approved the direction. We solved those tasks one at a time, sometimes in an order that seemed arbitrary to me. I didn't always understand how the pieces would fit until they did. That was impressive, and it changed how I think about the relationship between directing engineering work and understanding the system being built.
+How much code did I write in this project? I'll give it to you in three decimal places: **0.000%.**
 
-The four-worker setup taught me something else. These agents can move between tasks, pick up work another agent started, or be reassigned as priorities change. They don't have the same ownership boundaries, specialization costs, or coordination habits that human teams develop. That flexibility is a genuine advantage, although it puts more responsibility on the coordinator to preserve context, keep interfaces stable, and make sure the pieces still fit together.
+I've spent much of my career writing software. With SIGMA, I've taken a different role: directing the engineering rather than doing the implementation.
 
+That doesn't mean my engineering experience has been sitting idle. I decide what matters, set priorities, establish constraints, and try to keep the work moving toward a coherent product. AI can produce a lot of code, but that doesn't mean it's building the right thing.
 
-A ticketing system has turned out to be surprisingly important in coordinating all this. It's tempting to say, "I want to solve this problem, so I'll grab a worker and have it solve it." That works until the task takes longer than expected, or I've filled my head with three other things in the meantime. Then it's easy to lose track of who was doing what, why, and whether it was finished. Giving a substantial piece of work a ticket means there's a stable reference for the human, the coordinator, and whichever worker picks it up next.
+### Learning to delegate
 
-But making a ticket for every tiny change is its own antipattern, especially when I'm giving feedback on something that's already underway. That feedback belongs to the existing ticket. Sometimes I pass it through ChatGPT, which can keep the broader plan and dependencies in view. Other times I give it directly to the Codex worker while looking at the result. Both routes are useful. The important distinction isn't which route the instruction takes, but whether the work stays attached to something we can find and understand later.
+One of the more interesting lessons has been learning when to get out of the way.
 
-I've also found that merging a worker's finished PR is often easier for the coordinator to handle directly than handing it back to the worker. When the coordinator has capacity, it already has the broader integration picture and can review and merge without another round trip. When it's busy, delegating the merge still makes sense. The point is to minimize coordination overhead, not to enforce a rigid ownership rule.
+Sometimes I have a strong opinion about how something should work. Other times, my instruction is essentially, "I don't know, and I don't particularly care how you solve this. Figure it out."
+
+Cloud deployment was a good example. I'll be honest: infrastructure work isn't my forte. When AI came back with a 15-ticket plan, I pretty much rubber-stamped it, thinking, "It'll be wrong anyway, but it doesn't hurt to have some direction."
+
+Except AI was right. As we checked off the tickets, the pieces just snapped together. No backtracking, no major rethinking of the plan. I hadn't expected that.
+
+What surprised me was that I could effectively direct work without understanding every implementation detail along the way. My understanding of the system developed as the work progressed.
+
+### Coordinating the work
+
+SIGMA uses four AI workers—Blue, Green, Red, and Gray, named after their screen colors—with ChatGPT helping coordinate their efforts.
+
+Unlike a conventional engineering team, the workers can switch tasks or pick up one another's work with relatively little friction. That's a real advantage, but it also makes preserving context important.
+
+Tickets have been the most useful tool for that. A ticket provides a stable record of what's being done, why, and where things stand, regardless of which agent is working on it.
+
+I've learned not to overdo it. Substantial work deserves a ticket, but every little adjustment doesn't. Feedback on work already underway should stay with the existing ticket. And when a PR is ready, whoever has the best context and capacity can handle the merge.
+
+The goal isn't to reproduce the processes of a human software team. It's to find the amount of structure AI-assisted engineering actually needs.
+
+### Being nice
+
+Superstition or not, I've made a point of treating AI as though it wants to do a good job and could do without being belittled. [Steve Yegge](https://yegge.ai/essays/model-welfare/) has written about treating agents with dignity, and I think there's something to that. And perhaps ["Believe in yourself"](https://www.anthropic.com/research/riemann-zeta) really did help Claude make progress in cracking a part of the Riemann Hypothesis over at Anthropic.
+
+But even if none of this makes a difference to AI, I can think of a better reason: **it's good for us.** Maintaining a standard of friendly, respectful collaboration is better for our own mental well-being. We need to maintain the human element, particularly when the profession seems to be handing a lot of itself over to AI.
