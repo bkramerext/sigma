@@ -1,0 +1,26 @@
+RED / Issue #265 — release build blocker
+
+Base: 999db4362656fd5a22d6ebaaf733e64c8e87543e (origin/main).
+Branch: red/issue-265-release-build.
+
+Production diagnosis: the VM checkout, release pin, backend/frontend tags,
+container image IDs and OCI labels all remain at e1ef8db8. Host Caddy points
+to the Compose edge, so the public old UI is the old running frontend.
+State mount UUID 28ef67cb-4da8-46e7-9a8b-dce0470153a5 and permissions match
+inventory. 23/23 preflight checks pass with the explicit repository path.
+
+The exact-SHA 0.1.1 frontend Docker build fails with ENOENT for
+/workspace/pyproject.toml. Vite reads the canonical Python version from it.
+This PR copies the file into the frontend build stage and adds package coverage.
+The running production service was not changed.
+
+Production cutover remains blocked: the deployed env has no invitation SMTP
+sender/password, and the only READY snapshot is the October 26 initial
+recovery point. Owner decision for credential provisioning and a new snapshot
+with restore check was requested. The 0.1.1 target SHA cannot be deployed as
+published; coordinator must review and merge this fix, then approve the new
+full release SHA before cutover. No paid provider calls or secrets were used.
+
+Tests: focused deployment package test passed; release automation, image
+provenance, and state backup tests passed. Full ./sigma test result and corrected
+Docker build evidence will be added before final R4R.

@@ -35,6 +35,7 @@ def main() -> None:
     assert "USER 10001:10001" in backend
     assert "--network=none" in (ROOT / "src/sigma/python_sandbox.py").read_text(encoding="utf-8")
     assert "npm --prefix frontend ci" in frontend and "package-lock.json" in frontend
+    assert "COPY pyproject.toml ./pyproject.toml" in frontend
     assert "sigma-state:/var/lib/sigma-auth" in compose
     assert (
         "device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth" in gce_compose
