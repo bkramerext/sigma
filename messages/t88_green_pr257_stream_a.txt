@@ -26,6 +26,21 @@
   SIGMA API and Vite UI and exercises the actual mock selector, authorization,
   workspaces, invitation request, allowance, provider-failure, and simulated
   research paths in real Chrome.
+- Corrected the README's mock-auth limitations and aligned this handoff and
+  `docs/STATUS.md` with the deterministic simulation and fail-closed server
+  behavior. No runtime code or acceptance criteria changed in this correction.
+
+The mock research fixture is deliberately narrow: it advances one enabled,
+saved strategy through queued, simulated Investigator/Skeptic, and result
+states. With simulated allowance available and provider state Connected, the
+completed fixture may store one explicitly labeled, deliberately inconclusive
+artifact; exhausted sponsored allowance or simulated provider unavailability
+ends in failure without an artifact. Mock allowance amounts are displayable
+fixture state, not real balance, reservation, or consumption. The mock provider
+selector does not connect to or verify a provider. Server middleware continues
+to deny the normal live research-start endpoint, `/api/ai/*`,
+`/api/cloud-research/*`, and project writes outside the explicit safe-write and
+mock-route allowlist, preserving the no-provider-charge boundary.
 
 ## Acceptance dispositions
 
@@ -39,6 +54,9 @@
   against the real local API. Guest and Uninvited have no private member
   projects; Member B cannot inspect Member A's project. The administrator has
   the same default mock allowance as a regular member.
+- The local simulation is limited to its deterministic fixture flow and
+  scenarios; it does not emulate hosted inference, real allowance accounting,
+  Google OAuth, provider connectivity, or deployed-service behavior.
 - Sign-in identity switching, sign-out, invitation request, connection checks
   and recovery, funding-source selection, sponsor exhaustion, and provider
   unavailability were exercised with deterministic boundaries.
@@ -96,6 +114,13 @@
 - `./sigma test` — PASS all repository scenarios, Ruff, formatting (274 files),
   Pyright (0 diagnostics), frontend typecheck, and frontend production build.
   Existing advisory: one JavaScript chunk is larger than 500 kB.
+- Documentation correction verification: `./.venv/bin/python tests/cloud_auth.py`
+  — PASS, 44 tests; real Chrome
+  `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  uv run --locked --with playwright python browser_checks/t257_mock_auth.py`
+  — PASS, including sponsored allowance exhaustion and provider-unavailable
+  failure; `git diff --check` — PASS. The full suite was not rerun because this
+  correction changes documentation only.
 
 ## Browser evidence and costs
 
@@ -107,8 +132,8 @@
 
 ## CI
 
-At the fetched handoff head `05cabb5c743b884156cb423433f20e6700b69c2f`,
-Outcome, recovery, Recent Projects, and model-availability checks were
-completed successfully; the repository `verify` job was still running when
-that snapshot was inspected. CI for the pushed final handoff head is reported
-from the current PR status checks in the R4R notice.
+At the previously pushed implementation head
+`0270b522b492e640e133b9036fcddaf1e5ec945d`, all five checks passed:
+`verify`, `outcome-browser`, `recovery`, `model-availability`, and
+`recents-browser`. The documentation-correction head's checks are reported in
+the R4R notice.

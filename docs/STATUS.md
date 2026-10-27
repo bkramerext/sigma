@@ -17,7 +17,13 @@ the actual local mock selector and API. It covers Guest's empty scoped Recent,
 Member A/B project separation, Administrator role with the same allowance as a
 member, Uninvited denial and invitation request, and simulated sponsor
 exhaustion/provider unavailability through the mock research route. The test
-uses temporary storage and blank provider credentials. Screenshots are
+uses temporary storage and blank provider credentials. This route advances a
+single saved strategy through deterministic queued/Investigator/Skeptic/result
+states, optionally storing only a labeled inconclusive fixture artifact. A
+sponsored `$0` allowance or simulated unavailable provider yields a failure
+without an artifact; the normal research start, AI, cloud-research, and
+non-allowlisted project-write routes remain server-denied in mock mode.
+Screenshots are
 [Home](evaluations/t257/screenshots/home-account-dialog.png) and
 [Project](evaluations/t257/screenshots/project-account-dialog.png).
 
