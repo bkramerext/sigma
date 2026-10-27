@@ -694,6 +694,7 @@ def main() -> None:
                 private_paper_path = Path(paper_path).resolve(strict=True)
                 assert private_paper_path.is_relative_to((root / "workspaces").resolve())
                 from sigma.projects import read_project_artifact
+
                 for paper in all_papers:
                     pdf_bytes = read_project_artifact(
                         paper_path, f"artifacts/papers/{paper['paper_id']}.pdf"
