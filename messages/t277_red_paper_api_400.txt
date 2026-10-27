@@ -1,0 +1,59 @@
+T277 / Issue #277 — Red handoff for independent review
+
+Branch: red/t277-paper-api-400
+Base: origin/main 918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad
+PR: pending creation
+Release root cause: UNVERIFIED
+
+Production diagnosis (read-only):
+- IAP reached sigma-gce-01 in sigma-research-prod/us-west1-b.
+- sigma.service reported active; protected SIGMA_RELEASE pin was
+  0ab399f024f939fa08a1ded215878669639a25e2.
+- Checkout HEAD lookup was rejected by Git's dubious-ownership check for the
+  SSH principal. No ownership/configuration changes were made.
+- Whitelisted searches of systemd and backend container logs found no retained
+  provider error code or parameter for the user's reported HTTP 400.
+- Therefore there is no evidence to distinguish schema/request rejection,
+  model access, or billing. Model discovery and a generic HTTP 400 are not
+  sufficient to assert a cause.
+
+Code change:
+- src/sigma/plan_stream.py now classifies only allowlisted provider error codes
+  and parameter names in API-key mode. It never returns raw provider messages
+  or arbitrary code/param strings. Known invalid request/schema, model access,
+  and quota/billing errors receive distinct wording; unknown errors say that
+  their cause is unclassified. The misleading billing/model-permission hint
+  was removed for generic 400s.
+- tests/papers.py exercises the actual one-shot and long-form request functions
+  with a deterministic HTTP 400 fixture, and asserts selected model, reasoning,
+  store=false, max output, strict JSON Schema, safe diagnostics, no draft, and
+  exactly one request per path. Existing paper fixtures cover saved versions,
+  bounded compilation/rendering and retention.
+- No provider/model/request behavior, fallback, retry, spending guard, or live
+  production setting was changed.
+
+Verification:
+- `uv run --locked --no-sync python tests/papers.py` — PASS.
+- `uv run --locked --no-sync python tests/model_connection.py` — PASS.
+- `./sigma test` — PASS for final code/test head, including Ruff, Pyright,
+  frontend typecheck, and production build.
+- Real Chrome `browser_checks/a20_paper.py` — UNVERIFIED/failed to reach sample
+  open. It timed out waiting for “Open Maximum Regions Formed by Lines”; local
+  fixture port 8012 was already occupied. No live inference was used.
+- No provider calls/costs, secrets read, production configuration changes, or
+  redeployment.
+
+Acceptance:
+- Safe diagnostic classification and deterministic one-shot/long-form HTTP
+  400/no-retry fixture behavior: MET.
+- Actual production cause, successful hosted paper generation, live accounting
+  reconciliation, production TeX/PDF durability, and browser acceptance:
+  UNVERIFIED. No live paid test was authorized by T277.
+- Existing version preservation and mocked paper persistence fixtures pass;
+  they do not establish production state.
+
+Required next steps: complete full-suite status for final head; coordinator
+review; if merged, obtain explicit approval for a tightly bounded paid live
+generation if needed to establish provider cause and end-to-end hosted TeX/PDF
+acceptance. Do not deploy this diagnostic-only change and call the production
+generation problem fixed without that evidence.

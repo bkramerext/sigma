@@ -13,7 +13,7 @@ import httpx
 
 from sigma import papers
 from sigma.api import app
-from sigma.plan_stream import completed
+from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, initialize_project, inspect_project
 
 
@@ -84,6 +84,110 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
             assert "without a valid response.completed" in str(exc)
         else:
             raise AssertionError("Partial provider streams must not produce a paper draft")
+
+
+def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
+    cases = [
+        (
+            {
+                "error": {
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "private project text",
+                }
+            },
+            "structured-output schema",
+            "code=invalid_json_schema",
+        ),
+        (
+            {"error": {"code": "model_not_found", "param": "model"}},
+            "selected model",
+            "model_not_found",
+        ),
+        ({"error": {"code": "insufficient_quota"}}, "billing or quota", "insufficient_quota"),
+        (
+            {"error": {"code": "secret-value", "param": "private input"}},
+            "cause is not classified",
+            None,
+        ),
+    ]
+    for body, expected, safe_detail in cases:
+        try:
+            failure(400, body, "api_key")
+        except ProjectError as exc:
+            message = str(exc)
+            assert expected in message
+            assert "No automatic retry" in message
+            assert "private project text" not in message
+            assert "private input" not in message
+            if safe_detail:
+                assert safe_detail in message
+            else:
+                assert "secret-value" not in message
+        else:
+            raise AssertionError("Non-success provider responses must fail without retry")
+
+
+def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
+    requests: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "private research content must not be surfaced",
+                }
+            },
+        )
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    ):
+
+        async def exercise() -> None:
+            calls = [
+                papers._provider(
+                    {"sources": []},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                ),
+                papers._provider_structured(
+                    {"fixture": "input"},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                    instructions="fixture instructions",
+                    schema_name="fixture_long_paper_stage",
+                    response_model=papers.PaperDraft,
+                ),
+            ]
+            for call in calls:
+                try:
+                    await call
+                except ProjectError as exc:
+                    assert "code=invalid_json_schema" in str(exc)
+                    assert "param=text.format.schema" in str(exc)
+                    assert "private research content" not in str(exc)
+                else:
+                    raise AssertionError("Mock HTTP 400 must not create a draft")
+
+        asyncio.run(exercise())
+
+    assert len(requests) == 2  # one attempt per path; no retry/fallback
+    for request in requests:
+        assert request["model"] == "gpt-6.1-sol"
+        assert request["reasoning"] == {"effort": "high"}
+        assert request["store"] is False
+        assert request["max_output_tokens"] == 12000
+        assert request["text"]["format"]["type"] == "json_schema"
+        assert request["text"]["format"]["strict"] is True
+        assert request["text"]["format"]["schema"]
 
 
 def test_long_tex_compiler_source_bound_is_configurable() -> None:

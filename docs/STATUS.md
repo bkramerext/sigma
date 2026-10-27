@@ -1,3 +1,29 @@
+## T277 hosted TeX generation HTTP 400 (2026-10-27)
+
+Read-only IAP inspection found production `sigma.service` active and release pin
+`0ab399f024f939fa08a1ded215878669639a25e2`. The VM Git HEAD was not read because
+Git rejected the SSH principal's ownership context; no safe-directory setting
+was changed. Filtered systemd and backend container logs retained no provider
+error code/parameter for the reported HTTP 400, so its cause remains
+**UNVERIFIED** (request schema, model access, and billing are not distinguished).
+
+T277's isolated branch adds safe API error classification: only allowlisted
+provider codes and parameter names can appear in diagnostics; raw messages,
+arbitrary values, and research content remain suppressed. Known schema/request,
+model-access, and quota/billing classes receive distinct wording, while unknown
+400s are explicitly unclassified. Neither the request, selected model/provider,
+retry behavior, nor spending safeguards changed. `tests/papers.py` covers both
+one-shot and long-form request payloads with mocked HTTP 400, asserting strict
+Pydantic JSON Schema, selected model/reasoning, `store: false`, bounded output,
+and one call per path with no retry. Focused paper and model-connection tests
+passed. The full `./sigma test` passed for the final code/test head, including
+Ruff, Pyright, frontend typecheck, and production build. Real-Chrome A20 did not reach
+paper generation because its sample-open control timed out against the local
+fixture setup (port 8012 was already occupied); browser acceptance is
+UNVERIFIED. No live provider calls, paid inference, credential inspection,
+production configuration changes, or redeployment occurred. See
+`messages/t277_red_paper_api_400.txt`.
+
 ## Hosted sponsored API restoration and release repair (2026-10-27)
 
 Production is configured for SIGMA-sponsored OpenAI API inference with

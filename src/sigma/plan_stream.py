@@ -102,8 +102,53 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
                 "Account retained; no automatic billing fallback occurred."
             )
         raise ProjectError(f"{message} No strategy was saved.")
+    # Provider error bodies can contain request context or other sensitive
+    # values. Surface only a small allowlist of machine fields; never echo the
+    # provider message or an arbitrary code/parameter into the UI.
+    safe_codes = {
+        "invalid_json_schema",
+        "invalid_request_error",
+        "invalid_parameter",
+        "unsupported_parameter",
+        "unsupported_value",
+        "model_not_found",
+        "model_access_denied",
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+    }
+    safe_params = {
+        "text.format",
+        "text.format.schema",
+        "reasoning.effort",
+        "max_output_tokens",
+        "model",
+    }
+    safe_code = code if isinstance(code, str) and code in safe_codes else None
+    param = error.get("param") if isinstance(error, dict) else None
+    safe_param = param if isinstance(param, str) and param in safe_params else None
+    if safe_code in {
+        "invalid_json_schema",
+        "invalid_request_error",
+        "invalid_parameter",
+        "unsupported_parameter",
+        "unsupported_value",
+    }:
+        diagnosis = "The provider rejected a request parameter or structured-output schema."
+    elif safe_code in {"model_not_found", "model_access_denied"}:
+        diagnosis = "The provider rejected access to the selected model."
+    elif safe_code in {"insufficient_quota", "billing_hard_limit_reached"}:
+        diagnosis = "The provider reported an API billing or quota limit."
+    else:
+        diagnosis = "The provider rejected the request; the cause is not classified."
+    details = []
+    if safe_code:
+        details.append(f"code={safe_code}")
+    if safe_param:
+        details.append(f"param={safe_param}")
+    detail_text = f" ({', '.join(details)})" if details else ""
     raise ProjectError(
-        f"OpenAI API request failed (HTTP {status}). Check API model permissions or separate API billing; no fallback or strategy save occurred."
+        f"OpenAI API request failed (HTTP {status}): {diagnosis}{detail_text} "
+        "No automatic retry or billing fallback occurred; no paper was saved."
     )
 
 
