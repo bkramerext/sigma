@@ -378,6 +378,15 @@ def _configured_bootstrap_admin_email(cfg: Config) -> str | None:
         return _bootstrap_admin_email(db, cfg)
 
 
+def sponsored_access_enabled() -> bool:
+    """Allow the operator to disable hosted sponsorship without affecting local auth."""
+    return os.environ.get("SIGMA_CLOUD_SPONSORED_ENABLED", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
@@ -394,7 +403,8 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     # is available only after an authenticated user selects it.
     model_access = "personal"
     sponsorship_eligible = int(
-        not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:"))
+        sponsored_access_enabled()
+        and (not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")))
     )
     with _db(cfg) as db:
         _upsert_user_state(
@@ -406,6 +416,11 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             sponsorship_eligible,
             model_access,
         )
+        if not sponsored_access_enabled():
+            db.execute(
+                "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
+                (principal.subject,),
+            )
         row = db.execute(
             "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status FROM user_state WHERE subject=?",
             (principal.subject,),
@@ -451,12 +466,14 @@ def model_access_for_subject(subject: str) -> str:
         ).fetchone()
     if row is None:
         raise RuntimeError("Authorized account state is unavailable.")
-    return str(row["model_access"])
+    return str(row["model_access"]) if sponsored_access_enabled() else "personal"
 
 
 def set_model_access(subject: str, mode: str) -> None:
     if mode not in {"personal", "sponsored"}:
         raise ValueError("Unsupported model connection choice.")
+    if mode == "sponsored" and not sponsored_access_enabled():
+        raise PermissionError("Sponsored access is disabled.")
     cfg = config()
     if not cfg.enabled or cfg.error or (cfg.local and not _mock_enabled(cfg)):
         raise RuntimeError("Hosted connection choice is unavailable.")
@@ -501,11 +518,12 @@ def _sync_user_state_in_db(db: sqlite3.Connection, cfg: Config) -> None:
     for row in db.execute("SELECT subject,email,role FROM user_state").fetchall():
         role = _authorization_in_db(db, cfg, row["subject"], row["email"])
         db.execute(
-            "UPDATE user_state SET role=?,access_active=?,sponsorship_eligible=?,updated_at=? WHERE subject=?",
+            "UPDATE user_state SET role=?,access_active=?,sponsorship_eligible=?,model_access=CASE WHEN ? THEN model_access ELSE 'personal' END,updated_at=? WHERE subject=?",
             (
                 role or row["role"],
                 int(role is not None),
-                int(role is not None and not cfg.local),
+                int(role is not None and not cfg.local and sponsored_access_enabled()),
+                int(sponsored_access_enabled()),
                 _now(),
                 row["subject"],
             ),
@@ -540,8 +558,14 @@ def resolve_session(raw: str | None) -> Principal | None:
             )
             return None
         db.execute(
-            "UPDATE user_state SET role=?,access_active=1,sponsorship_eligible=?,updated_at=? WHERE subject=?",
-            (role, int(not cfg.local), _now(), row["subject"]),
+            "UPDATE user_state SET role=?,access_active=1,sponsorship_eligible=?,model_access=CASE WHEN ? THEN model_access ELSE 'personal' END,updated_at=? WHERE subject=?",
+            (
+                role,
+                int(not cfg.local and sponsored_access_enabled()),
+                int(sponsored_access_enabled()),
+                _now(),
+                row["subject"],
+            ),
         )
         return Principal(row["subject"], row["email"], role)
 

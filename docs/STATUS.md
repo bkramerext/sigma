@@ -1,5 +1,19 @@
 # SIGMA status
 
+## Issue #265 — hosted sponsorship disabled (2026-10-27)
+
+The public 0.1.1 Home UI at `3f2426c6fa83866c655cb1b601a7e2df78e5e459`
+passed clean and cache-disabled Chrome checks: Google and ChatGPT pills are
+visible, no console/network failures, current assets served. Production
+account state subsequently exposed the nonworking sponsored ChatGPT choice.
+Per owner direction, the hosted Compose stack now defaults sponsorship off;
+the backend rejects sponsored selection and provider access and resets saved
+sponsored choices to personal. The Connect to ChatGPT pill remains gated by
+Google authentication. Hosted personal ChatGPT authorization remains unavailable
+by existing design, so AI inference is not claimed. Focused auth, sponsored
+API, deployment package and GCE host tests passed; full test and final hosted
+account acceptance are reported separately.
+
 ## Issue #265 — 0.1.1 production upgrade (2026-10-27)
 
 Read-only GCE diagnosis found production still running the initial

@@ -170,7 +170,13 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
 
 
 async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
+    from sigma import cloud_auth
     from sigma.config_secrets import SecretConfigurationError, secret_value
+
+    if not cloud_auth.sponsored_access_enabled():
+        return AuthContext(
+            token="", mode="chatgpt", status="unavailable", identity="cloud_sponsor_disabled"
+        )
 
     if subject_hash is None:
         return AuthContext(token="", mode="chatgpt", status="unavailable", identity="cloud_unbound")
@@ -247,6 +253,10 @@ async def auth_context() -> AuthContext:
 
 def cloud_credential(context: Mapping[str, Any]) -> bool:
     """Accept only the explicitly selected server provider; never a local account."""
+    from sigma import cloud_auth
+
+    if not cloud_auth.sponsored_access_enabled():
+        return False
     provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
     return (
         bool(context.get("token"))
