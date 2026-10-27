@@ -2226,14 +2226,17 @@ async def test_pause_counts_interrupted_call(path: Path):
     assert stopped["status"] == "stopped" and stopped["calls_used"] == 1
     assert stopped["steps"][-1]["status"] == "interrupted"
     with patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)):
+        rejection_message = ""
         try:
             await research_sessions.control_session(str(path), stopped_start["id"], "resume")
         except ProjectError as exc:
-            assert "unavailable" in str(exc).lower()
+            rejection_message = str(exc)
+            assert "authentication (401)" in rejection_message.lower()
         else:
-            raise AssertionError("Unavailable configuration must visibly reject resume")
+            raise AssertionError("Rejected provider credentials must visibly reject resume")
     rejected = research_sessions.get_session(str(path), stopped_start["id"])
-    assert rejected["status"] == "stopped"  # unavailable configuration leaves it stopped
+    assert rejected["status"] == "stopped"  # rejected credentials leave it stopped
+    assert rejected["message"] == rejection_message
 
 
 async def test_malformed_output_and_restart(path: Path):

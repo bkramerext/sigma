@@ -2749,7 +2749,7 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
-    if project_path(path).suffix == ".json":
+    if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
         try:
