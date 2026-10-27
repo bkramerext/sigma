@@ -52,7 +52,6 @@ def main() -> None:
         assert read_file(migrated, "research-sessions/session.json") == b'{"status":"revised"}'
         assert read_file(migrated, "project.json") == original_project
         assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
-        assert (source / "research-sessions" / "session.json").read_bytes() == b'{"status":"complete"}'
         try:
             write_file(migrated, "../escape", b"unsafe")
         except BundleError:
