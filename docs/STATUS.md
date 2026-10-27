@@ -1,5 +1,27 @@
 # SIGMA status
 
+## Issue #265 — 0.1.1 production upgrade (2026-10-27)
+
+Read-only GCE diagnosis found production still running the initial
+`e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` release: checkout, release pin,
+backend/frontend tags, image IDs, and OCI revision labels agree. Host Caddy
+routes the public site to the Compose edge; the old Home UI is served by the
+old frontend container. The expected state disk UUID is mounted and 23/23
+preflight checks pass. The only READY recovery snapshot is from October 26;
+no backup scheduler is installed. Production lacks the new 0.1.1 SMTP sender
+configuration and protected password file, so cutover remains blocked on an
+approved secret and fresh recovery point.
+
+An exact-source build of target `999db4362656fd5a22d6ebaaf733e64c8e87543e`
+failed before any service change: the frontend Vite build reads
+`pyproject.toml`, but the Dockerfile did not copy it. The focused fix copies
+that file into the image build stage. `./sigma test` and the local real-Chrome
+mock-auth walkthrough passed. Both corrected release images built on the VM
+from PR #266 commit `df3a5626748d4a5960ca5809d376fb5c7272cb76`, with
+matching OCI source labels. Production is unchanged; public 0.1.1
+acceptance is **UNMET** pending independent review, configuration, backup, and
+verified deployment. No paid provider calls were made.
+
 ## PR #257 — T88 visual and research-follow-up refinements (2026-10-26)
 
 On `feature/local-mock-auth-walkthrough`, standardized Home and Project Google
