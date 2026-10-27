@@ -6,7 +6,6 @@ network requests, or existing projects are touched.
 import asyncio
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import time
