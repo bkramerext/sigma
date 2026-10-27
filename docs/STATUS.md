@@ -1,3 +1,53 @@
+## Hosted sponsored API restoration and release repair (2026-10-27)
+
+Production is configured for SIGMA-sponsored OpenAI API inference with
+`SIGMA_CLOUD_INFERENCE_PROVIDER=api_key` and
+`SIGMA_CLOUD_SPONSORED_ENABLED=true`. The server-held credential remains in the
+Secret Manager-mounted file; no credential was read or exposed. Secret version 1
+is enabled and VM runtime access is scoped to that individual secret. Non-billable
+credential validation and model discovery passed (`gpt-6-luna`, `gpt-6-astra`,
+`gpt-6.1-sol`). Spending and concurrency ceilings were inspected and left intact:
+$2 per user, $15 global, concurrency 1 per user/global, queues 2 per user/8
+global. No paid production inference was run.
+
+During restoration, the previously installed host preflight script did not
+recognize the existing `SIGMA_CLOUD_SPONSORED_ENABLED` setting. It blocked the
+systemd pre-start gate before Compose could start. The prior protected config was
+restored, the same release was restarted, and the helper was synchronized with
+the checked-out release. All 23 production preflight checks passed; backend,
+frontend, and edge then returned healthy. `/srv/sigma-state` stayed mounted and
+untouched. This branch updates `deploy/deploy-gce-release.py` to install the
+release-matched preflight helper for candidate and rollback transitions; fixture
+rehearsals cover candidate-build failure and source-SHA identity.
+
+The public HTTPS endpoint returns HTTP 200 but still references the old frontend
+bundle `/assets/index-CzWcx-8K.js`; the current candidate build emits
+`/assets/index-CHNuuinu.js`. This is direct evidence production has not yet
+received this frontend change. The hosted connection pill previously called
+`/api/ai/auth/begin`, intentionally blocked in hosted mode with
+`AI provider authorization is unavailable in cloud mode.` The pill now selects
+hosted sponsored mode via `/api/ai/mode`, reflects `/api/cloud-research/connection`
+status (not the personal ChatGPT connection), and does not silently leave a
+connected sponsor mode. The sample API is a distinct path and remains available
+under hosted project access rules.
+
+Focused validation passed: `tests/cloud_auth.py` (46 tests),
+`tests/cloud_research_sponsored_api.py` (deterministic mocked inference,
+accounting/limits/idempotency/isolation), `tests/deployment_automation.py`,
+`browser_checks/hosted_sponsored_connection.py` in real Chrome with mocked API,
+`npm --prefix frontend run build`, Ruff and Pyright. `./sigma test` was started
+but intentionally stopped at the owner's direction to prioritize deployment;
+it had reached the long research-session test when interrupted. One earlier run
+also surfaced fixture assumptions for the newly synchronized preflight helper;
+those fixtures were corrected and both T173 rehearsals passed afterward.
+
+Issue #265 remains open. The UI code and deployment-helper change await the
+production cutover. Live paid Investigator/Skeptic execution and its durable
+artifacts remain **UNVERIFIED** pending explicit owner approval for the bounded
+one-session/two-call test (maximum $0.25, no retries). Public browser verification
+of the authenticated production UI remains outstanding; deployment verification
+must compare checkout/pin/image provenance and public asset contents.
+
 # SIGMA status
 
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)

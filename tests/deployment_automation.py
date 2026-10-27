@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,6 +26,8 @@ def main() -> None:
         repo = root / "checkout"
         repo.mkdir()
         (repo / "deploy").mkdir()
+        checker_source = repo / "deploy/gce_preflight.py"
+        checker_source.write_text("# release-matched preflight\n", encoding="utf-8")
         env_file = root / "deploy.env"
         original = (
             f"SIGMA_RELEASE={OLD}\nSIGMA_DOMAIN=example.test\n"
@@ -43,7 +46,12 @@ def main() -> None:
         def ok_runner(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
             calls.append(argv)
             output = "ready"
-            if argv[-3:] in (
+            if argv[0] == "install":
+                shutil.copyfile(argv[-2], argv[-1])
+                Path(argv[-1]).chmod(0o755)
+            if argv[:4] == ["git", "-C", str(repo), "status"]:
+                output = ""
+            elif argv[-3:] in (
                 ["ps", "-q", "backend"],
                 ["ps", "-q", "frontend"],
                 ["ps", "-q", "edge"],
@@ -65,7 +73,13 @@ def main() -> None:
 
         deployment = module.Deployment(repo, env_file, root / "preflight.py", ok_runner, False)
         assert deployment.deploy(OLD, False, False) == "unchanged"
-        assert calls[0][0] == "python3"
+        assert calls[0][:4] == ["git", "-C", str(repo), "status"]
+        assert calls[1][0] == "install"
+        assert (root / "preflight.py").read_text(encoding="utf-8") == checker_source.read_text(
+            encoding="utf-8"
+        )
+        assert (root / "preflight.py").stat().st_mode & 0o777 == 0o755
+        assert any(argv[0] == "python3" and argv[1] == str(root / "preflight.py") for argv in calls)
         assert not any(argv[:2] == ["systemctl", "start"] for argv in calls)
         assert not any(argv[:4] == ["git", "-C", str(repo), "checkout"] for argv in calls)
         assert env_file.read_bytes() == original
@@ -134,6 +148,10 @@ def main() -> None:
         assert env_file.read_bytes() == original
         assert (state / "auth.sqlite").read_bytes() == b"preserve-me"
         assert start_attempts == 2  # candidate failed, previous release restarted
+        assert sum(argv[0] == "install" for argv in calls) >= 4
+        assert (root / "preflight.py").read_text(encoding="utf-8") == checker_source.read_text(
+            encoding="utf-8"
+        )
 
         # The candidate checkout must precede image build so tags cannot lie
         # about which source tree produced them.

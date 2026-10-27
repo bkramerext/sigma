@@ -24,6 +24,8 @@ def main() -> None:
         root = Path(temporary)
         checkout = root / "checkout"
         checkout.mkdir()
+        (checkout / "deploy").mkdir()
+        (checkout / "deploy/gce_preflight.py").write_text("# fixture\n", encoding="utf-8")
         deploy_env = root / "deploy.env"
         original_env = f"SIGMA_RELEASE={old_sha}\nSIGMA_DOMAIN=fixture.example\n".encode()
         deploy_env.write_bytes(original_env)
@@ -36,6 +38,9 @@ def main() -> None:
 
         def runner(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
             calls.append(argv)
+            if argv[:1] == ["install"]:
+                Path(argv[-1]).write_bytes(Path(argv[-2]).read_bytes())
+                return subprocess.CompletedProcess(argv, 0, "", "")
             if argv[:2] == ["python3", str(checkout / "deploy/release_image.py")]:
                 if argv[2] == "build":
                     return subprocess.CompletedProcess(argv, 17, "", "fixture failure")

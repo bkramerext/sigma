@@ -116,6 +116,20 @@ class Deployment:
         self.repository, self.env_file, self.preflight = repository, env_file, preflight
         self.runner, self.root_check = runner, root_check
 
+    def sync_preflight(self) -> None:
+        """Keep the installed host gate in lockstep with the active release."""
+        source = self.repository / "deploy/gce_preflight.py"
+        try:
+            info = source.lstat()
+        except OSError as error:
+            raise DeployFailure("release host preflight source is missing") from error
+        if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise DeployFailure("release host preflight source must be a regular file")
+        _call(
+            self.runner,
+            ["install", "-o", "root", "-g", "root", "-m", "0755", str(source), str(self.preflight)],
+        )
+
     def check_preflight(self) -> None:
         argv = [
             "python3",
@@ -153,6 +167,10 @@ class Deployment:
             raise DeployFailure("run this command with sudo on the prepared GCE host")
         owner = 0 if self.root_check else os.geteuid()
         original_env, old_sha = _read_release(self.env_file, owner)
+        dirty = _call(self.runner, ["git", "-C", str(self.repository), "status", "--porcelain"])
+        if dirty:
+            raise DeployFailure("release checkout has local changes; refusing deployment")
+        self.sync_preflight()
         if sha == old_sha and not initial:
             self.check_preflight()
             self.verify_health(sha)
@@ -175,9 +193,6 @@ class Deployment:
                 raise DeployFailure("cannot inspect initial service enablement") from error
             if enabled.returncode == 0:
                 raise DeployFailure("--initial requires sigma.service to be disabled")
-        dirty = _call(self.runner, ["git", "-C", str(self.repository), "status", "--porcelain"])
-        if dirty:
-            raise DeployFailure("release checkout has local changes; refusing deployment")
         _call(self.runner, ["git", "-C", str(self.repository), "fetch", "--no-tags", "origin", sha])
         _call(
             self.runner, ["git", "-C", str(self.repository), "cat-file", "-e", f"{sha}^{{commit}}"]
@@ -210,6 +225,7 @@ class Deployment:
                 service_stopped = True
             _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
             candidate_checkout_changed = True
+            self.sync_preflight()
             _replace_release(self.env_file, original_env, sha, owner)
             self.check_preflight()
             _call(self.runner, ["systemctl", "start", "sigma.service"])
@@ -236,6 +252,7 @@ class Deployment:
                     self.runner,
                     ["git", "-C", str(self.repository), "checkout", "--detach", previous],
                 )
+                self.sync_preflight()
                 if initial:
                     _call(self.runner, ["systemctl", "stop", "sigma.service"])
                     _call(self.runner, ["systemctl", "disable", "sigma.service"])

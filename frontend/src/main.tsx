@@ -4120,11 +4120,12 @@ function CloudAuthGate() {
         : await fetch('/api/ai/mode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
       if (!response.ok) throw await cloudFailure(response, 'Connection choice could not be saved.');
       await refresh();
+      if (mode === 'sponsored') await refreshSponsoredConnection();
     } catch (cause) {
       setConnectionError(cause instanceof Error ? cause.message : 'Connection choice could not be saved.');
       throw cause;
     } finally { setSelectingConnection(false); }
-  }, [refresh, selectingConnection, status?.mock_auth]);
+  }, [refresh, refreshSponsoredConnection, selectingConnection, status?.mock_auth]);
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', selectConnection, connectionError, selectingConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
