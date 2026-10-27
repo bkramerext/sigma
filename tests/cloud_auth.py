@@ -289,6 +289,7 @@ class CloudAuthTests(TestCase):
 
     def test_mock_member_projects_are_not_visible_to_other_members(self):
         origin = {"Origin": "http://127.0.0.1:5173"}
+        member_a_path = ""
         with patch.dict(os.environ, {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
             "SIGMA_CLOUD_AUTH_LOCAL": "true",
