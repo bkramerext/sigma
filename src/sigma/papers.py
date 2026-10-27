@@ -2506,7 +2506,9 @@ def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
     try:
         if target.suffix == ".json":
             from sigma.projects import read_project_artifact
-            contents = read_project_artifact(target, f"artifacts/papers/{record.get('paper_id')}.pdf")
+            contents = read_project_artifact(
+                target, f"artifacts/papers/{record.get('paper_id')}.pdf"
+            )
             return len(contents) == record.get("pdf_size_bytes") and len(contents) <= 80_000_000 and hashlib.sha256(contents).hexdigest() == record.get("pdf_sha256")
         file = _paper_dir(path, create=False) / f"{record.get('paper_id')}.pdf"
         info = file.lstat()
