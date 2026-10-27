@@ -864,8 +864,9 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
     project_id = inspect_project(path).project.id
     bundle_path = _execution_bundle_path(directory)
     if bundle_path is not None:
-        from sigma.project_bundle import read_bundle
         import base64
+
+        from sigma.project_bundle import read_bundle
         try:
             members = read_bundle(bundle_path)["files"]
         except (OSError, ValueError) as exc:
