@@ -1,5 +1,19 @@
 # SIGMA status
 
+## PR #257 — T88 Stream B visual consistency (2026-10-27)
+
+Real-Chrome visual checks found and corrected mock selector overflow in the
+Project header, account-dialog overlap with its pill on short/narrow screens,
+and Home pill stacking behind project content at narrow widths. The dialog
+now places itself on the side with more room, caps its height to that space,
+and remains scrollable. Browser coverage captures Guest, member, administrator,
+and denied/uninvited dialogs on Home and Project at desktop and mobile sizes;
+the checks assert viewport bounds, no pill overlap or horizontal overflow, and
+focus. Frontend typecheck/build and the focused T88 sign-in and mock-auth
+real-Chrome suites passed. No auth or provider behavior changed. See the
+[T88 Stream B handoff](../messages/t88_green_stream_b_visual.txt) for exact
+screenshots, commands, and disposition.
+
 ## PR #257 — T88 Stream A Batches 1–2 (2026-10-27)
 
 Continued the existing `feature/local-mock-auth-walkthrough` PR from

@@ -240,7 +240,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const [position, setPosition] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
   const [accountError, setAccountError] = useState('');
   const providerActive = useProviderActivity();
   useEffect(() => {
@@ -256,10 +256,17 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
       const rect = trigger?.getBoundingClientRect();
       if (!rect || !panel.current) return;
       const panelRect = panel.current.getBoundingClientRect();
-      const below = rect.bottom + 8 + panelRect.height <= window.innerHeight - 8;
+      const belowSpace = Math.max(0, window.innerHeight - rect.bottom - 16);
+      const aboveSpace = Math.max(0, rect.top - 16);
+      const below = panelRect.height <= belowSpace || belowSpace >= aboveSpace;
+      const maxHeight = below ? belowSpace : aboveSpace;
       const preferredRight = Math.max(8, window.innerWidth - rect.right);
       const right = Math.min(preferredRight, Math.max(8, window.innerWidth - panelRect.width - 8));
-      setPosition({ top: below ? rect.bottom + 8 : Math.max(8, rect.top - panelRect.height - 8), right });
+      setPosition({
+        top: below ? rect.bottom + 8 : Math.max(8, rect.top - Math.min(panelRect.height, maxHeight) - 8),
+        right,
+        maxHeight,
+      });
     };
     const frame = requestAnimationFrame(() => {
       place();
@@ -315,7 +322,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}${googleAccount ? ' account-model-status' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={guestAccount ? 'Guest, Explore only; open account settings' : googleAccount ? `${roleLabel}, ${modelLine}; open account and model settings` : projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>{guestAccount ? <span className="account-model-lines"><span role="status">Guest</span><span>Explore only · no execution</span></span> : googleAccount ? <span className="account-model-lines"><span role="status">{roleLabel}</span><span>{modelLine}</span></span> : <span role="status">{visibleLabel}</span>}</summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
-    <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label={guestAccount || googleAccount ? "Account and model settings" : "AI connection settings"} tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
+    <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label={guestAccount || googleAccount ? "Account and model settings" : "AI connection settings"} tabIndex={-1} style={position ? { top: position.top, right: position.right, maxHeight: position.maxHeight } : undefined}>
       {guestAccount ? <section className="account-identity-state"><h2>Guest · Explore SIGMA</h2><p>Published research is available without signing in. A verified invitation is required for a private workspace and model access.</p>{guestAccount.deniedEmail && <p role="status">Access is not granted for {guestAccount.deniedEmail}.</p>}{guestAccount.invitationControls}{guestAccount.ready ? <a className="connection-text-action" href="/api/cloud-auth/login">Sign in with Google</a> : <p role="status">Google sign-in is not configured on this server.</p>}</section> : <>{googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
       {!guestAccount && (serviceFunded ? <>
         <h2>Model access</h2>

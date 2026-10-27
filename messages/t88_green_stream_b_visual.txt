@@ -1,0 +1,81 @@
+# T88 Stream B — Green visual consistency handoff for PR #257
+
+## Delivery
+
+- PR: https://github.com/bkramerext/sigma/pull/257
+- Branch: `feature/local-mock-auth-walkthrough`
+- Base: `main`
+- Starting head: `056317cc4485375c98556452bcbe8bfa10e2bea7`
+- Final head: this handoff is committed on the PR branch; the exact commit
+  SHA is recorded in the R4R notice and PR's current head.
+- Scope: Stream B visual consistency and polish only. No merge or product
+  acceptance is claimed.
+
+## Findings and corrections
+
+- At desktop Project width, the local mock identity selector occupied an
+  implicit grid column and widened the page beyond the viewport. It now spans
+  the controls row and uses a capped width; at narrow widths it fills only the
+  available control width.
+- On a short/narrow Project viewport, the consolidated account dialog could
+  be taller than the available space on either side of the identity pill and
+  overlap the pill. Placement now chooses the side with more room, caps the
+  dialog to that available height, and preserves a visible gap. The dialog
+  remains internally scrollable.
+- On narrow Home, the project list could paint over the identity pill. The
+  Home top line now has a local stacking context above the project content.
+- Expanded the two real-Chrome browser checks to verify dialog anchoring,
+  viewport bounds, focus, no horizontal overflow, one identity pill, and
+  screenshots across the requested identity states and page types. Corrected
+  the denied-state desktop capture to explicitly restore desktop viewport size.
+- No auth, authorization, workspace, funding, or provider behavior changed.
+  The only component logic change computes the dialog's visual placement and
+  available height.
+
+## Browser evidence
+
+Screenshots are checked in under `docs/evaluations/t257/screenshots/`:
+
+- Home: guest desktop/mobile, member desktop/mobile, administrator
+  desktop/mobile, denied desktop/mobile.
+- Project: member desktop/mobile and administrator desktop/mobile.
+
+The real-Chrome T88 sign-in suite supplied these screenshots while exercising
+the actual Home and Project UI with deterministic auth/provider boundaries.
+The separate local mock-auth suite exercised the actual mock selector and API
+across Guest, Member A/B, Administrator, and Uninvited states and performed
+responsive dialog assertions; its transient fail-closed request toasts were
+unsuitable for clean screenshot evidence.
+
+The browser checks ran with installed Google Chrome. Viewports included Home
+at 1280×800 and 390×844; Project at 1280×900 and 390×844; and existing pill
+overflow checks at 1280×800, 390×844, and 320×700. Dialog tests require the
+dialog to fit within the viewport, avoid the pill, retain focus, and keep the
+document from scrolling horizontally. Screenshots show the existing SIGMA
+navy/copper styling, the two-line identity/model status, and the unified pill
+dialog; there is no welcome dialog or duplicate account control.
+
+## Verification
+
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/t23_1_google_signin.py` — PASS in real Chrome; Guest, Member, Administrator, denied-account and personal/sponsored recovery paths with external auth/provider boundaries mocked.
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/t257_mock_auth.py` — PASS in real Chrome; Guest, Member A/B project separation, Administrator, Uninvited invitation request, allowance exhaustion and provider-unavailable simulation.
+- `npm run typecheck` from `frontend/` — PASS.
+- `npm run build` from `frontend/` — PASS; Vite retains its existing advisory that one JS chunk exceeds 500 kB.
+- `./sigma test` — first attempt stopped at Ruff format check for the added T88 browser assertions; formatted only `browser_checks/t23_1_google_signin.py`, inspected the formatting diff, then reran. Final full suite — PASS, including Ruff (274 files), Pyright (0 diagnostics), frontend typecheck and build.
+- `git diff --check` — PASS.
+- No live OAuth, hosted provider, paid inference, GCP, or deployed-service check was performed. Cost: `$0`.
+
+## Acceptance disposition
+
+- **MET:** Home and Project pill/dialog visual consistency was exercised at
+  desktop and narrow widths for Guest, signed-in member, Administrator, and
+  denied/uninvited account states. Dialog placement, focus, viewport bounds,
+  horizontal overflow, and screenshot evidence are covered by the browser
+  checks described above.
+- **MET:** Concrete selector overflow, narrow dialog/pill overlap, and narrow
+  Home pill stacking defects are corrected without changing auth behavior.
+- **UNVERIFIED:** Live OAuth, hosted provider behavior, and deployed-service
+  presentation remain outside the local deterministic browser environment.
+- **UNMET:** None within Stream B's assigned visual scope.
+
+This handoff is R4R for independent review, not approval or merge.

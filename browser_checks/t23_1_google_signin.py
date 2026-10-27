@@ -40,6 +40,25 @@ def free_port() -> int:
         return int(listener.getsockname()[1])
 
 
+def assert_account_dialog_layout(page, trigger, dialog) -> None:
+    expect(dialog).to_be_visible()
+    page.wait_for_function(
+        """() => {
+            const trigger = document.querySelector('.api-connection > summary');
+            const dialog = document.querySelector('.connection-details[role="dialog"]');
+            if (!trigger || !dialog) return false;
+            const t = trigger.getBoundingClientRect();
+            const d = dialog.getBoundingClientRect();
+            const inside = d.left >= 0 && d.right <= innerWidth
+                && d.top >= 0 && d.bottom <= innerHeight;
+            const anchored = d.top >= t.bottom + 4 || d.bottom <= t.top - 4;
+            return inside && anchored && dialog.contains(document.activeElement);
+        }"""
+    )
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    assert trigger.get_attribute("aria-expanded") == "true"
+
+
 def wait_for(url: str, process: subprocess.Popen, log: Path) -> None:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline and process.poll() is None:
@@ -311,8 +330,23 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             expect(guest_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
                 "href", "/api/cloud-auth/login"
             )
+            SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-guest-dialog-desktop.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(
+                page, page.locator(".api-connection > summary"), guest_dialog
+            )
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-guest-dialog-mobile.png"), animations="disabled"
+            )
             page.keyboard.press("Escape")
             expect(guest_dialog).to_have_count(0)
+            page.wait_for_function(
+                "document.activeElement === document.querySelector('.api-connection > summary')"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
             page.goto(ui_url + "/demo", wait_until="networkidle")
             expect(
                 page.get_by_role("heading", name="Explore a SIGMA research project")
@@ -336,9 +370,19 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                 )
             ).to_be_visible()
             SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+            expect(account.locator(".account-identity-state h2")).to_have_text("Regular user")
+            expect(status_pill.locator(".account-model-lines > span")).to_have_count(2)
+            assert_account_dialog_layout(page, status_pill, account)
             page.screenshot(
                 path=str(SCREENSHOTS / "home-account-dialog.png"), animations="disabled"
             )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, status_pill, account)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-account-dialog-mobile.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
+            assert_account_dialog_layout(page, status_pill, account)
             expect(
                 account.get_by_text(
                     "Hosted personal ChatGPT authentication is unavailable", exact=False
@@ -393,11 +437,20 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             google.click()
             account = page.get_by_role("dialog", name="Account and model settings")
             expect(account).to_be_visible()
-            page.set_viewport_size({"width": 1280, "height": 1400})
+            expect(account.locator(".account-identity-state h2")).to_have_text("Regular user")
+            expect(google.locator(".account-model-lines > span")).to_have_count(2)
+            page.set_viewport_size({"width": 1280, "height": 900})
+            assert_account_dialog_layout(page, google, account)
             page.screenshot(
                 path=str(SCREENSHOTS / "project-account-dialog.png"), animations="disabled"
             )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, google, account)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-account-dialog-mobile.png"), animations="disabled"
+            )
             page.set_viewport_size({"width": 1280, "height": 800})
+            assert_account_dialog_layout(page, google, account)
             page.locator(".connection-backdrop").click(position={"x": 2, "y": 2})
             for width, height in ((1280, 800), (390, 844), (320, 700)):
                 page.set_viewport_size({"width": width, "height": height})
@@ -475,7 +528,25 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             assert login_attempts == ["A", "B"]
             page.reload(wait_until="networkidle")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-            expect(page.locator(".account-model-status > summary")).to_contain_text("Administrator")
+            admin_pill = page.locator(".account-model-status > summary")
+            expect(admin_pill).to_contain_text("Administrator")
+            expect(admin_pill.locator(".account-model-lines > span")).to_have_count(2)
+            admin_pill.click()
+            admin_dialog = page.get_by_role("dialog", name="Account and model settings")
+            expect(admin_dialog.locator(".account-identity-state h2")).to_have_text("Administrator")
+            assert_account_dialog_layout(page, admin_pill, admin_dialog)
+            page.screenshot(path=str(SCREENSHOTS / "home-admin-dialog.png"), animations="disabled")
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, admin_pill, admin_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-admin-dialog-mobile.png"), animations="disabled"
+            )
+            page.keyboard.press("Escape")
+            expect(admin_dialog).to_have_count(0)
+            page.wait_for_function(
+                "document.activeElement === document.querySelector('.account-model-status > summary')"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
             assert api_request("GET", "/api/projects/recent", identity).json()["projects"] == []
             project_b = api_request(
                 "POST",
@@ -499,6 +570,31 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                 ]
                 == project_b.json()["path"]
             )
+            page.goto(
+                ui_url + "/project?" + urlencode({"path": project_b.json()["path"]}),
+                wait_until="networkidle",
+            )
+            admin_project_pill = page.locator(".account-model-status > summary")
+            expect(admin_project_pill).to_contain_text("Administrator")
+            admin_project_pill.click()
+            admin_project_dialog = page.get_by_role("dialog", name="Account and model settings")
+            expect(admin_project_dialog.locator(".account-identity-state h2")).to_have_text(
+                "Administrator"
+            )
+            page.set_viewport_size({"width": 1280, "height": 900})
+            assert_account_dialog_layout(page, admin_project_pill, admin_project_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-admin-dialog.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, admin_project_pill, admin_project_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-admin-dialog-mobile.png"), animations="disabled"
+            )
+            page.keyboard.press("Escape")
+            expect(admin_project_dialog).to_have_count(0)
+            page.goto(ui_url + "/", wait_until="networkidle")
+            page.set_viewport_size({"width": 1280, "height": 800})
 
             # A valid but ungranted fixture identity returns the rejected-access UI
             # and still has no private API principal.
@@ -515,6 +611,15 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             denied_dialog = page.get_by_role("dialog")
             expect(denied_dialog).to_contain_text("Access is not granted")
             expect(denied_dialog).to_contain_text(ACCOUNTS["denied"]["email"])
+            denied_pill = page.locator(".api-connection > summary")
+            expect(denied_pill).to_have_count(1)
+            assert_account_dialog_layout(page, denied_pill, denied_dialog)
+            page.screenshot(path=str(SCREENSHOTS / "home-denied-dialog.png"), animations="disabled")
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, denied_pill, denied_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-denied-dialog-mobile.png"), animations="disabled"
+            )
             assert api_request("GET", "/api/projects/recent").status_code == 401
             denied_dialog.get_by_role("button", name="Request invitation").click()
             expect(denied_dialog).to_contain_text("Invitation requested. We'll get back to you.")
