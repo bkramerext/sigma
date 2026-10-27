@@ -3,6 +3,7 @@
 Unlike scripts/t249_verify.py this runner never commits or pushes anything.
 Run with --docker to include real sandbox lifecycle checks.
 """
+
 from __future__ import annotations
 
 import os
