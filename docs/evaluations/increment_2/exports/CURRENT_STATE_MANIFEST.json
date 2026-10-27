@@ -1,5 +1,5 @@
 {
-  "app_revision": "537893b10bcc7bae70b3eafeca21fab8b909feb3",
+  "app_revision": "1750add2eeeff2d74e50dfc7cc67bf3f720cc298",
   "baseline_export_commit": "322cf5593eb4a9dff3d5ccf0f97300d5294ddb29",
   "new_provider_calls": 0,
   "new_research_sessions": 0,
@@ -21,56 +21,8 @@
         {
           "path": "maximum-regions-archived.browser.audit.json",
           "format": "SIGMA browser Project Audit JSON",
-          "sha256": "12c9d6cc9a98500af7116aec770ffb9f5c8974739f3d60f9da85a4a0edd0e9b9",
-          "bytes": 121087
-        }
-      ],
-      "audit_content_unchanged": true,
-      "research_activity": "Read-only current-state/evidence navigation, reload, viewport and real audit-export checks. No new session or provider work."
-    },
-    {
-      "slug": "nonconsecutive-subset-sums",
-      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
-      "source_session_ids": [
-        "1a9a0c44-48ae-49e7-8bea-0e8d47297f9d",
-        "1aabbfc0-e642-4581-a96f-2e33ac17ee19",
-        "6c552b3c-44e4-4b57-8b93-e5a645d057d1",
-        "7c70ca6e-3fb2-4cda-b75a-72702ee10d97",
-        "f7301d22-fd90-4675-95cd-17b006262ef9"
-      ],
-      "files": [
-        {
-          "path": "nonconsecutive-subset-sums.current-understanding.json",
-          "format": "SIGMA current-understanding API JSON",
-          "sha256": "055525abdb2c79f25691bf68b0945410ea05baefe5a0a23c428e4ceb1bc63b5b",
-          "bytes": 58239
-        },
-        {
-          "path": "nonconsecutive-subset-sums.browser.audit.json",
-          "format": "SIGMA browser Project Audit JSON",
-          "sha256": "1211b7ed9f5ca48d6055209f4b6ecc3729ef74195635d8df2298109e7d6f21b1",
-          "bytes": 303779
-        }
-      ],
-      "audit_content_unchanged": true,
-      "research_activity": "Read-only current-state/evidence navigation, reload, viewport and real audit-export checks. No new session or provider work."
-    },
-    {
-      "slug": "maximum-regions-by-lines",
-      "project_id": "5731fd49-e4fd-47c3-9d3e-1691e30d6ea1",
-      "source_session_ids": [],
-      "files": [
-        {
-          "path": "maximum-regions-by-lines.current-understanding.json",
-          "format": "SIGMA current-understanding API JSON",
-          "sha256": "e71f0fa6a9449e23d6c4135c6b3a95aac3f37d7973efad1ee240e1e2ba5bd653",
-          "bytes": 625
-        },
-        {
-          "path": "maximum-regions-by-lines.browser.audit.json",
-          "format": "SIGMA browser Project Audit JSON",
-          "sha256": "80603d2a93d14000db23ee0f78e1ecde5c232d3cea327eac3fd5e7c2a1ba46c7",
-          "bytes": 4855
+          "sha256": "662156a3d549e46cc5795c23ea1c1935716d29e3ca32ca07e28527399178a977",
+          "bytes": 121311
         }
       ],
       "audit_content_unchanged": true,

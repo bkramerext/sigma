@@ -1,5 +1,5 @@
 export const REQUEST_TOAST_LIFETIME_MS = 60_000;
-export const REQUEST_TOAST_EXIT_MS = 320;
+export const REQUEST_TOAST_EXIT_MS = 960;
 
 export class RequestToastStore {
   constructor({

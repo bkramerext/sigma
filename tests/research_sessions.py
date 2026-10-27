@@ -2226,7 +2226,13 @@ async def test_pause_counts_interrupted_call(path: Path):
     assert stopped["status"] == "stopped" and stopped["calls_used"] == 1
     assert stopped["steps"][-1]["status"] == "interrupted"
     with patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)):
-        rejected = await research_sessions.control_session(str(path), stopped_start["id"], "resume")
+        try:
+            await research_sessions.control_session(str(path), stopped_start["id"], "resume")
+        except ProjectError as exc:
+            assert "unavailable" in str(exc).lower()
+        else:
+            raise AssertionError("Unavailable configuration must visibly reject resume")
+    rejected = research_sessions.get_session(str(path), stopped_start["id"])
     assert rejected["status"] == "stopped"  # unavailable configuration leaves it stopped
 
 

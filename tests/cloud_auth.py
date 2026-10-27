@@ -209,6 +209,50 @@ class CloudAuthTests(TestCase):
             self.assertEqual(saved.call_count, 3)
             self.assertEqual(len(record["artifacts"]), 1)
 
+    def test_mock_session_resume_continues_simulation_without_provider_calls(self):
+        from sigma import research_sessions
+
+        session_id = "11111111-1111-4111-8111-111111111111"
+        record = {
+            "id": session_id,
+            "project_path": "/mock/private-a",
+            "project_id": "project-a",
+            "strategy_id": "strategy-a",
+            "strategy_title": "Test strategy",
+            "strategy_runs": [
+                {
+                    "strategy_id": "strategy-a",
+                    "status": "stopped",
+                    "current_action": "Stopped",
+                    "artifacts": [],
+                    "calls_used": 0,
+                }
+            ],
+            "status": "stopped",
+            "mode": "mock",
+            "simulated": True,
+            "mock_stage": 1,
+            "mock_scenario": "completed",
+            "events": [],
+            "artifacts": [],
+        }
+        with (
+            patch.object(research_sessions, "_read", return_value=record),
+            patch.object(research_sessions, "_all", return_value=[record]),
+            patch.object(research_sessions, "_save") as save,
+        ):
+            resumed = research_sessions.control_mock_session(
+                "/mock/private-a", session_id, "resume"
+            )
+            assert resumed is not None
+            self.assertEqual(resumed["status"], "queued")
+            self.assertEqual(resumed["mock_stage"], 1)
+            self.assertTrue(resumed["simulated"])
+            self.assertIn("No provider was called", resumed["message"])
+            self.assertEqual(resumed["events"][-1]["kind"], "simulation.resumed")
+            self.assertEqual(record["strategy_runs"][0]["status"], "queued")
+            save.assert_called_once()
+
     def test_mock_failure_scenarios_never_create_fake_evidence(self):
         from sigma import research_sessions
 
@@ -294,6 +338,40 @@ class CloudAuthTests(TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertTrue(response.json()["simulated"])
                 fake.assert_called_once()
+            with (
+                patch.object(
+                    research_sessions,
+                    "control_mock_session",
+                    return_value={"id": "mock-session", "status": "queued", "simulated": True},
+                ) as mock_control,
+                patch.object(
+                    research_sessions,
+                    "control_session",
+                    side_effect=AssertionError("Mock resume must not enter provider resume checks"),
+                ),
+            ):
+                resumed = self.client.post(
+                    "/api/projects/research-sessions/mock-session/control",
+                    json={"path": project["path"], "action": "resume"},
+                    headers=origin,
+                )
+                self.assertEqual(resumed.status_code, 200, resumed.text)
+                self.assertTrue(resumed.json()["simulated"])
+                mock_control.assert_called_once_with(project["path"], "mock-session", "resume")
+            with (
+                patch.object(research_sessions, "control_mock_session", return_value=None),
+                patch.object(
+                    research_sessions,
+                    "control_session",
+                    side_effect=AssertionError("Mock identities must not resume real sessions"),
+                ),
+            ):
+                denied_resume = self.client.post(
+                    "/api/projects/research-sessions/real-session/control",
+                    json={"path": project["path"], "action": "resume"},
+                    headers=origin,
+                )
+                self.assertEqual(denied_resume.status_code, 404, denied_resume.text)
             blocked = self.client.post(
                 "/api/projects/research-sessions/start",
                 json={},
@@ -564,8 +642,21 @@ class CloudAuthTests(TestCase):
             self.assertIsNone(cfg.error)
             self.assertTrue(cfg.local)
             self.assertTrue(cloud_auth._mock_enabled(cfg))
-        with patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.example.org"}):
-            self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+            with patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5182"}):
+                self.assertTrue(cloud_auth._mock_enabled(cloud_auth.config()))
+            with patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.example.org"}):
+                self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+            for invalid_origin in (
+                "http://example.org:5182",
+                "http://127.0.0.1:5182/path",
+                "https://127.0.0.1:5182",
+                "http://user@127.0.0.1:5182",
+            ):
+                with (
+                    self.subTest(origin=invalid_origin),
+                    patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": invalid_origin}),
+                ):
+                    self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
 
     def test_mock_auth_disabled_for_hosted_and_nonlocal_configurations(self):
         with patch.dict(os.environ, {"SIGMA_MOCK_AUTH": "1"}):

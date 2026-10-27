@@ -3140,6 +3140,50 @@ def list_sessions(path: str) -> list[dict[str, Any]]:
     ]
 
 
+def control_mock_session(path: str, session_id: str, action: str) -> dict[str, Any] | None:
+    """Control an authenticated local simulation without entering provider resume logic."""
+    if action not in {"pause", "resume", "stop"}:
+        raise ProjectError("Unknown research session action")
+    record = _read(path, session_id)
+    if not record.get("simulated") or record.get("mode") != "mock":
+        return None
+    if action == "resume":
+        if record.get("status") not in {"paused", "stopped"}:
+            return _public(record)
+        if any(
+            item.get("id") != session_id and item.get("status") in {"queued", "running"}
+            for item in _all(path)
+        ):
+            raise ProjectError("Another research session is already active")
+        record["status"] = "queued"
+        record["current_action"] = "Queued"
+        record["message"] = "Simulated research resumed. No provider was called."
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"paused", "stopped"}:
+                branch["status"] = "queued"
+                branch["current_action"] = "Queued"
+                branch["reason"] = record["message"]
+        _event(record, "simulation.resumed", record["message"])
+    elif record.get("status") in {"queued", "running"}:
+        stopped = action == "stop"
+        record["status"] = "stopped" if stopped else "paused"
+        record["current_action"] = "Stopped" if stopped else "Paused"
+        record["message"] = (
+            "Simulated research stopped. No provider was called."
+            if stopped
+            else "Simulated research paused. No provider was called."
+        )
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"queued", "running"}:
+                branch["status"] = record["status"]
+                branch["current_action"] = record["current_action"]
+                branch["reason"] = record["message"]
+        _event(record, "simulation.stopped" if stopped else "simulation.paused", record["message"])
+    record["updated_at"] = _now()
+    _save(record["project_path"], record)
+    return _public(record)
+
+
 def has_active_session(path: str) -> bool:
     """Read-only Home status: never restart a worker or rewrite research history.
 
@@ -4094,7 +4138,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
     if guard != record["guard_hash"] or view.project.id != record["project_id"]:
         record["message"] = "Project or strategy changed; research remains paused."
         _save(record["project_path"], record)
-        return _public(record)
+        raise ProjectError(record["message"])
     config = await configuration(view=view, context=credential)
     if (
         not config["available"]
@@ -4105,14 +4149,14 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             "message", "Selected model is no longer available; session remains paused."
         )
         _save(record["project_path"], record)
-        return _public(record)
+        raise ProjectError(record["message"])
     if (
         credential["mode"] != record["mode"]
         or _digest(credential["identity"]) != record["identity_hash"]
     ):
         record["message"] = "AI account or billing identity changed; research remains paused."
         _save(record["project_path"], record)
-        return _public(record)
+        raise ProjectError(record["message"])
     if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
         record["status"] = "ended"
         record["message"] = (

@@ -12,7 +12,8 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma import (
@@ -542,7 +543,20 @@ async def research_start_view(body: ResearchStartRequest):
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
-async def research_control_view(session_id: str, body: ResearchControlRequest):
+async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if (
+        cloud_auth._mock_enabled(cfg)
+        and isinstance(principal, cloud_auth.Principal)
+        and principal.subject.startswith("mock:")
+    ):
+        simulated = await run_in_threadpool(
+            research_sessions.control_mock_session, body.path, session_id, body.action
+        )
+        if simulated is None:
+            raise HTTPException(404, "Not found")
+        return simulated
     return await research_sessions.control_session(body.path, session_id, body.action)
 
 
@@ -1035,9 +1049,26 @@ class AuthModeRequest(BaseModel):
     account_id: str | None = None
 
 
+class ApiKeyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    api_key: SecretStr
+
+
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
+
+
+@app.post("/api/ai/api-key")
+async def auth_api_key(body: ApiKeyRequest):
+    cfg = cloud_auth.config()
+    if cfg.enabled and not cfg.local:
+        raise HTTPException(403, "Personal API-key configuration is unavailable in hosted SIGMA.")
+    try:
+        await chatgpt_auth.save_api_key(body.api_key.get_secret_value())
+    except ProjectError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return JSONResponse({"saved": True}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/ai/auth/open/{identifier}")

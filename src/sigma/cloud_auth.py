@@ -140,7 +140,7 @@ def config() -> Config:
             local
             and parsed.scheme == "http"
             and parsed.hostname in {"127.0.0.1", "localhost"}
-            and parsed.port == 5173
+            and parsed.port is not None
             and parsed.path == ""
             and not parsed.query
             and not parsed.fragment
@@ -705,8 +705,12 @@ async def middleware(request: Request, call_next):
             "HEAD",
             "OPTIONS",
         }
+        mock_session_control = (
+            request.method == "POST"
+            and re.fullmatch(r"/api/projects/research-sessions/[^/]+/control", path) is not None
+        )
         if path.startswith(("/api/ai/", "/api/cloud-research/")) or (
-            project_write and path not in safe_project_writes
+            project_write and path not in safe_project_writes and not mock_session_control
         ):
             scenario = _mock_allowance(cfg, principal.subject)
             mode = model_access_for_subject(principal.subject)
@@ -735,12 +739,26 @@ _MOCK_IDENTITIES = {
 
 
 def _mock_enabled(cfg: Config) -> bool:
+    try:
+        origin = urlsplit(cfg.origin or "")
+        local_origin = (
+            origin.scheme == "http"
+            and origin.hostname in {"127.0.0.1", "localhost", "::1"}
+            and origin.port is not None
+            and not origin.username
+            and not origin.password
+            and not origin.path
+            and not origin.query
+            and not origin.fragment
+        )
+    except ValueError:
+        local_origin = False
     return (
         cfg.enabled
         and cfg.local
         and not cfg.error
         and os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
-        and cfg.origin in {"http://127.0.0.1:5173", "http://localhost:5173"}
+        and local_origin
         and os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().lower() in {"1", "true", "yes"}
     )
 

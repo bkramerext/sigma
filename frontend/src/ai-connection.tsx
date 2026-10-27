@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
 import './ai-connection.css';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
@@ -223,7 +222,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
   function cancelSignIn() { pending.current?.controller.abort(); }
   function invalidateChecks() { generation.current += 1; check.current?.controller.abort(); check.current = null; retryCount.current = 0; setHealthError(false); setChecking(false); setInitialLoading(false); setBackgroundRefreshing(false); }
   async function selectMode(mode: 'chatgpt' | 'api_key', accountId?: string) { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { const next = await aiPost<ConnectionInfo>('mode', { mode, account_id: accountId }); if (selectedGeneration === generation.current) setInfo(next); } catch (error) { if (selectedGeneration === generation.current) setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
-  async function disconnect() { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { const result = await aiPost<{ message: string; remote_revocation_confirmed: boolean }>('disconnect'); if (!result.remote_revocation_confirmed) setError(result.message); await refresh('background'); } catch (error) { setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
+  async function disconnect() { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { await aiPost<{ message: string; remote_revocation_confirmed: boolean }>('disconnect'); setInfo(current => current ? { ...current, status: 'disconnected', label: 'Connect to ChatGPT', account_label: undefined, active_account: undefined, checked_at: new Date().toISOString() } : current); await refresh('background'); } catch (error) { if (selectedGeneration === generation.current) setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
   const value = { info, checking, initialLoading, backgroundRefreshing, healthError, connecting, transitioning, error, handoff, welcome, dismissWelcome: () => setWelcome(false), refresh, signIn, cancelSignIn, selectMode, disconnect };
   return <Context.Provider value={value}>{children}{welcome && !document.querySelector('dialog[open]') && <div className="plan-welcome-toast"><PlanWelcome/></div>}</Context.Provider>;
 }
@@ -236,137 +235,35 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding, googleAccount, onGoogleSignOut, guestAccount }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean }; googleAccount?: { role: string; email: string } | null; onGoogleSignOut?: () => Promise<void>; guestAccount?: { ready: boolean; deniedEmail?: string | null; invitationControls?: ReactNode } } = {}) {
-  const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
-  const [accountError, setAccountError] = useState('');
+export function ConnectionStatus({ projectHeader = false, cloudFunding }: { projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean } } = {}) {
+  const ai = useAI();
   const providerActive = useProviderActivity();
-  useEffect(() => {
-    if (!guestAccount) return;
-    const openSignIn = () => setOpen(true);
-    window.addEventListener('sigma-open-google-signin', openSignIn);
-    return () => window.removeEventListener('sigma-open-google-signin', openSignIn);
-  }, [guestAccount]);
-  useEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const trigger = disclosure.current?.querySelector('summary');
-      const rect = trigger?.getBoundingClientRect();
-      if (!rect || !panel.current) return;
-      const panelRect = panel.current.getBoundingClientRect();
-      const belowSpace = Math.max(0, window.innerHeight - rect.bottom - 16);
-      const aboveSpace = Math.max(0, rect.top - 16);
-      const below = panelRect.height <= belowSpace || belowSpace >= aboveSpace;
-      const maxHeight = below ? belowSpace : aboveSpace;
-      const preferredRight = Math.max(8, window.innerWidth - rect.right);
-      const right = Math.min(preferredRight, Math.max(8, window.innerWidth - panelRect.width - 8));
-      setPosition({
-        top: below ? rect.bottom + 8 : Math.max(8, rect.top - Math.min(panelRect.height, maxHeight) - 8),
-        right,
-        maxHeight,
-      });
-    };
-    const frame = requestAnimationFrame(() => {
-      place();
-      panel.current?.querySelector<HTMLElement>('button:not(:disabled), a, select, summary')?.focus();
-    });
-    window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
-  }, [open]);
-  useEffect(() => {
-    function escape(event: KeyboardEvent) {
-      if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); }
-      if (event.key !== 'Tab' || !open || !panel.current) return;
-      const items = Array.from(panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], select:not(:disabled), summary, [tabindex="0"]')).filter(item => item.offsetParent !== null);
-      if (!items.length) { event.preventDefault(); panel.current.focus(); return; }
-      const first = items[0]; const last = items.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-    document.addEventListener('keydown', escape); return () => document.removeEventListener('keydown', escape);
-  }, [open]);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
-  const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
-  const serviceFunded = cloudFunding?.target === 'hosted';
-  const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && cloudFunding.authenticationEnabled && !cloudFunding.authorized;
-  const projectHeaderLabel = serviceFunded
-    ? cloudFunding?.selectedConnection === 'sponsored' ? 'ChatGPT · SIGMA allowance' : 'ChatGPT · personal connection'
-    : localGoogleRequired
-      ? 'ChatGPT sign-in · Google sign-in required'
-    : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
-    ? 'ChatGPT connected'
-    : status === 'connected' && ai.info?.mode === 'api_key'
-      ? 'OpenAI API connected'
-      : `ChatGPT sign-in · ${label}`;
-  const interactionDisabled = disabled || (localGoogleRequired && !guestAccount);
   const dotActive = !projectHeader && status === 'connected' && providerActive;
-  const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  const roleLabel = googleAccount?.role === 'admin' ? 'Administrator' : 'Regular user';
-  const modelLine = serviceFunded
-    ? cloudFunding?.selectedConnection === 'personal' ? 'Personal ChatGPT · unavailable'
-      : cloudFunding?.budget?.remaining_usd === 0 ? 'SIGMA-sponsored · allowance exhausted'
-        : cloudFunding?.providerLoading ? 'Checking SIGMA-sponsored access…'
-        : cloudFunding?.providerError ? 'SIGMA-sponsored check failed'
-          : cloudFunding?.provider?.status === 'connected' ? 'SIGMA-sponsored'
-            : cloudFunding?.provider?.status === 'unconfigured' ? 'SIGMA-sponsored · not configured'
-              : cloudFunding?.provider?.status === 'unauthorized' ? 'SIGMA-sponsored · credential rejected'
-                : cloudFunding?.provider ? 'SIGMA-sponsored · provider unavailable' : 'Checking SIGMA-sponsored access…'
-    : ai.connecting || ai.initialLoading ? 'Checking personal model…'
-      : ai.healthError || ai.info?.status === 'unavailable' ? 'Personal model check failed'
-        : ai.info?.status === 'connected' ? 'Personal model connected'
-          : ai.info?.status === 'unauthorized' || ai.info?.status === 'reauth_required' ? 'Personal model needs sign-in'
-            : ai.info?.status === 'unconfigured' || ai.info?.status === 'disconnected' ? 'Personal model not configured'
-              : ai.info?.label ?? 'Personal model status unavailable';
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}${googleAccount ? ' account-model-status' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={guestAccount ? 'Guest, Explore only; open account settings' : googleAccount ? `${roleLabel}, ${modelLine}; open account and model settings` : projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>{guestAccount ? <span className="account-model-lines"><span role="status">Guest</span><span>Explore only · no execution</span></span> : googleAccount ? <span className="account-model-lines"><span role="status">{roleLabel}</span><span>{modelLine}</span></span> : <span role="status">{visibleLabel}</span>}</summary>
-    {open && createPortal(<>
-    <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
-    <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label={guestAccount || googleAccount ? "Account and model settings" : "AI connection settings"} tabIndex={-1} style={position ? { top: position.top, right: position.right, maxHeight: position.maxHeight } : undefined}>
-      {guestAccount ? <section className="account-identity-state"><h2>Guest · Explore SIGMA</h2><p>Published research is available without signing in. A verified invitation is required for a private workspace and model access.</p>{guestAccount.deniedEmail && <p role="status">Access is not granted for {guestAccount.deniedEmail}.</p>}{guestAccount.invitationControls}{guestAccount.ready ? <a className="connection-text-action" href="/api/cloud-auth/login">Sign in with Google</a> : <p role="status">Google sign-in is not configured on this server.</p>}</section> : <>{googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
-      {!guestAccount && (serviceFunded ? <>
-        <h2>Model access</h2>
-        <p>Choose which connection SIGMA will use. The choice is saved for this Google account. SIGMA never switches funding paths automatically.</p>
-        <section className="account-model-choice" aria-label="Personal ChatGPT connection">
-          <p><strong>Connect your own ChatGPT account through OpenAI authentication.</strong></p>
-          <button type="button" className="connection-text-action" aria-pressed={cloudFunding?.selectedConnection === 'personal'} disabled={cloudFunding?.selectingConnection || cloudFunding?.selectedConnection === 'personal'} onClick={() => void cloudFunding?.selectConnection?.('personal')}>{cloudFunding?.selectedConnection === 'personal' ? 'Personal connection selected' : 'Use personal connection'}</button>
-          {cloudFunding?.selectedConnection === 'personal' && <p role="status">Hosted personal ChatGPT authentication is unavailable until an approved access path is established. No personal credential is transferred or used.</p>}
-        </section>
-        {cloudFunding?.authorized && cloudFunding.budget && cloudFunding.budget.remaining_usd > 0 && <button type="button" className="connection-text-action" aria-pressed={cloudFunding.selectedConnection === 'sponsored'} disabled={cloudFunding.selectingConnection || cloudFunding.selectedConnection === 'sponsored'} onClick={() => void cloudFunding?.selectConnection?.('sponsored')}>Or you can use your allowance that's on us.</button>}
-        {cloudFunding?.selectedConnection === 'sponsored' && <section className="account-model-choice" aria-label="SIGMA-sponsored connection">
-          <h3>SIGMA-sponsored ChatGPT</h3>
-          <p>Inference uses SIGMA's designated sponsor connection and the allowance below. It does not use a personal ChatGPT credential.</p>
-          {cloudFunding?.providerLoading && <p role="status">Checking sponsored provider authentication and model-catalog reachability. This check does not send a research prompt.</p>}
-          {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'connected' && <p role="status">The SIGMA-sponsored model connection is reachable. This does not guarantee a particular inference will complete.</p>}
-          {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unconfigured' && <p role="status">SIGMA-sponsored model access is not configured. Contact the administrator. SIGMA will not switch to personal or separately billed credentials.</p>}
-          {!cloudFunding?.providerLoading && cloudFunding?.provider?.status === 'unauthorized' && <p role="alert">The SIGMA-sponsored credential was rejected. Contact the administrator; SIGMA will not use a personal billing path.</p>}
-          {(cloudFunding?.providerError || ['unavailable', 'invalid_response', 'forbidden', 'limited', 'disconnected', 'reauth_required', 'plan_not_permitted'].includes(cloudFunding?.provider?.status ?? '')) && <p role="alert">{cloudFunding?.providerError ?? cloudFunding?.provider?.guidance ?? 'The sponsored provider could not be reached.'} Retry the check. No research was run.</p>}
-          <button type="button" className="connection-text-action" disabled={cloudFunding?.providerLoading} onClick={() => void cloudFunding?.retryProvider()}>{cloudFunding?.providerLoading ? 'Checking…' : 'Retry sponsored connection check'}</button>
-          <p>SIGMA-sponsored inference · separate from a personal ChatGPT plan.</p>
-        </section>}
-        {cloudFunding?.authorized && <p className="cloud-chatgpt-allowance"><strong>ChatGPT allowance</strong>{cloudFunding.budget ? <span>{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.remaining_usd)} remaining</span> : cloudFunding.loading ? <span>Loading…</span> : <span>{cloudFunding.error ?? 'Unavailable'}</span>}</p>}
-        {cloudFunding?.authorized && cloudFunding.budget && <p className="cloud-chatgpt-usage">Estimated {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.estimated_usage_usd)} · held {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.held_usd)}{cloudFunding.budget.unknown_provider_attempts ? ` · ${cloudFunding.budget.unknown_provider_attempts} unknown-charge attempts` : ''}</p>}
-        {cloudFunding?.connectionError && <p role="alert">{cloudFunding.connectionError}</p>}
-        {cloudFunding?.error && <p role="status">{cloudFunding.error} Saved research remains available.</p>}
-        {cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0 && <p role="status">This sponsored allowance is exhausted. Sponsored inference is disabled; switch to a personal connection or continue with saved research.</p>}
-      </> : <>
-        {googleAccount && <h2>Personal model connection</h2>}
-        {ai.initialLoading && <p role="status">Checking the configured personal model connection. SIGMA checks provider authentication and reachability; it does not send a research prompt.</p>}
-        {!ai.initialLoading && ai.info?.status === 'connected' && <p role="status">The configured personal model connection is reachable. No research was run.</p>}
-        {!ai.initialLoading && ai.info?.status === 'unconfigured' && <p role="status">No personal model connection is configured. Connect your ChatGPT account or choose the separately billed API key option.</p>}
-        {!ai.initialLoading && ai.info?.status === 'unauthorized' && <p role="status">The provider rejected the saved credential. Sign in again to restore this connection.</p>}
-        {!ai.initialLoading && (ai.healthError || ai.info?.status === 'unavailable') && <p role="status">SIGMA could not reach the model provider. Retry the connection check; no research was run.</p>}
-        {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
-        {(ai.info?.mode === 'api_key' || !ai.info?.active_account) && <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Connect your ChatGPT account'}</p>}
-        <p>{ai.healthError && ai.info?.status !== 'unavailable' ? 'Connection status could not be refreshed. Retry when convenient.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
-        {ai.info?.mode !== 'api_key' && <>{['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected') && <ConnectAction/>}{ai.info?.active_account && <div className="connection-usage-actions"><ManageUsage connectionAction/><button type="button" className="connection-text-action" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.disconnect()}>Disconnect</button></div>}</>}
-        {ai.info?.active_account && <button type="button" className="connection-text-action" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.signIn({ newAccount: true })}>Connect another account</button>}
-        <button type="button" className="connection-text-action" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
-        {ai.info?.mode === 'api_key' ? <button type="button" className="connection-text-action" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>API key option</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" className="connection-text-action" onClick={() => void ai.selectMode('api_key')}>Separately billed API Key</button></details>}
-      </>)}
-      </>}
-      {!guestAccount && ai.error && <p role="alert">{ai.error}</p>}
-      {accountError && <p role="alert">{accountError}</p>}
-    </div></>, document.body)}
+  const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
+  // Keep the ChatGPT credential intact while Google is signed out, but present
+  // the pill as unavailable until an authorized Google session returns.
+  const connected = status === 'connected' && !googleRequired;
+  const disabled = ai.connecting || ai.transitioning || googleRequired;
+  const dotStatus = projectHeader ? (connected ? 'connected' : 'disconnected') : status;
+  const visibleLabel = connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+  async function connect() {
+    if (ai.connecting || ai.transitioning) return;
+    try {
+      if (cloudFunding?.target === 'hosted' && cloudFunding.selectedConnection === 'sponsored') {
+        await cloudFunding.selectConnection?.('personal');
+      }
+      await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted' });
+    } catch {
+      // The connection error is shown beside the pill by the AI provider state.
+    }
+  }
+  return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || ai.connecting || !!ai.handoff}>
+    <summary aria-label={visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (connected) void ai.disconnect(); else void connect(); }}>
+      <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span>
+    </summary>
+    {ai.connecting && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>} <button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel</button></p>}
+    {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}
+    {cloudFunding?.connectionError && <p className="connection-pill-message" role="alert">{cloudFunding.connectionError}</p>}
   </details>;
 }
