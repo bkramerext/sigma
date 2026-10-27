@@ -100,7 +100,7 @@ def check(root: Path, base: Path) -> None:
     assert first.path == str(root / f"{selected['id']}.sigma")
     assert first.project.id != json.loads(sources[source_path])["id"]
     assert first.project.title == f"{selected['title']} v1"
-    assert read_file(first.path, "project.json") != sources[source_path]
+    assert (Path(first.path) / "project.json").read_bytes() != sources[source_path]
     second = open_sample_project(selected["id"])
     assert second.path != first.path and second.project.id != first.project.id
     assert second.project.title == f"{selected['title']} v2"
