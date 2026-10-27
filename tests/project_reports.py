@@ -555,6 +555,13 @@ def main() -> None:
         create_strategy(path, "Saved sample strategy", "Record a concrete mathematical approach.")
         audit_before = export_project_view(str(path))
         with TestClient(app) as client:
+            # Legacy directory projects must export as complete, importable JSON bundles.
+            from sigma.project_bundle import snapshot
+
+            downloaded = client.get("/api/projects/download", params={"path": str(path)})
+            assert downloaded.status_code == 200, downloaded.text
+            assert downloaded.json() == snapshot(path)
+            assert "application/json" in downloaded.headers["content-type"]
             for output_format, mime in (
                 ("txt", "text/plain"),
                 ("html", "text/html"),

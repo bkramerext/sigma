@@ -679,15 +679,21 @@ def export_project_view(path: str):
 @app.get("/api/projects/download")
 def download_project_bundle(path: str):
     """Download the complete portable project, not the audit-only export."""
-    from sigma.project_bundle import download_bytes
+    from sigma.project_bundle import download_bytes, encode
     from sigma.projects import project_path
 
     authorized = project_path(path)
     inspect_project(authorized)
-    if authorized.suffix != ".json":
-        raise ProjectError("Download requires a single-file JSON project")
+    # Legacy directory projects remain exportable without modifying live storage.
+    # A lossless bundle snapshot has the same importable format as a JSON project.
+    if authorized.suffix == ".json":
+        content = download_bytes(authorized)
+    elif authorized.suffix == ".sigma" and authorized.is_dir():
+        content = encode(authorized)
+    else:
+        raise ProjectError("Unsupported project storage format")
     return Response(
-        content=download_bytes(authorized),
+        content=content,
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{authorized.name}"'},
     )
