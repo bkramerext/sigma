@@ -179,6 +179,8 @@ def run_ui(
                                     or key
                                     not in {
                                         "OPENAI_API_KEY",
+                                        "SIGMA_CLOUD_OPENAI_API_KEY",
+                                        "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
                                         "ACCESS_TOKEN",
                                         "REFRESH_TOKEN",
                                         "ID_TOKEN",

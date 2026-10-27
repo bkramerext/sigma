@@ -21,10 +21,29 @@ provider selection. Sponsored inference uses SIGMA's designated
 ChatGPT session. For local use, SIGMA reads that account from the private
 `SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
 spend is reserved against the signed-in member's configured allowance before
-provider dispatch. Local sponsored inference selects ChatGPT even when
-`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset; hosted deployments continue to use
-their explicit provider setting. The option does not enable the hosted
-forced-sponsored setting. Use `./sigma start` to return to normal local mode.
+provider dispatch. Local sponsored inference selects ChatGPT when
+`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. If the operator provisions a dedicated
+SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
+
+```bash
+SIGMA_CLOUD_INFERENCE_PROVIDER=api_key
+SIGMA_CLOUD_OPENAI_API_KEY_FILE=/absolute/path/to/sigma-sponsored-api-key
+./sigma start --sponsored
+```
+
+The key file must contain the sponsored project's API key. A direct
+`SIGMA_CLOUD_OPENAI_API_KEY` environment variable is also supported, but do not
+set both sources. SIGMA does not use the personal `OPENAI_API_KEY` for sponsored
+calls. The operator must confirm the sponsored API project's billing and usage
+limits before supplying this key; API usage is billed separately from a ChatGPT
+plan. To roll back local service-key routing, unset
+`SIGMA_CLOUD_INFERENCE_PROVIDER` and the dedicated key setting, then restart.
+An account with only `$0.01` remaining may still be unable to start a call:
+the server reserves a conservative, model-specific amount before each provider
+request and never exceeds the member's allowance.
+Hosted deployments retain their own provider setting. The option does not
+enable the hosted forced-sponsored setting. Use `./sigma start` to return to
+normal local mode.
 
 If sponsored Play is temporarily unavailable, the signed-in member's research
 is preserved. The backend reports token-free `sponsor_connection status=...`

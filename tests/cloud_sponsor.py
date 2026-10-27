@@ -83,6 +83,36 @@ class SponsorTests(IsolatedAsyncioTestCase):
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
 
+    async def test_local_service_key_requires_explicit_provider_and_dedicated_secret(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                    "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+                    "SIGMA_CLOUD_OPENAI_API_KEY": "fixture-sponsored-key",
+                },
+            ),
+            patch.object(cloud_sponsor, "sponsor_session", AsyncMock()) as session,
+        ):
+            self.assertEqual(cloud_sponsor.inference_provider(), "api_key")
+            context = await self.sponsor_context()
+            session.assert_not_called()
+            self.assertEqual(context["mode"], "api_key")
+            self.assertEqual(context["status"], "connected")
+            self.assertEqual(context["token"], "fixture-sponsored-key")
+            self.assertTrue(openai_connection.cloud_credential(context))
+
+            os.environ.pop("SIGMA_CLOUD_OPENAI_API_KEY")
+            unconfigured = await self.sponsor_context()
+            self.assertEqual(unconfigured["status"], "unconfigured")
+            self.assertEqual(unconfigured["token"], "")
+
+            os.environ["SIGMA_CLOUD_INFERENCE_PROVIDER"] = "invalid"
+            invalid = await self.sponsor_context()
+            self.assertEqual(invalid["status"], "unavailable")
+            self.assertEqual(invalid["token"], "")
+
     async def test_missing_session_never_uses_local_or_service_credentials(self):
         with (
             patch.object(cloud_sponsor, "_last_issue", None),

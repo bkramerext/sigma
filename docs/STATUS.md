@@ -6984,3 +6984,27 @@ enables the explicit mock walkthrough. A CLI regression checks both invocations.
 test` passed after this correction. The older `browser_checks/t257_mock_auth.py`
 stops at a stale `.project-google-signin` locator now matching both Sign out
 and invitation sign-in controls; it was not used as evidence of a pass.
+
+## Local sponsored service credential route (2026-10-27)
+
+The remaining local Play blocker is an absent sponsor ChatGPT credential: the
+two registrations for the designated sponsor have neither access nor refresh
+tokens. Local sponsored inference now keeps ChatGPT as its default but accepts
+an explicit `SIGMA_CLOUD_INFERENCE_PROVIDER=api_key` choice backed only by
+`SIGMA_CLOUD_OPENAI_API_KEY` or its `_FILE` source. It does not borrow a
+member's ChatGPT credential or the checkout's `OPENAI_API_KEY`. Missing or
+invalid service configuration fails closed. The local sponsored ledger still
+reserves each eligible member's allowance before provider calls; the hosted
+provider default and production forced-sponsorship setting are unchanged.
+The launcher excludes both dedicated secret forms from the frontend process.
+Configuration and rollback are in `docs/GETTING_STARTED.md`. The service key
+has not been provisioned here; live Play remains unverified and requires an
+operator-approved, funded key or an interactive sponsor ChatGPT renewal.
+The reported `$0.01` member balance may be insufficient for the first
+model-specific call reservation; no spending limit was relaxed.
+
+Verification: the focused local provider and launcher regressions passed; the
+real-Chrome `browser_checks/hosted_sponsored_connection.py` passed with
+deterministic mocked API responses. `./sigma test` passed all steps, including
+Ruff, Pyright, frontend typecheck, and production build. No paid request or
+production change was made.

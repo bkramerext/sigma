@@ -35,9 +35,9 @@ def inference_provider() -> str:
     from sigma import cloud_auth, cloud_workspaces
 
     if cloud_auth.config().local and not cloud_workspaces.enabled():
-        # Local sponsored access is explicitly the designated administrator's
-        # ChatGPT session. Never fall back to a user's local session or API key.
-        return "chatgpt"
+        # Local sponsored access defaults to the designated ChatGPT session.
+        # A service API key is used only when the operator selects it explicitly.
+        return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
     return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
 
 

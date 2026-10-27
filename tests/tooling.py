@@ -307,7 +307,14 @@ def check_sponsored_local_startup() -> None:
     owner = MagicMock()
     owner.__enter__.return_value.replacement_request.return_value = None
     with (
-        patch.dict("os.environ", {}, clear=True),
+        patch.dict(
+            "os.environ",
+            {
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+                "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/private/fixture-key",
+            },
+            clear=True,
+        ),
         patch("sigma.ui.Instance", return_value=owner),
         patch("sigma.ui.load_local_config"),
         patch("sigma.ui.recover_orphans", return_value=[]),
@@ -326,6 +333,11 @@ def check_sponsored_local_startup() -> None:
     assert backend_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] == "1"
     assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
     assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
+    assert backend_env["SIGMA_CLOUD_INFERENCE_PROVIDER"] == "api_key"
+    assert backend_env["SIGMA_CLOUD_OPENAI_API_KEY_FILE"] == "/private/fixture-key"
+    frontend_env = launch.call_args_list[1].kwargs["env"]
+    assert "SIGMA_CLOUD_OPENAI_API_KEY" not in frontend_env
+    assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" not in frontend_env
 
 
 def check_local_google_setup_warning() -> None:

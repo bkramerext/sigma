@@ -137,3 +137,25 @@ not claimed as passing. The browser acceptance above uses deterministic local
 fixtures. No paid inference, production changes, or self-merge occurred.
 
 **R4R:** Ready for independent review.
+
+## Local sponsored Play credential follow-up
+
+The local sponsor ChatGPT registration has no access or refresh token, which
+explains the reported temporary-unavailability error. This branch now supports
+an operator-selected local service API credential with
+`SIGMA_CLOUD_INFERENCE_PROVIDER=api_key` and a dedicated
+`SIGMA_CLOUD_OPENAI_API_KEY` or `_FILE` value. ChatGPT remains the local default;
+the checkout's `OPENAI_API_KEY` is never used implicitly for sponsored calls.
+The existing eligibility and allowance ledger gates still apply. Both dedicated
+secret forms are stripped from the frontend launch environment. Missing keys
+and invalid provider settings fail closed. See `docs/GETTING_STARTED.md` for
+configuration and rollback. No production flag was enabled or changed.
+
+The dedicated key has not been provisioned in this checkout. Live Play will
+still require either an operator-approved, funded service API key or an
+interactive renewal of the designated sponsor ChatGPT session. Real inference
+was not attempted, and live Play is not claimed as verified. The focused local
+provider/launcher regressions and real-Chrome sponsored connection check
+passed using fake credentials and deterministic API responses.
+`./sigma test` passed all steps after formatting, including Ruff, Pyright,
+frontend typecheck, and production build. `git diff --check` passed.
