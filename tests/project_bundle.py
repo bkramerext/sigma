@@ -66,11 +66,14 @@ def main() -> None:
         delete_file(migrated, "artifacts/transient.bin")
         assert "artifacts/transient.bin" not in list_files(migrated)
         assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
-        update_files(migrated, {
-            "legacy-data/second.json": b'{"status":"complete"}',
-            "artifacts/new-evidence.bin": b"binary\\x00data",
-            "research-sessions/session.json": None,
-        })
+        update_files(
+            migrated,
+            {
+                "legacy-data/second.json": b'{"status":"complete"}',
+                "artifacts/new-evidence.bin": b"binary\\x00data",
+                "research-sessions/session.json": None,
+            },
+        )
         assert "research-sessions/session.json" not in list_files(migrated)
         assert read_file(migrated, "legacy-data/second.json") == b'{"status":"complete"}'
         assert read_file(migrated, "artifacts/new-evidence.bin") == b"binary\\x00data"
@@ -199,8 +202,10 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root),
-                                     "SIGMA_STATE_DIR": str(root / "state")}):
+        with patch.dict(
+            os.environ,
+            {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(root / "state")},
+        ):
             # The application root and Recent index are private and separate.
             (root / "state").mkdir(mode=0o700)
             created = create_json_project("Portable Experiment", "Investigate an example")
@@ -267,8 +272,10 @@ def main() -> None:
             else:
                 raise AssertionError("Noncanonical execution identifier was accepted")
             try:
-                _save_record(runtime_directory, {**execution, "id": str(uuid4()),
-                             "project_id": "foreign-project"})
+                _save_record(
+                    runtime_directory,
+                    {**execution, "id": str(uuid4()), "project_id": "foreign-project"},
+                )
             except ProjectError:
                 pass
             else:
@@ -277,19 +284,27 @@ def main() -> None:
             # Finalization failures cannot destroy the original reservation.
             wrong_id = str(uuid4())
             try:
-                _save_record(runtime_directory, {**execution, "id": wrong_id,
-                             "status": "completed"}, finalizing=True)
+                _save_record(
+                    runtime_directory,
+                    {**execution, "id": wrong_id, "status": "completed"},
+                    finalizing=True,
+                )
             except ProjectError:
                 pass
             else:
                 raise AssertionError("Unreserved execution was finalized")
             assert f"research-executions/{wrong_id}.json" not in list_files(created.path)
             assert {item["id"] for item in list_executions(created.path)} == {execution_id}
-            contents, media_type = get_execution_artifact(created.path, execution_id, "result.bin")
+            contents, media_type = get_execution_artifact(
+                created.path, execution_id, "result.bin"
+            )
             assert contents == bytes(range(128))
             assert media_type == "application/octet-stream"
             assert f"research-executions/{execution_id}.json" in list_files(created.path)
-            assert f"research-executions/{execution_id}.artifacts/result.bin" in list_files(created.path)
+            assert (
+                f"research-executions/{execution_id}.artifacts/result.bin"
+                in list_files(created.path)
+            )
             # Duplicate output filenames and invalid finalizations must leave
             # the committed execution and its binary output unchanged.
             extra_id = str(uuid4())
@@ -297,9 +312,12 @@ def main() -> None:
             _save_record(runtime_directory, extra)
             try:
                 _save_record(
-                    runtime_directory, {**extra, "status": "completed"},
-                    (("same.bin", "application/octet-stream", b"a"),
-                     ("same.bin", "application/octet-stream", b"b")),
+                    runtime_directory,
+                    {**extra, "status": "completed"},
+                    (
+                        ("same.bin", "application/octet-stream", b"a"),
+                        ("same.bin", "application/octet-stream", b"b"),
+                    ),
                     finalizing=True,
                 )
             except ProjectError:
@@ -307,12 +325,17 @@ def main() -> None:
             else:
                 raise AssertionError("Duplicate output filenames were accepted")
             assert get_execution(created.path, extra_id)["status"] == "interrupted"
-            assert {item["id"] for item in list_executions(created.path)} == {execution_id, extra_id}
+            assert {item["id"] for item in list_executions(created.path)} == {
+                execution_id,
+                extra_id,
+            }
             assert not any(
                 name.startswith(f"research-executions/{extra_id}.artifacts/")
                 for name in list_files(created.path)
             )
-            assert get_execution_artifact(created.path, execution_id, "result.bin")[0] == bytes(range(128))
+            assert get_execution_artifact(
+                created.path, execution_id, "result.bin"
+            )[0] == bytes(range(128))
             # Exercise the public asynchronous reservation/dispatch/finalize path
             # without requiring a Docker daemon or invoking untrusted code.
             import asyncio
@@ -322,15 +345,21 @@ def main() -> None:
             async def fake_execute(source: str, runtime_name: str = "python"):
                 assert source == "print('integration')"
                 return SimpleNamespace(
-                    status="completed", exit_code=0, stdout="integration\\n",
-                    stderr="", duration_ms=2, artifact_error=None,
-                    image_id="test-image", stdout_base64=None, stderr_base64=None,
+                    status="completed",
+                    exit_code=0,
+                    stdout="integration\\n",
+                    stderr="",
+                    duration_ms=2,
+                    artifact_error=None,
+                    image_id="test-image",
+                    stdout_base64=None,
+                    stderr_base64=None,
                     artifacts=(("integration.bin", "application/octet-stream", b"evidence"),),
                 )
             with patch("sigma.python_sandbox.execute", side_effect=fake_execute):
-                integrated = asyncio.run(execute_research_code(
-                    created.path, "print('integration')"
-                ))
+                integrated = asyncio.run(
+                    execute_research_code(created.path, "print('integration')")
+                )
             assert integrated["status"] == "completed"
             assert get_execution(created.path, integrated["id"])["stdout"] == "integration\\n"
             assert get_execution_artifact(
@@ -345,14 +374,19 @@ def main() -> None:
                 bytes(range(128)), "application/octet-stream"
             )
             assert {item["id"] for item in list_executions(imported)} == {
-                execution_id, extra_id, integrated["id"]
+                execution_id,
+                extra_id,
+                integrated["id"],
             }
             assert get_execution_artifact(imported, integrated["id"], "integration.bin") == (
                 b"evidence", "application/octet-stream"
             )
             # Tampered binary evidence is rejected even when metadata survives.
-            write_file(imported, f"research-executions/{execution_id}.artifacts/result.bin",
-                       b"tampered")
+            write_file(
+                imported,
+                f"research-executions/{execution_id}.artifacts/result.bin",
+                b"tampered",
+            )
             try:
                 get_execution_artifact(imported, execution_id, "result.bin")
             except ProjectError:
@@ -460,10 +494,13 @@ def main() -> None:
             assert not rejected_path.exists()
             # An unrelated foreign record must never influence session allocation.
             foreign_id = str(uuid4())
-            write_file(created.path, f"research-sessions/{foreign_id}.json",
-                       json.dumps(dict(record, id=foreign_id,
-                                       project_id=str(uuid4()),
-                                       session_number=100000)).encode())
+            write_file(
+                created.path,
+                f"research-sessions/{foreign_id}.json",
+                json.dumps(
+                    dict(record, id=foreign_id, project_id=str(uuid4()), session_number=100000)
+                ).encode(),
+            )
             assert read_session_snapshot(created.path)[1] == 1
             delete_file(created.path, f"research-sessions/{foreign_id}.json")
             from sigma.research_sessions import _worker_lock_path
@@ -502,9 +539,9 @@ def main() -> None:
             from concurrent.futures import ThreadPoolExecutor
 
             with ThreadPoolExecutor(max_workers=6) as executor:
-                numbers = list(executor.map(
-                    lambda _: _allocate_session_number(created.path, []), range(24)
-                ))
+                numbers = list(
+                    executor.map(lambda _: _allocate_session_number(created.path, []), range(24))
+                )
             assert sorted(numbers) == list(range(4, 28))
             assert json.loads(read_file(created.path, "research-sessions/sequence.json"))[
                 "next_session_number"
@@ -522,19 +559,28 @@ def main() -> None:
             view, guard = _snapshot(created.path)
             assert view.project.id == created.project.id
             assert isinstance(guard, str) and guard
-            transform_members(created.path, lambda members: {
-                "artifacts/proof.bin": bytes(range(256)),
-                "evidence/notes.txt": b"independent evidence",
-            })
+            transform_members(
+                created.path,
+                lambda members: {
+                    "artifacts/proof.bin": bytes(range(256)),
+                    "evidence/notes.txt": b"independent evidence",
+                },
+            )
             assert read_file(created.path, "artifacts/proof.bin") == bytes(range(256))
             assert read_file(created.path, "evidence/notes.txt") == b"independent evidence"
             from sigma.projects import read_project_artifact, save_project_artifacts
 
-            save_project_artifacts(created.path, {
-                "artifacts/report.html": b"<html>report</html>",
-                "evidence/raw.bin": bytes(range(256)),
-            })
-            assert read_project_artifact(created.path, "artifacts/report.html") == b"<html>report</html>"
+            save_project_artifacts(
+                created.path,
+                {
+                    "artifacts/report.html": b"<html>report</html>",
+                    "evidence/raw.bin": bytes(range(256)),
+                },
+            )
+            assert (
+                read_project_artifact(created.path, "artifacts/report.html")
+                == b"<html>report</html>"
+            )
             assert read_project_artifact(created.path, "evidence/raw.bin") == bytes(range(256))
             try:
                 save_project_artifacts(created.path, {"project.json": b"tamper"})
@@ -555,10 +601,13 @@ def main() -> None:
             # All-or-nothing evidence transaction: invalid second member
             # must not publish the first member.
             try:
-                update_files(created.path, {
-                    "evidence/partial.txt": b"must roll back",
-                    "../escape.txt": b"invalid",
-                })
+                update_files(
+                    created.path,
+                    {
+                        "evidence/partial.txt": b"must roll back",
+                        "../escape.txt": b"invalid",
+                    },
+                )
             except BundleError:
                 pass
             else:
@@ -585,26 +634,39 @@ def main() -> None:
             ]
             # Complete format: edits, deletion and atomic multi-member changes
             # survive export and re-import with exact binary bytes.
-            update_files(created.path, {
-                "legacy-data/one.json": b'{"turn":1}',
-                "artifacts/trace.bin": bytes(range(256)),
-                "evidence/source.txt": b"source evidence",
-            })
+            update_files(
+                created.path,
+                {
+                    "legacy-data/one.json": b'{"turn":1}',
+                    "artifacts/trace.bin": bytes(range(256)),
+                    "evidence/source.txt": b"source evidence",
+                },
+            )
             assert {
-                "project.json", f"research-sessions/{session_id}.json", "legacy-data/one.json",
-                "artifacts/proof.bin", "evidence/notes.txt",
-                "artifacts/report.html", "evidence/raw.bin",
-                "artifacts/trace.bin", "evidence/source.txt",
-                "research-sessions/sequence.json", "research-sessions/limits.json",
+                "project.json",
+                f"research-sessions/{session_id}.json",
+                "legacy-data/one.json",
+                "artifacts/proof.bin",
+                "evidence/notes.txt",
+                "artifacts/report.html",
+                "evidence/raw.bin",
+                "artifacts/trace.bin",
+                "evidence/source.txt",
+                "research-sessions/sequence.json",
+                "research-sessions/limits.json",
             } <= set(list_files(created.path))
             exported = json.loads(export_complete_project(created.path))
             assert exported["format"] == "sigma.project.bundle"
             assert exported["version"] == 1
             imported_path = root / "copy.json"
             import_bundle(exported, imported_path)
-            assert read_file(imported_path, "project.json") == read_file(created.path, "project.json")
+            assert read_file(imported_path, "project.json") == read_file(
+                created.path, "project.json"
+            )
             assert read_file(imported_path, "legacy-data/one.json") == b'{"turn":1}'
-            assert _read(str(imported_path), session_id)["project_path"] == str(imported_path.resolve())
+            assert _read(str(imported_path), session_id)["project_path"] == str(
+                imported_path.resolve()
+            )
             assert read_file(imported_path, "artifacts/trace.bin") == bytes(range(256))
             assert read_file(imported_path, "evidence/source.txt") == b"source evidence"
             delete_file(created.path, "evidence/source.txt")
@@ -628,7 +690,10 @@ def main() -> None:
                 lifecycle["status"] = status
                 _save(created.path, lifecycle)
                 assert _read(created.path, lifecycle_id)["status"] == status
-                assert any(item["id"] == lifecycle_id for item in read_session_snapshot(created.path)[0])
+                assert any(
+                    item["id"] == lifecycle_id
+                    for item in read_session_snapshot(created.path)[0]
+                )
             removed = remove_session(
                 created.path, lifecycle_id, lifecycle["updated_at"]
             )
@@ -656,14 +721,20 @@ def main() -> None:
             assert _read(created.path, lifecycle_id)["status"] == "completed"
             # Creation uses the normal project schema and preserves options.
             customized = create_json_project(
-                "Custom JSON", "Research with options",
-                difficulty="hard", show_advanced_outcome_details=True,
+                "Custom JSON",
+                "Research with options",
+                difficulty="hard",
+                show_advanced_outcome_details=True,
             )
-            assert customized.project.difficulty is not None and customized.project.difficulty.value == "hard"
+            assert (
+                customized.project.difficulty is not None
+                and customized.project.difficulty.value == "hard"
+            )
             assert customized.project.show_advanced_outcome_details is True
             assert read_bundle(customized.path)["files"]["project.json"]
             assert {item.project.id for item in list_json_projects()} >= {
-                created.project.id, customized.project.id,
+                created.project.id,
+                customized.project.id,
             }
     print("Project bundle round-trip and safety checks passed")
 
