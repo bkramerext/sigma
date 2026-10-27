@@ -486,11 +486,12 @@ async def callback(
             _urls.pop(attempt.id, None)
 
 
-async def session() -> dict:
+async def session(account_id: str | None = None) -> dict:
     """Return backend-only credential snapshot, refreshing serially when necessary."""
     async with transaction() as state:
         mode = state["mode"]
-        account = state["accounts"].get(state["active"])
+        selected_id = account_id if account_id is not None else state["active"]
+        account = state["accounts"].get(selected_id)
         if mode != "chatgpt":
             return {"mode": mode, "account": None}
         if not account or not account.get("access_token"):
@@ -533,7 +534,7 @@ async def session() -> dict:
                     refreshed = await validate_tokens(
                         raw, account["client_id"], None, account, state["ext_agent_host_id"]
                     )
-                    state["accounts"][state["active"]] = account = refreshed
+                    state["accounts"][selected_id] = account = refreshed
                 except (
                     httpx.HTTPError,
                     TimeoutError,
@@ -549,7 +550,7 @@ async def session() -> dict:
             "mode": mode,
             "account": dict(account),
             "status": status,
-            "account_id": state["active"],
+            "account_id": selected_id,
         }
 
 

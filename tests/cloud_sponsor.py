@@ -90,6 +90,19 @@ class SponsorTests(IsolatedAsyncioTestCase):
         self.assertEqual(context["token"], "")
         self.assertFalse((self.root / "local-must-not-be-used").exists())
 
+    async def test_designated_sponsor_is_used_when_a_personal_account_is_active(self):
+        personal = dict(self.account, email="personal@example.test", subject="personal-subject")
+        async with ai_store.sponsor_transaction() as state:
+            state["mode"] = "chatgpt"
+            state["active"] = "personal"
+            state["accounts"] = {"personal": personal, "sponsor": self.account}
+        selected = await cloud_sponsor.sponsor_session()
+        self.assertEqual(selected["status"], "connected")
+        self.assertEqual(selected["account_id"], "sponsor")
+        self.assertEqual(selected["account"]["email"], "sponsor@example.test")
+        async with ai_store.sponsor_transaction() as state:
+            self.assertEqual(state["active"], "personal")
+
     async def test_import_selected_account_preserves_vm_host_and_is_used(self):
         async with ai_store.transaction() as state:
             host = state["ext_agent_host_id"]

@@ -43,16 +43,40 @@ async def sponsor_session() -> dict:
     try:
         email = expected_email()
         async with sponsor_transaction() as state:
-            account = state["accounts"].get(state["active"]) or {}
-            if state["mode"] != "chatgpt" or account.get("email", "").casefold() != email:
+            account_id = next(
+                (
+                    key
+                    for key, account in state["accounts"].items()
+                    if account.get("email", "").casefold() == email
+                ),
+                None,
+            )
+            if state["mode"] != "chatgpt" or account_id is None:
                 return {"status": "disconnected"}
         with use_directory(sponsor_directory()):
-            selected = await chatgpt_auth.session()
+            selected = await chatgpt_auth.session(account_id=account_id)
         if (selected.get("account") or {}).get("email", "").casefold() != email:
             return {"status": "forbidden"}
         return selected
     except ProjectError:
         return {"status": "unavailable"}
+
+
+async def sponsor_account_id() -> str:
+    """Find the designated account for an administrator's local renewal flow."""
+    email = expected_email()
+    async with sponsor_transaction() as state:
+        account_id = next(
+            (
+                key
+                for key, account in state["accounts"].items()
+                if account.get("email", "").casefold() == email
+            ),
+            None,
+        )
+    if account_id is None:
+        raise ProjectError("The designated sponsor account has not been provisioned.")
+    return account_id
 
 
 async def import_session(source: Path) -> None:

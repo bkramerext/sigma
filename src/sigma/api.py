@@ -1121,6 +1121,27 @@ async def auth_begin(body: AuthBeginRequest):
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
 
 
+@app.post("/api/ai/sponsor-auth/begin")
+async def sponsor_auth_begin(request: Request):
+    """Let a local administrator renew only the designated sponsor account."""
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if (
+        not cfg.local
+        or not isinstance(principal, cloud_auth.Principal)
+        or principal.role != "admin"
+        or principal.subject.startswith("mock:")
+    ):
+        raise HTTPException(403, "Administrator access is required to renew sponsorship.")
+    from sigma.cloud_sponsor import sponsor_account_id
+
+    try:
+        account_id = await sponsor_account_id()
+        return await chatgpt_auth.begin(account_id=account_id)
+    except ProjectError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
 @app.post("/api/ai/api-key")
 async def auth_api_key(body: ApiKeyRequest):
     cfg = cloud_auth.config()

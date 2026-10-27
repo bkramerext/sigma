@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import './ai-connection.css';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
-type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; signal?: AbortSignal };
+type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; sponsor?: boolean; signal?: AbortSignal };
 type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<void> };
 const Context = createContext<AIState | null>(null);
 const providerActivity = new Set<string>();
@@ -109,6 +109,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
         const data: ConnectionInfo = await response.json();
         if (mounted.current && requestGeneration === generation.current) {
           setInfo(data);
+          window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
           const failed = data.status === 'unavailable';
           setHealthError(failed);
           retryCount.current = failed ? retryCount.current + 1 : 0;
@@ -194,7 +195,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
     const popup = controller.signal.aborted ? null : window.open('about:blank', '_blank'); if (popup) popup.opener = null;
     setConnecting(true); setError('');
     try {
-      const data = await aiPost<{ id: string; authorization_url: string }>('auth/begin', { account_id: options.accountId, enable_plan: !!options.enablePlan, retry_attempt_id: !options.newAccount && retryAttempt.current?.accountId === options.accountId ? retryAttempt.current?.id : undefined }, controller.signal);
+      const data = await aiPost<{ id: string; authorization_url: string }>(options.sponsor ? 'sponsor-auth/begin' : 'auth/begin', { account_id: options.accountId, enable_plan: !!options.enablePlan, retry_attempt_id: !options.newAccount && retryAttempt.current?.accountId === options.accountId ? retryAttempt.current?.id : undefined }, controller.signal);
       attempt.id = data.id;
       const url = new URL(data.authorization_url, window.location.origin);
       if (url.origin !== window.location.origin || url.pathname !== `/api/ai/auth/open/${data.id}` || url.search || url.hash) throw new Error('Unsafe sign-in handoff rejected.');
@@ -247,8 +248,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const hosted = cloudFunding?.target === 'hosted';
   const simulatedSponsored = !!cloudFunding?.simulatedSponsored;
   const hostedPillLabel = 'Sponsored ChatGPT';
-  const sponsoredPill = !!hosted || (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible);
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored';
+  const sponsoredPill = !!hosted || (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
@@ -273,7 +274,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : cloudFunding.error
         ? 'Your sponsored allowance is unavailable. Try again after reconnecting.'
         : cloudFunding.budget
-          ? `${simulatedSponsored ? 'This mock sponsorship and its allowance are simulated; research cannot call a live provider. ' : cloudFunding.target === 'local' ? 'This is the allowance configured for your signed-in account. Local research uses your local provider connection and does not consume the hosted sponsored balance. ' : 'SIGMA covers eligible model calls with this sponsored allowance; membership, spending and provider limits still apply. '}${cloudFunding.providerError ? 'Sponsored model connection could not be checked. ' : `Sponsored model connection: ${cloudFunding.provider?.status ?? 'not checked'}. `}${cloudFunding.target === 'local' ? `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining in this local preview of the configured $${cloudFunding.budget.allowance_usd.toFixed(2)} allowance.` : cloudFunding.budget.remaining_usd <= 0 ? 'No sponsored allowance remains.' : `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of $${cloudFunding.budget.allowance_usd.toFixed(2)} per-user allowance.`} $${cloudFunding.budget.estimated_usage_usd.toFixed(2)} estimated and $${cloudFunding.budget.held_usd.toFixed(2)} held.`
+          ? `${simulatedSponsored ? 'This mock sponsorship and its allowance are simulated; research cannot call a live provider. ' : 'SIGMA covers eligible model calls with this sponsored allowance; membership, spending and provider limits still apply. '}${cloudFunding.providerError ? 'Sponsored model connection could not be checked. ' : `Sponsored model connection: ${cloudFunding.provider?.status ?? 'not checked'}. `}${cloudFunding.budget.remaining_usd <= 0 ? 'No sponsored allowance remains.' : `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of $${cloudFunding.budget.allowance_usd.toFixed(2)} per-user allowance.`} $${cloudFunding.budget.estimated_usage_usd.toFixed(2)} estimated and $${cloudFunding.budget.held_usd.toFixed(2)} held.`
           : sponsoredSelected ? 'Your sponsored allowance is unavailable.' : 'Sponsored access is not selected.';
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : ''}`;
   const allowanceText = cloudFunding?.budget
@@ -289,7 +290,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       }
       if (cloudFunding?.authorized && cloudFunding.sponsorshipEligible) {
         if (forcedSponsored && sponsoredSelected) return;
-        await cloudFunding.selectConnection?.('sponsored');
+        if (sponsoredSelected) {
+          const personalConnected = await ai.signIn({ newAccount: true });
+          if (personalConnected) await cloudFunding.selectConnection?.('personal');
+          else await cloudFunding.selectConnection?.('sponsored');
+        } else {
+          await cloudFunding.selectConnection?.('sponsored');
+        }
         await ai.refresh('manual');
         return;
       }
@@ -302,7 +309,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     return zeroAllowanceAction ?? null;
   }
   return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
-    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && sponsoredPill && !simulatedSponsored)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && sponsoredPill) return; else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Sponsored allowance details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip-disabled onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{forcedSponsored ? `Sponsored mode is required for this account. ${allowanceDescription}` : allowanceDescription}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>

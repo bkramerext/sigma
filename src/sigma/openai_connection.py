@@ -235,11 +235,29 @@ async def auth_context() -> AuthContext:
         return await _cloud_sponsored_context(subject_hash)
     from sigma import cloud_auth
 
-    local_principal = cloud_auth.local_sponsored_principal()
-    if local_principal is not None:
+    local_principal = cloud_auth.local_sponsored_principal(require_selected=False)
+    if (
+        local_principal is not None
+        and cloud_auth.model_access_for_subject(local_principal.subject) == "sponsored"
+    ):
         workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
         return await _cloud_sponsored_context(workspace.subject_hash)
     selected = await chatgpt_auth.session()
+    if (
+        local_principal is not None
+        and selected["mode"] == "chatgpt"
+        and selected.get("status") in {"disconnected", "reauth_required", "plan_not_permitted"}
+    ):
+        # An unsuccessful personal connection attempt must not strand an
+        # eligible member in personal mode after a reload or later Play click.
+        try:
+            cloud_auth.set_model_access(local_principal.subject, "sponsored")
+            workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
+        except (OSError, RuntimeError, ValueError, PermissionError):
+            return AuthContext(
+                token="", mode="chatgpt", status="unavailable", identity="cloud_state_unavailable"
+            )
+        return await _cloud_sponsored_context(workspace.subject_hash)
     mode = selected["mode"]
     if mode == "api_key":
         token = os.environ.get("OPENAI_API_KEY", "").strip()

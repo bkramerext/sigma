@@ -3939,17 +3939,18 @@ function InvitationRequestControls({ error, onError, onRecorded }: { error: stri
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string; request_type?: 'invitation' | 'reload' };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
-function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, onClose, onAdd, onSave, onRevoke, onUpdateInvitation, onUpdateFeedback }: {
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, localSponsorRepair, onClose, onAdd, onSave, onRevoke, onUpdateInvitation, onUpdateFeedback }: {
   bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   invitationRequests: CloudInvitationRequest[];
   feedbackRequests: CloudFeedbackRequest[];
-  error: string; busy: boolean; onClose: () => void;
+  error: string; busy: boolean; localSponsorRepair: boolean; onClose: () => void;
   onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
   onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
   onRevoke: (grant: CloudGrant) => Promise<void>;
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
   onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
 }) {
+  const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
   const [addOpen, setAddOpen] = useState(false);
@@ -4132,6 +4133,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
+      {localSponsorRepair && <p className="cloud-access-bootstrap">Sponsored research uses the designated ChatGPT account. <button type="button" className="admin-text-action" disabled={ai.connecting} onClick={() => void ai.signIn({ sponsor: true })}>Reconnect sponsor ChatGPT</button>{ai.connecting && <span role="status"> Complete sign-in as zetacontinuation@gmail.com in the browser.</span>}{ai.error && <span role="alert"> {ai.error}</span>}</p>}
       <div className="admin-table-heading"><h3>Invitation/reload requests</h3></div>
       {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {
         return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void addInvitation(item)}>Add</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void removeInvitation(item)}>Remove</button></div></td></tr>;
@@ -4237,7 +4239,8 @@ function CloudAuthGate() {
     void refresh();
     const interval = window.setInterval(() => void refresh(), 30_000);
     window.addEventListener('focus', refresh);
-    return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+    window.addEventListener('sigma-cloud-auth-refresh', refresh);
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh); window.removeEventListener('sigma-cloud-auth-refresh', refresh); };
   }, [refresh]);
   const loadGrants = useCallback(async () => {
     const [response, requestsResponse, feedbackResponse] = await Promise.all([
@@ -4377,14 +4380,15 @@ function CloudAuthGate() {
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedIdentityAvailable={deniedIdentityAvailable} authenticated={status.authenticated} user={status.user}/>;
   if (!status.authenticated && window.location.pathname === '/project') window.history.replaceState(null, '', '/');
   return <CloudIdentityContext.Provider value={context}>
-    <AIProvider unavailable={!status.authenticated}><App/></AIProvider>
+    <AIProvider unavailable={!status.authenticated}><App/>
     {status.authenticated && showSponsorWelcome && <InvitationWelcomeDialog
       allowance={budgetEmail === status.user?.email ? budget?.allowance_usd ?? null : null}
       allowanceUsed={budgetEmail === status.user?.email && budget ? budget.estimated_usage_usd + budget.held_usd : 0}
       allowanceLoading={budgetLoading && budgetEmail !== status.user?.email}
       onDismiss={async () => { setWelcomeDismissedForPage(true); await refresh(); }}
     />}
-    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
+    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} localSponsorRepair={status.target === 'local' && !status.mock_identity} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
+    </AIProvider>
   </CloudIdentityContext.Provider>;
 }
 

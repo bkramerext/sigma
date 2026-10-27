@@ -2039,6 +2039,87 @@ class CloudAuthTests(TestCase):
             self.assertTrue(allowance.json()["local_preview"])
             self.assertFalse(allowance.json()["simulated"])
 
+    def test_local_expired_personal_connection_restores_sponsorship_and_admin_can_renew(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
+                "SIGMA_MOCK_AUTH": "0",
+            },
+        ):
+            admin_login = self.finish()
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "nontrivialzeero@gmail.com",
+                    "role": "member",
+                    "allowance_usd": 0.01,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23456)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            login = self.finish(
+                email="nontrivialzeero@gmail.com",
+                subject="local-sponsored-member",
+                client=member,
+            )
+            self.assertEqual(login.status_code, 303)
+            member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            with (
+                patch(
+                    "sigma.openai_connection.chatgpt_auth.session",
+                    new=AsyncMock(
+                        return_value={"mode": "chatgpt", "status": "reauth_required", "account": {}}
+                    ),
+                ) as personal_session,
+                patch(
+                    "sigma.cloud_sponsor.sponsor_session",
+                    new=AsyncMock(return_value={"status": "reauth_required", "account": {}}),
+                ) as sponsor_session,
+            ):
+                connection = member.get("/api/ai/connection")
+            self.assertEqual(connection.status_code, 200, connection.text)
+            self.assertEqual(personal_session.await_count, 1)
+            self.assertEqual(sponsor_session.await_count, 1)
+            self.assertIn("administrator must provision or renew", connection.json()["guidance"])
+            self.assertNotIn("Your ChatGPT session has expired", connection.json()["guidance"])
+            status = member.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+            with (
+                patch(
+                    "sigma.cloud_sponsor.sponsor_account_id",
+                    new=AsyncMock(return_value="sponsor-id"),
+                ),
+                patch(
+                    "sigma.api.chatgpt_auth.begin",
+                    new=AsyncMock(
+                        return_value={
+                            "id": "attempt",
+                            "authorization_url": "/api/ai/auth/open/attempt",
+                        }
+                    ),
+                ) as begin,
+            ):
+                denied = member.post(
+                    "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+                )
+                self.assertEqual(denied.status_code, 403, denied.text)
+                allowed = self.client.post(
+                    "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(allowed.status_code, 200, allowed.text)
+            begin.assert_awaited_once_with(account_id="sponsor-id")
+
     def test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor(self):
         signed_in = self.finish()
         self.client.cookies.set(

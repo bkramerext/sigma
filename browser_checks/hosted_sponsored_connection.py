@@ -259,7 +259,7 @@ def exercise(origin: str) -> None:
                     "ttl_seconds": 0,
                     "accounts": [],
                 }
-            elif path.endswith("/api/ai/auth/begin") and method == "POST":
+            elif path.endswith(("/api/ai/auth/begin", "/api/ai/sponsor-auth/begin")) and method == "POST":
                 payload = {
                     "id": "test-connect",
                     "authorization_url": origin + "/api/ai/auth/open/test-connect",
@@ -714,7 +714,7 @@ def exercise(origin: str) -> None:
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         sponsored_summary = page.locator(".api-connection > summary")
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(sponsored_summary).to_have_attribute("aria-label", "Connect to ChatGPT")
         with page.expect_request("**/api/ai/mode") as sponsor_choice:
             sponsored_summary.click()
         assert sponsor_choice.value.method == "POST"
@@ -722,7 +722,29 @@ def exercise(origin: str) -> None:
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_have_count(0)
         expect(page.get_by_text("Complete sign-in in the browser.")).to_have_count(0)
-        assert not any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
+        posts.clear()
+        with page.expect_request("**/api/ai/auth/begin"):
+            sponsored_summary.click()
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        assert not any(path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts), posts
+        local_connect_succeeds["value"] = True
+        posts.clear()
+        with page.expect_request("**/api/ai/auth/begin"):
+            sponsored_summary.click()
+        expect(sponsored_summary).to_have_attribute("aria-label", "Disconnect from ChatGPT")
+        assert any(path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts), posts
+
+        admin_mode["value"] = True
+        selected["mode"] = "sponsored"
+        page.goto(origin + "/", wait_until="domcontentloaded")
+        dismiss_sponsor_welcome(page)
+        page.get_by_role("link", name="Administrator settings").click()
+        admin_dialog = page.get_by_role("dialog", name="Administrator Settings")
+        with page.expect_request("**/api/ai/sponsor-auth/begin"):
+            admin_dialog.get_by_role("button", name="Reconnect sponsor ChatGPT").click()
+        expect(admin_dialog).to_be_visible()
+        admin_dialog.get_by_role("button", name="Close", exact=True).click()
+        admin_mode["value"] = False
 
         sponsored_test_mode["value"] = True
         selected["mode"] = "sponsored"
