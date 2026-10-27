@@ -630,7 +630,7 @@ def main() -> None:
                 "Custom JSON", "Research with options",
                 difficulty="hard", show_advanced_outcome_details=True,
             )
-            assert customized.project.difficulty.value == "hard"
+            assert customized.project.difficulty is not None and customized.project.difficulty.value == "hard"
             assert customized.project.show_advanced_outcome_details is True
             assert read_bundle(customized.path)["files"]["project.json"]
             assert {item.project.id for item in list_json_projects()} >= {

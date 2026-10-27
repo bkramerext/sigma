@@ -2262,7 +2262,7 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
         project_id = inspect_project(path).project.id
         allocated: list[int] = []
 
-        def allocate(members: dict[str, bytes]) -> dict[str, bytes | None]:
+        def allocate(members: dict[str, bytes]) -> dict[str, bytes]:
             current = max(
                 (item.get("session_number", 0) for item in records
                  if type(item.get("session_number")) is int and item["session_number"] > 0),
@@ -2746,7 +2746,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
             raise ProjectError("Research session status must be a string")
         member = f"research-sessions/{session_id}.json"
 
-        def update(members: dict[str, bytes]) -> dict[str, bytes | None]:
+        def update(members: dict[str, bytes]) -> dict[str, bytes]:
             existing = members.get(member)
             if existing is not None:
                 try:

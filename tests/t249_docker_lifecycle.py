@@ -135,7 +135,6 @@ async def verify():
                 env=os.environ.copy(),
             )
             killed = False
-            doomed_id: str | None = None
             try:
                 deadline = time.monotonic() + 12
                 while time.monotonic() < deadline:
@@ -148,10 +147,12 @@ async def verify():
                         killed = True
                         break
                     if child.poll() is not None:
-                        stderr = child.stderr.read().decode(errors="replace") if child.stderr is not None else "(stderr unavailable)"
-                        raise AssertionError("Docker worker exited before reservation: " + stderr)
+                        raise AssertionError(
+                            "Docker worker exited before reservation: "
+                            + child.stderr.read().decode(errors="replace")
+                        )
                     await asyncio.sleep(0.05)
-                assert killed and doomed_id is not None, "Docker worker did not create a running reservation"
+                assert killed, "Docker worker did not create a running reservation"
                 dead = get_execution(path, doomed_id)
                 assert dead["status"] == "interrupted", dead
                 assert dead["exit_code"] is None

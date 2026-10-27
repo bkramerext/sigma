@@ -8,7 +8,6 @@ can verify round trips before migrating project paths.
 from __future__ import annotations
 
 import base64
-import binascii
 import fcntl
 import json
 import os
@@ -87,7 +86,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
             raise BundleError("Invalid encoded file")
         try:
             result[name] = base64.b64decode(encoded, validate=True)
-        except (ValueError, binascii.Error) as exc:
+        except (ValueError, base64.binascii.Error) as exc:
             raise BundleError("Invalid encoded file") from exc
     try:
         document = json.loads(result["project.json"])
