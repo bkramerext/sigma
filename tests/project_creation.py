@@ -208,6 +208,21 @@ def main() -> None:
                 assert Path(imported.json()["path"]).suffix == ".json"
                 assert client.post("/api/projects/import", json={"bundle": portable}).status_code == 400
                 assert inspect_project(imported.json()["path"]).project.title == "API math imported"
+                # Home discovery and Open Project must work for both original
+                # and imported single-file projects, not only legacy directories.
+                from sigma.projects import list_json_projects
+                discovered = {view.path for view in list_json_projects()}
+                assert response.json()["path"] in discovered
+                assert imported.json()["path"] in discovered
+                for project_path in (response.json()["path"], imported.json()["path"]):
+                    reopened = client.post("/api/projects/open", json={"path": project_path})
+                    assert reopened.status_code == 200, reopened.text
+                    assert reopened.json()["path"] == project_path
+                recents = client.get("/api/projects/recent")
+                assert recents.status_code == 200, recents.text
+                recent_paths = {item["path"] for item in recents.json()["projects"]}
+                assert imported.json()["path"] in recent_paths
+
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(
