@@ -10,9 +10,9 @@ import datetime as dt
 import json
 import os
 import subprocess
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 BRANCH = "fix/t249-single-file-projects"
 REPORT = Path("docs/evaluations/t249/local-verification.json")
