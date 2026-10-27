@@ -134,9 +134,7 @@ def restore(bundle: dict[str, Any], destination: str | Path) -> None:
         finally:
             os.close(directory_fd)
     except BaseException as exc:
-        raise BundleError(
-            f"Restore incomplete at {destination}; inspect before retrying"
-        ) from exc
+        raise BundleError(f"Restore incomplete at {destination}; inspect before retrying") from exc
 
 
 def migrate(directory: str | Path, destination: str | Path) -> Path:
@@ -242,8 +240,7 @@ def _publish_members(path: Path, members: dict[str, bytes], prefix: str) -> None
         "format": FORMAT,
         "version": VERSION,
         "files": {
-            name: base64.b64encode(data).decode("ascii")
-            for name, data in sorted(members.items())
+            name: base64.b64encode(data).decode("ascii") for name, data in sorted(members.items())
         },
     }
     fd, name = tempfile.mkstemp(prefix=prefix, dir=path.parent)
@@ -408,6 +405,7 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
             raise BundleError("Cannot import foreign research session")
         session_id = member.removeprefix("research-sessions/").removesuffix(".json")
         from uuid import UUID
+
         try:
             if str(UUID(session_id)) != session_id:
                 raise ValueError("Noncanonical session identifier")
@@ -429,8 +427,7 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
         "format": FORMAT,
         "version": VERSION,
         "files": {
-            name: base64.b64encode(data).decode("ascii")
-            for name, data in sorted(members.items())
+            name: base64.b64encode(data).decode("ascii") for name, data in sorted(members.items())
         },
     }
     fd, name = tempfile.mkstemp(prefix=".sigma-import-", dir=path.parent)
