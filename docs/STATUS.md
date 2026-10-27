@@ -48,6 +48,25 @@ one-session/two-call test (maximum $0.25, no retries). Public browser verificati
 of the authenticated production UI remains outstanding; deployment verification
 must compare checkout/pin/image provenance and public asset contents.
 
+## Hosted sample research-session ID collision (2026-10-27)
+
+The first production cutover exposed a second hosted issue: opening the
+history-bearing Nonconsecutive Subset Sums sample returned HTTP 400, `Cannot
+open sample working project: Research job is unavailable.` Reproduced against
+production from a clean guest browser. Cause: saved sample histories reused the
+template session IDs in every new copy, while the cloud research ledger is shared
+and binds each session ID to one workspace/project. The owner check correctly
+rejected reuse across workspaces.
+
+`src/sigma/samples.py` now assigns each sample copy fresh session IDs and
+rebinds exact session-ID references throughout saved history and artifacts. A
+new hosted-auth regression opens the same history-bearing sample in two isolated
+guest workspaces and verifies each copy succeeds with disjoint session IDs.
+`tests/cloud_auth.py` passed all 47 tests; targeted Ruff, format, and whitespace
+checks passed. The fix is in PR #271 and awaits deployment. No user data or
+research ledger rows were modified. The sample endpoint failure does not involve
+inference or sponsorship and required no provider calls.
+
 # SIGMA status
 
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)

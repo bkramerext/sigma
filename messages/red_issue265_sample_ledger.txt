@@ -1,0 +1,12 @@
+R4R — follow-up PR for issue #265: hosted history-bearing sample 400
+
+Base: origin/main after PR #270, 51fd98735bb16375f4b035a66b76884904336aa9
+Commit: f9423b7 (plus status/handoff update in the branch)
+
+Production reproduction: a fresh guest browser opened the history-bearing `nonconsecutive-subset-sums` sample and received HTTP 400: “Cannot open sample working project: Research job is unavailable.” Root cause is sample copies retaining their template research-session IDs. The persistent cloud research ledger is shared; each ID is owned by its original workspace/project, so its existing tenant check rejects a copied sample that reuses the ID.
+
+Fix: generate per-copy session IDs and rebind exact references through saved session/artifact history. Added regression opens the same history-bearing sample in two isolated guest workspaces, confirms both HTTP operations succeed and IDs differ. This preserves the existing ownership guard.
+
+Verification: `tests/cloud_auth.py` passes 47 tests; focused Ruff check, formatter check and `git diff --check` pass. No provider calls. Production is currently running release `51fd98735bb16375f4b035a66b76884904336aa9`; this fix is not deployed until merged and redeployed.
+
+Please review/merge under the user's standing authorization for urgent production repairs. Deploy the merged exact SHA through the guarded GCE release flow, preserve the state disk, and verify the history-bearing sample opens from two independent sessions. Keep issue #265 open for the authorized paid Investigator/Skeptic production completion and remaining browser acceptance.

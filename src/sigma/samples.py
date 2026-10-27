@@ -333,7 +333,9 @@ def make_sample(export_file: str | Path, name: str) -> Path:
         raise ProjectError(f"Cannot save sample: {exc}") from exc
 
 
-def _rebind_history(value: Any, project_id: str, project_path: str) -> Any:
+def _rebind_history(
+    value: Any, project_id: str, project_path: str, session_ids: dict[str, str]
+) -> Any:
     if isinstance(value, dict):
         result = {}
         for key, item in value.items():
@@ -342,24 +344,37 @@ def _rebind_history(value: Any, project_id: str, project_path: str) -> Any:
             elif key == "project_id":
                 result[key] = project_id
             else:
-                result[key] = _rebind_history(item, project_id, project_path)
+                result[key] = _rebind_history(item, project_id, project_path, session_ids)
         return result
     if isinstance(value, list):
-        return [_rebind_history(item, project_id, project_path) for item in value]
-    return project_id if value == _SAMPLE_PROJECT_ID else value
+        return [_rebind_history(item, project_id, project_path, session_ids) for item in value]
+    if isinstance(value, str):
+        if value in session_ids:
+            return session_ids[value]
+        if value == _SAMPLE_PROJECT_ID:
+            return project_id
+    return value
 
 
 def _install_sample_evidence(destination: Path, project_id: str, evidence: dict[str, Any]) -> None:
     from sigma import agentic_evidence, research_sessions
 
     canonical_path = str(destination.resolve())
+    # A sample's saved session IDs are template data. Each copy needs its own
+    # IDs because the hosted research ledger is shared across workspaces and
+    # enforces one owner/project for each session ID.
+    session_ids = {
+        raw["id"]: str(uuid4())
+        for raw in evidence["research_sessions"]
+        if isinstance(raw, dict) and isinstance(raw.get("id"), str)
+    }
     for raw in evidence["research_sessions"]:
-        record = _rebind_history(raw, project_id, canonical_path)
+        record = _rebind_history(raw, project_id, canonical_path, session_ids)
         record["project_id"] = project_id
         record["project_path"] = canonical_path
         research_sessions._save(canonical_path, record)
     for raw in evidence["agentic_runs"]:
-        record = _rebind_history(raw, project_id, canonical_path)
+        record = _rebind_history(raw, project_id, canonical_path, session_ids)
         agentic_evidence.save(destination, record)
 
 

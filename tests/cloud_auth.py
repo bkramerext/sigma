@@ -766,6 +766,28 @@ class CloudAuthTests(TestCase):
         with TestClient(app, base_url="https://testserver") as another_guest:
             self.assertEqual(another_guest.get("/api/projects/recent").status_code, 401)
 
+    def test_separate_guest_workspaces_can_open_same_sample_with_saved_sessions(self):
+        from sigma import research_sessions
+
+        paths: list[str] = []
+        session_ids: list[set[str]] = []
+        for _ in range(2):
+            with TestClient(app, base_url="https://testserver") as guest:
+                opened = guest.post(
+                    "/api/projects/samples/open",
+                    json={"sample_id": "nonconsecutive-subset-sums"},
+                    headers={"Origin": ORIGIN},
+                )
+                self.assertEqual(opened.status_code, 200, opened.text)
+                path = opened.json()["path"]
+                paths.append(path)
+                session_ids.append({record["id"] for record in research_sessions._all(path)})
+
+        self.assertTrue(session_ids[0])
+        self.assertTrue(session_ids[1])
+        self.assertFalse(session_ids[0] & session_ids[1])
+        self.assertNotEqual(paths[0], paths[1])
+
     def test_guest_projects_stay_temporary_when_local_google_auth_is_unready(self):
         from dataclasses import replace
 
