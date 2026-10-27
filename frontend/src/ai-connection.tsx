@@ -236,13 +236,19 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding, googleAccount, onGoogleSignOut }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean }; googleAccount?: { role: string; email: string } | null; onGoogleSignOut?: () => Promise<void> } = {}) {
+export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding, googleAccount, onGoogleSignOut, guestAccount }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean }; googleAccount?: { role: string; email: string } | null; onGoogleSignOut?: () => Promise<void>; guestAccount?: { ready: boolean; deniedEmail?: string | null; invitationControls?: ReactNode } } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const [accountError, setAccountError] = useState('');
   const providerActive = useProviderActivity();
+  useEffect(() => {
+    if (!guestAccount) return;
+    const openSignIn = () => setOpen(true);
+    window.addEventListener('sigma-open-google-signin', openSignIn);
+    return () => window.removeEventListener('sigma-open-google-signin', openSignIn);
+  }, [guestAccount]);
   useEffect(() => {
     if (!open) return;
     const place = () => {
@@ -287,7 +293,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
     : status === 'connected' && ai.info?.mode === 'api_key'
       ? 'OpenAI API connected'
       : `ChatGPT sign-in · ${label}`;
-  const interactionDisabled = disabled || localGoogleRequired;
+  const interactionDisabled = disabled || (localGoogleRequired && !guestAccount);
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
   const roleLabel = googleAccount?.role === 'admin' ? 'Admin' : 'Member';
@@ -306,12 +312,12 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
           : ai.info?.status === 'unauthorized' || ai.info?.status === 'reauth_required' ? 'Personal model needs sign-in'
             : ai.info?.status === 'unconfigured' || ai.info?.status === 'disconnected' ? 'Personal model not configured'
               : ai.info?.label ?? 'Personal model status unavailable';
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}${googleAccount ? ' account-model-status' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={googleAccount ? `${roleLabel}, ${modelLine}; open account and model settings` : projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>{googleAccount ? <span className="account-model-lines"><span role="status">{roleLabel}</span><span>{modelLine}</span></span> : <span role="status">{visibleLabel}</span>}</summary>
+  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}${googleAccount ? ' account-model-status' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={guestAccount ? 'Guest, Explore only; open account settings' : googleAccount ? `${roleLabel}, ${modelLine}; open account and model settings` : projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>{guestAccount ? <span className="account-model-lines"><span role="status">Guest</span><span>Explore only · no execution</span></span> : googleAccount ? <span className="account-model-lines"><span role="status">{roleLabel}</span><span>{modelLine}</span></span> : <span role="status">{visibleLabel}</span>}</summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
-      {googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
-      {serviceFunded ? <>
+      {guestAccount ? <section className="account-identity-state"><h2>Guest · Explore SIGMA</h2><p>Published research is available without signing in. A verified invitation is required for a private workspace and model access.</p>{guestAccount.deniedEmail && <p role="status">Access is not granted for {guestAccount.deniedEmail}.</p>}{guestAccount.invitationControls}{guestAccount.ready ? <a className="connection-text-action" href="/api/cloud-auth/login">Sign in with Google</a> : <p role="status">Google sign-in is not configured on this server.</p>}</section> : <>{googleAccount && <section className="account-identity-state"><h2>{roleLabel}</h2><p>{googleAccount.email}</p><p>Invitation access is verified by SIGMA for this Google account.</p>{onGoogleSignOut && <button type="button" className="connection-text-action" onClick={() => { setAccountError(''); void onGoogleSignOut().catch(cause => setAccountError(message(cause))); }}>Sign out of Google</button>}</section>}
+      {!guestAccount && (serviceFunded ? <>
         <h2>Model access</h2>
         <p>Choose which connection SIGMA will use. The choice is saved for this Google account. SIGMA never switches funding paths automatically.</p>
         <section className="account-model-choice" aria-label="Personal ChatGPT connection">
@@ -350,8 +356,9 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
         {ai.info?.active_account && <button type="button" className="connection-text-action" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.signIn({ newAccount: true })}>Connect another account</button>}
         <button type="button" className="connection-text-action" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
         {ai.info?.mode === 'api_key' ? <button type="button" className="connection-text-action" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>API key option</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" className="connection-text-action" onClick={() => void ai.selectMode('api_key')}>Separately billed API Key</button></details>}
+      </>)}
       </>}
-      {ai.error && <p role="alert">{ai.error}</p>}
+      {!guestAccount && ai.error && <p role="alert">{ai.error}</p>}
       {accountError && <p role="alert">{accountError}</p>}
     </div></>, document.body)}
   </details>;
