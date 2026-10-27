@@ -48,11 +48,7 @@ def _directory(path: Path, create: bool) -> Path:
 
 
 def _lock(path: Path):
-    lock_path = (
-        path.with_name("." + path.name + LOCK)
-        if path.suffix == ".json"
-        else path / LOCK
-    )
+    lock_path = path.with_name("." + path.name + LOCK) if path.suffix == ".json" else path / LOCK
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     stream = os.fdopen(fd, "rb")
     lock_stat = os.fstat(stream.fileno())
