@@ -703,8 +703,7 @@ async def middleware(request: Request, call_next):
             and request.method not in {"GET", "HEAD", "OPTIONS"}
         )
         if (
-            path.startswith("/api/ai/")
-            or path.startswith("/api/cloud-research/")
+            path.startswith(("/api/ai/", "/api/cloud-research/"))
             or (project_write and path not in safe_project_writes)
         ):
             scenario = _mock_allowance(cfg, principal.subject)
