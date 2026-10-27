@@ -72,10 +72,11 @@ For hosted setup, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). Hosted deplo
 
 ### JSON project regression and integration tests
 
-The human-readable JSON bundle simulation runs without Docker:
+The JSON project bundle and project creation simulations run on every pull
+request through the JSON project regressions workflow. Run them locally with:
 
 ```sh
-PYTHONPATH=src python3 tests/project_bundle.py
+python3 scripts/test_t249_integration.py
 ```
 
 To additionally verify real Docker-backed execution, binary artifacts,
@@ -83,12 +84,11 @@ export/import integrity, and interruption recovery, first build the sandbox
 images described below, then run:
 
 ```sh
-python3 scripts/test_t249_integration.py
+python3 scripts/test_t249_integration.py --docker
 ```
 
-The integration runner does not modify Git history or push reports. Docker
-integration is an explicit opt-in because it requires a running local Docker
-daemon and the configured sandbox image.
+The runner does not modify Git history or push reports. Docker lifecycle
+coverage is opt-in because it requires a running daemon and sandbox image.
 
 ### Optional scientific Python sandbox
 
