@@ -1154,7 +1154,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       link.href = url; link.download = downloadName;
       document.body.appendChild(link); link.click(); link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      if (openInTab && (!opened || opened.closed)) {
+      if (openInTab && exportType !== 'bundle' && (!opened || opened.closed)) {
         setError('The browser blocked or closed the new tab. The file was still downloaded.');
       } else onCancel();
     } catch (cause) { if (opened && !opened.closed) opened.close(); setError(errorMessage(cause)); }
