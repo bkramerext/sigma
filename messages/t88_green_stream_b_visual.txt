@@ -79,3 +79,14 @@ dialog; there is no welcome dialog or duplicate account control.
 - **UNMET:** None within Stream B's assigned visual scope.
 
 This handoff is R4R for independent review, not approval or merge.
+
+## Coordinator review follow-up
+
+- Correction commit: `02bfa99f27e92ba2e1fb4e448c11e613ceef3f67` updates only
+  the stale fail-closed comment in `src/sigma/cloud_auth.py`. It now describes
+  the existing deterministic provider-free mock route and the server-denied
+  live AI/provider and other research execution routes. No runtime code or
+  behavior changed.
+- The final head also includes this handoff update; its SHA is reported in the
+  R4R notice. No local tests were rerun for the comment-only source correction;
+  current-head GitHub CI was allowed to run before reporting.
