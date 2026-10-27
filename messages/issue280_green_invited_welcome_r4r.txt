@@ -56,6 +56,12 @@ SIGMA action-button styling, invitation Add/Remove actions and row filtering,
 compact scrollable authorized-user rows, five visible toasts with oldest-first
 eviction, and the 50-word running-session summary with fallback text.
 
+The switchable local sponsored pill's custom tooltip now starts “Click to
+switch to your own ChatGPT account.” It retains the remaining allowance and
+connection explanation. Forced/hosted pills do not show a switch instruction.
+Real-Chrome sponsored acceptance and `./sigma test` passed after this wording
+change. A metadata-only recheck still found no designated sponsor tokens.
+
 Configuration and rollback are documented in `docs/GETTING_STARTED.md` and
 `docs/CLOUD_DEPLOYMENT.md`. Rollback disables the hosted flag and restarts using
 the guarded release procedure. Production was not enabled.

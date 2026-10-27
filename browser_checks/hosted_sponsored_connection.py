@@ -723,6 +723,9 @@ def exercise(origin: str) -> None:
         assert sponsor_choice.value.method == "POST"
         assert sponsor_choice.value.post_data_json == {"mode": "sponsored"}
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
+            "Click to switch to your own ChatGPT account."
+        )
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_have_count(0)
         expect(page.get_by_text("Complete sign-in in the browser.")).to_have_count(0)
         posts.clear()

@@ -6936,3 +6936,14 @@ unmetered personal path after admin renewal. Focused `tests/cloud_auth.py`
 passed all steps after formatting the new test. No live ChatGPT sign-in or
 provider inference was performed; Play after admin renewal remains to be
 checked by the human.
+
+Sponsored-pill tooltip wording follow-up: the local, switchable sponsored
+control now begins its custom hover/focus/tap explanation with “Click to switch
+to your own ChatGPT account.” Remaining allowance and connection details stay
+in the same tooltip. Forced sponsored mode and hosted controls do not offer
+that instruction because their pill cannot switch to a personal account.
+The real-Chrome sponsored connection check, frontend typecheck, and `./sigma
+test` passed with the new wording. No provider call was made. A metadata-only
+recheck after the reported Play error still found no access or refresh token
+for either designated sponsor registration, so live Play remains blocked on
+the administrator's interactive renewal.
