@@ -3,6 +3,7 @@
 This script intentionally uses the installed SIGMA sandbox image. No providers,
 network requests, or existing projects are touched.
 """
+
 import asyncio
 import json
 import os
@@ -28,6 +29,7 @@ async def verify():
     with tempfile.TemporaryDirectory(prefix="sigma-t249-docker-") as temporary:
         root = Path(temporary)
         from sigma import projects
+
         original_root = projects.projects_root
         projects.projects_root = lambda: root
         try:
@@ -79,6 +81,7 @@ async def verify():
             # Deliberately leave a running reservation with no live lock to
             # simulate process termination before finalization.
             import sigma.python_sandbox as sandbox
+
             interrupted = dict(first)
             interrupted["id"] = str(uuid4())
             interrupted["source"] = "print('interrupted')"
@@ -95,8 +98,10 @@ async def verify():
             sandbox._save_record(directory, interrupted)
             observed = get_execution(path, interrupted["id"])
             assert observed["status"] == "interrupted", observed
-            assert any(item["id"] == interrupted["id"] and item["status"] == "interrupted"
-                       for item in list_executions(path))
+            assert any(
+                item["id"] == interrupted["id"] and item["status"] == "interrupted"
+                for item in list_executions(path)
+            )
             print("PASS interrupted reservation remains inspectable after lock loss")
 
             # An interrupted reservation must survive export/import without
@@ -113,11 +118,13 @@ async def verify():
             # Integrity checks must detect same-length modifications to
             # captured bytes, including after a valid Docker run.
             from sigma.project_bundle import read_file, write_file
+
             member = f"research-executions/{artifact_run['id']}.artifacts/proof.bin"
             original = read_file(path, member)
             tampered = bytes([original[0] ^ 0xFF]) + original[1:]
             write_file(path, member, tampered)
             from sigma.projects import ProjectError
+
             try:
                 get_execution_artifact(path, artifact_run["id"], "proof.bin")
             except ProjectError:
