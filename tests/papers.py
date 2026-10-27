@@ -13,7 +13,7 @@ import httpx
 
 from sigma import papers
 from sigma.api import app
-from sigma.plan_stream import completed
+from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, initialize_project, inspect_project
 
 
@@ -86,6 +86,110 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
             raise AssertionError("Partial provider streams must not produce a paper draft")
 
 
+def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
+    cases = [
+        (
+            {
+                "error": {
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "private project text",
+                }
+            },
+            "structured-output schema",
+            "code=invalid_json_schema",
+        ),
+        (
+            {"error": {"code": "model_not_found", "param": "model"}},
+            "selected model",
+            "model_not_found",
+        ),
+        ({"error": {"code": "insufficient_quota"}}, "billing or quota", "insufficient_quota"),
+        (
+            {"error": {"code": "secret-value", "param": "private input"}},
+            "cause is not classified",
+            None,
+        ),
+    ]
+    for body, expected, safe_detail in cases:
+        try:
+            failure(400, body, "api_key")
+        except ProjectError as exc:
+            message = str(exc)
+            assert expected in message
+            assert "No automatic retry" in message
+            assert "private project text" not in message
+            assert "private input" not in message
+            if safe_detail:
+                assert safe_detail in message
+            else:
+                assert "secret-value" not in message
+        else:
+            raise AssertionError("Non-success provider responses must fail without retry")
+
+
+def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
+    requests: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "private research content must not be surfaced",
+                }
+            },
+        )
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    ):
+
+        async def exercise() -> None:
+            calls = [
+                papers._provider(
+                    {"sources": []},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                ),
+                papers._provider_structured(
+                    {"fixture": "input"},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                    instructions="fixture instructions",
+                    schema_name="fixture_long_paper_stage",
+                    response_model=papers.PaperDraft,
+                ),
+            ]
+            for call in calls:
+                try:
+                    await call
+                except ProjectError as exc:
+                    assert "code=invalid_json_schema" in str(exc)
+                    assert "param=text.format.schema" in str(exc)
+                    assert "private research content" not in str(exc)
+                else:
+                    raise AssertionError("Mock HTTP 400 must not create a draft")
+
+        asyncio.run(exercise())
+
+    assert len(requests) == 2  # one attempt per path; no retry/fallback
+    for request in requests:
+        assert request["model"] == "gpt-6.1-sol"
+        assert request["reasoning"] == {"effort": "high"}
+        assert request["store"] is False
+        assert request["max_output_tokens"] == 12000
+        assert request["text"]["format"]["type"] == "json_schema"
+        assert request["text"]["format"]["strict"] is True
+        assert request["text"]["format"]["schema"]
+
+
 def test_long_tex_compiler_source_bound_is_configurable() -> None:
     with patch("sigma.project_reports.shutil.which", return_value="tectonic-fixture"):
         try:
@@ -94,6 +198,81 @@ def test_long_tex_compiler_source_bound_is_configurable() -> None:
             assert "100 byte source limit" in str(exc)
         else:
             raise AssertionError("The TeX compiler must enforce the configured source bound")
+
+
+def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "one-shot-recovery.sigma"
+        initialize_project(path, "One-shot recovery", "Preserve this paper draft")
+        view = inspect_project(path)
+        credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        provider_calls = 0
+        compile_calls = 0
+
+        async def fake_provider(context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            project_source = next(
+                source["id"] for source in context["sources"] if source["kind"] == "project"
+            )
+            return draft(project_source), config["model"]
+
+        def fail_compile_once(_tex, **_kwargs):
+            nonlocal compile_calls
+            compile_calls += 1
+            if compile_calls == 1:
+                raise RuntimeError("fixture compiler unavailable")
+            return b"%PDF-fixture"
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=fake_provider),
+            patch.object(papers, "_compile_pdf", new=fail_compile_once),
+        ):
+            try:
+                asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
+            except ProjectError as exc:
+                assert "fixture compiler unavailable" in str(exc)
+            else:
+                raise AssertionError("The injected compile failure must be surfaced")
+
+            checkpoint = papers._load_work(str(path))
+            assert checkpoint is not None and checkpoint["kind"] == "one_shot"
+            assert checkpoint["provider_calls"] == 1
+            preflight = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=credential["identity"],
+                mode=credential["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert preflight["draft_recovery_available"] is True
+            assert preflight["provider_calls_remaining"] == 0
+            assert preflight["maximum_provider_calls"] == 0
+            with patch.object(
+                papers, "_provider", side_effect=AssertionError("cached draft must be reused")
+            ):
+                result = asyncio.run(
+                    papers.generate(str(path), credential["identity"], view.project.id)
+                )
+
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert provider_calls == 1
+        assert compile_calls == 2
+        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_lifetime_total"] == 1
+        assert papers._load_work(str(path)) is None
+        assert len(papers.list_papers(str(path))) == 1
 
 
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
@@ -775,6 +954,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
+    test_one_shot_draft_is_reused_after_pdf_compilation_failure()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()

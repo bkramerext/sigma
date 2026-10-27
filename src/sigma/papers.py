@@ -671,6 +671,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Long-paper checkpoint is invalid")
     allowed_keys = {
         "schema_version",
+        "kind",
         "snapshot_sha256",
         "project_id",
         "binding_fingerprint",
@@ -693,16 +694,21 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "reduction_next_group",
         "reduction_output",
         "evidence_indexed",
+        "one_shot_draft",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
+    value.setdefault("kind", "long_form")
+    value.setdefault("one_shot_draft", None)
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
     value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
     value.setdefault("reduction_note_compaction_events", 0)
     value.setdefault("reduction_source_refs_omitted", [])
     value["schema_version"] = 2
+    if value["kind"] not in {"long_form", "one_shot"}:
+        raise ProjectError("Paper checkpoint kind is invalid")
     if any(
         not isinstance(value.get(key), str)
         for key in (
@@ -792,6 +798,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
         LongSectionDraft.model_validate(section)
     if value.get("plan") is not None:
         LongPaperPlan.model_validate(value["plan"])
+    if value["one_shot_draft"] is not None:
+        PaperDraft.model_validate(value["one_shot_draft"])
     for key in ("reduction_input", "reduction_output"):
         if key in value:
             items = value[key]
@@ -841,9 +849,11 @@ def _new_work(
     *,
     provider_calls_total: int = 0,
     prior_runs: list[dict[str, Any]] | None = None,
+    kind: str = "long_form",
 ) -> dict[str, Any]:
     return {
         "schema_version": 2,
+        "kind": kind,
         "snapshot_sha256": snapshot_sha256,
         "project_id": project_id,
         "binding_fingerprint": binding_fingerprint,
@@ -860,6 +870,7 @@ def _new_work(
         "conflict_notes": [],
         "conflict_note_count": 0,
         "section_drafts": {},
+        "one_shot_draft": None,
     }
 
 
@@ -868,6 +879,7 @@ async def _restart_work_locked(
     expected_project_id: str,
     expected_binding: str,
     expected_snapshot_sha256: str,
+    force_long_form: bool,
 ) -> dict[str, Any]:
     """Explicitly reset long-paper work while retaining prior attempt accounting."""
     view = inspect_project(path)
@@ -903,6 +915,11 @@ async def _restart_work_locked(
         config["reasoning_effort"],
         provider_calls_total=int(state.get("provider_calls_total", state.get("provider_calls", 0))),
         prior_runs=history,
+        kind=(
+            "long_form"
+            if force_long_form or len(_json(package)) > MAX_ONE_SHOT_CONTEXT_BYTES
+            else "one_shot"
+        ),
     )
     _save_work(path, restarted)
     return {
@@ -919,6 +936,7 @@ async def restart_work(
     expected_binding: str,
     expected_snapshot_sha256: str,
     confirmed: bool,
+    force_long_form: bool = True,
 ) -> dict[str, Any]:
     if not confirmed:
         raise ProjectError("Explicit confirmation is required to restart long-paper work")
@@ -932,6 +950,7 @@ async def restart_work(
             expected_project_id,
             expected_binding,
             expected_snapshot_sha256,
+            force_long_form,
         )
 
 
@@ -2083,30 +2102,53 @@ async def generate(
         if progress:
             await progress("snapshot", 1, 1)
         work: dict[str, Any] = {}
-        if len(_json(package)) <= MAX_ONE_SHOT_CONTEXT_BYTES and not force_long_form:
-            draft, model = await _provider(package, initial_auth, config, view.project.id, path)
-            provider_calls = 1
-            long_form = False
+        binding_fingerprint = hashlib.sha256(
+            (initial_auth["mode"] + "\0" + initial_auth["identity"]).encode()
+        ).hexdigest()
+        checkpoint = _load_work(path)
+        long_form = len(_json(package)) > MAX_ONE_SHOT_CONTEXT_BYTES or force_long_form
+        expected_kind = "long_form" if long_form else "one_shot"
+        compatible = checkpoint is not None and not any(
+            checkpoint.get(key) != value
+            for key, value in (
+                ("kind", expected_kind),
+                ("snapshot_sha256", snapshot_hash),
+                ("project_id", view.project.id),
+                ("binding_fingerprint", binding_fingerprint),
+                ("model", config["model"]),
+                ("reasoning_effort", config["reasoning_effort"]),
+            )
+        )
+        if checkpoint is not None and not compatible:
+            raise ProjectError(
+                "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
+            )
+        if not long_form:
+            if checkpoint is not None and checkpoint.get("one_shot_draft") is not None:
+                draft = PaperDraft.model_validate(checkpoint["one_shot_draft"])
+                model = config["model"]
+                work = checkpoint
+                provider_calls = int(work.get("provider_calls", 1))
+            else:
+                draft, model = await _provider(package, initial_auth, config, view.project.id, path)
+                # Cache only drafts that pass the evidence-integrity checks, so
+                # a compiler retry cannot reuse an invalid result.
+                _validate(draft, package)
+                work = checkpoint or _new_work(
+                    snapshot_hash,
+                    view.project.id,
+                    binding_fingerprint,
+                    config["model"],
+                    config["reasoning_effort"],
+                    kind="one_shot",
+                )
+                work["provider_calls"] = int(work.get("provider_calls", 0)) + 1
+                work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
+                work["one_shot_draft"] = draft.model_dump()
+                _save_work(path, work)
+                provider_calls = int(work["provider_calls"])
             evidence_batch_count = 0
         else:
-            binding_fingerprint = hashlib.sha256(
-                (initial_auth["mode"] + "\0" + initial_auth["identity"]).encode()
-            ).hexdigest()
-            checkpoint = _load_work(path)
-            compatible = checkpoint is not None and not any(
-                checkpoint.get(key) != value
-                for key, value in (
-                    ("snapshot_sha256", snapshot_hash),
-                    ("project_id", view.project.id),
-                    ("binding_fingerprint", binding_fingerprint),
-                    ("model", config["model"]),
-                    ("reasoning_effort", config["reasoning_effort"]),
-                )
-            )
-            if checkpoint and not compatible:
-                raise ProjectError(
-                    "A paper checkpoint exists for different evidence or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
-                )
             if checkpoint is None:
                 work = _new_work(
                     snapshot_hash,
@@ -2176,12 +2218,12 @@ async def generate(
                 "provider_calls_attempted": provider_calls,
                 "provider_calls_prior_runs": (
                     sum(item["provider_calls_attempted"] for item in work.get("prior_runs", []))
-                    if long_form
+                    if work
                     else 0
                 ),
                 "provider_calls_lifetime_total": (
                     int(work.get("provider_calls_total", provider_calls))
-                    if long_form
+                    if work
                     else provider_calls
                 ),
                 "long_form": long_form,
@@ -2245,11 +2287,10 @@ async def generate(
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
         record["tex_source"] = tex
         _save(path, record, pdf)
-        if long_form:
-            try:
-                _clear_work(path)
-            except OSError:
-                pass
+        try:
+            _clear_work(path)
+        except OSError:
+            pass
         return {
             key: record[key]
             for key in (
@@ -2285,7 +2326,7 @@ def preflight(
         if expected_binding and mode
         else None
     )
-    work = _load_work(path) if long_form else None
+    work = _load_work(path)
     work_state = work if work is not None else {}
     same_project_and_snapshot = bool(
         work_state
@@ -2293,12 +2334,22 @@ def preflight(
         and (expected_project_id is None or expected_project_id == view.project.id)
         and work_state.get("snapshot_sha256") == fingerprint
     )
+    checkpoint_kind_matches = bool(
+        work_state.get("kind") == ("long_form" if long_form else "one_shot")
+    )
+    one_shot_draft_available = bool(
+        not long_form
+        and work_state.get("one_shot_draft") is not None
+        and work_state.get("provider_calls", 0) > 0
+    )
     resume_available = bool(
         same_project_and_snapshot
+        and checkpoint_kind_matches
         and binding_fingerprint
         and work_state.get("binding_fingerprint") == binding_fingerprint
         and work_state.get("model") == model
         and work_state.get("reasoning_effort") == reasoning_effort
+        and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
@@ -2312,10 +2363,25 @@ def preflight(
             + MAX_LONG_PAPER_SECTIONS,
         )
         if long_form
+        else 0
+        if one_shot_draft_available
+        else 1
+    )
+    maximum_restart_calls = (
+        min(
+            MAX_LONG_PAPER_CALLS,
+            len(batches)
+            + MAX_LONG_PAPER_REDUCTION_CALLS
+            + MAX_LONG_PAPER_OUTLINE_CALLS
+            + MAX_LONG_PAPER_SECTIONS,
+        )
+        if long_form
         else 1
     )
     calls_remaining = (
-        max(0, MAX_LONG_PAPER_CALLS - work_state.get("provider_calls", 0))
+        0
+        if one_shot_draft_available and resume_available
+        else max(0, MAX_LONG_PAPER_CALLS - work_state.get("provider_calls", 0))
         if resume_available
         else maximum_calls
     )
@@ -2334,6 +2400,7 @@ def preflight(
         "long_form": long_form,
         "evidence_batches": len(batches),
         "maximum_provider_calls": maximum_calls,
+        "maximum_restart_provider_calls": maximum_restart_calls,
         "maximum_evidence_calls": len(batches),
         "maximum_index_reduction_calls": min(
             MAX_LONG_PAPER_REDUCTION_CALLS,
@@ -2350,7 +2417,7 @@ def preflight(
         "max_output_tokens_per_call": 12_000 if mode == "api_key" else None,
         "maximum_requested_output_tokens": maximum_output_tokens,
         "maximum_fresh_run_requested_output_tokens": (
-            maximum_calls * 12_000 if mode == "api_key" else None
+            maximum_restart_calls * 12_000 if mode == "api_key" else None
         ),
         "maximum_structured_input_bytes": maximum_structured_input_bytes,
         "max_evidence_batches": MAX_EVIDENCE_BATCHES,
@@ -2358,6 +2425,7 @@ def preflight(
         "checkpoint_exists": work is not None,
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
+        "draft_recovery_available": resume_available and one_shot_draft_available,
         "completed_batches": work_state.get("next_batch", 0) if resume_available else 0,
         "evidence_indexed": work_state.get("evidence_indexed", False)
         if resume_available
