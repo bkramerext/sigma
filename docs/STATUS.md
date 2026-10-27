@@ -108,6 +108,19 @@ no backup scheduler is installed. Production lacks the new 0.1.1 SMTP sender
 configuration and protected password file, so cutover remains blocked on an
 approved secret and fresh recovery point.
 
+Under owner authorization, a consistent snapshot
+`sigma-state-issue265-20261027-075405` was created while the application was
+stopped; it reached READY and the prior service restarted healthy. A temporary
+recovery VM with no public IP or service account mounted its clone read-only
+with the approved UUID. The packaged verifier initially failed because it
+looked for the workspace databases in `/auth`, although production stores them
+in `/auth/workspaces`. With that path corrected, the verifier passed SQLite
+integrity and required tables, 2 identity/workspace mappings, 3 project
+records, 10 research artifacts, 0 paper pairs, and accounting references with
+1 reserved/unknown call. The temporary recovery VM and disk were removed;
+the READY snapshot remains. This is a read-only restore check, not a full
+recovery cutover or authenticated browser test.
+
 An exact-source build of target `999db4362656fd5a22d6ebaaf733e64c8e87543e`
 failed before any service change: the frontend Vite build reads
 `pyproject.toml`, but the Dockerfile did not copy it. The focused fix copies
