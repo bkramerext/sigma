@@ -2167,9 +2167,8 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
     <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
     <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
     <form onSubmit={submit}><fieldset disabled={busy}><label htmlFor="import-project-file">Project file</label>
-      <input id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
+      <div className="import-project-file-row"><input id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/><button className="import-project-submit" type="submit" disabled={!file}>{busy ? 'Importing…' : 'Import'}</button></div>
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="entry-dialog-actions"><button type="submit" disabled={!file}>{busy ? 'Importing…' : 'Import Project'}</button></div>
     </fieldset></form>
   </dialog>;
 }
