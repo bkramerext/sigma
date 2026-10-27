@@ -129,7 +129,7 @@ def check(root: Path, base: Path) -> None:
         pass
 
     collision = root / f"{selected['id']}.sigma"
-    moved = root / "saved-sample.json"
+    moved = root / "saved-sample.sigma"
     collision.rename(moved)
     impostor = create_project(selected["id"], "Different research")
     assert impostor.path == str(collision)
