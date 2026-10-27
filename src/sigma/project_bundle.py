@@ -70,7 +70,11 @@ def encode(directory: str | Path) -> bytes:
 def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if not isinstance(bundle, dict) or set(bundle) != {"format", "version", "files"}:
         raise BundleError("Invalid project bundle")
-    if bundle["format"] != FORMAT or type(bundle["version"]) is not int or bundle["version"] != VERSION:
+    if (
+        bundle["format"] != FORMAT
+        or type(bundle["version"]) is not int
+        or bundle["version"] != VERSION
+    ):
         raise BundleError("Unsupported project bundle format")
     files = bundle["files"]
     if not isinstance(files, dict) or "project.json" not in files:
@@ -158,8 +162,14 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
         before = _files(source)
         # A directory-based research writer must be stopped by the caller.
         # Detect ordinary concurrent mutations before publishing.
-        contents = (json.dumps({"format": FORMAT, "version": VERSION, "files": before},
-                               sort_keys=True, indent=2) + "\n").encode("utf-8")
+        contents = (
+            json.dumps(
+                {"format": FORMAT, "version": VERSION, "files": before},
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n"
+        ).encode("utf-8")
         fd, name = tempfile.mkstemp(prefix=".sigma-migrate-", dir=target.parent)
         staged = Path(name)
         try:
@@ -403,19 +413,25 @@ def import_bundle(payload: dict[str, Any], destination: str | Path) -> Path:
                 raise ValueError("Noncanonical session identifier")
         except (ValueError, TypeError) as exc:
             raise BundleError("Cannot import invalid research session identifier") from exc
-        if (session.get("id") != session_id
+        if (
+            session.get("id") != session_id
             or type(session.get("session_number")) is not int
             or session["session_number"] < 1
             or not isinstance(session.get("status"), str)
-            or not isinstance(session.get("project_path"), str)):
+            or not isinstance(session.get("project_path"), str)
+        ):
             raise BundleError("Cannot import malformed research session")
         session["project_path"] = str(path.resolve())
-        members[member] = (json.dumps(session, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        members[member] = (
+            json.dumps(session, ensure_ascii=False, separators=(",", ":")) + "\n"
+        ).encode()
     canonical = {
         "format": FORMAT,
         "version": VERSION,
-        "files": {name: base64.b64encode(data).decode("ascii")
-                  for name, data in sorted(members.items())},
+        "files": {
+            name: base64.b64encode(data).decode("ascii")
+            for name, data in sorted(members.items())
+        },
     }
     fd, name = tempfile.mkstemp(prefix=".sigma-import-", dir=path.parent)
     staged = Path(name)
@@ -461,8 +477,13 @@ def transform_members(
         if not isinstance(changes, dict):
             raise BundleError("Bundle transaction must return a dictionary")
         for name, value in changes.items():
-            if (not isinstance(name, str) or not name or chr(92) in name
-                or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/"))):
+            if (
+                not isinstance(name, str)
+                or not name
+                or chr(92) in name
+                or name.startswith("/")
+                or any(part in ("", ".", "..") for part in name.split("/"))
+            ):
                 raise BundleError("Unsafe bundle path")
             if value is not None and not isinstance(value, bytes):
                 raise BundleError("Bundle transaction values must be bytes or None")
@@ -473,9 +494,14 @@ def transform_members(
             else:
                 members[name] = value
         if changes:
-            _decode({
-                "format": FORMAT, "version": VERSION,
-                "files": {name: base64.b64encode(data).decode("ascii")
-                          for name, data in members.items()},
-            })
+            _decode(
+                {
+                    "format": FORMAT,
+                    "version": VERSION,
+                    "files": {
+                        name: base64.b64encode(data).decode("ascii")
+                        for name, data in members.items()
+                    },
+                }
+            )
             _publish_members(path, members, ".sigma-transaction-")
