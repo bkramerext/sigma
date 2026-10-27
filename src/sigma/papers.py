@@ -558,6 +558,7 @@ def _read_one(path: str, identifier: str) -> dict[str, Any]:
     target = project_path(path)
     if target.suffix == ".json":
         from sigma.projects import read_project_artifact
+
         try:
             contents = read_project_artifact(
                 target, f"artifacts/papers/{identifier}.json"
