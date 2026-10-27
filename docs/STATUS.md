@@ -16,22 +16,28 @@ systemd pre-start gate before Compose could start. The prior protected config wa
 restored, the same release was restarted, and the helper was synchronized with
 the checked-out release. All 23 production preflight checks passed; backend,
 frontend, and edge then returned healthy. `/srv/sigma-state` stayed mounted and
-untouched. This branch updates `deploy/deploy-gce-release.py` to install the
+untouched. PR #270 updates `deploy/deploy-gce-release.py` to install the
 release-matched preflight helper for candidate and rollback transitions; fixture
 rehearsals cover candidate-build failure and source-SHA identity.
 
-The public HTTPS endpoint returns HTTP 200 but still references the old frontend
-bundle `/assets/index-CzWcx-8K.js`; the current candidate build emits
-`/assets/index-CHNuuinu.js`. This is direct evidence production has not yet
-received this frontend change. The hosted connection pill previously called
-`/api/ai/auth/begin`, intentionally blocked in hosted mode with
-`AI provider authorization is unavailable in cloud mode.` The pill now selects
-hosted sponsored mode via `/api/ai/mode`, reflects `/api/cloud-research/connection`
-status (not the personal ChatGPT connection), and does not silently leave a
-connected sponsor mode. The sample API is a distinct path and remains available
-under hosted project access rules.
+PR #270 was deployed as `51fd98735bb16375f4b035a66b76884904336aa9`; PR #271
+then fixed history-bearing sample copies and was deployed as
+`84edc9f4aa574d17749d61d0a110e56c192c0e04`. The public URL now references
+`/assets/index-StWhmoPv.js`, which contains the hosted sponsored pill actions and
+no longer contains the old cloud OAuth 403 text. The authenticated UI itself is
+not visible to the operator's clean browser, but public sample navigation is
+visible and works.
 
-Focused validation passed: `tests/cloud_auth.py` (46 tests),
+The hosted pill previously called `/api/ai/auth/begin`, intentionally blocked in
+hosted mode with `AI provider authorization is unavailable in cloud mode.` It now
+selects hosted sponsored mode via `/api/ai/mode`, reflects
+`/api/cloud-research/connection` status (not personal ChatGPT state), and does
+not silently leave an active sponsor mode. The history-bearing sample 400 was
+caused by template session IDs being reused across workspaces; PR #271 assigns
+fresh session IDs per copy while preserving references and the ledger ownership
+guard.
+
+Focused validation passed: `tests/cloud_auth.py` (47 tests),
 `tests/cloud_research_sponsored_api.py` (deterministic mocked inference,
 accounting/limits/idempotency/isolation), `tests/deployment_automation.py`,
 `browser_checks/hosted_sponsored_connection.py` in real Chrome with mocked API,
@@ -41,12 +47,16 @@ it had reached the long research-session test when interrupted. One earlier run
 also surfaced fixture assumptions for the newly synchronized preflight helper;
 those fixtures were corrected and both T173 rehearsals passed afterward.
 
-Issue #265 remains open. The UI code and deployment-helper change await the
-production cutover. Live paid Investigator/Skeptic execution and its durable
-artifacts remain **UNVERIFIED** pending explicit owner approval for the bounded
-one-session/two-call test (maximum $0.25, no retries). Public browser verification
-of the authenticated production UI remains outstanding; deployment verification
-must compare checkout/pin/image provenance and public asset contents.
+Issue #265 remains open. Live paid Investigator/Skeptic execution and its
+durable artifacts remain **UNVERIFIED**. The owner approved one session with at
+most two calls, a $0.25 cap, and no retries, but the operator environment has no
+authorized Google member browser session to run it. Public API readiness is
+healthy and a clean real-Chrome browser opened the history-bearing sample from
+two independent guest workspaces without toast or console errors; authenticated
+member pill and research acceptance still need verification. The daily backup
+timer is inactive. A fresh consistent snapshot reached READY and a separate
+clone disk was successfully restored from it, then deleted; no application
+schema migration was part of these releases.
 
 ## Hosted sample research-session ID collision (2026-10-27)
 
@@ -63,9 +73,12 @@ rebinds exact session-ID references throughout saved history and artifacts. A
 new hosted-auth regression opens the same history-bearing sample in two isolated
 guest workspaces and verifies each copy succeeds with disjoint session IDs.
 `tests/cloud_auth.py` passed all 47 tests; targeted Ruff, format, and whitespace
-checks passed. The fix is in PR #271 and awaits deployment. No user data or
-research ledger rows were modified. The sample endpoint failure does not involve
-inference or sponsorship and required no provider calls.
+checks passed. PR #271 is deployed in release
+`84edc9f4aa574d17749d61d0a110e56c192c0e04`. Real Chrome opened this sample from
+two independent fresh production workspaces without a 400, toast, or page error.
+No user data or historical research ledger rows were modified. The fix requires
+no provider calls; the sample endpoint failure did not involve inference or
+sponsorship.
 
 # SIGMA status
 
