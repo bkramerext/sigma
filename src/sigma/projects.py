@@ -235,8 +235,8 @@ def project_path(value: str | Path) -> Path:
             cloud_workspaces.assert_project_path(value, path)
         except ValueError as exc:
             raise WorkspaceAccessError("Project not found or access denied.") from exc
-        if path.suffix != ".sigma":
-            raise ProjectError("Project path must end in .sigma")
+        if path.suffix not in (".sigma", ".json"):
+            raise ProjectError("Project path must end in .sigma or .json")
         return path
     except WorkspaceAccessError:
         raise
@@ -632,6 +632,11 @@ def inspect_project(value: str | Path) -> ProjectView:
     path = project_path(value)
     state = path / STATE
     try:
+        if path.suffix == ".json":
+            from sigma.project_bundle import read_file
+
+            project = _decode(json.loads(read_file(path, STATE)))
+            return ProjectView(str(path), project)
         if state.is_symlink() or not state.is_file():
             raise ProjectError("Project has no regular project.json; initialize it explicitly")
         project = _decode(json.loads(state.read_text(encoding="utf-8")))
@@ -662,6 +667,44 @@ def initialize_project(
     path = project_path(value)
     if not title.strip() or not problem.strip():
         raise ProjectError("Title and problem must be nonempty")
+    if path.suffix == ".json":
+        from sigma.project_bundle import FORMAT, VERSION
+
+        if os.path.lexists(path):
+            raise ProjectError("Project destination already exists")
+        if not path.parent.is_dir() or path.parent.is_symlink():
+            raise ProjectError("Project destination parent is unavailable")
+        project = Project(
+            9, str(uuid4()), title.strip(), problem.strip(),
+            (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
+            investigation_type=mode, ai_model=resolved_model,
+            reasoning_effort=reasoning_effort, difficulty=selected_difficulty,
+            show_advanced_outcome_details=show_advanced_outcome_details,
+        )
+        import base64
+
+        bundle = {
+            "format": FORMAT, "version": VERSION,
+            "files": {STATE: base64.b64encode(_document(project)).decode("ascii")},
+        }
+        fd, staged_name = tempfile.mkstemp(prefix=".sigma-init-", dir=path.parent)
+        staged = Path(staged_name)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write((json.dumps(bundle, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.link(staged, path)
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+            return ProjectView(str(path), project)
+        except OSError as exc:
+            raise ProjectError(f"Cannot initialize {path}: {exc}") from exc
+        finally:
+            staged.unlink(missing_ok=True)
     created = False
     temporary: str | None = None
     try:
@@ -930,6 +973,18 @@ def _update_project(
 ) -> ProjectView:
     view = inspect_project(value)
     path = Path(view.path)
+    if path.suffix == ".json":
+        if text_edit is not None:
+            raise ProjectError("Text-view editing is not yet supported for single-file projects")
+        from sigma.project_bundle import transform_file
+
+        def transform(previous: bytes) -> bytes:
+            project = _decode(json.loads(previous))
+            updated = update(project)
+            return _document(updated)
+
+        contents = transform_file(path, STATE, transform)
+        return ProjectView(str(path), _decode(json.loads(contents)))
     temporary: Path | None = None
     backup_temporary: Path | None = None
     try:
@@ -1044,7 +1099,10 @@ def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
         if item["available"] and item["id"] != exclude_id:
             names.add(_title_key(item["title"]))
     for directory in root.iterdir():
-        if directory.suffix != ".sigma" or directory.is_symlink() or not directory.is_dir():
+        if directory.is_symlink() or not (
+            (directory.suffix == ".sigma" and directory.is_dir())
+            or (directory.suffix == ".json" and directory.is_file())
+        ):
             continue
         try:
             view = inspect_project(directory)
@@ -1068,8 +1126,10 @@ def project_destination(title: str = "") -> ProjectDestination:
         return ProjectDestination(str(root), None, False)
     _, name = _project_name(title)
     path = root / name
-    taken = os.path.lexists(path) or _title_key(title) in _occupied_titles(root)
-    return ProjectDestination(str(root), str(path), taken)
+    json_path = path.with_suffix(".json")
+    taken = (os.path.lexists(path) or os.path.lexists(json_path)
+             or _title_key(title) in _occupied_titles(root))
+    return ProjectDestination(str(root), str(json_path), taken)
 
 
 def create_project(
@@ -1081,44 +1141,15 @@ def create_project(
     difficulty: str = "medium",
     show_advanced_outcome_details: bool = False,
 ) -> ProjectView:
-    """Reserve a unique project name beneath the configured root."""
-    title, name = _project_name(title)
-    problem = _text(problem, "Research problem", 20000)
-    mode = _research_mode(research_mode)
-    root = projects_root()
-    destination = root / name
-    reserved = False
-    with _title_registry_lock(root):
-        _require_available_title(title, root)
-        try:
-            destination.mkdir(mode=0o700)  # Never overwrite files or existing research.
-            reserved = True
-            view = initialize_project(
-                destination,
-                title,
-                problem,
-                mode,
-                ai_model,
-                reasoning_effort,
-                difficulty,
-                show_advanced_outcome_details,
-            )
-            from sigma.recents import record_access
+    """Create a single-file JSON project by default.
 
-            record_access(view)
-            return view
-        except FileExistsError as exc:
-            raise ProjectError(
-                f"A project or file already exists at {destination}; choose another name"
-            ) from exc
-        except OSError as exc:
-            raise ProjectError(f"Cannot create project: {exc}") from exc
-        finally:
-            if reserved:
-                try:
-                    destination.rmdir()
-                except OSError:
-                    pass
+    Existing directory-backed projects remain readable and writable through
+    their paths; only newly created projects use the portable bundle format.
+    """
+    return create_json_project(
+        title, problem, research_mode, ai_model, reasoning_effort,
+        difficulty, show_advanced_outcome_details,
+    )
 
 
 def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
@@ -1283,3 +1314,129 @@ def update_project(
         with _title_registry_lock(projects_root()):
             return _update_project(value, update, edit)
     return _update_project(value, update, edit)
+
+
+def export_complete_project(value: str | Path) -> bytes:
+    """Download all project data, including research evidence and artifacts.
+
+    Legacy directory exports are snapshots. Stop active research writers before
+    using a snapshot as a migration source.
+    """
+    path = project_path(value)
+    inspect_project(path)
+    from sigma.project_bundle import download_bytes, encode
+
+    if path.suffix == ".json":
+        return download_bytes(path)
+    return encode(path)
+
+
+def migrate_project(value: str | Path, destination: str | Path | None = None) -> ProjectView:
+    """Copy a legacy project into one JSON file without deleting its source.
+
+    Research must be stopped before migration: independent legacy file writers
+    cannot be frozen by the bundle's destination lock.
+    """
+    source = project_path(value)
+    if source.suffix != ".sigma":
+        raise ProjectError("Only legacy .sigma directories can be migrated")
+    existing = inspect_project(source)
+    target = project_path(destination if destination is not None else source.with_suffix(".json"))
+    if target.suffix != ".json":
+        raise ProjectError("Migration destination must end in .json")
+    from sigma.project_bundle import migrate
+
+    try:
+        migrate(source, target)
+        result = inspect_project(target)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot migrate project: {exc}") from exc
+    if result.project != existing.project:
+        raise ProjectError("Migrated project did not match its source")
+    return result
+
+
+def create_json_project(
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
+    difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
+) -> ProjectView:
+    """Create a durable, single-file JSON project in the current owner root."""
+    title, name = _project_name(title)
+    problem = _text(problem, "Research problem", 20000)
+    root = projects_root()
+    destination = (root / name).with_suffix(".json")
+    legacy = root / name
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        if os.path.lexists(destination) or os.path.lexists(legacy):
+            raise ProjectError("A project with that filename already exists")
+        view = initialize_project(
+            destination, title, problem, research_mode, ai_model,
+            reasoning_effort, difficulty, show_advanced_outcome_details,
+        )
+        from sigma.recents import record_access
+
+        record_access(view)
+        return view
+
+
+def list_json_projects() -> tuple[ProjectView, ...]:
+    """Discover valid single-file projects in the current owner's root."""
+    root = projects_root()
+    result: list[ProjectView] = []
+    for candidate in sorted(root.glob("*.json")):
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        try:
+            result.append(inspect_project(candidate))
+        except ProjectError:
+            continue
+    return tuple(result)
+
+
+def save_project_artifacts(
+    value: str | Path, artifacts: dict[str, bytes | None],
+) -> None:
+    """Atomically save or remove evidence and artifacts in a JSON project.
+
+    Names must be relative to evidence/ or artifacts/. A single transaction
+    publishes the entire change set or leaves the previous project intact.
+    """
+    path = project_path(value)
+    if path.suffix != ".json":
+        raise ProjectError("Artifact bundle writes require a JSON project")
+    inspect_project(path)
+    if not isinstance(artifacts, dict) or any(
+        not isinstance(name, str)
+        or not name.startswith(("evidence/", "artifacts/"))
+        or name in ("evidence/", "artifacts/")
+        for name in artifacts
+    ):
+        raise ProjectError("Artifact paths must be under evidence/ or artifacts/")
+    from sigma.project_bundle import update_files
+
+    try:
+        update_files(path, artifacts)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot save project artifacts: {exc}") from exc
+
+
+def read_project_artifact(value: str | Path, name: str) -> bytes:
+    """Read an evidence or artifact member from an authorized JSON project."""
+    path = project_path(value)
+    if path.suffix != ".json" or not isinstance(name, str) or not name.startswith(
+        ("evidence/", "artifacts/")
+    ):
+        raise ProjectError("Artifact path is invalid")
+    inspect_project(path)
+    from sigma.project_bundle import read_file
+
+    try:
+        return read_file(path, name)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot read project artifact: {exc}") from exc
