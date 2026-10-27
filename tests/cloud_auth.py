@@ -123,6 +123,7 @@ class CloudAuthTests(TestCase):
 
     def test_mock_queue_recovery_never_contacts_hosted_research(self):
         import asyncio
+
         from sigma import cloud_research, cloud_workspaces, research_sessions
 
         with patch.object(cloud_workspaces, "enabled", return_value=True), patch.object(
