@@ -5,22 +5,33 @@ network requests, or existing projects are touched.
 """
 import asyncio
 import json
+import os
+import subprocess
+import sys
 import tempfile
+import time
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
+from uuid import uuid4
 
 from sigma.project_bundle import import_bundle, read_bundle
 from sigma.projects import create_json_project, export_complete_project
-from sigma.python_sandbox import execute_research_code, get_execution, list_executions, get_execution_artifact
+from sigma.python_sandbox import (
+    execute_research_code,
+    get_execution,
+    get_execution_artifact,
+    list_executions,
+)
 
 
 async def verify():
     with tempfile.TemporaryDirectory(prefix="sigma-t249-docker-") as temporary:
         root = Path(temporary)
-        import sigma.projects as projects
+        from sigma import projects
         original_root = projects.projects_root
         projects.projects_root = lambda: root
         try:
-            from uuid import uuid4
             project = create_json_project(
                 f"T249 Docker verification {uuid4().hex[:12]}",
                 "Validate durable sandbox execution",
@@ -56,7 +67,10 @@ async def verify():
             imported = root / "imported.json"
             import_bundle(exported, imported)
             assert get_execution(imported, first["id"])["stdout"] == first["stdout"]
-            assert get_execution_artifact(imported, artifact_run["id"], "proof.bin")[0] == bytes(range(256))
+            assert (
+                get_execution_artifact(imported, artifact_run["id"], "proof.bin")[0]
+                == bytes(range(256))
+            )
             assert any(item["id"] == first["id"] for item in list_executions(imported))
             print("PASS export/import execution persistence")
 
@@ -64,13 +78,11 @@ async def verify():
             # simulate process termination before finalization.
             import sigma.python_sandbox as sandbox
             from uuid import uuid4
-            from datetime import datetime, timezone
-            from hashlib import sha256
             interrupted = dict(first)
             interrupted["id"] = str(uuid4())
             interrupted["source"] = "print('interrupted')"
             interrupted["source_sha256"] = sha256(interrupted["source"].encode()).hexdigest()
-            interrupted["created_at"] = datetime.now(timezone.utc).isoformat()
+            interrupted["created_at"] = datetime.now(UTC).isoformat()
             interrupted["status"] = "running"
             interrupted["exit_code"] = None
             interrupted["stdout"] = ""
@@ -117,11 +129,6 @@ async def verify():
 
             # Kill a separate SIGMA worker after it has durably reserved an
             # execution. This is a real process death, not a mocked lock loss.
-            import os
-            import signal
-            import subprocess
-            import sys
-            import time
             child_code = (
                 "import asyncio,sys\n"
                 "from sigma.python_sandbox import execute_research_code\n"
