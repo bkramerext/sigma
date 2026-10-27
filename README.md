@@ -18,6 +18,10 @@ Create a project or start from a sample, write or generate strategies, then choo
 
 ![SIGMA Home page](assets/screenshot_home_page.png)
 
+**Exploring multiple strategies to prove a theorem** — develop and compare different approaches to a mathematical problem, investigate their proof obligations, and preserve findings and unresolved questions.
+
+![SIGMA strategies for a mathematical theorem](assets/screenshot_strategies.png)
+
 ## Run SIGMA locally
 
 The local development setup supports macOS and Linux. Install:
