@@ -296,7 +296,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const interactionDisabled = disabled || (localGoogleRequired && !guestAccount);
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  const roleLabel = googleAccount?.role === 'admin' ? 'Admin' : 'Member';
+  const roleLabel = googleAccount?.role === 'admin' ? 'Administrator' : 'Regular user';
   const modelLine = serviceFunded
     ? cloudFunding?.selectedConnection === 'personal' ? 'Personal ChatGPT · unavailable'
       : cloudFunding?.budget?.remaining_usd === 0 ? 'SIGMA-sponsored · allowance exhausted'
