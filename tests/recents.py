@@ -97,7 +97,7 @@ def check(root: Path, base: Path) -> None:
     selected = binary_counting
     source_path = ROOT / "samples" / selected["id"] / "project.json"
     first = open_sample_project(selected["id"])
-    assert first.path == str(root / f"{selected['id']}.json")
+    assert first.path == str(root / f"{selected['id']}.sigma")
     assert first.project.id != json.loads(sources[source_path])["id"]
     assert first.project.title == f"{selected['title']} v1"
     assert read_file(first.path, "project.json") != sources[source_path]
@@ -122,7 +122,7 @@ def check(root: Path, base: Path) -> None:
 
     other = open_sample_project(catalog[-1]["id"])
     assert other.path != first.path and other.project.id != first.project.id
-    assert len(list(root.glob("*.json"))) == 4
+    assert len(list(root.glob("*.sigma"))) == 4
     try:
         open_sample_project("../../unknown")
         raise AssertionError("An unknown sample identifier was accepted")
