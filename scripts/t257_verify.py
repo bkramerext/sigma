@@ -1,15 +1,14 @@
-#!/usr/bin/env python3
 """PR #257 local verification. Executes offline checks and publishes only its JSON report."""
 from __future__ import annotations
 
 import datetime as dt
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
 import traceback
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = Path("docs/evaluations/t257/local-verification.json")
@@ -26,7 +25,7 @@ def run(name, argv, *, timeout=240, env=None, cwd=ROOT):
                 "stderr": p.stderr[-30000:], "traceback": None,
                 "duration_seconds": round(time.monotonic()-started, 3),
                 "command": argv}
-    except Exception:
+    except (OSError, subprocess.SubprocessError, ValueError):
         return {"name": name, "status": "error", "exit_code": None,
                 "stdout": "", "stderr": "", "traceback": traceback.format_exc(),
                 "duration_seconds": round(time.monotonic()-started, 3),
@@ -50,7 +49,7 @@ def main():
     sha = git("rev-parse", "HEAD").stdout.strip()
     branch = git("branch", "--show-current").stdout.strip()
     report = {"ticket": "T257", "branch": branch, "tested_commit_sha": sha,
-              "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+              "started_at": dt.datetime.now(dt.UTC).isoformat(),
               "checks": [], "publication": {}}
     if branch != BRANCH:
         report["checks"].append({"name": "branch guard", "status": "failed",
@@ -85,7 +84,7 @@ def main():
             report["checks"].append({"name": "Frontend build", "status": "unavailable",
                 "stderr": "frontend/node_modules missing; install dependencies before retry",
                 "stdout": "", "traceback": None, "duration_seconds": 0})
-    report["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    report["finished_at"] = dt.datetime.now(dt.UTC).isoformat()
     report["summary"] = {k: sum(c["status"] == k for c in report["checks"])
                          for k in ("passed", "failed", "error", "unavailable")}
     dest = ROOT / REPORT
