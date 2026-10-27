@@ -4,6 +4,7 @@ Run from the SIGMA checkout on fix/t249-single-file-projects:
     python3 scripts/t249_verify.py
 Only docs/evaluations/t249/local-verification.json is staged by this script.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -137,9 +138,7 @@ def main() -> int:
         print("Other staged changes detected; report saved but not committed.", file=sys.stderr)
         return 4
     if staged["stdout"].strip():
-        commit = command(
-            ["git", "commit", "-m", "test(t249): capture local verification results"]
-        )
+        commit = command(["git", "commit", "-m", "test(t249): capture local verification results"])
         if commit["exit_code"] != 0:
             print("Report saved; commit failed:", commit["stderr"], file=sys.stderr)
             return 5
