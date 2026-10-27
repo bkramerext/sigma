@@ -139,9 +139,13 @@ async def verify():
                 "'import time; time.sleep(6); print(42)'))\n"
             )
             prior_ids = {item["id"] for item in list_executions(path)}
-            child = subprocess.Popen(
-                [sys.executable, "-c", child_code, str(path)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            child = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-c",
+                child_code,
+                str(path),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
                 env=os.environ.copy(),
             )
             killed = False
@@ -154,12 +158,12 @@ async def verify():
                     if current:
                         doomed_id = current[0]["id"]
                         child.kill()
-                        child.wait(timeout=5)
+                        await asyncio.wait_for(child.wait(), timeout=5)
                         killed = True
                         break
-                    if child.poll() is not None:
+                    if child.returncode is not None:
                         stderr = (
-                            child.stderr.read().decode(errors="replace")
+                            (await child.stderr.read()).decode(errors="replace")
                             if child.stderr is not None
                             else "(stderr unavailable)"
                         )
@@ -174,9 +178,9 @@ async def verify():
                 assert get_execution(imported, first["id"])["status"] == "completed"
                 print("PASS real SIGMA worker termination preserves uncertain execution")
             finally:
-                if child.poll() is None:
+                if child.returncode is None:
                     child.kill()
-                    child.wait(timeout=5)
+                    await asyncio.wait_for(child.wait(), timeout=5)
 
 
         finally:
