@@ -652,8 +652,11 @@ def get_limits(path: str) -> dict[str, Any]:
                             raise current_error
             except ValueError as exc:
                 raise ProjectError("Research limits are invalid") from exc
-        return (cloud_research.evaluation_session_limits(limits)
-                if cloud_workspaces.enabled() else limits)
+        return (
+            cloud_research.evaluation_session_limits(limits)
+            if cloud_workspaces.enabled()
+            else limits
+        )
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
