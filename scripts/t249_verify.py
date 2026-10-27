@@ -9,8 +9,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 import sys
 import time
 
@@ -22,22 +22,41 @@ def command(argv: list[str], *, timeout: int = 180, env: dict[str, str] | None =
     print(f"RUN {' '.join(argv)} (timeout {timeout}s)", flush=True)
     started = time.monotonic()
     try:
-        result = subprocess.run(argv, capture_output=True, text=True, errors="replace",
-                                timeout=timeout, env=env, check=False)
+        result = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+            env=env,
+            check=False,
+        )
         print(f"DONE exit={result.returncode} elapsed={time.monotonic() - started:.1f}s", flush=True)
-        return {"command": argv, "exit_code": result.returncode,
-                "seconds": round(time.monotonic() - started, 2),
-                "stdout": result.stdout[-24000:], "stderr": result.stderr[-24000:]}
+        return {
+            "command": argv,
+            "exit_code": result.returncode,
+            "seconds": round(time.monotonic() - started, 2),
+            "stdout": result.stdout[-24000:],
+            "stderr": result.stderr[-24000:],
+        }
     except subprocess.TimeoutExpired as exc:
         print(f"TIMEOUT after {timeout}s: {' '.join(argv)}", flush=True)
-        return {"command": argv, "exit_code": None, "timed_out": True,
-                "seconds": round(time.monotonic() - started, 2),
-                "stdout": str(exc.stdout or "")[-24000:],
-                "stderr": str(exc.stderr or "")[-24000:]}
+        return {
+            "command": argv,
+            "exit_code": None,
+            "timed_out": True,
+            "seconds": round(time.monotonic() - started, 2),
+            "stdout": str(exc.stdout or "")[-24000:],
+            "stderr": str(exc.stderr or "")[-24000:],
+        }
     except OSError as exc:
         print(f"ERROR: {exc}", flush=True)
-        return {"command": argv, "exit_code": None, "error": str(exc),
-                "seconds": round(time.monotonic() - started, 2)}
+        return {
+            "command": argv,
+            "exit_code": None,
+            "error": str(exc),
+            "seconds": round(time.monotonic() - started, 2),
+        }
 
 
 def main() -> int:
@@ -78,7 +97,9 @@ def main() -> int:
         "python": interpreter, "initial_git_status": status["stdout"],
         "checks": checks,
         "passing": [key for key, value in checks.items() if value.get("exit_code") == 0],
-        "failing_or_unavailable": [key for key, value in checks.items() if value.get("exit_code") != 0],
+        "failing_or_unavailable": [
+            key for key, value in checks.items() if value.get("exit_code") != 0
+        ],
     }
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
