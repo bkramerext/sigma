@@ -145,10 +145,13 @@ def _project_input_digest(path: str) -> str:
     digest = hashlib.sha256()
     if project.suffix == ".json":
         from sigma.project_bundle import list_files, read_file
+
         names = set(list_files(project))
         members = [("project.json", "project.json")]
         if "artifacts/text-representations.json" in names:
-            members.append(("text-representations.json", "artifacts/text-representations.json"))
+            members.append(
+                ("text-representations.json", "artifacts/text-representations.json")
+            )
         for label, member in members:
             contents = read_file(project, member)
             digest.update(label.encode())
