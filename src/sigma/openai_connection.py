@@ -414,8 +414,13 @@ async def connection(
     elif mode == "chatgpt" and str(context.get("identity", "")).startswith("cloud_sponsor:"):
         label = "SIGMA-sponsored ChatGPT · " + str(state["status"]).replace("_", " ")
         if state["status"] != "connected":
+            from sigma import cloud_auth
+
             guidance = (
-                "The administrator must provision or renew the configured ChatGPT sponsor session "
+                "Ask a SIGMA administrator to open Admin Settings and choose Reconnect sponsor "
+                "ChatGPT, then sign in as the designated sponsor account. Saved research is unchanged."
+                if cloud_auth.config().local and not cloud_workspaces.enabled()
+                else "The administrator must provision or renew the configured ChatGPT sponsor session "
                 "on the server. Google sign-in does not authorize ChatGPT plan use. "
                 "No API-key fallback was selected; saved research is unchanged."
             )

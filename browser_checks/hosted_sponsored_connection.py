@@ -259,7 +259,10 @@ def exercise(origin: str) -> None:
                     "ttl_seconds": 0,
                     "accounts": [],
                 }
-            elif path.endswith(("/api/ai/auth/begin", "/api/ai/sponsor-auth/begin")) and method == "POST":
+            elif (
+                path.endswith(("/api/ai/auth/begin", "/api/ai/sponsor-auth/begin"))
+                and method == "POST"
+            ):
                 payload = {
                     "id": "test-connect",
                     "authorization_url": origin + "/api/ai/auth/open/test-connect",
@@ -726,13 +729,17 @@ def exercise(origin: str) -> None:
         with page.expect_request("**/api/ai/auth/begin"):
             sponsored_summary.click()
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
-        assert not any(path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts), posts
+        assert not any(
+            path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts
+        ), posts
         local_connect_succeeds["value"] = True
         posts.clear()
         with page.expect_request("**/api/ai/auth/begin"):
             sponsored_summary.click()
         expect(sponsored_summary).to_have_attribute("aria-label", "Disconnect from ChatGPT")
-        assert any(path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts), posts
+        assert any(
+            path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts
+        ), posts
 
         admin_mode["value"] = True
         selected["mode"] = "sponsored"

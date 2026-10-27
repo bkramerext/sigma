@@ -6890,8 +6890,9 @@ the local force flag is active. This option does not set
 Local play failure follow-up: the local sponsored provider now defaults to the
 designated ChatGPT sponsor even when `SIGMA_CLOUD_INFERENCE_PROVIDER` is unset.
 Connection checks, credential validation, and spend-ledger job records use the
-same provider selection, so a member's expired personal ChatGPT session cannot
-block sponsored research. `./sigma test` passed after this change, and
+same provider selection. This change alone did not repair a previously saved
+personal provider choice, so it could still surface the generic expired
+ChatGPT error. `./sigma test` passed after this change, and
 `browser_checks/hosted_sponsored_connection.py` passed in real Chrome. The
 local UI was restarted with `./sigma start --nav`; no live model generation was
 used for verification.
@@ -6902,3 +6903,19 @@ the oldest toast and clears its timers before inserting the new item.
 The portfolio research failure summary now deduplicates repeated branch error
 messages, so parallel responses over the existing 1 MB transport safety bound
 report the reason once. The response-size safety bound itself is unchanged.
+
+Local Play expiry correction: the reported account is
+`nontrivialzeero@gmail.com`. Its local state was funding-eligible but selected
+`personal`, while the pill still displayed sponsored text. The designated
+sponsor record was present but had no usable access or refresh token. Local
+connection checks now restore sponsored mode when a personal ChatGPT session
+is disconnected or requires reauthorization. The pill reflects the selected
+mode. Clicking a sponsored pill attempts a personal ChatGPT connection and
+switches mode only after success. Sponsor selection now finds the designated
+account even if another ChatGPT account is active in the local store. A local
+Google administrator can renew the existing sponsor account via **Admin
+Settings → Reconnect sponsor ChatGPT**. Provider calls remain blocked until
+that sign-in completes. No credential values or live model calls were used in
+the diagnosis or verification.
+The corrected tree passed `./sigma test` (including Ruff, Pyright and the
+frontend production build) and the real-Chrome sponsored connection check.

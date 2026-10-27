@@ -26,6 +26,13 @@ provider dispatch. Local sponsored inference selects ChatGPT even when
 their explicit provider setting. The option does not enable the hosted
 forced-sponsored setting. Use `./sigma start` to return to normal local mode.
 
+If sponsored Play needs ChatGPT renewal, sign in with a local Google
+administrator account, open **Admin Settings**, and choose **Reconnect sponsor
+ChatGPT**. Complete the ChatGPT sign-in as `zetacontinuation@gmail.com`. A
+member's Google sign-in does not renew the server's sponsor credential. A
+failed personal ChatGPT connection returns an eligible member to sponsored
+mode; only a successful personal connection selects personal mode.
+
 To test with mock identities and controls, use `./sigma start --mock-auth`.
 The mock member's $25 allowance is simulated. For its sponsored presentation,
 combine the options: `./sigma start --mock-auth --sponsored`.

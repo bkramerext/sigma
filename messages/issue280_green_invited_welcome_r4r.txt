@@ -3,8 +3,9 @@
 - **Ticket:** Issue #280
 - **Branch:** `green/issue-280-invited-welcome`
 - **PR:** [#285](https://github.com/bkramerext/sigma/pull/285)
-- **Head:** `6c7e17c` (includes current `origin/main` at
-  `e2f4f6e89ea4a83f9e01b74aa63ae3f1b267a910`)
+- **Recovery implementation:** `d79a211` (later wording/documentation commits
+  remain on the same PR branch). The branch includes `origin/main` at
+  `e2f4f6e89ea4a83f9e01b74aa63ae3f1b267a910`.
 - **Production force flag:** unchanged and default-off. No production setting was changed.
 
 ## Review scope
@@ -24,6 +25,17 @@ Local spending is reserved against the member's configured grant. `--sponsored`
 does not enable `--mock-auth`; mock identities and the simulated `$25`
 allowance still require `--mock-auth` explicitly. At zero allowance, the pill
 offers **Reload me!**.
+
+The local Play expiry report exposed a saved `personal` mode for the eligible
+Google account `nontrivialzeero@gmail.com`, while its pill still displayed
+“Sponsored ChatGPT.” The designated sponsor record existed but had no usable
+access or refresh token. The current fix returns an expired personal choice to
+sponsored mode, makes the pill follow the selected mode, and uses the designated
+sponsor account even when another ChatGPT account is active. A sponsored pill
+click starts personal ChatGPT sign-in and selects personal mode only on success.
+The local administrator can renew the existing sponsor credential from **Admin
+Settings → Reconnect sponsor ChatGPT**. Member Google sign-in cannot renew it.
+Live Play remains blocked until that administrator sign-in completes.
 
 The welcome appears on each fresh page entry for an eligible signed-in user,
 but not on browser refresh. It starts with “Welcome to SIGMA.” and one of 100
@@ -51,6 +63,12 @@ the guarded release procedure. Production was not enabled.
   provider, and rejects use of the local member ChatGPT session.
 - `tests/cloud_sponsor.py` — 9 passed, including local default provider and
   designated administrator identity.
+- Focused recovery checks: `tests/cloud_auth.py` — 55 passed, including expired
+  personal-mode fallback and administrator-only renewal; `tests/cloud_sponsor.py`
+  — 10 passed, including designated-account selection while a personal account
+  is active. The real-Chrome check passed after the pill/recovery UI update.
+- `./sigma test` passed again after the recovery changes and formatting fix;
+  the real-Chrome sponsored connection check also passed on that final tree.
 - `git diff --check` — passed.
 - The branch was merged with current `origin/main` using a normal merge commit;
   the ticket tracker conflict retained both the T279 entry and main's T277

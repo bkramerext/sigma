@@ -2091,7 +2091,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(connection.status_code, 200, connection.text)
             self.assertEqual(personal_session.await_count, 1)
             self.assertEqual(sponsor_session.await_count, 1)
-            self.assertIn("administrator must provision or renew", connection.json()["guidance"])
+            self.assertIn("Admin Settings", connection.json()["guidance"])
             self.assertNotIn("Your ChatGPT session has expired", connection.json()["guidance"])
             status = member.get("/api/cloud-auth/status").json()
             self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
