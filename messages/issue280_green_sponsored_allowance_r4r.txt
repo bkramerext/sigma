@@ -1,0 +1,50 @@
+R4R — Issue #280: sponsored allowance and forced-mode launch flag
+
+Worker: Green
+Branch: green/issue-280-sponsor-mode
+Base: main at 918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad
+Implementation commit: 022bb7227b75f9be0b358d6d825efae3b06408a6
+PR: created after this handoff file was committed (link in PR description)
+
+## Result
+
+- MET — The hosted account/model pill reads “SIGMA-sponsored GPT Usage”. Its
+  authenticated tooltip reports per-user allowance remaining, ceiling,
+  estimated and held use, and provider connection/check status. It supports
+  pointer hover, keyboard focus, and a tap-to-toggle mobile affordance. Budget
+  refresh follows provider request completion and uses the no-store budget API;
+  it does not issue inference.
+- MET — `SIGMA_CLOUD_FORCE_SPONSORED_MODE` defaults to false and is wired into
+  Compose, the example deployment environment, and deployment preflight
+  validation. For eligible hosted accounts, sign-in/status refresh selects and
+  persists sponsored mode; server-side mode resolution and `/api/ai/mode`
+  reject an attempt to change to personal mode. Guests and ineligible accounts
+  do not gain access. Existing model selection and spending, concurrency,
+  queue, and ledger checks remain in force.
+- MET — Configuration scope and rollback are documented in
+  `docs/CLOUD_DEPLOYMENT.md`; production configuration was not changed and the
+  flag was not enabled.
+
+## Verification evidence
+
+- `uv run python tests/cloud_auth.py` — PASS, 48 tests, including flag off/on,
+  first account status after sign-in, eligible member persistence, personal
+  mode rejection, and unauthenticated request denial.
+- `uv run python tests/gce_host.py` — PASS, 21 tests, including accepted
+  `true`/`false` and rejected invalid values for the new deployment setting.
+- `uv run python browser_checks/hosted_sponsored_connection.py` — PASS in real
+  Chrome. At 1440px and 390px it exercised hover, keyboard focus, tap open/close,
+  simulated allowance refresh after a provider request, exact pill label, and
+  required mode across reloads without a mode-switch request.
+- `./sigma test` — PASS, all steps: Python suites, sponsored API/accounting and
+  cross-workspace isolation, deployment checks, Ruff (`281 files`), Pyright
+  (`0 errors`), frontend typecheck and production build. Vite emitted its
+  existing non-failing large-chunk advisory.
+- No paid or live provider calls; no production changes.
+
+## Review notes
+
+No dependencies, conflicts, or unmet acceptance items identified. The
+implementation commit above is the tested code head; this handoff and STATUS
+entry are a documentation-only follow-up commit. The PR's current head is
+recorded in GitHub. Do not self-merge.
