@@ -26,15 +26,36 @@ selection”): the flag defaults off, only applies alongside sponsored access,
 and rollback sets it to false followed by the guarded release/start procedure.
 Production configuration was not changed and the flag was not enabled.
 
+The home header places **Invite me!** directly under About. For account
+testing, the action is temporarily visible to any account with hosted sign-in
+enabled, including signed-in members, so it can open Google's account chooser
+from an existing session. The request endpoint still requires a verified,
+server-issued denied-login cookie before recording a request. A Google challenge
+started from that action carries server-bound invite intent; after verified
+sign-in for an uninvited identity, the client posts the request to the existing
+server-verified invitation endpoint. Success dismisses the dialog and removes
+Invite me. Delivery errors open the request dialog with a retry path. The
+request dialog's underlined, transparent Close follows its title; Privacy
+Notice is at lower left. Closing that notice returns to the invitation dialog,
+and the About link returns to About. Both locations display **Privacy Notice**.
+The live notice now describes identity/access state, session cookies,
+invitation and feedback records, per-account workspace content, sponsored
+accounting, provider/mail sharing, and the current retention controls. It
+remains version 1.0. The home artwork credit reads “Crafted by Brian Kramer”
+and “and [a randomly selected adjective] OpenAI agents.” The adjective is
+selected from the user's supplied list once per page load.
+
 ## Verification
 
 - `uv run python tests/cloud_auth.py` — PASS, 50 tests, including invite eligibility, denial, migration, persistent dismissal and repeat sign-in.
 - `uv run ruff check src/sigma/cloud_auth.py tests/cloud_auth.py browser_checks/hosted_sponsored_connection.py` — PASS.
 - `npm --prefix frontend run typecheck` — PASS.
 - `npm --prefix frontend run build` — PASS; existing non-failing Vite chunk-size advisory.
-- `uv run python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; dialog content, $0.75 allowance wording, one-time dismissal/reload and centered placement verified.
+- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; allowance, welcome dismissal/reload/centering, Invite me placement for both signed-in and guest accounts, transparent underlined Close after title, lower-left Privacy Notice, return to invitation and About dialogs, automatic invite-intent submission/removal, and dark pre-render canvas verified.
+- `npm --prefix frontend run typecheck` — PASS.
 - `./sigma test` — PASS, all steps, including Ruff (282 files), Pyright, frontend typecheck/build and deployment checks. The first run detected `deploy/gce_preflight.py` tracked without executable permission despite its shebang; corrected mode to `100755`, then the full rerun passed.
 - No provider calls, paid inference, or production changes.
+- The real Google OAuth challenge for the supplied personal account was not run from this environment; the browser check simulates the verified callback and invitation API response. Any actual Google-consent or mail-delivery failure remains deployment/account dependent.
 
 ## Review notes
 

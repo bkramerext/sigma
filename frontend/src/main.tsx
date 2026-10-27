@@ -18,6 +18,19 @@ const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 const ENABLE_WORKSPACE_SIDEBAR = false;
 const SHOW_PROJECT_DETAILS_AND_HISTORY = false;
 const MAX_STRATEGY_APPROACH = 50000;
+const OPENAI_AGENT_CREDIT_ADJECTIVES = [
+  'Intrepid', 'Plucky', 'Spirited', 'Tireless', 'Cheeky', 'Quirky', 'Scrappy', 'Whimsical', 'Spunky', 'Feisty',
+  'Sassy', 'Saucy', 'Wacky', 'Goofy', 'Funky', 'Groovy', 'Jazzy', 'Snazzy', 'Dapper', 'Dashing',
+  'Gallant', 'Valiant', 'Stellar', 'Bionic', 'Brainy', 'Canny', 'Crafty', 'Nimble', 'Spry', 'Astute',
+  'Zealous', 'Fervent', 'Ardent', 'Stalwart', 'Dauntless', 'Audacious', 'Tenacious', 'Sparkly', 'Gleeful', 'Winsome',
+  'Zany', 'Bubbly', 'Bouncy', 'Zesty', 'Zippy', 'Snappy', 'Peppy', 'Perky', 'Daring', 'Playful',
+  'Nerdy', 'Witty', 'Fearless', 'Inventive', 'Mischievous', 'Eccentric', 'Impish', 'Rascally', 'Roguish', 'Jaunty',
+  'Sprightly', 'Frisky', 'Perceptive', 'Ingenious', 'Wily', 'Sly', 'Cunning', 'Foxy', 'Kooky', 'Loopy',
+  'Nutty', 'Dorky', 'Geeky', 'Dweeby', 'Zingy', 'Fizzy', 'Buzzy', 'Chirpy', 'Chipper', 'Perkyish',
+  'Zazzy', 'Zappy', 'Zippyish', 'Squirrely', 'Ditsy', 'Daffy', 'Bonkers', 'Batty', 'Madcap', 'Zestyish',
+  'Spiffy', 'Nifty', 'Swanky', 'Flashy', 'Glitzy', 'Glitzyish', 'Zappyish', 'Sparky', 'Snarky', 'Puckish',
+  'Giddy', 'Gung-ho', 'Spunkyish',
+] as const;
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
@@ -2033,12 +2046,17 @@ function FeedbackForm() {
       {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
         <label>Contact email <span>(optional)</span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>
-        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href="/privacy">proposed privacy notice, version 1</a>.</p>
+        <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
         <button type="submit" className="cloud-secondary-button" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send feedback'}</button>
         {error && <p role="alert">{error}</p>}
       </form>}
     </div>
   </details>;
+}
+
+function privacyNoticeHref(returnDialog: 'invitation' | 'about') {
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  return `/privacy?return_to=${encodeURIComponent(returnTo)}&return_dialog=${returnDialog}`;
 }
 
 function AboutDialog({ onClose }: { onClose: () => void }) {
@@ -2075,7 +2093,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       </details>
       {cloud?.enabled && cloud.ready && <FeedbackForm/>}
     </div>
-    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href="/privacy">Privacy Policy</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('about')}>Privacy Notice</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
   </dialog></div>;
 }
 
@@ -2782,7 +2800,18 @@ function Home({ initialPath, onOpen }: {
   const cloud = useCloudIdentity();
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
-  useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
+  useEffect(() => {
+    const openAbout = () => setAboutOpen(true);
+    window.addEventListener('sigma-open-about', openAbout);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('show_about') === '1') {
+      setAboutOpen(true);
+      params.delete('show_about');
+      const query = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
+    return () => window.removeEventListener('sigma-open-about', openAbout);
+  }, []);
   const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
@@ -2793,6 +2822,7 @@ function Home({ initialPath, onOpen }: {
   const displacementAnimation = useRef<SVGAnimateElement>(null);
   const [creditStreaks, setCreditStreaks] = useState<Array<{ id: number; line: 'name' | 'models' }>>([]);
   const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
+  const [creditAdjective] = useState(() => OPENAI_AGENT_CREDIT_ADJECTIVES[Math.floor(Math.random() * OPENAI_AGENT_CREDIT_ADJECTIVES.length)].toLowerCase());
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
   useEffect(() => {
     // CSS background-size: cover scales the source image by the larger of
@@ -2846,7 +2876,7 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.funding.budget && cloud.funding.budget.remaining_usd <= 0 && <button type="button" className="administrator-settings-link reload-me-pill" onClick={() => window.location.reload()}>Reload me!</button>}{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill inviteInHeader/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button><HomeInvitationAction/>{cloud?.funding.budget && cloud.funding.budget.remaining_usd <= 0 && <button type="button" className="administrator-settings-link reload-me-pill" onClick={() => window.location.reload()}>Reload me!</button>}{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -2858,7 +2888,7 @@ function Home({ initialPath, onOpen }: {
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; GPT Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'import' && <ImportProjectDialog onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
@@ -3247,6 +3277,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     const openAbout = () => setAboutOpen(true);
     window.addEventListener('sigma-open-about', openAbout);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('show_about') === '1') {
+      setAboutOpen(true);
+      params.delete('show_about');
+      const query = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
     return () => window.removeEventListener('sigma-open-about', openAbout);
   }, []);
   useEffect(() => {
@@ -3707,7 +3744,7 @@ function MockAuthSelector() {
   </span>;
 }
 
-function GoogleIdentityPill() {
+function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boolean }) {
   const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState('');
@@ -3719,7 +3756,8 @@ function GoogleIdentityPill() {
     }
   }, [cloud?.deniedInvitationStatus]);
   useEffect(() => {
-    if (deniedEmail && dialog.current && !dialog.current.open) dialog.current.showModal();
+    const inviteIntent = new URLSearchParams(window.location.search).get('invite') === '1';
+    if (deniedEmail && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [deniedEmail]);
   useEffect(() => {
     const open = () => {
@@ -3727,9 +3765,49 @@ function GoogleIdentityPill() {
         .querySelector<HTMLAnchorElement>('.project-google-signin[href="/api/cloud-auth/login"]')
         ?.click();
     };
+    const openInvitation = () => dialog.current?.showModal();
     window.addEventListener('sigma-open-google-signin', open);
-    return () => window.removeEventListener('sigma-open-google-signin', open);
+    window.addEventListener('sigma-open-invitation', openInvitation);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('show_invitation') === '1') {
+      openInvitation();
+      params.delete('show_invitation');
+      const query = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
+    return () => {
+      window.removeEventListener('sigma-open-google-signin', open);
+      window.removeEventListener('sigma-open-invitation', openInvitation);
+    };
   }, []);
+  useEffect(() => {
+    if (!deniedEmail || new URLSearchParams(window.location.search).get('invite') !== '1') return;
+    let cancelled = false;
+    function clearInviteIntent() {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('invite');
+      const query = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
+    async function submitInvitationRequest() {
+      try {
+        const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
+        if (cancelled) return;
+        clearInviteIntent();
+        setInvitationRecorded(true);
+        window.dispatchEvent(new Event('sigma-invitation-recorded'));
+        dialog.current?.close();
+      } catch (cause) {
+        if (cancelled) return;
+        clearInviteIntent();
+        setError(errorMessage(cause));
+        dialog.current?.showModal();
+      }
+    }
+    void submitInvitationRequest();
+    return () => { cancelled = true; };
+  }, [deniedEmail]);
   async function signOut() {
     setError('');
     try {
@@ -3744,23 +3822,38 @@ function GoogleIdentityPill() {
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip-disabled><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
         <a className="project-google-signin" href="/api/cloud-auth/login"><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
-        {cloud?.enabled && !invitationRecorded && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}><span className="connection-dot" aria-hidden="true"/>Invite me!</button>}
+        {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}><span className="connection-dot" aria-hidden="true"/>Invite me!</button>}
       </>}
     <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedEmail) event.preventDefault(); }}>
-      <h2 id="google-invitation-heading">Request an invitation</h2>
+      <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
       {deniedEmail
-        ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here. Read the <a href="/privacy">proposed privacy notice, version 1</a>.</p>
-        : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request. Read the <a href="/privacy">proposed privacy notice, version 1</a>.</p>}
+        ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
+        : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request.</p>}
       {deniedEmail && <p className="google-account-email">{deniedEmail}</p>}
       {deniedEmail
         ? invitationRecorded
           ? <p role="status">{cloud?.deniedInvitationStatus === 'sending' ? 'Your invitation request is already recorded and being processed.' : "Glad you're interested! Your request has been sent along to the right person!"}</p>
-          : <InvitationRequestControls onRecorded={() => setInvitationRecorded(true)}/>
+          : <InvitationRequestControls onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}/>
         : <a className="project-google-signin google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google to continue</a>}
       {error && <p role="alert">{error}</p>}
-      <button type="button" className="google-text-action google-account-close" onClick={() => dialog.current?.close()}>Close</button>
+      <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>
   </>;
+}
+
+function HomeInvitationAction() {
+  const cloud = useCloudIdentity();
+  const [recorded, setRecorded] = useState(false);
+  useEffect(() => {
+    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') setRecorded(true);
+  }, [cloud?.deniedInvitationStatus]);
+  useEffect(() => {
+    const onRecorded = () => setRecorded(true);
+    window.addEventListener('sigma-invitation-recorded', onRecorded);
+    return () => window.removeEventListener('sigma-invitation-recorded', onRecorded);
+  }, []);
+  if (!cloud?.enabled || recorded) return null;
+  return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}><span className="connection-dot" aria-hidden="true"/>Invite me!</button>;
 }
 
 function InvitationRequestControls({ onRecorded }: { onRecorded: () => void }) {
@@ -4196,27 +4289,40 @@ function InvitationWelcomeDialog({ allowance, allowanceUsed, allowanceLoading, o
 
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
+  function closeNotice() {
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get('return_to');
+    if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+      const destination = new URL(returnTo, window.location.origin);
+      if (destination.origin === window.location.origin) {
+        if (params.get('return_dialog') === 'invitation' && destination.searchParams.get('access') !== 'denied') {
+          destination.searchParams.set('show_invitation', '1');
+        } else if (params.get('return_dialog') === 'about') {
+          destination.searchParams.set('show_about', '1');
+        }
+        window.location.assign(`${destination.pathname}${destination.search}${destination.hash}`);
+        return;
+      }
+    }
+    window.location.assign('/');
+  }
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
-    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
+    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><button type="button" className="privacy-close-button" onClick={closeNotice}>Close</button></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
-    <h2>Information SIGMA handles</h2>
-    <p>If you sign in, SIGMA receives your Google account identifier and verified email from Google and stores account, access, and session records. SIGMA uses browser cookies for Google sign-in and your SIGMA session. A denied sign-in can also create a short-lived record used to support an invitation request.</p>
-    <p>If you send product feedback, SIGMA stores the feedback text, submission time, status, and any optional contact email. If you are signed in, it also associates the verified account identifier and email. Feedback rate limits use the signed-in Google subject or a random signed-out browser token; the database stores a hash of that key and a request counter, not the anonymous token itself. Feedback is not sent to AI or email providers by this workflow.</p>
-    <p>If you request an invitation, SIGMA stores the verified Google account identifier, verified email, request time, and review/notification status. The notification email containing the verified account email and request time is sent to zetacontinuation@gmail.com through authenticated SMTP.</p>
-    <p>For an authorized account, SIGMA stores project names and research questions, settings, strategies, session prompts and results, evidence, code and execution outputs, reports, and generated paper files. SIGMA also records account-level research usage and spending estimates for the sponsored service.</p>
-    <h2>How information is used and shared</h2>
-    <p>SIGMA uses account information to authenticate users, control access, isolate private workspaces, and administer invitations. Administrators can review invitation requests and feedback. Optional feedback contact details are shown to those administrators so they can follow up; SIGMA does not require an email address to submit feedback.</p>
-    <p>When a user chooses an AI research feature, SIGMA sends the request and relevant project context to OpenAI using either the selected ChatGPT account authorization or an explicitly selected API-key billing path. These are separate paths; SIGMA does not silently switch between them. OpenAI handles data under the terms and settings of the selected account. SIGMA cannot promise OpenAI retention, training, or other data-use practices in this notice.</p>
-    <p>Google processes sign-in requests. Invitation notifications contain the verified account email and request time and are sent through the configured authenticated SMTP account to zetacontinuation@gmail.com. Feedback content is not included in those emails.</p>
-    <h2>Storage, access, and retention</h2>
-    <p>In the hosted configuration, authentication and administrative records use a SQLite database, and authenticated users' projects and research records use owner-specific workspace storage. The repository's Compose configuration places persistent state on the SIGMA state volume and applies rotating local container logs. The code does not establish a fixed retention period for feedback, invitation records, account records, research content, or usage records, and it does not provide a complete account-and-data deletion workflow.</p>
-    <p>The repository includes optional state-disk snapshot tooling, but this notice cannot confirm whether snapshots are enabled for a particular deployment, the configured snapshot count, or how deletion applies to snapshots. SIGMA does not claim encryption at rest. The deployed host, region, infrastructure logging, and any additional operator retention settings require confirmation.</p>
-    <h2>Cookies and service logs</h2>
-    <p>Hosted Google sign-in uses short-lived flow and denied-access cookies and an eight-hour session cookie. The feedback form may set a random, HTTP-only browser cookie for rate limiting. The application also writes service logs; the exact data visible in infrastructure and provider logs and their retention depends on deployment and operator configuration and has not been fully established.</p>
-    <h2>Questions and requests</h2>
-    <p>A privacy contact and process for access, correction, or deletion requests have not yet been approved. No response time or deletion guarantee is established here. Please do not treat the invitation email address as a confirmed privacy-request contact until the owner approves it.</p>
-    <h2>Owner review required before public use</h2>
-    <p>This draft must be reviewed and approved before it is published as the operative notice. Open questions include: the privacy contact and request-handling process; applicable jurisdiction and entity identity; the production hosting region and operator log settings; whether backups are active and how long they are retained; the intended retention and deletion rules for feedback, invitations, account/audit, usage, and workspace data; and the exact applicable Google, OpenAI, and SMTP provider privacy terms.</p>
+    <p>This notice describes the information SIGMA handles when you use the hosted research workspace.</p>
+    <h2>Information SIGMA stores</h2>
+    <p>When you sign in with Google, SIGMA receives your stable Google account identifier and verified email address. SIGMA stores them with your access role, whether access is active, assigned workspace, sponsored eligibility, selected model-access mode, and connection status. The hosted sign-in session is represented by a browser cookie and a hashed session token in SIGMA's authentication database. Sessions last up to eight hours. Sign-in flow data expires after five minutes; a temporary denied-sign-in record expires after ten minutes.</p>
+    <p>If you request an invitation, SIGMA stores your Google account identifier, verified email, request time, and request/notification/review status. SIGMA sends your verified email and request time through its configured mail service to the SIGMA invitation administrator. If you send product feedback, SIGMA stores your message, submission time, status, and any optional contact email. When signed in, the feedback record is associated with your account identifier and email. Feedback is reviewed in SIGMA's administrator interface; it is not sent to an AI or mail provider. Feedback submissions are limited to five per 24 hours per signed-in account or signed-out browser.</p>
+    <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
+    <h2>How SIGMA uses and shares information</h2>
+    <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
+    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
+    <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
+    <h2>Where information is stored and how long it remains</h2>
+    <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>
+    <p>SIGMA has no general time-based deletion schedule for account, invitation, feedback, research, or sponsored-usage records. Signing out ends your browser session but does not erase these records. Project controls can remove project data where available, but the hosted service does not currently offer a control that deletes all information associated with an account. If the operator makes backups, copies may remain according to the operator's backup schedule.</p>
+    <h2>Cookies and account controls</h2>
+    <p>Hosted sign-in uses Secure, HttpOnly, SameSite=Lax cookies for the sign-in flow and session. The session cookie expires after eight hours; the short-lived sign-in and denied-access cookies expire after five and ten minutes respectively. The feedback form uses a random, HttpOnly cookie to apply its five-per-day limit to signed-out browsers. Signing out removes the active session; it does not delete saved projects or records described above. For a request about your account data, contact the SIGMA administrator who invited you.</p>
   </article></main>;
 }
 

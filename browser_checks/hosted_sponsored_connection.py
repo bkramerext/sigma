@@ -81,6 +81,7 @@ def exercise(origin: str) -> None:
         selected = {"mode": "personal"}
         forced = {"value": False}
         welcome_pending = {"value": True}
+        guest_mode = {"value": False}
         funding = {
             "allowance_usd": 0.75,
             "estimated_usage_usd": 0,
@@ -104,9 +105,13 @@ def exercise(origin: str) -> None:
                     "target": "hosted",
                     "enabled": True,
                     "ready": True,
-                    "authenticated": True,
-                    "user": {"email": "member@example.test", "role": "member"},
-                    "account": {
+                    "authenticated": not guest_mode["value"],
+                    "user": None
+                    if guest_mode["value"]
+                    else {"email": "member@example.test", "role": "member"},
+                    "account": None
+                    if guest_mode["value"]
+                    else {
                         "identity": {"email": "member@example.test", "verified": True},
                         "access": {"status": "invited", "role": "member"},
                         "workspace": {"available": True, "id": "workspace-test"},
@@ -154,6 +159,10 @@ def exercise(origin: str) -> None:
             elif path.endswith("/api/cloud-auth/welcome") and method == "POST":
                 welcome_pending["value"] = False
                 payload = {"dismissed": True}
+            elif path.endswith("/api/cloud-auth/denied"):
+                payload = {"email": "new-guest@example.test", "invitation_status": None}
+            elif path.endswith("/api/cloud-auth/invitation-request") and method == "POST":
+                payload = {"status": "notified", "duplicate": False}
             elif path.endswith(("/api/projects/samples", "/api/projects/recent")):
                 payload = {"projects": []}
             elif path.endswith("/api/ui-instance"):
@@ -162,6 +171,17 @@ def exercise(origin: str) -> None:
 
         page.route("**/api/**", mock_api)
         page.goto(origin + "/", wait_until="networkidle")
+        assert page.locator("html").evaluate(
+            "element => getComputedStyle(element).backgroundColor"
+        ) == "rgb(2, 7, 17)"
+        assert page.locator("body").evaluate(
+            "element => getComputedStyle(element).backgroundColor"
+        ) == "rgb(2, 7, 17)"
+        credit = page.locator(".home-art-credit")
+        expect(credit).to_be_visible()
+        credit_lines = [line.strip() for line in credit.inner_text().splitlines() if line.strip()]
+        assert credit_lines[0] == "Crafted by Brian Kramer", credit_lines
+        assert re.fullmatch(r"and [a-z-]+ OpenAI agents\.", credit_lines[1]), credit_lines
         welcome = page.locator("#invitation-welcome-dialog")
         expect(welcome).to_be_visible()
         expect(welcome.get_by_role("heading", name="You have been invited!")).to_be_visible()
@@ -173,6 +193,12 @@ def exercise(origin: str) -> None:
         assert abs(welcome_box["y"] + welcome_box["height"] / 2 - 450) < 30, welcome_box
         welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
+        # Keep the temporary invitation action available for signed-in
+        # accounts so the Google account chooser can be tested from an
+        # existing session as well as a guest session.
+        expect(
+            page.locator(".home-topline .home-header-actions .project-invite-me")
+        ).to_be_visible()
         page.reload(wait_until="domcontentloaded")
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         funding.update(
@@ -236,6 +262,71 @@ def exercise(origin: str) -> None:
         page.reload(wait_until="domcontentloaded")
         expect(page.locator(".api-connection > summary")).to_contain_text(
             "SIGMA-sponsored GPT Usage"
+        )
+
+        # The guest invitation action belongs directly below About in the
+        # right-hand home header action stack, and still opens its dialog.
+        guest_mode["value"] = True
+        page.reload(wait_until="domcontentloaded")
+        about = page.locator(".home-topline .home-about-button")
+        invite = page.locator(".home-topline .home-header-actions .project-invite-me")
+        expect(about).to_be_visible()
+        expect(invite).to_be_visible()
+        about_box = about.bounding_box()
+        invite_box = invite.bounding_box()
+        assert about_box and invite_box
+        assert invite_box["y"] >= about_box["y"] + about_box["height"], (about_box, invite_box)
+        invite.click()
+        invitation_dialog = page.locator("#google-invitation-dialog")
+        expect(invitation_dialog).to_be_visible()
+        expect(invitation_dialog.get_by_role("link", name="Privacy Notice")).to_be_visible()
+        heading_box = invitation_dialog.locator(".google-invitation-heading h2").bounding_box()
+        close_box = invitation_dialog.get_by_role("button", name="Close").bounding_box()
+        assert heading_box and close_box
+        assert close_box["x"] >= heading_box["x"] + heading_box["width"], (heading_box, close_box)
+        assert (
+            invitation_dialog.get_by_role("button", name="Close").evaluate(
+                "element => getComputedStyle(element).textDecorationLine"
+            )
+            == "underline"
+        )
+        assert (
+            invitation_dialog.get_by_role("button", name="Close").evaluate(
+                "element => getComputedStyle(element).backgroundColor"
+            )
+            == "rgba(0, 0, 0, 0)"
+        )
+        dialog_box = invitation_dialog.bounding_box()
+        privacy_box = invitation_dialog.get_by_role("link", name="Privacy Notice").bounding_box()
+        assert dialog_box and privacy_box
+        assert abs(privacy_box["x"] - dialog_box["x"] - 24) <= 2, (dialog_box, privacy_box)
+        invitation_dialog.get_by_role("link", name="Privacy Notice").click()
+        expect(page).to_have_url(re.compile(r"/privacy\?return_to="))
+        page.locator(".privacy-close-button").click()
+        invitation_dialog = page.locator("#google-invitation-dialog")
+        expect(invitation_dialog).to_be_visible()
+        invitation_dialog.get_by_role("button", name="Close").click()
+        page.locator(".home-topline .home-about-button").click()
+        about_dialog = page.locator(".about-dialog")
+        expect(about_dialog.get_by_role("link", name="Privacy Notice")).to_be_visible()
+        about_dialog.get_by_role("link", name="Privacy Notice").click()
+        expect(page).to_have_url(re.compile(r"/privacy\?return_to=.*return_dialog=about"))
+        page.locator(".privacy-close-button").click()
+        expect(about_dialog).to_be_visible()
+        about_dialog.get_by_text("Send product feedback", exact=True).click()
+        about_dialog.locator(".about-feedback-form a").click()
+        expect(page).to_have_url(re.compile(r"/privacy\?return_to=.*return_dialog=about"))
+        page.locator(".privacy-close-button").click()
+        expect(about_dialog).to_be_visible()
+
+        # An invite-intent Google sign-in submits immediately after identity
+        # verification and removes Invite me without reopening a dialog.
+        posts.clear()
+        page.goto(origin + "/?access=denied&invite=1", wait_until="networkidle")
+        expect(page.locator(".project-invite-me")).to_have_count(0)
+        expect(page.locator("#google-invitation-dialog")).not_to_be_visible()
+        assert sum(path.endswith("/api/cloud-auth/invitation-request") for path, _ in posts) == 1, (
+            posts
         )
         browser.close()
 

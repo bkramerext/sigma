@@ -121,14 +121,36 @@ acknowledgment button; dismissal is persisted server-side, so reloads do not
 repeat it. The account state migration defaults existing users to no pending
 welcome. Account switching does not reuse another user's allowance.
 
+The home **Invite me!** action sits directly below About on the home header.
+For account testing, it is temporarily visible to any account while hosted
+sign-in is enabled, including signed-in members, so the Google account chooser
+can be opened from an existing session. The invitation endpoint still requires
+a verified, server-issued denied-login cookie before it records a request.
+After a Google challenge started from that action, an uninvited verified
+identity submits the invitation request automatically; success closes the
+dialog and removes the action. On delivery failure, the request dialog opens
+with the error so the user can retry. The invitation dialog has an underlined,
+transparent Close action after its title and a lower-left **Privacy Notice**
+link. Closing the privacy page returns to the invitation dialog; the About
+dialog's Privacy Notice link likewise returns to About. The notice body now
+describes SIGMA's stored identity, access, invitation, feedback, project, and
+sponsored-usage data and remains version 1.0. The artwork credit reads
+“Crafted by Brian Kramer” / “and [a randomly selected adjective] OpenAI agents.”
+
 Focused validation passed: `tests/cloud_auth.py` (50 tests), Ruff, frontend
 typecheck/build, and `browser_checks/hosted_sponsored_connection.py` in real
 Chrome with mocked API, including the one-time behavior, message, amount, and
-centering. `./sigma test` passed all steps, including Ruff, Pyright, frontend
-typecheck/build, and deployment checks. The full run exposed a tracked
+centering, invitation layout, both privacy return paths, and the automatic
+invite-intent submission. `./sigma test` passed all steps, including Ruff,
+Pyright, frontend typecheck/build, and deployment checks. The full run exposed a tracked
 executable-mode issue in `deploy/gce_preflight.py`; its shebang/mode is now
 consistent with Ruff and scripts that invoke it directly. No paid provider
-calls or production configuration changes occurred.
+calls, live Google OAuth challenge, or production configuration changes
+occurred; the supplied personal account's actual Google challenge therefore
+remains unverified.
+The browser and application canvas now start at `#020711`, matching the fixed
+home artwork's dark fallback, to prevent a light default page flash before the
+artwork renders.
 See [invitation welcome R4R handoff](../messages/issue280_green_invited_welcome_r4r.txt).
 
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)

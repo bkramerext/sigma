@@ -1,134 +1,106 @@
 # SIGMA Privacy Notice — proposed version 1.0
 
-**Status:** Draft for Brian's approval. Do not treat or publish this text as
-approved policy until the owner resolves the questions at the end.
+**Status:** Candidate wording for owner review.
 
 **Prepared:** 2026-10-26
-
 **Proposed version:** 1.0
-**Proposed public route:** `/privacy`
+**Public route:** `/privacy`
 
-The unauthenticated `/privacy` page uses the following proposed wording and is
-marked as a draft. It is linked from feedback collection, invitation requests,
-and About. No production deployment was performed.
+The public page and this document should remain aligned. This wording describes
+known SIGMA application behavior; deployment-specific physical location and
+backup settings are configured by the operator.
 
 ## Proposed notice wording
 
-### Information SIGMA handles
+### Information SIGMA stores
 
-If you sign in, SIGMA receives your Google account identifier and verified
-email from Google and stores account, access, and session records. SIGMA uses
-browser cookies for Google sign-in and your SIGMA session. A denied sign-in can
-also create a short-lived record used to support an invitation request.
+When you sign in with Google, SIGMA receives your stable Google account
+identifier and verified email address. SIGMA stores them with your access role,
+whether access is active, assigned workspace, sponsored eligibility, selected
+model-access mode, and connection status. The hosted sign-in session is
+represented by a browser cookie and a hashed session token in SIGMA's
+authentication database. Sessions last up to eight hours. Sign-in flow data
+expires after five minutes; a temporary denied-sign-in record expires after ten
+minutes.
 
-If you send product feedback, SIGMA stores the feedback text, submission time,
-status, and any optional contact email. If you are signed in, it also associates
-the verified account identifier and email. Feedback rate limits use the signed-in Google subject or a random signed-out
-browser token; the database stores a hash of that key and a request counter,
-not the anonymous token itself. Feedback is not sent to AI or email providers by
-this workflow.
+If you request an invitation, SIGMA stores your Google account identifier,
+verified email, request time, and request/notification/review status. SIGMA
+sends your verified email and request time through its configured mail service
+to the SIGMA invitation administrator. If you send product feedback, SIGMA
+stores your message, submission time, status, and any optional contact email.
+When signed in, the feedback record is associated with your account identifier
+and email. Feedback is reviewed in SIGMA's administrator interface; it is not
+sent to an AI or mail provider. Feedback submissions are limited to five per
+24 hours per signed-in account or signed-out browser.
 
-If you request an invitation, SIGMA stores the verified Google account
-identifier, verified email, request time, and review/notification status. The
-notification email containing the verified account email and request time is
-sent to `zetacontinuation@gmail.com` through authenticated SMTP.
+Your account workspace can contain project titles and questions, project
+settings, strategies, research prompts and results, evidence, uploaded or
+imported project files, code and execution output, analyses, reports, and
+generated papers. SIGMA also stores research-session identifiers and
+sponsored-service accounting records, including reserved and estimated usage,
+call status, and token counts when the provider returns them. Usage estimates
+are used to enforce SIGMA spending limits and may differ from a provider's
+final bill.
 
-For an authorized account, SIGMA stores project names and research questions,
-settings, strategies, session prompts and results, evidence, code and execution
-outputs, reports, and generated paper files. SIGMA also records account-level
-research usage and spending estimates for the sponsored service.
+### How SIGMA uses and shares information
 
-### How information is used and shared
+SIGMA uses your Google account information to sign you in, apply access rules,
+and keep your projects in your account workspace. SIGMA administrators can
+review invitation requests and product feedback, including any optional
+contact email.
 
-SIGMA uses account information to authenticate users, control access, isolate
-private workspaces, and administer invitations. Administrators can review
-invitation requests and feedback. Optional feedback contact details are shown
-to those administrators so they can follow up; SIGMA does not require an email
-address to submit feedback.
+When you run an AI research feature, SIGMA sends the prompt and the project
+context required or selected for that action to the configured AI provider.
+In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side
+service credential. The provider returns a response to SIGMA, and research
+results are saved in the project. Do not include information in a research
+request that you do not want sent to the selected provider.
 
-When a user chooses an AI research feature, SIGMA sends the request and
-relevant project context to OpenAI using either the selected ChatGPT account
-authorization or an explicitly selected API-key billing path. These are
-separate paths; SIGMA does not silently switch between them. OpenAI handles
-data under the terms and settings of the selected account. SIGMA cannot promise
-OpenAI retention, training, or other data-use practices in this notice.
+For an invitation request, SIGMA's configured mail service receives the
+verified email and request time so it can notify the invitation administrator.
+Product feedback is not included in invitation email. SIGMA does not send
+feedback messages to AI providers.
 
-Google processes sign-in requests. Invitation notifications contain the
-verified account email and request time and are sent through the configured
-authenticated SMTP account to zetacontinuation@gmail.com. Feedback content is
-not included in those emails.
+### Where information is stored and how long it remains
 
-### Storage, access, and retention
+In hosted SIGMA, authentication, access, invitation, and feedback records are
+kept in server-side SQLite databases. Each signed-in account has a separate
+server-side workspace for its projects and research files. Sponsored usage
+records are kept in a server-side accounting ledger. The service stores these
+in its configured persistent storage; the exact physical hosting location and
+backup schedule are set by the operator.
 
-In the hosted configuration, authentication and administrative records use a
-SQLite database, and authenticated users' projects and research records use
-owner-specific workspace storage. The repository's Compose configuration places
-persistent state on the SIGMA state volume and applies rotating local container
-logs. The code does not establish a fixed retention period for feedback,
-invitation records, account records, research content, or usage records, and it
-does not provide a complete account-and-data deletion workflow.
+SIGMA has no general time-based deletion schedule for account, invitation,
+feedback, research, or sponsored-usage records. Signing out ends your browser
+session but does not erase these records. Project controls can remove project
+data where available, but the hosted service does not currently offer a control
+that deletes all information associated with an account. If the operator makes
+backups, copies may remain according to the operator's backup schedule.
 
-The repository includes optional state-disk snapshot tooling, but this notice
-cannot confirm whether snapshots are enabled for a particular deployment, the
-configured snapshot count, or how deletion applies to snapshots. SIGMA does
-not claim encryption at rest. The deployed host, region, infrastructure
-logging, and any additional operator retention settings require confirmation.
+### Cookies and account controls
 
-### Cookies and service logs
+Hosted sign-in uses Secure, HttpOnly, SameSite=Lax cookies for the sign-in flow
+and session. The session cookie expires after eight hours; the short-lived
+sign-in and denied-access cookies expire after five and ten minutes
+respectively. The feedback form uses a random, HttpOnly cookie to apply its
+five-per-day limit to signed-out browsers. Signing out removes the active
+session; it does not delete saved projects or records described above. For a
+request about your account data, contact the SIGMA administrator who invited
+you.
 
-Hosted Google sign-in uses short-lived flow and denied-access cookies and an
-eight-hour session cookie. The feedback form may set a random, HTTP-only
-browser cookie for rate limiting. The application also writes service logs;
-the exact data visible in infrastructure and provider logs and their retention
-depends on deployment and operator configuration and has not been fully
-established.
+## Implementation basis
 
-### Questions and requests
+- `src/sigma/cloud_auth.py`: account identity/access state, sessions, denied
+  sign-ins, invitation requests, feedback content, and administrator review.
+- `src/sigma/cloud_workspaces.py`: server-generated per-account workspace
+  mapping and workspace directory access boundaries.
+- `src/sigma/cloud_research.py`: research jobs and sponsored call reservations,
+  usage estimates, statuses, and available token counts.
+- `src/sigma/openai_connection.py` and `src/sigma/cloud_research.py`: selected
+  provider request path and hosted sponsored inference.
+- `deploy/compose.yaml` and `deploy/compose.gce.yaml`: hosted persistence and
+  service configuration. Physical hosting location and backup schedule are
+  operator settings, not application constants.
 
-A privacy contact and process for access, correction, or deletion requests
-have not yet been approved. No response time or deletion guarantee is
-established here. Please do not treat the invitation email address as a
-confirmed privacy-request contact until the owner approves it.
-
-## Questions requiring owner resolution before publication
-
-1. What legal entity/operator name and privacy contact should the notice name?
-   Who handles access, correction, and deletion requests, and what process and
-   response expectations should be stated?
-2. Which jurisdictions and audience should the notice cover?
-3. What is the actual hosted location/region and what application, host, edge,
-   and provider logs are enabled, which fields can they contain, and how long
-   are they retained?
-4. Are disk snapshots active for this deployment? What is the configured
-   snapshot count, and how are deleted records reflected in snapshots?
-5. What retention and deletion process should apply to feedback, invitations,
-   auth/audit records, usage ledgers, workspaces, generated artifacts, and
-   backups? Current code has no complete user-facing deletion workflow.
-6. Which current Google, OpenAI ChatGPT-plan/API, SMTP, and hosting terms apply
-   to the actual deployment? Confirm and link the relevant terms without making
-   unsupported training, retention, or encryption promises.
-7. Does the owner approve storing optional contact email alongside feedback,
-   visible to SIGMA administrators, and the 5-per-24-hour feedback limit?
-
-## Implementation audit basis
-
-- `src/sigma/cloud_auth.py`: Google subject/email sessions, denied-access and
-  invitation records, invitation SMTP payload, SQLite auth data, administrator
-  access, and the new feedback records/rate-limit table.
-- `src/sigma/cloud_workspaces.py`, `src/sigma/storage.py`, and
-  `src/sigma/projects.py`: owner-specific project storage and local/persistent
-  storage roots.
-- `src/sigma/proposals.py`, `src/sigma/openai_connection.py`, and
-  `src/sigma/chatgpt_auth.py`: explicit OpenAI API-key and ChatGPT account
-  authorization request paths.
-- `deploy/compose.yaml`, `deploy/Caddyfile`, and `deploy/nginx.conf`: hosted
-  state mount, service logging rotation, HTTPS reverse proxy, and SPA route
-  fallback. Caddy access logging is not configured in the checked-in site
-  file; external edge/host logging was not independently audited.
-- `deploy/backup-state.sh` and `deploy/backup-retention.py`: optional snapshot
-  workflow supports a configured minimum of 14 recovery points, but repository
-  code does not prove it is installed or active on a particular host.
-
-This draft reflects repository behavior, not a legal review or a claim about
-provider/host policies. Re-audit and version the notice when deployment,
-provider, data, or retention behavior changes.
+Review this version when storage, providers, request contents, or deployment
+retention settings change. Version remains 1.0.
