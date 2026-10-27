@@ -28,7 +28,8 @@ from sigma.samples import open_sample_project, sample_projects
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
-    assert len(catalog) == 17
+    assert len(catalog) == len(sources)
+    assert {entry["id"] for entry in catalog} == {path.parent.name for path in sources}
     assert {entry["title"] for entry in catalog} >= {
         "Nonconsecutive Subset Sums Modulo 3",
         "Did Jesus Use Cannabis?",

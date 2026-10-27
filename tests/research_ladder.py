@@ -11,7 +11,7 @@ from sigma import recents, samples
 
 ROOT = Path(__file__).resolve().parents[1]
 LADDER = (
-    ("handshake-count-easy", "easy", 1),
+    ("maximum-regions-by-lines", "easy", 1),
     ("euler-product-primes", "medium", 2),
     ("alternating-zeta-boundary", "hard", 2),
     ("theta-functional-equation", "hard", 2),
@@ -71,24 +71,34 @@ def main() -> None:
                 raw, entry = samples._load(identifier)
                 assert entry.difficulty == difficulty
                 assert entry.investigation_type == "mathematical"
-                assert len(raw["strategies"]) == strategy_count
+                active_strategies = [
+                    strategy for strategy in raw["strategies"] if not strategy["removed_at"]
+                ]
+                assert len(active_strategies) == strategy_count
                 assert catalog[identifier]["strategy_count"] == strategy_count
-                assert len({strategy["id"] for strategy in raw["strategies"]}) == strategy_count
-                for strategy in raw["strategies"]:
+                assert len({strategy["id"] for strategy in raw["strategies"]}) == len(
+                    raw["strategies"]
+                )
+                for strategy in active_strategies:
                     assert strategy["author_kind"] == "human"
                     assert len(strategy["approach"]) > 100
-                if identifier == "handshake-count-easy":
+                if identifier == "maximum-regions-by-lines":
+                    archived_strategies = [
+                        strategy for strategy in raw["strategies"] if strategy["removed_at"]
+                    ]
+                    assert len(archived_strategies) == 1
+                    assert "R(n) = 1 + n(n + 1)/2" in archived_strategies[0]["summary"]
                     supplied_text = json.dumps(
-                        {"problem": raw["problem"], "strategies": raw["strategies"]},
+                        {"problem": raw["problem"], "strategies": active_strategies},
                         ensure_ascii=False,
                     )
-                    assert "n(n−1)/2" not in supplied_text
-                    assert "binomial coefficient" not in supplied_text
+                    assert "1 + n(n + 1)/2" not in supplied_text
+                    assert "R(n) = 1 +" not in supplied_text
                 original_bytes = (ROOT / "samples" / identifier / "project.json").read_bytes()
                 copy = samples.open_sample_project(identifier)
                 assert copy.project.id != raw["id"]
                 assert copy.project.title == entry.title + " v1"
-                assert len(copy.project.strategies) == strategy_count
+                assert len(copy.project.active_order) == strategy_count
                 assert (
                     ROOT / "samples" / identifier / "project.json"
                 ).read_bytes() == original_bytes

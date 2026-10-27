@@ -6499,3 +6499,31 @@ GitHub checks passed on implementation/test head
 Outcome, and SIGMA verification. The handoff/status-only follow-up commit will
 receive a fresh CI run before final R4R. See the
 [PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).
+
+## PR #257 T249 sample and T201 recovery CI remediation (2026-10-26)
+
+Merged the latest `main` into `feature/local-mock-auth-walkthrough`, including
+main's intentional removal of the pairwise-handshakes sample. Updated Recent
+catalog coverage to compare discovered entries with the single-file sample
+catalog. Replaced the removed ladder sample with Maximum Regions Formed by
+Lines; the ladder checks its one active answer-free starter, distinct strategy
+IDs, and continued preservation of the removed solution in the archived
+strategy.
+
+T201's fixture now uses a `.json` project and canonical inspected path. Its
+browser acceptance reads saved session records from the project bundle. The
+overflow message recommends creating a new strategy from saved findings, and
+the browser recovery flow uses the visible New action. It still verifies that
+blocked starts create no session, reserve no number, make no provider call,
+and leave the source session unchanged before the fake-provider follow-up.
+
+Local verification: `uv run --locked --no-sync python tests/recents.py`,
+`uv run --locked --no-sync python tests/research_ladder.py`, and
+`uv run python tests/research_sessions.py` passed. `browser_checks/t201_overflow.py`
+passed in installed Google Chrome against the isolated local fake provider;
+`browser_checks/t257_mock_auth.py` passed in installed Google Chrome. The
+complete `./sigma test` passed, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. `git diff --check` passed. The build retains
+its existing advisory about the JavaScript chunk over 500 kB; Python emitted
+Starlette's existing `TestClient` deprecation warning. No live provider or OAuth
+calls occurred; cost was $0. Final GitHub CI for the pushed head is pending.

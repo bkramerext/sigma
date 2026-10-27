@@ -2636,7 +2636,7 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
         except ProjectError as exc:
             message = str(exc)
             assert "Research was not started" in message
-            assert "Fork strategy from findings" in message
+            assert "create a new strategy informed by the saved findings" in message
             assert "Disable the affected strategy" in message
             assert omitted_id in message
             assert indexed[5][strategy.id][0]["text"] in message

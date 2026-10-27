@@ -4389,9 +4389,8 @@ async def start_session(
                     "obligations exceed the context bound. "
                     + "; ".join(blocked)
                     + ". Disable the affected strategy before starting another session. To pursue "
-                    "a narrower question, expand a saved session and choose Fork strategy from "
-                    "findings. Review its copied recent findings before saving; earlier evidence "
-                    "remains in the saved session. Editing the original strategy "
+                    "a narrower question, create a new strategy informed by the saved findings; "
+                    "earlier evidence remains in the saved session. Editing the original strategy "
                     "does not remove its history. Earlier sessions and evidence remain available."
                 )
             record["session_number"] = _allocate_session_number(view.path, records)
