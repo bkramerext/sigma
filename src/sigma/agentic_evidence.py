@@ -108,7 +108,9 @@ def _bundle_entries(path: Path, project_id: str) -> list[tuple[str, int, dict[st
     prefix = "evidence/agentic-runs/"
     entries: list[tuple[str, int, dict[str, Any]]] = []
     for name in list_files(path):
-        if not name.startswith(prefix) or not re.fullmatch(r"[0-9a-f]{32}\.json", name[len(prefix):]):
+        if not name.startswith(prefix) or not re.fullmatch(
+            r"[0-9a-f]{32}\.json", name[len(prefix):]
+        ):
             continue
         contents = read_file(path, name)
         if len(contents) > MAX_RECORD_BYTES:
@@ -117,7 +119,12 @@ def _bundle_entries(path: Path, project_id: str) -> list[tuple[str, int, dict[st
             record = json.loads(contents)
         except (OSError, ValueError, UnicodeDecodeError) as exc:
             raise ProjectError(f"Agentic evidence record {name} is unreadable") from exc
-        if not isinstance(record, dict) or record.get("schema_version") != 1 or record.get("project_id") != project_id or record.get("run_id") != Path(name).stem:
+        if (
+            not isinstance(record, dict)
+            or record.get("schema_version") != 1
+            or record.get("project_id") != project_id
+            or record.get("run_id") != Path(name).stem
+        ):
             raise ProjectError(f"Agentic evidence record {name} does not match this project")
         entries.append((name, len(contents), record))
     entries.sort(key=lambda item: (item[2].get("started_at", ""), item[0]))
