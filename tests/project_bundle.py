@@ -711,8 +711,7 @@ def main() -> None:
                 _save(created.path, lifecycle)
                 assert _read(created.path, lifecycle_id)["status"] == status
                 assert any(
-                    item["id"] == lifecycle_id
-                    for item in read_session_snapshot(created.path)[0]
+                    item["id"] == lifecycle_id for item in read_session_snapshot(created.path)[0]
                 )
             removed = remove_session(
                 created.path, lifecycle_id, lifecycle["updated_at"]
