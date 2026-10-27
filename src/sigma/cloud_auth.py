@@ -678,8 +678,8 @@ async def middleware(request: Request, call_next):
         )
     if _mock_enabled(cfg) and principal.subject.startswith("mock:"):
         # Keep normal project CRUD available for UI acceptance testing.
-        # Fail closed for AI and research execution until the deterministic
-        # mock executor is implemented. These checks are server-side.
+        # The allowlisted mock research route is deterministic and provider-free.
+        # Keep live AI/provider and other research execution routes server-denied.
         # Explicitly allow known provider-free project mutations. New routes
         # fail closed until reviewed, instead of relying on name heuristics.
         safe_project_writes = {
