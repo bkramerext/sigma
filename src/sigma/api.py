@@ -646,7 +646,7 @@ def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
     from sigma.project_bundle import BundleError, import_bundle
     from sigma.projects import (
-        _occupied_titles, _project_name, _require_available_title,
+        _project_name, _require_available_title,
         _title_registry_lock, projects_root,
     )
     import base64
