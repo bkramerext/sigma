@@ -1,112 +1,65 @@
-# Green R4R — Issue #280 invitation welcome follow-up
+# Green R4R — Issue #280 sponsored allowance and invitation flow
 
 - **Ticket:** Issue #280
 - **Branch:** `green/issue-280-invited-welcome`
-- **Base:** `integration/t279-t280` at combined commit `5971d35e42cfecdb21c5879b07d3b7cb407e10c8`
-- **Pull request:** [#284](https://github.com/bkramerext/sigma/pull/284)
-- **Implementation commit:** `163220bbe865793ae1118e343d526db038856a17`
-- **Production flag:** unchanged; `SIGMA_CLOUD_FORCE_SPONSORED_MODE` remains default-off unless explicitly configured by an operator.
+- **PR:** [#285](https://github.com/bkramerext/sigma/pull/285)
+- **Head:** `71e7a8baa478d215af905850b718163150154d38`
+- **Production force flag:** unchanged and default-off. No production setting was changed.
 
-## Changes
+## Review scope
 
-Eligible sponsored users get a centered “You have been invited!” dialog on
-each fresh page entry; a browser reload does not reopen it. The dialog starts
-with “Welcome to SIGMA.” followed by one of 100 distinct curiosity/research-
-themed lines in normal body text. The allowance copy uses the effective
-allowance for the signed-in account when it is $1.00 or less. A new account
-gets “We will start you off with a $X.XX allowance.”; accounts with usage or
-holds get “We added a $X.XX allowance to your account.” Escape and the
-acknowledgment button dismiss it for that page visit. The invitation
-acknowledgment remains persisted server-side. A database migration gives
-existing accounts a default of no pending invitation welcome. Browser state
-does not carry allowance across account switches.
+This branch implements the sponsored allowance and local force-mode behavior,
+invitation/reload dialogs, welcome message, administration table changes,
+session progress text and toast cap. The sponsored pill displays the balance
+from the signed-in account's local ledger, with a custom hover/focus/mobile
+explanation. Server checks enforce eligibility, provider choice, and spending
+limits. Hosted `SIGMA_CLOUD_FORCE_SPONSORED_MODE` remains default-off.
 
-The sponsored pill is retained in all header render paths. For an eligible
-local sponsor, activating it starts the personal ChatGPT connection flow even
-if a personal connection already exists; it does not disconnect that account.
+Local sponsored inference uses the designated `zetacontinuation@gmail.com`
+ChatGPT sponsor by default, even when `SIGMA_CLOUD_INFERENCE_PROVIDER` is
+unset. The signed-in member's ChatGPT session is not used. Connection checks,
+provider credential validation and ledger job records share this selection.
+Local spending is reserved against the member's configured grant. `--sponsored`
+does not enable `--mock-auth`; mock identities and the simulated `$25`
+allowance still require `--mock-auth` explicitly. At zero allowance, the pill
+offers **Reload me!**.
 
-While a research session is running, its outcome badge shows a 50-word maximum
-summary of the current action and research focus, refreshed with session
-updates. When neither field is available, the original “Pending · provisional”
-label remains. Reopening a project from Home by clicking its project title
-automatically expands and scrolls the Sessions pane to the active running
-session.
+The welcome appears on each fresh page entry for an eligible signed-in user,
+but not on browser refresh. It starts with “Welcome to SIGMA.” and one of 100
+distinct curiosity-themed lines. Invitation and reload requests remain
+administrator-reviewed. Other changes include Privacy Notice return paths,
+SIGMA action-button styling, invitation Add/Remove actions and row filtering,
+compact scrollable authorized-user rows, five visible toasts with oldest-first
+eviction, and the 50-word running-session summary with fallback text.
 
-The existing force-sponsored-mode flag configuration and rollback procedure
-are documented in `docs/CLOUD_DEPLOYMENT.md` (section “Hosted sponsored-mode
-selection”): the flag defaults off, only applies alongside sponsored access,
-and rollback sets it to false followed by the guarded release/start procedure.
-Production configuration was not changed and the flag was not enabled.
+Configuration and rollback are documented in `docs/GETTING_STARTED.md` and
+`docs/CLOUD_DEPLOYMENT.md`. Rollback disables the hosted flag and restarts using
+the guarded release procedure. Production was not enabled.
 
-The home header places **Invite me!** directly under About. For account
-testing, the action is temporarily visible to any account with hosted sign-in
-enabled, including signed-in members, so it can open Google's account chooser
-from an existing session. The request endpoint still requires a verified,
-server-issued denied-login cookie before recording a request. A Google challenge
-started from that action carries server-bound invite intent; after verified
-sign-in for an uninvited identity, the client posts the request to the existing
-server-verified invitation endpoint. Success dismisses the dialog and removes
-Invite me. Delivery errors open the request dialog with a retry path. The
-request dialog's underlined, transparent Close follows its title; Privacy
-Notice is at lower left. Closing that notice returns to the invitation dialog,
-and the About link returns to About. Both locations display **Privacy Notice**.
-The sign-in pill's lower gap is 2.5 times the upper gap. Failed invitation
-requests show one error and a standard **Try again** pill; a successful retry
-closes the dialog and removes Invite me.
-Administrator Settings now offers **Add** beside invitation requests. It adds
-the verified email as a member using the configured default allowance and
-changes the action to **Added** for an active email rule. The request table
-omits Status and gives the verified-account column one third more width. The
-Authorized users table collapses case/trailing-dot duplicates and shows the
-most recently updated rule, preferring normalized spelling when timestamps tie.
-The live notice now describes identity/access state, session cookies,
-invitation and feedback records, per-account workspace content, sponsored
-accounting, provider/mail sharing, and the current retention controls. It
-remains version 1.0. The home artwork credit reads “Crafted by Brian Kramer”
-and “and [a randomly selected adjective] OpenAI agents.” The adjective is
-selected from the user's supplied list once per page load.
+## Verification evidence
 
-## Verification
+- `./sigma test` — passed, including Ruff, Pyright, frontend typecheck/build,
+  toast tests, research/session and cloud-sponsored API tests.
+- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py`
+  — passed in real Chrome with deterministic API fixtures. Covered allowance
+  presentation/hover/focus/mobile interaction, sponsored selection and reload,
+  invitation welcome, reload request, hidden mock controls without mock auth,
+  zero-allowance **Reload me!**, and admin/invitation flows.
+- `tests/cloud_auth.py` — 54 passed. The local sponsored connection regression
+  omits `SIGMA_CLOUD_INFERENCE_PROVIDER`, verifies the designated sponsor
+  provider, and rejects use of the local member ChatGPT session.
+- `tests/cloud_sponsor.py` — 9 passed, including local default provider and
+  designated administrator identity.
+- `git diff --check` — passed.
+- Restarted the local service with `./sigma start --nav` after backend changes.
+  Signed-in status, local allowance, and AI connection endpoints returned
+  HTTP 200. No live generation was attempted, so actual sponsored-session
+  dispatch and the account's exact remaining cents were not independently
+  observed in this verification.
 
-- `browser_checks/a17_research.py` — sample fixture and current Home-link
-  selectors are updated, but the run stops at an obsolete export-dialog radio
-  assertion before reaching the running-session summary and project-title
-  scrolling checks. Those browser assertions are not recorded as passing.
+The separate `browser_checks/a17_research.py` still stops at its obsolete
+export-dialog assertion before the new running-session checks; this script is
+not claimed as passing. The browser acceptance above uses deterministic local
+fixtures. No paid inference, production changes, or self-merge occurred.
 
-- `./sigma start --sponsored` — loopback-only forced sponsored presentation for
-  eligible, actually signed-in local Google accounts. It does not enable mock
-  auth or mock controls. The pill reads the account's configured local grant
-  and labels it a preview; local research does not consume hosted allowance.
-  Clicking a connected sponsored pill disconnects the local provider; reload
-  rediscovers sponsored mode. Only explicit `--mock-auth` enables simulated
-  identities and the `$25` mock allowance. The hosted force flag remains off.
-- `tests/cloud_auth.py` covers mock selection, sponsored state, simulated
-  allowance, provider reset on reload, and rejection of the personal-mode
-  change. `tests/tooling.py` covers CLI help and local launch environment.
-
-- `uv run python tests/cloud_auth.py` — PASS, 50 tests, including invite eligibility, denial, migration, persistent dismissal and repeat sign-in.
-- `uv run ruff check src/sigma/cloud_auth.py tests/cloud_auth.py browser_checks/hosted_sponsored_connection.py` — PASS.
-- `npm --prefix frontend run typecheck` — PASS.
-- `npm --prefix frontend run build` — PASS; existing non-failing Vite chunk-size advisory.
-- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome against mocked API; allowance, welcome dismissal/reload/centering, Invite me placement for both signed-in and guest accounts, transparent underlined Close after title, 2.5x lower sign-in spacing, lower-left Privacy Notice and return paths, automatic invite-intent submission, single-error Try again recovery, invitation Add action with wider account column/no Status, duplicate-rule preference, and artwork pre-render verified.
-- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py` — PASS in real Chrome for allowance text, hover/focus/mobile tap, transparent allowance control, sponsorship explanation, green simulated-active indicator, hidden mock controls, simulated disconnect, and sponsored state restored after reload.
-- `npm --prefix frontend run typecheck` — PASS.
-- `./sigma test` — PASS after formatting, all steps including Ruff, Pyright,
-  frontend typecheck/build and deployment checks. This pass preceded the latest
-  sponsored sign-in panel and toast cap edits; those edits passed frontend
-  typecheck and focused toast unit tests.
-- `browser_checks/t40_cloud_ui.py` — could not complete against the already-running service on port 5173: the check expected its sign-in fixture, while that service served the public guest home. The isolated real-Chrome acceptance above passed with deterministic mocked admin APIs and exercised the invitation Add and duplicate-display behavior.
-- No provider calls, paid inference, or production changes.
-- Toasts are capped at five; adding a sixth removes the oldest and clears its
-  timers. Focused Node tests pass.
-- The supplied local-run screenshot shows HTTP 503 because no effective
-  allowance is configured in that local grant/default. The local preview does
-  not read hosted-ledger remaining funds; do not claim the account's `$0.01`
-  display verified until an authorized source provides it.
-- Latest real-Chrome run did not pass: the sponsor welcome dismissal button
-  detached during its click. No clean browser acceptance is claimed for it.
-- The real Google OAuth challenge for the supplied personal account was not run from this environment; the browser check simulates the verified callback and invitation API response. Any actual Google-consent or mail-delivery failure remains deployment/account dependent.
-
-## Review notes
-
-No known conflicts. R4R: ready for independent review. No self-merge performed.
+**R4R:** Ready for independent review.
