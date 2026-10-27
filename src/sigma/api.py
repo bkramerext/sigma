@@ -656,6 +656,8 @@ def import_project_bundle(body: ImportBundleRequest):
             body.bundle["files"]["project.json"], validate=True
         ))
         title = document["title"]
+        if not isinstance(document.get("id"), str):
+            raise ProjectError("Imported project identity is invalid")
         _, name = _project_name(title)
         root = projects_root()
         destination = (root / name).with_suffix(".json")
