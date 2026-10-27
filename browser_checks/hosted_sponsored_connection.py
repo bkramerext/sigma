@@ -93,6 +93,7 @@ def exercise(origin: str) -> None:
         selected = {"mode": "personal"}
         forced = {"value": False}
         local_sponsored_mode = {"value": False}
+        local_sponsor_reauth = {"value": False}
         sponsored_test_mode = {"value": False}
         mock_provider = {"value": "connected"}
         local_connect_succeeds = {"value": False}
@@ -248,17 +249,28 @@ def exercise(origin: str) -> None:
                     "checked_at": "2026-10-27T00:00:00Z",
                 }
             elif path.endswith("/api/ai/connection"):
-                payload = {
-                    "mode": "api_key",
-                    "status": "connected"
-                    if selected["mode"] == "sponsored" or local_connect_succeeds["value"]
-                    else "disconnected",
-                    "label": "OpenAI API connected",
-                    "guidance": "",
-                    "checked_at": "2026-10-27T00:00:00Z",
-                    "ttl_seconds": 0,
-                    "accounts": [],
-                }
+                if local_sponsor_reauth["value"]:
+                    payload = {
+                        "mode": "chatgpt",
+                        "status": "reauth_required",
+                        "label": "Reconnect ChatGPT",
+                        "guidance": "Sponsor credentials are unavailable.",
+                        "checked_at": None,
+                        "ttl_seconds": 0,
+                        "accounts": [],
+                    }
+                else:
+                    payload = {
+                        "mode": "api_key",
+                        "status": "connected"
+                        if selected["mode"] == "sponsored" or local_connect_succeeds["value"]
+                        else "disconnected",
+                        "label": "OpenAI API connected",
+                        "guidance": "",
+                        "checked_at": "2026-10-27T00:00:00Z",
+                        "ttl_seconds": 0,
+                        "accounts": [],
+                    }
             elif (
                 path.endswith(("/api/ai/auth/begin", "/api/ai/sponsor-auth/begin"))
                 and method == "POST"
@@ -268,6 +280,8 @@ def exercise(origin: str) -> None:
                     "authorization_url": origin + "/api/ai/auth/open/test-connect",
                 }
             elif path.endswith("/api/ai/auth/attempt/test-connect"):
+                if local_connect_succeeds["value"]:
+                    local_sponsor_reauth["value"] = False
                 payload = {
                     "status": "connected" if local_connect_succeeds["value"] else "failed",
                     "retryable": False,
@@ -743,6 +757,22 @@ def exercise(origin: str) -> None:
         assert any(
             path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts
         ), posts
+
+        selected["mode"] = "sponsored"
+        local_sponsor_reauth["value"] = True
+        local_connect_succeeds["value"] = True
+        page.reload(wait_until="domcontentloaded")
+        sponsored_summary = page.locator(".api-connection > summary")
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
+            "Click to reconnect SIGMA-sponsored ChatGPT"
+        )
+        posts.clear()
+        with page.expect_request("**/api/ai/sponsor-auth/begin"):
+            sponsored_summary.click()
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        assert any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
+        expect(page.locator(".connection-pill-message")).to_have_count(0)
 
         admin_mode["value"] = True
         selected["mode"] = "sponsored"

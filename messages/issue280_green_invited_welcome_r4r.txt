@@ -171,3 +171,19 @@ ChatGPT preferences. The live sponsor credential is still missing; this test
 does not establish live paid Play. No user rerun was requested.
 The real-Chrome sponsored connection check and `./sigma test` passed all steps
 on this follow-up, including Ruff, Pyright, frontend typecheck, and build.
+
+Sponsor identity check: OpenAI's metadata endpoint associates the checkout's
+`OPENAI_API_KEY` with API user `zetacontinuation@gmail.com` and the API
+organization named `Personal`; `/v1/models` returned the selected model. No
+inference was sent. API use would be billed through that API organization,
+separate from the ChatGPT subscription. The key was not copied into sponsored
+configuration or used for a paid call.
+
+Member reconnect correction: an authenticated, eligible local member can now
+start the sponsor OAuth flow by clicking the sponsored pill when the sponsor
+ChatGPT credential needs reauthorization. The server binds the flow to the
+existing designated sponsor registration; ineligible and unauthenticated
+members remain denied, and this does not grant admin settings access. The
+pill's normal click still starts a personal ChatGPT sign-in when the sponsor
+connection is healthy. Real-Chrome coverage verifies the member reconnect
+path. Live sponsor OAuth and inference have not been attempted.

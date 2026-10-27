@@ -2303,15 +2303,21 @@ class CloudAuthTests(TestCase):
                     ),
                 ) as begin,
             ):
-                denied = member.post(
+                member_allowed = member.post(
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
+                self.assertEqual(member_allowed.status_code, 200, member_allowed.text)
+                with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSORED_ENABLED": "false"}):
+                    denied = member.post(
+                        "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+                    )
                 self.assertEqual(denied.status_code, 403, denied.text)
                 allowed = self.client.post(
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
             self.assertEqual(allowed.status_code, 200, allowed.text)
-            begin.assert_awaited_once_with(account_id="sponsor-id", sponsor=True)
+            self.assertEqual(begin.await_count, 2)
+            begin.assert_awaited_with(account_id="sponsor-id", sponsor=True)
 
     def test_local_personal_mode_cannot_use_or_disconnect_active_sponsor_credential(self):
         import asyncio

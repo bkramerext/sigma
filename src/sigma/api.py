@@ -1131,16 +1131,28 @@ async def auth_begin(body: AuthBeginRequest):
 
 @app.post("/api/ai/sponsor-auth/begin")
 async def sponsor_auth_begin(request: Request):
-    """Let a local administrator renew only the designated sponsor account."""
+    """Let admins or eligible local members renew only the designated sponsor."""
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
     if (
         not cfg.local
         or not isinstance(principal, cloud_auth.Principal)
-        or principal.role != "admin"
         or principal.subject.startswith("mock:")
     ):
-        raise HTTPException(403, "Administrator access is required to renew sponsorship.")
+        raise HTTPException(403, "An authenticated local account is required to renew sponsorship.")
+    if principal.role != "admin":
+        try:
+            account = cloud_auth._persist_user_state(cfg, principal)
+        except (OSError, RuntimeError, sqlite3.Error):
+            raise HTTPException(
+                503, "Sponsored account eligibility could not be checked."
+            ) from None
+        if (
+            principal.role != "member"
+            or not cloud_auth.sponsored_access_enabled()
+            or not account["sponsorship"]["eligible"]
+        ):
+            raise HTTPException(403, "Eligible sponsored access is required to renew sponsorship.")
     from sigma.cloud_sponsor import sponsor_account_id
 
     try:

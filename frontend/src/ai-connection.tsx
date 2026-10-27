@@ -250,6 +250,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const hostedPillLabel = 'Sponsored ChatGPT';
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored';
   const sponsoredPill = !!hosted || (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
+  const localSponsorNeedsReconnect = cloudFunding?.target === 'local'
+    && !simulatedSponsored
+    && !!cloudFunding.authorized
+    && !!cloudFunding.sponsorshipEligible
+    && sponsoredSelected
+    && ai.info?.mode === 'chatgpt'
+    && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
@@ -276,7 +283,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         : cloudFunding.budget
           ? `${simulatedSponsored ? 'This mock sponsorship and its allowance are simulated; research cannot call a live provider. ' : 'SIGMA covers eligible model calls with this sponsored allowance; membership, spending and provider limits still apply. '}${cloudFunding.providerError ? 'Sponsored model connection could not be checked. ' : `Sponsored model connection: ${cloudFunding.provider?.status ?? 'not checked'}. `}${cloudFunding.budget.remaining_usd <= 0 ? 'No sponsored allowance remains.' : `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of $${cloudFunding.budget.allowance_usd.toFixed(2)} per-user allowance.`} $${cloudFunding.budget.estimated_usage_usd.toFixed(2)} estimated and $${cloudFunding.budget.held_usd.toFixed(2)} held.`
           : sponsoredSelected ? 'Your sponsored allowance is unavailable.' : 'Sponsored access is not selected.';
-  const sponsorTooltip = `${forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
+  const sponsorTooltip = `${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : ''}`;
   const allowanceText = cloudFunding?.budget
     ? `$${cloudFunding.budget.remaining_usd.toFixed(2)}`
@@ -287,6 +294,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       if (hosted) {
         if (forcedSponsored && sponsoredSelected) return;
         await cloudFunding?.selectConnection?.('sponsored');
+        return;
+      }
+      if (localSponsorNeedsReconnect) {
+        if (await ai.signIn({ sponsor: true })) await ai.refresh('manual');
         return;
       }
       if (cloudFunding?.authorized && cloudFunding.sponsorshipEligible) {

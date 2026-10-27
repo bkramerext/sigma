@@ -7030,3 +7030,22 @@ restart when a sponsored credential is configured. No user retry was requested.
 The focused local Play regression passed; the real-Chrome sponsored connection
 check passed with mocked API responses; `./sigma test` passed all steps,
 including Ruff, Pyright, frontend typecheck, and production build.
+
+Sponsor-account and member-reconnect follow-up: OpenAI's metadata endpoint
+associates the checkout's `OPENAI_API_KEY` with API user
+`zetacontinuation@gmail.com` and the API organization named `Personal`; the key
+can list `gpt-6.1-sol`. No inference request was sent. This is API billing,
+separate from the ChatGPT subscription, and the key was not copied into the
+sponsored setting. The account's ChatGPT browser session was switched to the
+designated sponsor identity, but SIGMA still had no saved sponsor token.
+
+To remove the SIGMA-admin dependency for that renewal, authenticated, eligible
+local members can now start the existing sponsor OAuth flow by clicking the
+sponsored pill when its ChatGPT credential needs reauthorization. The route is
+local-only, rejects mock and ineligible users, and remains bound to the saved
+designated sponsor registration and subject. It grants no admin settings
+access. The normal connected-pill action still starts a personal ChatGPT
+connection. Real-Chrome acceptance covers the member flow, and the focused
+auth regression verifies eligible access, ineligible denial, and admin access.
+`./sigma test` passed all steps. The running app was restarted on the updated
+branch; no OAuth completion or inference call has yet been made.

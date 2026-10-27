@@ -51,14 +51,16 @@ reasons both in the terminal and in the private, bounded
 `sponsor-diagnostics.log` file at the checkout root. Run
 `tail -n 20 sponsor-diagnostics.log` there to read the latest entries.
 `credential_missing` means the server has no usable sponsor session. The
-operator can sign in with a local Google administrator account,
-open **Admin Settings**, and choose **Reconnect sponsor ChatGPT**, completing
-ChatGPT sign-in as `zetacontinuation@gmail.com`. The same log records
+eligible local member can click the sponsored pill to start the pinned sponsor
+reconnect flow and complete ChatGPT sign-in as `zetacontinuation@gmail.com`;
+local administrators can also start it from **Admin Settings**. The OAuth flow
+is bound to SIGMA's saved sponsor account, and an eligible member cannot access
+admin settings. The same log records
 `sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
 the operator can tell whether renewal completed. A member's Google sign-in
-does not renew the server's sponsor credential. A failed personal ChatGPT
-connection returns an eligible member to sponsored mode; only a successful
-personal connection selects personal mode.
+alone does not renew the server's sponsor credential. A failed personal
+ChatGPT connection returns an eligible member to sponsored mode; only a
+successful personal connection selects personal mode.
 
 To test with mock identities and controls, use `./sigma start --mock-auth`.
 The mock member's $25 allowance is simulated. For its sponsored presentation,
