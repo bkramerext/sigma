@@ -57,7 +57,11 @@ Unlike a conventional engineering team, the workers can switch tasks or pick up 
 
 Tickets have been the most useful tool for that. A ticket provides a stable record of what's being done, why, and where things stand, regardless of which agent is working on it.
 
-I've learned not to overdo it. Substantial work deserves a ticket, but every little adjustment doesn't. Feedback on work already underway should stay with the existing ticket. And when a PR is ready, whoever has the best context and capacity can handle the merge.
+I've learned not to overdo it. Substantial work deserves a ticket, but every little adjustment doesn't. Feedback on work already underway should stay with the existing ticket.
+
+Sometimes I'll tell the ChatGPT orchestrator, "Remind Green to add the test results to the PR when it's done." That's a small example of how I've come to rely on the coordinator to keep track of details while I'm focused on something else.
+
+And when a PR is ready, whoever has the best context and capacity can handle the merge.
 
 The goal isn't to reproduce the processes of a human software team. It's to find the amount of structure AI-assisted engineering actually needs.
 
