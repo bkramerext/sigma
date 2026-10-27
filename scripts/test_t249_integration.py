@@ -42,7 +42,8 @@ def main() -> int:
         if result.returncode:
             print(f"FAILED {suite} (exit {result.returncode})", file=sys.stderr)
             return result.returncode
-    print("PASS JSON project integration" + (" and Docker lifecycle" if "--docker" in sys.argv[1:] else ""))
+    suffix = " and Docker lifecycle" if "--docker" in sys.argv[1:] else ""
+    print(f"PASS JSON project integration{suffix}")
     return 0
 
 
