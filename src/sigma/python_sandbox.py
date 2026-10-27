@@ -1175,9 +1175,14 @@ def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -
     metadata = next(
         (item for item in record.get("artifacts", []) if item.get("filename") == filename), None
     )
-    if (metadata is None or not isinstance(filename, str)
-        or filename in {"", ".", ".."} or Path(filename).name != filename
-        or "/" in filename or "\\" in filename):
+    if (
+        metadata is None
+        or not isinstance(filename, str)
+        or filename in {"", ".", ".."}
+        or Path(filename).name != filename
+        or "/" in filename
+        or "\\" in filename
+    ):
         raise ProjectError("Research output artifact not found")
     execution_directory = _execution_directory(path)
     bundle_path = _execution_bundle_path(execution_directory)
@@ -1188,7 +1193,10 @@ def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -
             content = read_file(bundle_path, member)
         except (OSError, ValueError, KeyError) as exc:
             raise ProjectError("Research output artifact not found") from exc
-        if len(content) != metadata["size_bytes"] or hashlib.sha256(content).hexdigest() != metadata["sha256"]:
+        if (
+            len(content) != metadata["size_bytes"]
+            or hashlib.sha256(content).hexdigest() != metadata["sha256"]
+        ):
             raise ProjectError("Research output artifact failed its integrity check")
         return content, str(metadata["media_type"])
     artifact_directory = execution_directory / f"{record['id']}.artifacts"
