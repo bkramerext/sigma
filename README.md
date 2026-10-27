@@ -14,15 +14,13 @@ Create a project or start from a sample, write or generate strategies, then choo
 
 ### Screenshots
 
-The following owner-provided screenshots are pending. They will be placed here when supplied; no substitute images are included.
+**SIGMA Home** — start a new investigation or explore sample research projects.
 
-**SIGMA Home** — owner-provided screenshot pending.
+![SIGMA Home page](assets/screenshot_home_page.png)
 
-<!-- Screenshot placement: SIGMA Home. Insert the owner-provided image here. -->
+**Research project workspace** — investigate strategies and review research progress.
 
-**Riemann Hypothesis investigation** — owner-provided screenshot pending.
-
-<!-- Screenshot placement: Riemann Hypothesis investigation. Insert the owner-provided image here. -->
+![SIGMA project page](assets/screenshot_project_page.png)
 
 ## Run SIGMA locally
 
