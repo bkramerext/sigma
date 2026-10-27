@@ -122,7 +122,7 @@ def check(root: Path, base: Path) -> None:
 
     other = open_sample_project(catalog[-1]["id"])
     assert other.path != first.path and other.project.id != first.project.id
-    assert len(list(root.glob("*.sigma"))) == 4
+    assert len(list(root.glob("*.json"))) == 4
     try:
         open_sample_project("../../unknown")
         raise AssertionError("An unknown sample identifier was accepted")
