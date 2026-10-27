@@ -3,8 +3,8 @@
 **Status:** R4R — implementation and local verification complete; independent review requested.  
 **Branch:** `blue/issue-279-invite-me`  
 **Base:** `main` at `918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad`  
-**Verified implementation commit:** `e118694` (`T279: add invitation request to sign-in pills`)  
-**PR:** [#281](https://github.com/bkramerext/sigma/pull/281), open against `main`, mergeable, not merged. The PR was opened at branch head `be0722bc0fcd1ac1a7a6fb09b30af77a1b7c6b2e`; the follow-up tracker/handoff link update is documentation only.
+**Verified implementation commits:** `e118694` (`T279: add invitation request to sign-in pills`) and `024f606` (zero-allowance **Reload me!**).
+**PR:** [#281](https://github.com/bkramerext/sigma/pull/281), open against `main`, not merged. It was opened at branch head `be0722bc0fcd1ac1a7a6fb09b30af77a1b7c6b2e`; subsequent commits include the allowance correction and documentation-only updates.
 **Merge:** not performed.
 
 ## Implemented
