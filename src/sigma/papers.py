@@ -2491,6 +2491,7 @@ def delete_paper(path: str, paper_id: str) -> None:
     target = project_path(path)
     if target.suffix == ".json":
         from sigma.projects import save_project_artifacts
+
         save_project_artifacts(
             target,
             {
