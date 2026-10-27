@@ -190,7 +190,6 @@ async def verify():
                     child.kill()
                     await asyncio.wait_for(child.wait(), timeout=5)
 
-
         finally:
             projects.projects_root = original_root
 
