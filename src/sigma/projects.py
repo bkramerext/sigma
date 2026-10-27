@@ -697,9 +697,7 @@ def initialize_project(
         staged = Path(staged_name)
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write(
-                    (json.dumps(bundle, sort_keys=True, indent=2) + "\n").encode("utf-8")
-                )
+                stream.write((json.dumps(bundle, sort_keys=True, indent=2) + "\n").encode("utf-8"))
                 stream.flush()
                 os.fsync(stream.fileno())
             os.link(staged, path)
@@ -1135,8 +1133,11 @@ def project_destination(title: str = "") -> ProjectDestination:
     _, name = _project_name(title)
     path = root / name
     json_path = path.with_suffix(".json")
-    taken = (os.path.lexists(path) or os.path.lexists(json_path)
-             or _title_key(title) in _occupied_titles(root))
+    taken = (
+        os.path.lexists(path)
+        or os.path.lexists(json_path)
+        or _title_key(title) in _occupied_titles(root)
+    )
     return ProjectDestination(str(root), str(json_path), taken)
 
 
@@ -1155,8 +1156,13 @@ def create_project(
     their paths; only newly created projects use the portable bundle format.
     """
     return create_json_project(
-        title, problem, research_mode, ai_model, reasoning_effort,
-        difficulty, show_advanced_outcome_details,
+        title,
+        problem,
+        research_mode,
+        ai_model,
+        reasoning_effort,
+        difficulty,
+        show_advanced_outcome_details,
     )
 
 
@@ -1384,8 +1390,14 @@ def create_json_project(
         if os.path.lexists(destination) or os.path.lexists(legacy):
             raise ProjectError("A project with that filename already exists")
         view = initialize_project(
-            destination, title, problem, research_mode, ai_model,
-            reasoning_effort, difficulty, show_advanced_outcome_details,
+            destination,
+            title,
+            problem,
+            research_mode,
+            ai_model,
+            reasoning_effort,
+            difficulty,
+            show_advanced_outcome_details,
         )
         from sigma.recents import record_access
 
@@ -1408,7 +1420,8 @@ def list_json_projects() -> tuple[ProjectView, ...]:
 
 
 def save_project_artifacts(
-    value: str | Path, artifacts: dict[str, bytes | None],
+    value: str | Path,
+    artifacts: dict[str, bytes | None],
 ) -> None:
     """Atomically save or remove evidence and artifacts in a JSON project.
 
@@ -1437,8 +1450,10 @@ def save_project_artifacts(
 def read_project_artifact(value: str | Path, name: str) -> bytes:
     """Read an evidence or artifact member from an authorized JSON project."""
     path = project_path(value)
-    if path.suffix != ".json" or not isinstance(name, str) or not name.startswith(
-        ("evidence/", "artifacts/")
+    if (
+        path.suffix != ".json"
+        or not isinstance(name, str)
+        or not name.startswith(("evidence/", "artifacts/"))
     ):
         raise ProjectError("Artifact path is invalid")
     inspect_project(path)
