@@ -6408,5 +6408,9 @@ stale `Welcome to SIGMA` assertion after merged T88 / PR #251 removed that Guest
 Home overlay. Updated `browser_checks/guest_samples.py` to assert the current
 Projects/sign-in/Samples/Recent Home and explicitly assert the removed overlay
 is absent, retaining the rest of the guest recovery workflow. The affected real
-Chrome guest sample check and a fresh `./sigma test` both passed. Updated-head
-GitHub checks are pending; see the handoff for the previous check dispositions.
+Chrome guest sample check and a fresh `./sigma test` both passed. All five
+GitHub checks passed on implementation/test head
+`5b574cf29ead711e20c32e86c5db2b73161d4444`: T200, T92, T201 recovery, Research
+Outcome, and SIGMA verification. The handoff/status-only follow-up commit will
+receive a fresh CI run before final R4R. See the
+[PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).

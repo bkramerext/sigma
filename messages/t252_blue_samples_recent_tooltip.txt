@@ -62,9 +62,19 @@ Follow-up verification on local branch head `236d242332c322d403c5ba71980d2e6cb8b
   `uv run --locked --no-sync ruff format --check browser_checks/guest_samples.py`
   — PASS; `git diff --check` — PASS.
 
-Prior PR checks on `affc704f2d630929e8dc33509d5671a978e7e573`: T200 Model
-availability — PASS; T92 Recent Projects — PASS; T201 obligation recovery —
-FAIL solely at the stale Welcome heading assertion; SIGMA verification — PASS;
-Research Outcome — IN PROGRESS at the last check. This follow-up is pushed on
-the same branch. Results for checks triggered by the updated PR head will be
-recorded before final R4R.
+On prior PR head `affc704f2d630929e8dc33509d5671a978e7e573`, T200 Model
+availability and T92 Recent Projects passed, SIGMA verification passed, T201
+obligation recovery failed solely at the stale Welcome heading assertion, and
+Research Outcome was still in progress at the last observation.
+
+All GitHub checks on implementation/test head
+`5b574cf29ead711e20c32e86c5db2b73161d4444` completed successfully:
+- T200 Model availability browser acceptance (run 40434881654) — PASS.
+- T92 Recent Projects browser acceptance (run 40434882232) — PASS.
+- T201 obligation recovery browser acceptance (run 40434881547) — PASS.
+- Research Outcome browser acceptance (run 40434881675) — PASS.
+- SIGMA verification (run 40434881651) — PASS.
+
+This report records the passing check set for the code and test correction at
+`5b574cf29ead711e20c32e86c5db2b73161d4444`. The handoff/status-only commit
+that adds these results will receive its own CI run before final R4R.
