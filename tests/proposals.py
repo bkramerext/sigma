@@ -281,8 +281,96 @@ async def check(path):
         await rejects(
             proposals.generate_proposal(str(path), consent=True), "repeats"
         )  # Repeated approach.
+
+    source = {
+        "project_id": project_id,
+        "session_id": "suggestion-context-session",
+        "session_number": 4,
+        "strategy_id": "suggestion-context-strategy",
+        "artifact_id": "suggestion-context-artifact",
+    }
+    large_understanding = {
+        "scope_note": "All findings remain unverified.",
+        "session_count": 4,
+        "findings": [
+            {
+                "id": "current-finding",
+                "text": "Saved finding. " * 90,
+                "investigated_claim": "Conditional claim. " * 90,
+                "source": source,
+                "review_ref": "artifacts/suggestion-context-artifact/objective_review",
+                "review_status": "partial",
+                "status": "unassessed",
+                "verification": "Incomplete",
+                "local_scope": "Local strategy finding only.",
+                "strategy_title": "Existing direction",
+                "strategy_text": "Existing full content",
+                "assumptions": ["Assumption. " * 30 for _ in range(6)],
+                "objections": ["Unresolved objection. " * 30 for _ in range(6)],
+                "evidence_kind": "Unverified source-backed evidence.",
+                "related_by": [],
+            }
+        ],
+        "current_finding_ids": ["current-finding"],
+        "changes": [
+            {
+                "kind": "supersedes",
+                "text": "Changed claim. " * 60,
+                "caution": "Unverified.",
+                "source": source,
+                "earlier": None,
+            }
+            for _ in range(28)
+        ],
+        "obligations": [
+            {
+                "id": f"obligation-{number:03d}",
+                "text": f"Open question {number}. " + "Investigate the boundary. " * 18,
+                "kind": "obligation",
+                "strategy_id": "suggestion-context-strategy",
+                "status": "historical_unreconciled",
+                "actionable": number % 2 == 0,
+                "sources": [source],
+                "note": "Historical and not reconciled.",
+            }
+            for number in range(80)
+        ],
+        "failures": [
+            {
+                "session_id": f"failure-{number}",
+                "session_number": number,
+                "status": "failed",
+                "note": "Preserved." * 30,
+            }
+            for number in range(20)
+        ],
+        "limitations": [f"Limitation {number}. " * 40 for number in range(16)],
+        "next_investigations": [],
+    }
+    with (
+        patch("sigma.research_state.build_current_understanding", return_value=large_understanding),
+        patch(
+            "sigma.research_sessions.strategy_generation_findings",
+            return_value=[
+                {"id": "bounded-source", "claim_or_question": "A relevant saved result."}
+            ],
+        ),
+    ):
+        bounded_project_id, bounded_context = proposals.suggestion_context_for(str(path))
+    bounded = json.loads(bounded_context)
+    omitted = bounded["context_selection"]["omitted"]
+    assert bounded_project_id == project_id and len(bounded_context) <= proposals.MAX_CONTEXT
+    assert bounded["project_question"] == inspect_project(path).project.problem
+    assert (
+        bounded["existing_strategies_including_disabled"][0]["approach"] == "Existing full content"
+    )
+    assert len(bounded["current_understanding"]["open_questions"]) == 12
+    assert omitted["open_questions"] == 68
+    assert len(omitted["open_question_ids"]) == 32
+    assert omitted["additional_open_question_ids_omitted"] == 36
+    assert omitted["changes"] == 20 and omitted["execution_states"] == 12
     print(
-        "PASS exact Responses request/strict schema/full context, empty/seed, nonmutation, human-edited acceptance and signed provenance"
+        "PASS exact Responses request/strict schema, nonmutating strategy suggestions, bounded Current Understanding with omission accounting, human-edited acceptance and signed provenance"
     )
     for fixture in (
         httpx.Response(429),

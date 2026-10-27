@@ -54,7 +54,7 @@ with sync_playwright() as playwright:
     ).to_be_visible()
     project_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     project_id = json.loads(Path(project_path, "project.json").read_text())["id"]
-    page.get_by_role("button", name="Back to home", exact=True).click()
+    page.locator(".project-art-header .project-header-art").click()
     recent = page.get_by_role("tabpanel", name="Recent")
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
@@ -69,6 +69,17 @@ with sync_playwright() as playwright:
     expect(metadata).to_contain_text(" · Running · ", timeout=10000)
     label = metadata.locator(".recent-running")
     assert label.evaluate("e => getComputedStyle(e).color") == "rgb(143, 189, 154)"
+    category_indicator = recent_group.locator("summary .research-running-indicator")
+    expect(category_indicator).to_have_count(0)
+    recent_group.locator("summary").click()
+    expect(category_indicator).to_be_visible()
+    assert category_indicator.evaluate("e => getComputedStyle(e).top") == "-2px"
+    assert (
+        category_indicator.evaluate("e => getComputedStyle(e).backgroundColor")
+        == "rgb(85, 189, 112)"
+    )
+    recent_group.locator("summary").click()
+    expect(category_indicator).to_have_count(0)
     for width, height in ((1280, 720), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
         expect(label).to_be_visible()

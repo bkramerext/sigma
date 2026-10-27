@@ -547,7 +547,6 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
   </div>;
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
-    {!!session.artifacts.length && <div className="research-session-actions"><button type="button" className="text-view-link" onClick={() => onForkFromFindings(session)}>Fork strategy from findings</button></div>}
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {provenancePrelude}
@@ -744,7 +743,7 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
   const changeRow = (row: CurrentUnderstanding['changes'][number], index: number) => <li key={`${row.kind}-${row.source.session_id}-${row.source.artifact_id}-${index}`}><strong>{({ obligation_addressed: 'Resolution reported', obligation_superseded: 'Supersession reported', obligation_retracted: 'Retraction reported', local_refutation_reported: 'Local counterexample reported', later_finding_available: 'Later review saved', supersedes: 'Supersession reported', refutes: 'Refutation reported' } as Record<string, string>)[row.kind] || 'Saved assessment'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.caution}</p><p>{sourceButton(row.source, 'Inspect later evidence')}{row.earlier && <> · {sourceButton(row.earlier, 'Inspect earlier evidence')}</>}</p></li>;
   const questionRow = (row: CurrentQuestion) => <li key={row.id}><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.note}</p>{row.sources.length > 0 && <p>{sourceButton(row.sources.at(-1)!, 'Inspect obligation')}{row.narrative_resolution_sources.slice(-1).map(source => <span key={source.record_path}> · {sourceButton(source, 'Inspect narrative resolution')}</span>)}{row.dispositions.filter(item => item.valid).slice(-1).map(item => <span key={item.source.record_path}> · {sourceButton(item.source, 'Inspect disposition')}</span>)}</p>}</li>;
   return <details className="outcome-subsection current-understanding" open>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><button type="button" className="text-view-link strategy-suggestion-trigger" disabled={suggestionBusy} aria-busy={suggestionBusy} onClick={event => { event.preventDefault(); event.stopPropagation(); void suggestStrategy(); }}>{suggestionBusy ? 'Suggesting…' : hasSuggestedResult ? 'Suggest another strategy' : 'Suggest a strategy'}</button></summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>Suggesting…</span> : <button type="button" className="text-view-link strategy-suggestion-trigger" onClick={event => { event.preventDefault(); event.stopPropagation(); void suggestStrategy(); }}>{hasSuggestedResult ? 'Suggest another strategy' : 'Suggest a strategy'}</button>}</summary>
     <p className="hint current-understanding-scope">{state.scope_note}</p>
     <div className="current-understanding-columns">
       <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
@@ -757,7 +756,6 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
     </div>
     <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map(note => <li key={note}>{note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
     <div className="strategy-suggestion-feedback">
-      {suggestionBusy && <p role="status">Reviewing Current Understanding and relevant session evidence…</p>}
       {suggestionError && <p className="error" role="alert">{suggestionError}</p>}
       {hasSuggestedResult && !suggestion && !suggestionError && <p role="status">No additional strategy is warranted by the available evidence.</p>}
       {suggestion && <details className="strategy-suggestion-result">
@@ -1429,6 +1427,8 @@ function FloatingTooltip() {
   const [active, setActive] = useState<{ element: HTMLElement; text: string } | null>(null);
   const tooltip = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLElement | null>(null);
+  const pointerPosition = useRef({ x: 0, y: 0 });
+  const tooltipPointerPosition = useRef({ x: 0, y: 0 });
   const suppressedAfterClick = useRef(new WeakSet<HTMLElement>());
   const previousDescriptions = useRef(new WeakMap<HTMLElement, string | null>());
   const hoverTimer = useRef<number | null>(null);
@@ -1442,6 +1442,16 @@ function FloatingTooltip() {
     if (!element?.isConnected || !hint) return;
     const anchor = element.getBoundingClientRect();
     const box = hint.getBoundingClientRect();
+    if (element.dataset.tooltipFollowCursor === 'true' && element.matches(':hover')) {
+      const left = Math.max(8, Math.min(window.innerWidth - box.width - 8, tooltipPointerPosition.current.x + 14));
+      const below = tooltipPointerPosition.current.y + 16;
+      const top = below + box.height <= window.innerHeight - 8
+        ? below
+        : Math.max(8, tooltipPointerPosition.current.y - box.height - 12);
+      hint.style.left = `${left}px`;
+      hint.style.top = `${top}px`;
+      return;
+    }
     const left = Math.max(8, Math.min(window.innerWidth - box.width - 8, anchor.left + anchor.width / 2 - box.width / 2));
     const below = anchor.bottom + 8;
     const top = below + box.height <= window.innerHeight - 8
@@ -1466,6 +1476,9 @@ function FloatingTooltip() {
     if (!element || !text) return;
     if (activeRef.current === element) { setActive({ element, text }); return; }
     const previous = element.getAttribute('aria-describedby');
+    if (element.dataset.tooltipFollowCursor === 'true' && element.matches(':hover')) {
+      tooltipPointerPosition.current = { ...pointerPosition.current };
+    }
     previousDescriptions.current.set(element, previous);
     element.setAttribute('aria-describedby', [previous, 'sigma-ui-tooltip'].filter(Boolean).join(' '));
     activeRef.current = element;
@@ -1476,6 +1489,7 @@ function FloatingTooltip() {
       ? target.closest<HTMLElement>('[data-tooltip]:not([data-tooltip-disabled]), button[aria-label]:not([data-tooltip-disabled])')
       : null;
     const onPointerOver = (event: PointerEvent) => {
+      pointerPosition.current = { x: event.clientX, y: event.clientY };
       const element = targetFor(event.target);
       if (document.querySelector('.project-model-confirm-popover')) { clearHoverTimer(); hide(); return; }
       if (element && suppressedAfterClick.current.has(element)) return;
@@ -1511,9 +1525,15 @@ function FloatingTooltip() {
       const element = targetFor(event.target);
       if (element && !element.matches(':hover') && !element.contains(event.relatedTarget as Node | null)) hide(element);
     };
+    const onPointerMove = (event: PointerEvent) => {
+      pointerPosition.current = { x: event.clientX, y: event.clientY };
+      if (activeRef.current && targetFor(event.target) === activeRef.current
+        && activeRef.current.dataset.tooltipFollowCursor !== 'true') position();
+    };
     const onMove = () => position();
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
+    document.addEventListener('pointermove', onPointerMove, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('focusout', onFocusOut, true);
@@ -1523,6 +1543,7 @@ function FloatingTooltip() {
       clearHoverTimer();
       document.removeEventListener('pointerover', onPointerOver, true);
       document.removeEventListener('pointerout', onPointerOut, true);
+      document.removeEventListener('pointermove', onPointerMove, true);
       document.removeEventListener('click', onClick, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
@@ -2067,11 +2088,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   const cloud = useCloudIdentity();
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
-      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork && close && <div className="project-back-row project-art-back-row">
-        <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" data-tooltip-disabled><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>
-        <button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption" data-tooltip-disabled>Back to home</button>
-      </div>}
+      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}{researchRunning && <span className="research-running-indicator" aria-hidden="true"/>}</span></div>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
@@ -2590,6 +2607,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [opening, setOpening] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [error, setError] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
@@ -2649,8 +2667,14 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
-    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'}>
-      <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+    {recentGroups.map(group => {
+      const groupKey = group.type ?? 'other';
+      const hiddenRunningProject = !expandedGroups[groupKey] && group.projects.some(entry => entry.research_running);
+      return <details className="recent-type-group" key={groupKey} onToggle={event => {
+        const isOpen = event.currentTarget.open;
+        setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
+      }}>
+      <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
@@ -2662,7 +2686,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
       </li>)}</ul>
-    </details>)}
+    </details>;
+    })}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }

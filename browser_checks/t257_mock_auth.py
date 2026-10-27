@@ -300,28 +300,22 @@ def exercise_browser(origin: str) -> None:
         inspect_account_view(page, 1440, 900, "Regular user")
         expect(page.get_by_label("Mock funding mode")).to_have_value("personal")
         new_action = page.get_by_role("button", name="New", exact=True)
-        open_action = page.get_by_role("button", name="Open", exact=True)
         expect(new_action).to_be_visible()
         expect(new_action).to_be_enabled()
-        expect(open_action).to_be_visible()
-        expect(open_action).to_be_enabled()
+        expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         page.get_by_role("tab", name="Recent").click()
         expect(page.get_by_text("No recent projects yet.", exact=False)).to_be_visible()
         page.get_by_role("tab", name="Samples").click()
         page.screenshot(
             path=str(SCREENSHOTS / "green-next-home-member-desktop.png"), full_page=True
         )
-        page.set_viewport_size({"width": 390, "height": 844})
+        inspect_account_view(page, 390, 844, "Regular user")
         page.screenshot(path=str(SCREENSHOTS / "green-next-home-member-narrow.png"), full_page=True)
         page.set_viewport_size({"width": 1440, "height": 900})
         new_action.click()
         new_dialog = page.get_by_role("dialog", name="New Project")
         expect(new_dialog).to_be_visible()
         new_dialog.get_by_role("button", name="Cancel").click()
-        open_action.click()
-        open_dialog = page.get_by_role("dialog", name="Open Project")
-        expect(open_dialog).to_be_visible()
-        open_dialog.get_by_role("button", name="Cancel").click()
         member_allowance = page.evaluate(
             "async () => (await (await fetch('/api/cloud-auth/mock/funding')).json())"
             ".allowance.remaining_usd"
@@ -341,7 +335,7 @@ def exercise_browser(origin: str) -> None:
         member_project_path = created["body"]["path"]
         page.goto(origin + "/", wait_until="networkidle")
         expect(page.get_by_role("button", name="New", exact=True)).to_be_enabled()
-        expect(page.get_by_role("button", name="Open", exact=True)).to_be_enabled()
+        expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         page.get_by_role("tab", name="Recent").click()
         page.get_by_text("1 project", exact=True).click()
         recent_project = page.get_by_role("button", name="T257 Member A isolation", exact=True)
@@ -354,6 +348,7 @@ def exercise_browser(origin: str) -> None:
             wait_until="networkidle",
         )
         expect(page.locator(".project-art-header")).to_be_visible()
+        assert_logo_tooltip_stays_at_first_cursor_position(page)
         inspect_account_view(page, 1440, 900, "Regular user")
         inspect_account_view(page, 390, 844, "Regular user")
         page.screenshot(
@@ -414,6 +409,7 @@ def exercise_browser(origin: str) -> None:
         page.set_viewport_size({"width": 390, "height": 844})
         denied_dialog = page.get_by_role("dialog", name="Request an invitation")
         expect(denied_dialog).to_be_visible()
+        inspect_account_view(page, 390, 844, "Denied", capture=False)
         expect(denied_dialog).to_contain_text("couldn’t find an active SIGMA invitation")
         expect(denied_dialog).not_to_contain_text("sign in with another account")
         expect(page.locator(".project-google-signin")).to_have_text("Sign in with Google")
@@ -444,6 +440,9 @@ def exercise_browser(origin: str) -> None:
         page.get_by_label("Mock funding mode").select_option("sponsored")
         page.get_by_label("Mock sponsorship allowance").select_option("exhausted")
         page.get_by_label("Mock provider state").select_option("connected")
+        expect(
+            page.get_by_text(re.compile(r"Simulated allowance: \$0\.00 remaining"))
+        ).to_be_visible()
         catalog = page.evaluate(
             "async () => (await (await fetch('/api/projects/samples')).json()).projects"
         )
@@ -487,6 +486,11 @@ def exercise_browser(origin: str) -> None:
 
         page.get_by_label("Mock sponsorship allowance").select_option("available")
         page.get_by_label("Mock provider state").select_option("unavailable")
+        expect(
+            page.get_by_text(
+                re.compile(r"Simulated allowance: \$25\.00 remaining · Provider: unavailable")
+            )
+        ).to_be_visible()
         provider_error = start_mock_research()
         assert provider_error["status"] == 200 and provider_error["body"]["simulated"]
         result = advance_latest_session(page, project_path)
@@ -553,7 +557,9 @@ def exercise_browser(origin: str) -> None:
     )
 
 
-def inspect_account_view(page, width: int, height: int, _expected: str) -> None:
+def inspect_account_view(
+    page, width: int, height: int, _expected: str, *, capture: bool = True
+) -> None:
     page.set_viewport_size({"width": width, "height": height})
     google = page.locator(".identity-pill-stack > .project-google-signin")
     summary = page.locator(".api-connection > summary")
@@ -566,17 +572,99 @@ def inspect_account_view(page, width: int, height: int, _expected: str) -> None:
     assert not any(
         role in summary.inner_text() for role in ("Guest", "Regular user", "Administrator")
     )
-    gap = page.evaluate("""() => {
+    geometry = page.evaluate("""() => {
       const google = document.querySelector('.identity-pill-stack > .project-google-signin').getBoundingClientRect();
       const chatgpt = document.querySelector('.api-connection > summary').getBoundingClientRect();
-      return {vertical: Math.round(chatgpt.top - google.bottom), alignment: Math.round(chatgpt.left - google.left)};
+      const googleStyle = getComputedStyle(document.querySelector('.identity-pill-stack > .project-google-signin'));
+      const chatgptStyle = getComputedStyle(document.querySelector('.api-connection > summary'));
+      return {
+        vertical: Math.round(chatgpt.top - google.bottom),
+        alignment: Math.round(chatgpt.left - google.left),
+        googleHeight: google.height,
+        chatgptHeight: chatgpt.height,
+        googlePadding: [googleStyle.paddingLeft, googleStyle.paddingRight],
+        chatgptPadding: [chatgptStyle.paddingLeft, chatgptStyle.paddingRight],
+      };
     }""")
-    assert gap["vertical"] >= 14, f"Google and ChatGPT pills are only {gap['vertical']}px apart"
-    assert abs(gap["alignment"]) <= 2, f"Stacked pills are not left-aligned: {gap}"
+    expected_height, expected_padding = (28, "9px") if width <= 700 else (34, "12px")
+    assert geometry["vertical"] == 13, f"Google and ChatGPT pill gap is not 13px: {geometry}"
+    assert abs(geometry["alignment"]) <= 2, f"Stacked pills are not left-aligned: {geometry}"
+    assert geometry["googleHeight"] == geometry["chatgptHeight"] == expected_height, geometry
+    assert geometry["googlePadding"] == geometry["chatgptPadding"] == [expected_padding] * 2, (
+        geometry
+    )
+    if capture:
+        page_type = "home" if page.locator(".home-page").count() else "project"
+        identity = page.evaluate(
+            "async () => (await (await fetch('/api/cloud-auth/status')).json()).user"
+        )
+        account_type = identity["role"] if identity else "guest"
+        capture_pill_pair(page, f"green-{page_type}-pills-{account_type}-{width}.png")
     expect(page.get_by_role("dialog", name="ChatGPT connection settings")).to_have_count(0)
     assert not any(
         choice in summary.inner_text()
         for choice in ("Use the same Google account", "Use a different ChatGPT account", "API key")
+    )
+
+
+def assert_logo_tooltip_stays_at_first_cursor_position(page) -> None:
+    logo = page.locator(".project-art-header .project-header-art")
+    expect(logo).to_be_visible()
+    assert not logo.evaluate("element => element.hasAttribute('title')")
+    box = logo.bounding_box()
+    assert box
+    page.mouse.move(box["x"] + 20, box["y"] + 20)
+    tooltip = page.locator("#sigma-ui-tooltip")
+    expect(tooltip).to_have_text("Go back to home page", timeout=2_000)
+    first = tooltip.bounding_box()
+    assert first
+    left = max(0, int(min(box["x"], first["x"]) - 8))
+    top = max(0, int(min(box["y"], first["y"]) - 8))
+    viewport = page.viewport_size
+    assert viewport
+    right = min(
+        viewport["width"],
+        int(max(box["x"] + box["width"], first["x"] + first["width"]) + 8),
+    )
+    bottom = min(
+        viewport["height"],
+        int(max(box["y"] + box["height"], first["y"] + first["height"]) + 8),
+    )
+    page.screenshot(
+        path=str(SCREENSHOTS / "green-project-logo-tooltip.png"),
+        clip={"x": left, "y": top, "width": right - left, "height": bottom - top},
+    )
+    page.mouse.move(
+        box["x"] + min(box["width"] - 10, 100),
+        box["y"] + min(box["height"] - 10, 50),
+        steps=4,
+    )
+    second = tooltip.bounding_box()
+    assert second
+    assert abs(first["x"] - second["x"]) < 1 and abs(first["y"] - second["y"]) < 1, (
+        first,
+        second,
+    )
+    page.mouse.move(0, 0)
+    expect(tooltip).to_have_count(0)
+
+
+def capture_pill_pair(page, filename: str) -> None:
+    google = page.locator(".identity-pill-stack > .project-google-signin").bounding_box()
+    chatgpt = page.locator(".api-connection > summary").bounding_box()
+    assert google and chatgpt
+    viewport = page.viewport_size
+    assert viewport
+    left = max(0, int(min(google["x"], chatgpt["x"]) - 10))
+    top = max(0, int(google["y"] - 10))
+    right = min(
+        viewport["width"],
+        int(max(google["x"] + google["width"], chatgpt["x"] + chatgpt["width"]) + 10),
+    )
+    bottom = min(viewport["height"], int(chatgpt["y"] + chatgpt["height"] + 10))
+    page.screenshot(
+        path=str(SCREENSHOTS / filename),
+        clip={"x": left, "y": top, "width": right - left, "height": bottom - top},
     )
 
 

@@ -1,5 +1,27 @@
 # SIGMA status
 
+## PR #257 — T88 visual and research-follow-up refinements (2026-10-26)
+
+On `feature/local-mock-auth-walkthrough`, standardized Home and Project Google
+and ChatGPT pill geometry: 34px desktop and 28px narrow-screen height, matching
+12px/9px inline padding, and a 13px vertical gap. The SIGMA project-logo
+tooltip now has no native browser `title`; the custom tooltip stays at the
+cursor-relative point where it first appears. The recent-category running
+indicator, suggestion progress treatment, and bounded strategy-suggestion
+context are covered by focused regressions. No authentication, workspace,
+funding, or provider behavior changed.
+
+`./sigma test` passed, including Ruff check/format (280 files), Pyright (0
+diagnostics), frontend typecheck, and production build (existing >500 kB chunk
+advisory). Real Chrome passed `browser_checks/t257_mock_auth.py` and
+`browser_checks/t92_recent_running.py`. Pill-pair and tooltip screenshots are
+in `evaluations/t257/screenshots/green-*-pills-*.png` and
+`evaluations/t257/screenshots/green-project-logo-tooltip.png`. Final-head CI
+was not polled per the user's instruction; no paid calls or provider
+credentials were used.
+See the [follow-up handoff](../messages/t88_green_pr257_followup.txt) for
+exact commands, evidence, and acceptance disposition.
+
 ## PR #257 — T88 Stream B visual consistency (2026-10-27)
 
 Real-Chrome visual checks found and corrected mock selector overflow in the

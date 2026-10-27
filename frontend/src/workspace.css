@@ -28,7 +28,7 @@
 .workspace-page .project-art-header { align-items: flex-start; padding-bottom: 0; }
 .workspace-page .project-art-header .brand-block { position: relative; flex: 1 1 auto; align-items: flex-start; gap: 16px; }
 /* Show the logo and wire field, leaving the source image untouched. */
-.workspace-page .project-header-art { position: relative; z-index: 0; align-items: flex-start; width: min(34vw, 390px); aspect-ratio: 25 / 8; overflow: hidden; margin: -15px 0 0 -32px; }
+.workspace-page .project-header-art { position: relative; z-index: 0; align-items: flex-start; width: min(29vw, 330px); aspect-ratio: 25 / 8; overflow: hidden; margin: -15px 0 0 -32px; }
 .workspace-page .project-header-art img { display: block; width: 100%; height: auto; }
 .workspace-page .expansion {
   margin: 0;
@@ -41,14 +41,16 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model identity" "about thinking identity"; align-items: center; justify-content: end; gap: 14px var(--identity-pill-gap); margin-left: auto; padding-top: 6px; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model identity" "about thinking identity"; align-items: center; justify-content: end; gap: var(--identity-pill-gap); margin-left: auto; padding-top: 6px; }
 .workspace-page .project-art-header .about-action { grid-area: about; }
-.workspace-page .project-art-header .about-action { display: inline-flex; align-items: center; justify-content: center; justify-self: start; box-sizing: border-box; flex: 0 0 auto; width: auto; min-width: 0; min-height: 34px; padding: 7px 12px; border-color: #a9654875; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
+.workspace-page .project-art-header .about-action { display: inline-flex; align-items: center; justify-content: center; justify-self: start; box-sizing: border-box; flex: 0 0 auto; width: auto; min-width: 0; height: 34px; min-height: 34px; padding: 0 12px; border-color: #a9654875; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
 .workspace-page .project-art-header .about-action:hover:not(:disabled) { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-identity-pill-stack { grid-area: identity; align-self: start; }
 .workspace-page .project-identity-pill-stack > .project-google-signin,
 .workspace-page .project-identity-pill-stack > .api-connection { grid-area: auto; }
+.workspace-page .project-identity-pill-stack > .project-google-signin,
+.workspace-page .project-identity-pill-stack > .project-chatgpt-signin > summary { color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; }
 .workspace-page .project-art-header .header-controls > span:has(> select[aria-label="Mock authentication identity"]) {
   grid-column: 1 / -1;
   justify-self: end;
@@ -67,11 +69,6 @@
 .workspace-page .project-title-actions button { min-height: 30px; padding: 4px 9px; border: 1px solid #ae7a44; border-radius: 5px; background: #281d16; color: #f0cca0; font-size: 11px; cursor: pointer; }
 .workspace-page .project-title-actions button:hover { background: #5b3920; }
 .workspace-page .project-title-error { color: #ffbdad; font-size: 11px; }
-.workspace-page .project-back { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid #8b6745; border-radius: 50%; background: #0b1a27e8; color: #e6bd88; cursor: pointer; }
-.workspace-page .project-back:hover { border-color: #d6a76e; background: #4b311c; color: #fff0d9; }
-.workspace-page .project-back:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
-.workspace-page .project-back:disabled { opacity: .55; cursor: wait; }
-.workspace-page .project-back-label { align-self: center; color: #c6b59f; font-size: 12px; letter-spacing: .02em; }
 .workspace-page .local { color: var(--workspace-copper); background: transparent; border-color: #71543a; }
 .workspace-page .workspace-layout { position: relative; z-index: 1; display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: calc(100dvh - 88px); }
 .workspace-page .workspace-nav { background: #03090f; border-right: 1px solid var(--workspace-line); padding: 24px 10px; }
@@ -178,7 +175,7 @@
   .workspace-page .project-art-header { padding-bottom: 0; }
   .workspace-page .brand-block { gap: 20px; }
   .workspace-page .brand { width: 160px; }
-  .workspace-page .project-header-art { width: 300px; margin-top: -13px; margin-left: -24px; }
+  .workspace-page .project-header-art { width: 255px; margin-top: -13px; margin-left: -24px; }
   .workspace-page .project-art-back-row { left: 145px; }
   .workspace-page .expansion { max-width: 310px; font-size: 9px; }
   .workspace-page .api-connection { min-width: 160px; max-width: 190px; }
@@ -199,11 +196,10 @@
   .workspace-page .brand { width: 144px; }
   .workspace-page .project-art-header { flex-direction: column; align-items: stretch; padding-bottom: 0; }
   .workspace-page .project-art-header .brand-block { width: 100%; flex: none; gap: 12px; }
-  .workspace-page .project-header-art { width: min(100%, 330px); margin-left: -20px; }
-  .workspace-page .project-art-back-row { left: auto; right: 40px; }
-  .workspace-page .project-back-label { display: none; }
+  .workspace-page .project-header-art { width: min(100%, 281px); margin-left: -20px; }
+  .workspace-page .project-art-back-row { left: auto; right: auto; }
   .workspace-page .current-project { padding-top: 0; }
-  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto auto; grid-template-areas: "difficulty difficulty" "about identity" "model identity" "thinking ."; justify-content: stretch; gap: 14px var(--identity-pill-gap); margin-left: 0; }
+.workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto auto; grid-template-areas: "difficulty difficulty" "about identity" "model identity" "thinking ."; justify-content: stretch; gap: var(--identity-pill-gap); margin-left: 0; }
   .workspace-page .project-art-header .about-action { position: relative; top: auto; right: auto; grid-area: about; justify-self: start; }
   .workspace-page .project-art-header .project-difficulty-badge { width: 100%; justify-self: start; align-self: center; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
@@ -253,19 +249,15 @@
 /* Prospective sidebar is feature-gated in WorkspaceFrame. */
 .workspace-page .workspace-layout.sidebar-disabled { grid-template-columns: minmax(0, 1fr); }
 
-/* The full project title owns row one; Back to home is a single inline row below it. */
+/* Keep the project title on its own flexible row beside the logo. */
 .workspace-page .project-art-header .project-title-line { display: flex; flex: 1 1 auto; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 8px; min-width: 0; max-width: min(58vw, 820px); }
-.workspace-page .project-back-row { display: flex; align-items: center; gap: 9px; }
-.workspace-page .project-back-label { align-self: center; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: #e0c4a0; font: 600 13px Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: normal; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; cursor: pointer; }
-.workspace-page .project-back-label:hover:not(:disabled) { color: #e0c4a0; background: transparent; border-color: transparent; box-shadow: none; }
-.workspace-page .project-back-label:disabled { opacity: .5; cursor: default; }
 .workspace-page .project-header-title { display: block; width: 100%; min-width: 0; padding: 0; color: var(--workspace-copper); font: 400 clamp(18px, 1.7vw, 24px)/1.3 Georgia, serif; overflow-wrap: anywhere; }
 .workspace-page .project-header-title-row { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .workspace-page .project-header-title-row .research-type-icon { display: block; flex: 0 0 26px; width: 26px; height: 26px; color: var(--workspace-copper); }
 .workspace-page .project-header-title-row .project-header-title { width: auto; min-width: 0; max-width: 100%; flex: 0 1 auto; }
 .workspace-page .project-difficulty-badge { grid-area: difficulty; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; max-width: 100%; padding: 4px 9px; border-color: #8b6745; background: #091824e8; color: #e0c4a0; letter-spacing: .025em; white-space: nowrap; }
 .workspace-page .project-header-controls { display: contents; }
-.workspace-page .project-control-pill { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-height: 27px; padding: 4px 9px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e1c39e; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
+.workspace-page .project-control-pill { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 12px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
 .workspace-page .project-model-pill { grid-area: model; justify-content: center; align-items: center; text-align: center; }
 .workspace-page .project-model-pill > span { margin: 0; }
 .workspace-page .project-thinking-pill { grid-area: thinking; }
@@ -280,7 +272,7 @@
 button.project-control-pill { cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
 button.project-control-pill:hover:not(:disabled), button.project-control-pill:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
 button.project-control-pill:focus-visible { outline: 2px solid #e9bc82; outline-offset: 2px; }
-button.project-control-pill:disabled { cursor: default; opacity: .62; }
+button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity: 1; }
 .project-model-confirm-popover { position: fixed; z-index: 1300; width: min(320px, calc(100vw - 16px)); padding: 12px 14px; border: 1px solid #66533d; border-radius: 6px; background: #101820f5; color: #d5dfe7; line-height: 1.55; box-shadow: 0 14px 35px #0009; }
 .project-model-confirm-popover p { margin: 0 0 10px; color: #d5dfe7; font: 400 12px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
 .project-model-confirm-popover strong { color: #e1c39e; font-weight: 600; }
@@ -295,7 +287,8 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-header-title { font-size: 18px; }
   .workspace-page .project-header-title-row { gap: 5px; }
   .workspace-page .project-header-title-row .research-type-icon { flex-basis: 22px; width: 22px; height: 22px; }
-  .workspace-page .project-control-pill { min-height: 26px; padding-inline: 8px; font-size: 9px; }
+  .workspace-page .project-control-pill { height: 28px; min-height: 28px; padding-inline: 9px; font-size: 9px; }
+  .workspace-page .project-art-header .about-action { height: 28px; min-height: 28px; padding: 0 9px; font-size: 9px; line-height: 1.2; }
   .workspace-page .project-google-signin { font-size: 9px; line-height: 1.2; }
   .workspace-page .cloud-home-controls.compact { min-width: 0; max-width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: center; }
   .workspace-page .cloud-home-controls.compact .cloud-user-email { max-width: 100%; }
@@ -303,7 +296,7 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-art-header .api-connection.project-chatgpt-signin { width: 100%; max-width: none; }
   .workspace-page .project-chatgpt-signin > summary { width: 100%; min-width: 0; justify-content: center; font-size: 9px; line-height: 1.2; white-space: normal; }
   .workspace-page .project-identity-pill-stack > .project-google-signin,
-  .workspace-page .project-identity-pill-stack > .project-chatgpt-signin > summary { min-height: 28px; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); }
+  .workspace-page .project-identity-pill-stack > .project-chatgpt-signin > summary { height: 28px; min-height: 28px; padding: 0 9px; font-size: 9px; line-height: 1.2; }
   .workspace-page .project-chatgpt-signin > summary [role="status"] { min-width: 0; white-space: normal; text-align: center; }
 }
 
@@ -329,6 +322,7 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .outcome-subsection.current-understanding > summary .disclosure-chevron { width: 14px; height: 14px; flex-basis: 14px; }
 .workspace-page .outcome-subsection.current-understanding > summary > span { min-width: 0; flex: 0 1 auto; overflow-wrap: normal; word-break: normal; }
 .workspace-page .outcome-subsection.current-understanding > summary .strategy-suggestion-trigger { flex: 0 0 auto; width: auto; min-width: 0; min-height: 0; margin: 0 0 0 8px; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: #e0c4a0; font: 600 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.workspace-page .outcome-subsection.current-understanding > summary .strategy-suggestion-progress { display: inline-flex; flex: 0 0 auto; align-items: baseline; gap: 3px; margin-left: 8px; color: #aab4ba; font: 400 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 .current-understanding-scope { margin: 0.25rem 16px 0.8rem 40px; }
 .current-understanding-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.2rem; }
 .current-understanding > .current-understanding-columns { padding: 0 16px; }
