@@ -189,8 +189,12 @@ def main() -> None:
     from unittest.mock import patch
 
     from sigma.projects import (
-        ProjectError, create_json_project, export_complete_project,
-        inspect_project, list_json_projects, migrate_project,
+        ProjectError,
+        create_json_project,
+        export_complete_project,
+        inspect_project,
+        list_json_projects,
+        migrate_project,
     )
 
     with tempfile.TemporaryDirectory() as directory:
