@@ -3720,7 +3720,11 @@ function GoogleIdentityPill() {
     if (deniedEmail && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [deniedEmail]);
   useEffect(() => {
-    const open = () => dialog.current?.showModal();
+    const open = () => {
+      document
+        .querySelector<HTMLAnchorElement>('.project-google-signin[href="/api/cloud-auth/login"]')
+        ?.click();
+    };
     window.addEventListener('sigma-open-google-signin', open);
     return () => window.removeEventListener('sigma-open-google-signin', open);
   }, []);

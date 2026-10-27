@@ -6527,3 +6527,13 @@ typecheck, and production build. `git diff --check` passed. The build retains
 its existing advisory about the JavaScript chunk over 500 kB; Python emitted
 Starlette's existing `TestClient` deprecation warning. No live provider or OAuth
 calls occurred; cost was $0. Final GitHub CI for the pushed head is pending.
+
+The first GitHub T201 workflow on the remediation head passed its overflow
+recovery and legal-page checks but failed in the chained Guest samples browser
+check on stale Google-button, account-dialog, and Back-to-home expectations.
+Updated that check for the current T88 pills, Privacy Close action, and SIGMA
+logo navigation. Corrected the guest research “Sign in now” action to activate
+the existing Google sign-in link; real-Chrome guest acceptance intercepts the
+local login route and verifies no research or project mutations. The T201,
+T257, guest-samples, legal-page, and full local verification suites pass after
+these corrections. GitHub CI for the next pushed head remains to be checked.

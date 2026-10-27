@@ -134,6 +134,7 @@ def exercise(ui_url: str, root: Path) -> None:
         mutation_requests: list[str] = []
         research_dispatch_requests: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
+        page.route("**/api/cloud-auth/login", lambda route: route.abort())
         page.on(
             "response",
             lambda response: (
@@ -169,7 +170,7 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         # The guest landing page intentionally starts with Projects, not a welcome heading.
         expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
-        expect(page.get_by_role("button", name="Sign in with Google")).to_be_visible()
+        expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
@@ -186,13 +187,10 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("tab", name="Recent")).to_have_attribute("aria-selected", "true")
         assert recent_responses == [], recent_responses
         page.get_by_role("tab", name="Samples").click()
-        page.locator(".api-connection > summary").click()
-        expect(page.get_by_role("dialog", name="Account and model settings")).to_contain_text(
-            "Guest · Explore SIGMA"
-        )
         sign_in = page.get_by_role("link", name="Sign in with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
-        page.keyboard.press("Escape")
+        expect(page.locator(".api-connection > summary")).to_contain_text("Connect to ChatGPT")
+        expect(page.get_by_role("dialog", name="Account and model settings")).to_have_count(0)
         sample_group = page.locator("details.sample-type-group").filter(
             has_text="Did Jesus Use Cannabis?"
         )
@@ -207,8 +205,8 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(policy).to_be_visible()
         policy.click()
         expect(page.get_by_role("heading", name="SIGMA Privacy Notice")).to_be_visible()
-        expect(page.get_by_role("link", name="Return to SIGMA")).to_be_visible()
-        page.get_by_role("link", name="Return to SIGMA").click()
+        page.get_by_role("button", name="Close", exact=True).click()
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
 
         sample_group.locator("button.sample-open").evaluate("button => button.click()")
         expect(page.get_by_role("heading", name="Did Jesus Use Cannabis? v1")).to_be_visible(
@@ -241,20 +239,6 @@ def exercise(ui_url: str, root: Path) -> None:
         assert len(action_colors) == 2 and action_colors[0] == action_colors[1], action_colors
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
-        play_dialog.get_by_role("button", name="Sign in now").click()
-        expect(play_dialog).to_have_count(0)
-        google_dialog = page.get_by_role("dialog", name="Account and model settings")
-        expect(google_dialog).to_be_visible()
-        expect(google_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
-            "href", "/api/cloud-auth/login"
-        )
-        assert len(mutation_requests) == mutations_before_play, mutation_requests
-        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
-        page.keyboard.press("Escape")
-        expect(google_dialog).to_have_count(0)
-        expect(page.locator(".api-connection > summary")).to_be_focused()
-        play.click()
-        expect(play_dialog).to_be_visible()
         play_dialog.get_by_role("button", name="Cancel").click()
         expect(play_dialog).to_have_count(0)
         expect(play).to_be_focused()
@@ -264,7 +248,7 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(
             page.get_by_role("status").filter(has_text="AI features require a signed-in account.")
         ).to_be_visible()
-        expect(page.get_by_role("button", name="Back to home").first).to_be_visible()
+        expect(page.get_by_role("link", name="Go back to home page")).to_be_visible()
         assert opened_projects
         assert Path(opened_projects[-1]["path"]).is_dir()
         assert not Path(opened_projects[-1]["path"]).is_relative_to(root / "saved-projects")
@@ -273,6 +257,17 @@ def exercise(ui_url: str, root: Path) -> None:
         )
         assert recent == [], recent
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
+        play.click()
+        play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
+        expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
+        with page.expect_request("**/api/cloud-auth/login") as sign_in_request:
+            play_dialog.get_by_role("button", name="Sign in now").click()
+        expect(play_dialog).to_have_count(0)
+        assert sign_in_request.value.url.endswith("/api/cloud-auth/login"), (
+            sign_in_request.value.url
+        )
+        assert len(mutation_requests) == mutations_before_play, mutation_requests
+        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         assert not failures, failures
         assert (
             not list((root / "saved-projects").glob("*.sigma"))

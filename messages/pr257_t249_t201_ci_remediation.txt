@@ -7,23 +7,28 @@ Base: main
 
 ## Findings and corrections
 
-- The branch was two commits behind main. Merged latest main; it intentionally
-  removes `samples/handshake-count-easy/project.json` as part of #260. This is
-  the root cause of the stale 17-sample assertion and missing ladder sample.
-- `tests/recents.py` now verifies the catalog count and IDs against actual
-  single-file project sources. It does not freeze the public sample count.
-- `tests/research_ladder.py` now uses the retained Maximum Regions Formed by
-  Lines sample for the easy mathematical stage. It counts active strategies,
-  checks distinct IDs, confirms its active starter does not contain the known
-  formula, and confirms the removed solution remains archived.
-- T201's local fixture now initializes a T249 single-file `.json` project and
-  uses its canonical inspected path. Browser assertions read embedded session
-  members through the project-bundle service. The blocked-start protections
-  remain asserted: no provider call, new session, sequence reservation, or
-  mutation to the original session. Recovery uses the existing New strategy
-  action and completes through the deterministic fake provider. The overflow
-  error text now recommends that available action instead of the removed
-  “Fork strategy from findings” control.
+- Merged latest main, including #260's intentional removal of
+  `samples/handshake-count-easy/project.json`. This caused the stale 17-sample
+  assertion and missing ladder sample.
+- `tests/recents.py` checks catalog count and IDs against actual single-file
+  project sources. `tests/research_ladder.py` uses the retained Maximum Regions
+  sample for the easy stage, checks its active answer-free starter and distinct
+  strategy IDs, and verifies the known solution remains archived.
+- T201's fixture now creates a T249 `.json` project, uses its canonical path,
+  and reads embedded session members through the project-bundle service.
+- T201 overflow guidance now matches the available New strategy action. The
+  browser check carries the actual omitted finding text into that strategy.
+  It still checks that a blocked start makes no provider call, allocates no
+  session or sequence number, and leaves source evidence unchanged, then
+  verifies fake-provider progress.
+- GitHub's first T201 workflow run passed T201 recovery and public legal checks,
+  then exposed stale expectations in its chained Guest samples check: it treated
+  the Google sign-in link as a button, expected the retired account dialog, and
+  expected the removed Back to home button. The check now validates the current
+  Google/ChatGPT pills, privacy Close action, and logo Home link. Guest research
+  “Sign in now” now follows the same Google sign-in link; the browser check
+  intercepts `/api/cloud-auth/login` and confirms no research or project mutation.
+  It makes no OAuth request to Google.
 
 ## Verification
 
@@ -32,30 +37,31 @@ Base: main
 - `uv run python tests/research_sessions.py` — PASS.
 - `./sigma test` — PASS all repository scenarios, Ruff check and format,
   Pyright (0 diagnostics), frontend typecheck, and production build.
-- `browser_checks/t201_overflow.py` — PASS in installed Google Chrome against
-  an isolated local API, single-file project, and deterministic fake provider.
-  Evidence screenshot: `/tmp/sigma-t201-recovery.png` (local temporary path);
-  the workflow also uploads this screenshot as `t201-recovery-evidence`.
-- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/t257_mock_auth.py` — PASS in installed Google Chrome; T257 local mock-auth journeys remain intact.
-- `git diff --check` — PASS.
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/t201_overflow.py` — PASS in installed Google Chrome with the local deterministic fake provider.
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/guest_samples.py` — PASS in installed Google Chrome; guest samples, protected actions, Google sign-in link, and guest research action.
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/t81_public_legal_pages.py` — PASS in installed Google Chrome.
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --locked --with playwright python browser_checks/t257_mock_auth.py` — PASS in installed Google Chrome; Guest, Member A/B isolation, Administrator, denied account, allowance exhaustion, provider unavailable, and pause/resume.
+- Ruff check/format on the seven changed Python files and `git diff --check` — PASS.
 
-The full build reported the existing advisory for a JavaScript chunk larger than
-500 kB. The Python suite emitted Starlette's existing `TestClient` deprecation
-warning. No live OAuth, paid inference, provider credentials, or external
-provider calls were used; cost was $0.
+The full build reports its existing advisory for a JavaScript chunk larger than
+500 kB. Python emits Starlette's existing `TestClient` deprecation warning. No
+live OAuth, provider credentials, paid inference, or external provider calls
+were used; cost was $0.
 
 ## Acceptance disposition
 
-- **MET:** Catalog count and sample IDs follow T249's actual single-file sample
-  catalog; the five-stage ladder opens all its samples, including its retained
-  easy sample.
-- **MET:** T201 overflow is blocked before provider work or session allocation;
-  saved evidence stays unchanged; the supported strategy-creation recovery path
-  completes a fake-provider session.
-- **MET:** T257 real-Chrome regression check passes.
+- **MET:** T249 sample catalog count/IDs match actual single-file sample files;
+  all five research ladder stages open, with active strategy counts and archived
+  answer preservation verified.
+- **MET:** T201 overflow blocks before provider work or allocation; existing
+  findings remain unchanged; creating a strategy informed by the displayed
+  omitted finding supports a successful fake-provider follow-up.
+- **MET:** Guest samples behavior, Google sign-in entry, legal page navigation,
+  current logo navigation, and guest research access checks pass in real Chrome.
+- **MET:** T257 mock-auth regression coverage passes in real Chrome.
 - **UNMET:** None identified in local scope.
-- **UNVERIFIED:** GitHub CI for the final pushed head is pending. Live OAuth,
-  hosted inference, and deployed-service behavior were not in scope.
+- **UNVERIFIED:** GitHub workflows for the new head are pending after the
+  guest-samples correction. Live OAuth, hosted inference, and deployed-service
+  behavior were not exercised or required.
 
-This is a local verification report. Current PR head SHA and final workflow
-state are in the PR metadata and completion handoff.
+See the PR's current head and checks for the final commit SHA and CI state.
