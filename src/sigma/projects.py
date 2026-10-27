@@ -675,23 +675,31 @@ def initialize_project(
         if not path.parent.is_dir() or path.parent.is_symlink():
             raise ProjectError("Project destination parent is unavailable")
         project = Project(
-            9, str(uuid4()), title.strip(), problem.strip(),
+            9,
+            str(uuid4()),
+            title.strip(),
+            problem.strip(),
             (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
-            investigation_type=mode, ai_model=resolved_model,
-            reasoning_effort=reasoning_effort, difficulty=selected_difficulty,
+            investigation_type=mode,
+            ai_model=resolved_model,
+            reasoning_effort=reasoning_effort,
+            difficulty=selected_difficulty,
             show_advanced_outcome_details=show_advanced_outcome_details,
         )
         import base64
 
         bundle = {
-            "format": FORMAT, "version": VERSION,
+            "format": FORMAT,
+            "version": VERSION,
             "files": {STATE: base64.b64encode(_document(project)).decode("ascii")},
         }
         fd, staged_name = tempfile.mkstemp(prefix=".sigma-init-", dir=path.parent)
         staged = Path(staged_name)
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write((json.dumps(bundle, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+                stream.write(
+                    (json.dumps(bundle, sort_keys=True, indent=2) + "\n").encode("utf-8")
+                )
                 stream.flush()
                 os.fsync(stream.fileno())
             os.link(staged, path)
