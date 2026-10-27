@@ -285,3 +285,8 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .home-page .home-topline .api-connection > summary { font-size: clamp(9px, calc(1.25vw + 4.5px), 11px); }
 }
 
+
+/* T88: use the existing account-pill language for the guest's two-line state. */
+.project-google-signin .google-identity-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 0; line-height: 1.3; }
+.project-google-signin .google-identity-lines > span:first-child { color: #e0d0c8; font-weight: 600; }
+.project-google-signin .google-identity-lines > span:last-child { color: #c9b18f; font-size: 10px; }
