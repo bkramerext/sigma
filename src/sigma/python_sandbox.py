@@ -608,11 +608,16 @@ def _save_record(
                         prior = json.loads(data)
                     except (ValueError, UnicodeDecodeError):
                         continue
-                    if (isinstance(prior, dict)
+                    if (
+                        isinstance(prior, dict)
                         and prior.get("runtime", "python") == record.get("runtime", "python")
-                        and all(prior.get(key) == record.get(key) for key in (
-                            "project_id", "session_id", "strategy_id", "cycle", "source"
-                        ))):
+                        and all(
+                            prior.get(key) == record.get(key)
+                            for key in (
+                                "project_id", "session_id", "strategy_id", "cycle", "source"
+                            )
+                        )
+                    ):
                         raise ProjectError(
                             "This research proposal is already reserved; no second run was started"
                         )
@@ -624,13 +629,18 @@ def _save_record(
                     reserved = json.loads(previous) if previous is not None else None
                 except (ValueError, UnicodeDecodeError) as exc:
                     raise ProjectError("Research execution reservation is unreadable") from exc
-                if (not isinstance(reserved, dict)
+                if (
+                    not isinstance(reserved, dict)
                     or reserved.get("status") != "running"
                     or reserved.get("runtime", "python") != record.get("runtime", "python")
-                    or any(reserved.get(key) != record.get(key) for key in (
-                        "id", "project_id", "session_id", "strategy_id", "cycle",
-                        "source", "runtime_version", "syntax", "source_sha256", "agent"
-                    ))):
+                    or any(
+                        reserved.get(key) != record.get(key)
+                        for key in (
+                            "id", "project_id", "session_id", "strategy_id", "cycle",
+                            "source", "runtime_version", "syntax", "source_sha256", "agent"
+                        )
+                    )
+                ):
                     raise ProjectError("Research execution reservation does not match the result")
             artifact_records = []
             changes: dict[str, bytes | None] = {}
@@ -639,8 +649,11 @@ def _save_record(
                 if name.startswith(prefix):
                     changes[name] = None
             for filename, media_type, content in artifacts:
-                if (len(content) > MAX_CAPTURED_ARTIFACT_BYTES
-                    or Path(filename).name != filename or filename in {".", ".."}):
+                if (
+                    len(content) > MAX_CAPTURED_ARTIFACT_BYTES
+                    or Path(filename).name != filename
+                    or filename in {".", ".."}
+                ):
                     raise ProjectError("Research output artifact is invalid")
                 artifact_records.append({
                     "filename": filename, "media_type": media_type,
