@@ -57,8 +57,12 @@ async def verify():
             artifact_run = await execute_research_code(path, artifact_source)
             assert artifact_run["status"] == "completed", artifact_run
             assert artifact_run["exit_code"] == 0, artifact_run
-            assert any(item["filename"] == "proof.bin" for item in artifact_run["artifacts"]), artifact_run
-            artifact_bytes, media_type = get_execution_artifact(path, artifact_run["id"], "proof.bin")
+            assert any(
+                item["filename"] == "proof.bin" for item in artifact_run["artifacts"]
+            ), artifact_run
+            artifact_bytes, media_type = get_execution_artifact(
+                path, artifact_run["id"], "proof.bin"
+            )
             assert artifact_bytes == bytes(range(256)), (len(artifact_bytes), media_type)
             assert get_execution(path, artifact_run["id"])["artifacts"] == artifact_run["artifacts"]
             print("PASS real Docker binary artifact capture and integrity")
@@ -77,7 +81,6 @@ async def verify():
             # Deliberately leave a running reservation with no live lock to
             # simulate process termination before finalization.
             import sigma.python_sandbox as sandbox
-            from uuid import uuid4
             interrupted = dict(first)
             interrupted["id"] = str(uuid4())
             interrupted["source"] = "print('interrupted')"
@@ -155,10 +158,16 @@ async def verify():
                         killed = True
                         break
                     if child.poll() is not None:
-                        stderr = child.stderr.read().decode(errors="replace") if child.stderr is not None else "(stderr unavailable)"
+                        stderr = (
+                            child.stderr.read().decode(errors="replace")
+                            if child.stderr is not None
+                            else "(stderr unavailable)"
+                        )
                         raise AssertionError("Docker worker exited before reservation: " + stderr)
                     await asyncio.sleep(0.05)
-                assert killed and doomed_id is not None, "Docker worker did not create a running reservation"
+                assert killed and doomed_id is not None, (
+                    "Docker worker did not create a running reservation"
+                )
                 dead = get_execution(path, doomed_id)
                 assert dead["status"] == "interrupted", dead
                 assert dead["exit_code"] is None
