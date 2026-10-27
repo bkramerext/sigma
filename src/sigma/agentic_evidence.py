@@ -48,7 +48,11 @@ def _directory(path: Path, create: bool) -> Path:
 
 
 def _lock(path: Path):
-    lock_path = path.with_name("." + path.name + LOCK) if path.suffix == ".json" else path / LOCK
+    lock_path = (
+        path.with_name("." + path.name + LOCK)
+        if path.suffix == ".json"
+        else path / LOCK
+    )
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     stream = os.fdopen(fd, "rb")
     lock_stat = os.fstat(stream.fileno())
@@ -65,7 +69,9 @@ def _lock(path: Path):
 
 def _encoded(record: dict[str, Any]) -> bytes:
     try:
-        contents = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        contents = (
+            json.dumps(record, ensure_ascii=False, indent=2) + "\n"
+        ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ProjectError("Agentic evidence is not valid JSON") from exc
     if len(contents) > MAX_RECORD_BYTES:
@@ -152,10 +158,15 @@ def save(path_value: str | Path, record: dict[str, Any]) -> None:
     contents = _encoded(record)
     if path.suffix == ".json":
         from sigma.projects import save_project_artifacts
+
         destination = f"evidence/agentic-runs/{run_id}.json"
         with _lock(path):
             entries = _bundle_entries(path, view.project.id)
-            retained = [(name, size, item) for name, size, item in entries if name != destination]
+            retained = [
+                (name, size, item)
+                for name, size, item in entries
+                if name != destination
+            ]
             retained.append((destination, len(contents), record))
             retained.sort(key=lambda item: (item[2].get("started_at", ""), item[0]))
             total = sum(size for _, size, _ in retained)
