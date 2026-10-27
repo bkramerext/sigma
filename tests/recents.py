@@ -96,7 +96,7 @@ def check(root: Path, base: Path) -> None:
     selected = binary_counting
     source_path = ROOT / "samples" / selected["id"] / "project.json"
     first = open_sample_project(selected["id"])
-    assert first.path == str(root / f"{selected['id']}.sigma")
+    assert first.path == str(root / f"{selected['id']}.json")
     assert first.project.id != json.loads(sources[source_path])["id"]
     assert first.project.title == f"{selected['title']} v1"
     assert Path(first.path, "project.json").read_bytes() != sources[source_path]
@@ -129,14 +129,14 @@ def check(root: Path, base: Path) -> None:
         pass
 
     collision = root / f"{selected['id']}.sigma"
-    moved = root / "saved-sample.sigma"
+    moved = root / "saved-sample.json"
     collision.rename(moved)
     impostor = create_project(selected["id"], "Different research")
     assert impostor.path == str(collision)
     additional = open_sample_project(selected["id"])
     assert additional.path != str(collision)
     assert inspect_project(collision).project == impostor.project
-    collision.rename(root / "saved-impostor.sigma")
+    collision.rename(root / "saved-impostor.json")
     moved.rename(collision)
     last_copy = open_sample_project(selected["id"])
     assert last_copy.project.id != edited.project.id
