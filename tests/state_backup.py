@@ -70,7 +70,7 @@ class StateBackupTests(unittest.TestCase):
                 "INSERT INTO identities VALUES('s2','two@example.org',1);"
             )
             db.commit()
-        mapping = auth / "workspaces.sqlite3"
+        mapping = workspaces / "workspaces.sqlite3"
         with closing(sqlite3.connect(mapping)) as db:
             db.execute(
                 "CREATE TABLE workspaces(subject_hash TEXT,workspace_id TEXT,created_at TEXT)"
@@ -89,7 +89,7 @@ class StateBackupTests(unittest.TestCase):
                 ],
             )
             db.commit()
-        ledger = auth / "cloud-research.sqlite3"
+        ledger = workspaces / "cloud-research.sqlite3"
         with closing(sqlite3.connect(ledger)) as db:
             db.executescript(
                 "CREATE TABLE jobs(session_id TEXT,workspace_id TEXT,project_id TEXT);"

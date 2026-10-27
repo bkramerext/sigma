@@ -13,8 +13,8 @@ from pathlib import Path
 
 DATABASES = {
     "auth identity database": ("access.sqlite3", {"identities", "sessions", "grants"}),
-    "workspace mapping database": ("workspaces.sqlite3", {"workspaces"}),
-    "research accounting database": ("cloud-research.sqlite3", {"jobs", "calls"}),
+    "workspace mapping database": ("workspaces/workspaces.sqlite3", {"workspaces"}),
+    "research accounting database": ("workspaces/cloud-research.sqlite3", {"jobs", "calls"}),
 }
 SAFE_WORKSPACE_ID = re.compile(r"^[0-9a-f]{32}$")
 
@@ -72,13 +72,13 @@ def verify(
     mapped: set[str] = set()
     for description, (filename, tables) in DATABASES.items():
         identifiers, status = check_database(auth / filename, tables, auth_metadata.st_uid)
-        if filename == "workspaces.sqlite3":
+        if filename == "workspaces/workspaces.sqlite3":
             mapped = identifiers
         results.append(f"PASS {description}: SQLite integrity and required tables ({status})")
 
     access_db = sqlite3.connect(f"file:{(auth / 'access.sqlite3').resolve()}?mode=ro", uri=True)
     mapping_db = sqlite3.connect(
-        f"file:{(auth / 'workspaces.sqlite3').resolve()}?mode=ro", uri=True
+        f"file:{(auth / 'workspaces/workspaces.sqlite3').resolve()}?mode=ro", uri=True
     )
     try:
         subjects = {row[0] for row in access_db.execute("SELECT subject FROM identities")}
@@ -116,10 +116,15 @@ def verify(
             f"only {len(mapped)} identity mappings; expected at least {min_workspaces}"
         )
     workspace_entries = list(workspace_root.iterdir())
-    invalid_entries = [p.name for p in workspace_entries if p.is_symlink() or not p.is_dir()]
+    metadata_files = {"workspaces.sqlite3", "cloud-research.sqlite3"}
+    invalid_entries = [
+        p.name
+        for p in workspace_entries
+        if p.is_symlink() or (not p.is_dir() and p.name not in metadata_files)
+    ]
     if invalid_entries:
         raise ValueError(f"workspaces root contains {len(invalid_entries)} non-directory entries")
-    workspace_dirs = {p.name for p in workspace_entries}
+    workspace_dirs = {p.name for p in workspace_entries if p.is_dir()}
     invalid = sorted(value for value in mapped if not SAFE_WORKSPACE_ID.fullmatch(value))
     if invalid:
         raise ValueError(f"mapping contains {len(invalid)} invalid workspace IDs")
@@ -206,7 +211,7 @@ def verify(
     )
 
     ledger = sqlite3.connect(
-        f"file:{(auth / 'cloud-research.sqlite3').resolve()}?mode=ro", uri=True
+        f"file:{(auth / 'workspaces/cloud-research.sqlite3').resolve()}?mode=ro", uri=True
     )
     try:
         job_workspaces = {
