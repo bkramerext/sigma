@@ -2880,8 +2880,9 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     """
     view = inspect_project(path)
     if Path(view.path).suffix == ".json":
-        from sigma.project_bundle import read_bundle
         import base64
+
+        from sigma.project_bundle import read_bundle
 
         records: list[dict[str, Any]] = []
         unavailable = 0
