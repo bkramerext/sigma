@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Permanent JSON project integration suite (Docker lifecycle opt-in).
 
 Unlike scripts/t249_verify.py this runner never commits or pushes anything.
