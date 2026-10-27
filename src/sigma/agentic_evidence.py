@@ -65,9 +65,6 @@ def _lock(path: Path):
 
 def _encoded(record: dict[str, Any]) -> bytes:
     try:
-        contents = (
-            json.dumps(record, ensure_ascii=False, indent=2) + "\n"
-        ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ProjectError("Agentic evidence is not valid JSON") from exc
     if len(contents) > MAX_RECORD_BYTES:
