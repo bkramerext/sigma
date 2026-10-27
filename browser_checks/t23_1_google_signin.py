@@ -22,6 +22,7 @@ import httpx
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
+SCREENSHOTS = ROOT / "docs" / "evaluations" / "t257" / "screenshots"
 CHROME = os.environ.get(
     "SIGMA_BROWSER_EXECUTABLE",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -37,6 +38,25 @@ def free_port() -> int:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         return int(listener.getsockname()[1])
+
+
+def assert_account_dialog_layout(page, trigger, dialog) -> None:
+    expect(dialog).to_be_visible()
+    page.wait_for_function(
+        """() => {
+            const trigger = document.querySelector('.api-connection > summary');
+            const dialog = document.querySelector('.connection-details[role="dialog"]');
+            if (!trigger || !dialog) return false;
+            const t = trigger.getBoundingClientRect();
+            const d = dialog.getBoundingClientRect();
+            const inside = d.left >= 0 && d.right <= innerWidth
+                && d.top >= 0 && d.bottom <= innerHeight;
+            const anchored = d.top >= t.bottom + 4 || d.bottom <= t.top - 4;
+            return inside && anchored && dialog.contains(document.activeElement);
+        }"""
+    )
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    assert trigger.get_attribute("aria-expanded") == "true"
 
 
 def wait_for(url: str, process: subprocess.Popen, log: Path) -> None:
@@ -299,30 +319,70 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             assert rejected.status_code == 401, rejected.text
 
             page.goto(ui_url + "/", wait_until="networkidle")
-            expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_be_visible()
-            expect(page.get_by_role("link", name="Continue with Google")).to_be_visible()
-            expect(page.get_by_role("link", name="Invite Me")).to_be_visible()
-            expect(page.get_by_role("link", name="Continue as Guest")).to_be_visible()
+            expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
+            expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            expect(page.locator(".api-connection > summary")).to_be_visible()
+            expect(page.locator(".account-model-status")).to_have_count(0)
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-            page.get_by_role("link", name="Continue as Guest").click()
+            page.locator(".api-connection > summary").click()
+            guest_dialog = page.get_by_role("dialog")
+            expect(guest_dialog).to_contain_text("Guest · Explore SIGMA")
+            expect(guest_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+                "href", "/api/cloud-auth/login"
+            )
+            SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-guest-dialog-desktop.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(
+                page, page.locator(".api-connection > summary"), guest_dialog
+            )
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-guest-dialog-mobile.png"), animations="disabled"
+            )
+            page.keyboard.press("Escape")
+            expect(guest_dialog).to_have_count(0)
+            page.wait_for_function(
+                "document.activeElement === document.querySelector('.api-connection > summary')"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
+            page.goto(ui_url + "/demo", wait_until="networkidle")
             expect(
                 page.get_by_role("heading", name="Explore a SIGMA research project")
             ).to_be_visible()
             assert not guest_ai_requests, guest_ai_requests
             page.goto(ui_url + "/", wait_until="networkidle")
-            page.get_by_role("link", name="Continue with Google").click()
+            page.locator(".api-connection > summary").click()
+            expect(page.get_by_role("dialog")).to_contain_text("Guest · Explore SIGMA")
+            page.get_by_role("dialog").get_by_role("link", name="Sign in with Google").click()
             expect(page).to_have_url(ui_url + "/")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             status_pill = page.locator(".account-model-status > summary")
-            expect(status_pill).to_contain_text("Member")
+            expect(status_pill).to_contain_text("Regular user")
             expect(status_pill).to_contain_text("Personal ChatGPT · unavailable")
             status_pill.click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
+            expect(page.locator(".account-model-status > summary")).to_have_count(1)
             expect(
                 account.get_by_text(
                     "Connect your own ChatGPT account through OpenAI authentication."
                 )
             ).to_be_visible()
+            SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+            expect(account.locator(".account-identity-state h2")).to_have_text("Regular user")
+            expect(status_pill.locator(".account-model-lines > span")).to_have_count(2)
+            assert_account_dialog_layout(page, status_pill, account)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-account-dialog.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, status_pill, account)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-account-dialog-mobile.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
+            assert_account_dialog_layout(page, status_pill, account)
             expect(
                 account.get_by_text(
                     "Hosted personal ChatGPT authentication is unavailable", exact=False
@@ -365,7 +425,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             )
             controls = page.locator(".project-art-header .header-controls")
             google = controls.locator(".account-model-status > summary")
-            expect(google).to_contain_text("Member")
+            expect(google).to_contain_text("Regular user")
             expect(google).to_contain_text("SIGMA-sponsored")
             model = controls.locator(".project-model-pill")
             thinking = controls.locator(".project-thinking-pill")
@@ -373,6 +433,25 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             chatgpt = controls.locator(".project-chatgpt-signin > summary")
             for control in (model, thinking, difficulty, google, chatgpt):
                 expect(control).to_be_visible()
+            expect(controls.locator(".account-model-status > summary")).to_have_count(1)
+            google.click()
+            account = page.get_by_role("dialog", name="Account and model settings")
+            expect(account).to_be_visible()
+            expect(account.locator(".account-identity-state h2")).to_have_text("Regular user")
+            expect(google.locator(".account-model-lines > span")).to_have_count(2)
+            page.set_viewport_size({"width": 1280, "height": 900})
+            assert_account_dialog_layout(page, google, account)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-account-dialog.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, google, account)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-account-dialog-mobile.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
+            assert_account_dialog_layout(page, google, account)
+            page.locator(".connection-backdrop").click(position={"x": 2, "y": 2})
             for width, height in ((1280, 800), (390, 844), (320, 700)):
                 page.set_viewport_size({"width": width, "height": height})
                 expect(google).to_be_visible()
@@ -381,7 +460,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             # Account switch is another fixture redirect; the API must expose only B's
             # workspace after the browser identity changes and the app reloads.
             google.click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             expect(account.get_by_text(ACCOUNTS["A"]["email"], exact=True)).to_be_visible()
             expect(account.get_by_role("heading", name="Model access")).to_be_visible()
             expect(
@@ -421,7 +500,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             google = page.locator(".account-model-status > summary")
             expect(google).to_contain_text("allowance exhausted")
             google.click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             expect(
                 account.get_by_role("button", name="Or you can use your allowance that's on us.")
             ).to_have_count(0)
@@ -438,16 +517,36 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             ).to_be_visible()
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
             expect(page).to_have_url(ui_url + "/")
-            expect(page.get_by_role("link", name="Continue with Google")).to_be_visible()
+            expect(page.locator(".api-connection > summary")).to_be_visible()
             assert page.evaluate("window.localStorage.getItem('sigma.currentProject')") is None
             assert api_request("GET", "/api/projects/recent").status_code == 401
 
-            page.get_by_role("link", name="Continue with Google").click()
+            page.locator(".api-connection > summary").click()
+            expect(page.get_by_role("dialog")).to_contain_text("Guest · Explore SIGMA")
+            page.get_by_role("dialog").get_by_role("link", name="Sign in with Google").click()
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             assert login_attempts == ["A", "B"]
             page.reload(wait_until="networkidle")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-            expect(page.locator(".account-model-status > summary")).to_contain_text("Admin")
+            admin_pill = page.locator(".account-model-status > summary")
+            expect(admin_pill).to_contain_text("Administrator")
+            expect(admin_pill.locator(".account-model-lines > span")).to_have_count(2)
+            admin_pill.click()
+            admin_dialog = page.get_by_role("dialog", name="Account and model settings")
+            expect(admin_dialog.locator(".account-identity-state h2")).to_have_text("Administrator")
+            assert_account_dialog_layout(page, admin_pill, admin_dialog)
+            page.screenshot(path=str(SCREENSHOTS / "home-admin-dialog.png"), animations="disabled")
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, admin_pill, admin_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-admin-dialog-mobile.png"), animations="disabled"
+            )
+            page.keyboard.press("Escape")
+            expect(admin_dialog).to_have_count(0)
+            page.wait_for_function(
+                "document.activeElement === document.querySelector('.account-model-status > summary')"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
             assert api_request("GET", "/api/projects/recent", identity).json()["projects"] == []
             project_b = api_request(
                 "POST",
@@ -471,22 +570,59 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
                 ]
                 == project_b.json()["path"]
             )
+            page.goto(
+                ui_url + "/project?" + urlencode({"path": project_b.json()["path"]}),
+                wait_until="networkidle",
+            )
+            admin_project_pill = page.locator(".account-model-status > summary")
+            expect(admin_project_pill).to_contain_text("Administrator")
+            admin_project_pill.click()
+            admin_project_dialog = page.get_by_role("dialog", name="Account and model settings")
+            expect(admin_project_dialog.locator(".account-identity-state h2")).to_have_text(
+                "Administrator"
+            )
+            page.set_viewport_size({"width": 1280, "height": 900})
+            assert_account_dialog_layout(page, admin_project_pill, admin_project_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-admin-dialog.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, admin_project_pill, admin_project_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-admin-dialog-mobile.png"), animations="disabled"
+            )
+            page.keyboard.press("Escape")
+            expect(admin_project_dialog).to_have_count(0)
+            page.goto(ui_url + "/", wait_until="networkidle")
+            page.set_viewport_size({"width": 1280, "height": 800})
 
             # A valid but ungranted fixture identity returns the rejected-access UI
             # and still has no private API principal.
             page.locator(".account-model-status > summary").click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
-            page.get_by_role("link", name="Continue with Google").click()
-            expect(
-                page.get_by_text("Your Google account is not yet invited to SIGMA.")
-            ).to_be_visible()
-            expect(page.get_by_text(ACCOUNTS["denied"]["email"], exact=True)).to_be_visible()
+            page.locator(".api-connection > summary").click()
+            expect(page.get_by_role("dialog")).to_contain_text("Guest · Explore SIGMA")
+            page.get_by_role("dialog").get_by_role("link", name="Sign in with Google").click()
+            expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
+            expect(page.get_by_role("button", name="Invite Me", exact=True)).to_have_count(0)
+            page.locator(".api-connection > summary").click()
+            denied_dialog = page.get_by_role("dialog")
+            expect(denied_dialog).to_contain_text("Access is not granted")
+            expect(denied_dialog).to_contain_text(ACCOUNTS["denied"]["email"])
+            denied_pill = page.locator(".api-connection > summary")
+            expect(denied_pill).to_have_count(1)
+            assert_account_dialog_layout(page, denied_pill, denied_dialog)
+            page.screenshot(path=str(SCREENSHOTS / "home-denied-dialog.png"), animations="disabled")
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert_account_dialog_layout(page, denied_pill, denied_dialog)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-denied-dialog-mobile.png"), animations="disabled"
+            )
             assert api_request("GET", "/api/projects/recent").status_code == 401
-            page.get_by_role("button", name="Invite Me", exact=True).click()
-            expect(
-                page.get_by_text("Glad you're interested! We'll get back to you!", exact=True)
-            ).to_be_visible()
+            denied_dialog.get_by_role("button", name="Request invitation").click()
+            expect(denied_dialog).to_contain_text("Invitation requested. We'll get back to you.")
             assert invitation_requests == [{"method": "POST", "body": "{}"}]
             assert login_attempts == ["A", "B", "denied"]
             assert not errors, errors

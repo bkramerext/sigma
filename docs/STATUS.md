@@ -1,5 +1,90 @@
 # SIGMA status
 
+## PR #257 — T88 visual and research-follow-up refinements (2026-10-26)
+
+On `feature/local-mock-auth-walkthrough`, standardized Home and Project Google
+and ChatGPT pill geometry: 34px desktop and 28px narrow-screen height, matching
+12px/9px inline padding, and a 13px vertical gap. The SIGMA project-logo
+tooltip now has no native browser `title`; the custom tooltip stays at the
+cursor-relative point where it first appears. The recent-category running
+indicator, suggestion progress treatment, and bounded strategy-suggestion
+context are covered by focused regressions. No authentication, workspace,
+funding, or provider behavior changed.
+
+`./sigma test` passed, including Ruff check/format (280 files), Pyright (0
+diagnostics), frontend typecheck, and production build (existing >500 kB chunk
+advisory). Real Chrome passed `browser_checks/t257_mock_auth.py` and
+`browser_checks/t92_recent_running.py`. Pill-pair and tooltip screenshots are
+in `evaluations/t257/screenshots/green-*-pills-*.png` and
+`evaluations/t257/screenshots/green-project-logo-tooltip.png`. Final-head CI
+was not polled per the user's instruction; no paid calls or provider
+credentials were used.
+See the [follow-up handoff](../messages/t88_green_pr257_followup.txt) for
+exact commands, evidence, and acceptance disposition.
+
+## PR #257 — T88 Stream B visual consistency (2026-10-27)
+
+Real-Chrome visual checks found and corrected mock selector overflow in the
+Project header, account-dialog overlap with its pill on short/narrow screens,
+and Home pill stacking behind project content at narrow widths. The dialog
+now places itself on the side with more room, caps its height to that space,
+and remains scrollable. Browser coverage captures Guest, member, administrator,
+and denied/uninvited dialogs on Home and Project at desktop and mobile sizes;
+the checks assert viewport bounds, no pill overlap or horizontal overflow, and
+focus. Frontend typecheck/build and the focused T88 sign-in and mock-auth
+real-Chrome suites passed. No auth or provider behavior changed. See the
+[T88 Stream B handoff](../messages/t88_green_stream_b_visual.txt) for exact
+screenshots, commands, and disposition.
+
+## PR #257 — T88 Stream A Batches 1–2 (2026-10-27)
+
+Continued the existing `feature/local-mock-auth-walkthrough` PR from
+`05cabb5c743b884156cb423433f20e6700b69c2f`, based on current `main`
+`14612ff553dd684db993e25c4aedaf83155465ff`. Applied Ruff formatting to the
+six CI-identified Python files; review of the whitespace-insensitive diff
+shows no behavior changes from formatting. Extended the local mock-identity
+request regression to cover cross-member artifact URL access as well as
+project and session access. Extended the T88 real-Chrome check to assert one
+identity pill and save screenshots of Home and Project with the account dialog
+open beneath the pill.
+
+Added `browser_checks/t257_mock_auth.py` as a reproducible real-Chrome check of
+the actual local mock selector and API. It covers Guest's empty scoped Recent,
+Member A/B project separation, Administrator role with the same allowance as a
+member, Uninvited denial and invitation request, and simulated sponsor
+exhaustion/provider unavailability through the mock research route. The test
+uses temporary storage and blank provider credentials. This route advances a
+single saved strategy through deterministic queued/Investigator/Skeptic/result
+states, optionally storing only a labeled inconclusive fixture artifact. A
+sponsored `$0` allowance or simulated unavailable provider yields a failure
+without an artifact; the normal research start, AI, cloud-research, and
+non-allowlisted project-write routes remain server-denied in mock mode.
+Screenshots are
+[Home](evaluations/t257/screenshots/home-account-dialog.png) and
+[Project](evaluations/t257/screenshots/project-account-dialog.png).
+
+Verification on the candidate tree: `tests/cloud_auth.py` passed 44 tests;
+Ruff check/format and `git diff --check` passed. Real Chrome passed
+`browser_checks/t23_1_google_signin.py`,
+`browser_checks/t257_mock_auth.py`, `browser_checks/model_availability.py`,
+`browser_checks/t92_recent_running.py`, `browser_checks/t201_overflow.py`,
+`browser_checks/t81_public_legal_pages.py`, `browser_checks/guest_samples.py`,
+and `browser_checks/t47_conclusion.py` (Research Outcome). T201 was run with
+`TMPDIR=/private/tmp` to avoid macOS `/tmp` symlink mismatch in its fixture.
+The complete `./sigma test` passed, including Ruff (274 files formatted),
+Pyright (0 diagnostics), frontend typecheck, and production build; the build
+retains its existing >500 kB chunk advisory.
+
+No live OAuth, production deployment, GCP change, paid inference, or provider
+credential was used. The browser screenshots show the two-line identity/model
+pill and the unified pill-anchored dialog, with no welcome dialog or duplicate
+identity pill. This is R4R for independent review, not acceptance. The
+separately scoped hosted personal-inference authorization remains unavailable;
+live Google/OAuth, hosted provider, GCE, and production multi-account behavior
+remain unverified. Batch 3 was not started. See the
+[T88 Stream A handoff](../messages/t88_green_pr257_stream_a.txt) for criterion
+dispositions and exact commands.
+
 ## T81 PR #242 reconciliation with current main (2026-10-26)
 
 Reconciled PR #242 with `origin/main` at
@@ -6414,3 +6499,46 @@ GitHub checks passed on implementation/test head
 Outcome, and SIGMA verification. The handoff/status-only follow-up commit will
 receive a fresh CI run before final R4R. See the
 [PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).
+
+## PR #257 T249 sample and T201 recovery CI remediation (2026-10-26)
+
+Merged the latest `main` into `feature/local-mock-auth-walkthrough`, including
+main's intentional removal of the pairwise-handshakes sample. Updated Recent
+catalog coverage to compare discovered entries with the single-file sample
+catalog. Replaced the removed ladder sample with Maximum Regions Formed by
+Lines; the ladder checks its one active answer-free starter, distinct strategy
+IDs, and continued preservation of the removed solution in the archived
+strategy.
+
+T201's fixture now uses a `.json` project and canonical inspected path. Its
+browser acceptance reads saved session records from the project bundle. The
+overflow message recommends creating a new strategy from saved findings, and
+the browser recovery flow uses the visible New action. It still verifies that
+blocked starts create no session, reserve no number, make no provider call,
+and leave the source session unchanged before the fake-provider follow-up.
+
+Local verification: `uv run --locked --no-sync python tests/recents.py`,
+`uv run --locked --no-sync python tests/research_ladder.py`, and
+`uv run python tests/research_sessions.py` passed. `browser_checks/t201_overflow.py`
+passed in installed Google Chrome against the isolated local fake provider;
+`browser_checks/t257_mock_auth.py` passed in installed Google Chrome. The
+complete `./sigma test` passed, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. `git diff --check` passed. The build retains
+its existing advisory about the JavaScript chunk over 500 kB; Python emitted
+Starlette's existing `TestClient` deprecation warning. No live provider or OAuth
+calls occurred; cost was $0. Final GitHub CI for the pushed head is pending.
+
+The first GitHub T201 workflow on the remediation head passed its overflow
+recovery and legal-page checks but failed in the chained Guest samples browser
+check on stale Google-button, account-dialog, and Back-to-home expectations.
+Updated that check for the current T88 pills, Privacy Close action, and SIGMA
+logo navigation. Corrected the guest research “Sign in now” action to activate
+the existing Google sign-in link; real-Chrome guest acceptance intercepts the
+local login route and verifies no research or project mutations. The T201,
+T257, guest-samples, legal-page, and full local verification suites pass after
+these corrections. All six GitHub Actions workflows passed on implementation
+head `57cdea354c752723a930ef45f3dddcd1c9982281`: SIGMA verification run
+`40462919527` (#1037), T201 recovery `40462919422` (#197), T249 project
+verification `40462919506` (#80), T200 availability `40462919443` (#212), T92
+Recent Projects `40462919425` (#299), and Research Outcome `40462919416` (#368).
+No live OAuth or provider calls, paid inference, or cloud changes occurred.

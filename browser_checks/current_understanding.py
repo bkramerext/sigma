@@ -214,7 +214,8 @@ from sigma.api import app
                 header = summary.locator(":scope > summary")
                 chevron = header.locator(".disclosure-chevron")
                 assert summary.get_attribute("open") == ""
-                assert header.inner_text().strip() == "Current understanding"
+                title = header.locator(":scope > span")
+                assert title.inner_text().strip() == "Current understanding"
                 assert "saved session" not in header.inner_text().lower()
                 assert chevron.count() == 1
                 assert (
@@ -227,12 +228,12 @@ from sigma.api import app
                 expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                     f"{session_rows} session"
                 )
-                header.click()
+                title.click()
                 assert summary.get_attribute("open") is None
                 page.wait_for_function(
                     "getComputedStyle(document.querySelector('.current-understanding > summary .disclosure-chevron')).transform === 'none'"
                 )
-                header.click()
+                title.click()
                 assert summary.get_attribute("open") == ""
                 page.wait_for_function(
                     "getComputedStyle(document.querySelector('.current-understanding > summary .disclosure-chevron')).transform !== 'none'"
@@ -264,9 +265,41 @@ from sigma.api import app
                 else:
                     expect(summary).to_contain_text("No reviewed finding is saved")
                     assert not state["findings"] and not state["obligations"]
+                expect(summary).not_to_contain_text("One copy-only Markdown")
                 if slug == "maximum-regions-archived":
-                    action = summary.get_by_role("button", name="Suggest a Strategy", exact=True)
+                    action = summary.get_by_role("button", name="Suggest a strategy", exact=True)
                     expect(action).to_be_visible()
+                    assert action.evaluate("el => el.parentElement.matches('summary')")
+                    action_layout = page.evaluate(
+                        """() => {
+                          const title = document.querySelector('.current-understanding > summary > span').getBoundingClientRect();
+                          const action = document.querySelector('.current-understanding > summary > button').getBoundingClientRect();
+                          const pane = document.querySelector('.current-understanding').getBoundingClientRect();
+                          return {pane: {left: pane.left, right: pane.right, width: pane.width}, title: {left: title.left, right: title.right, top: title.top, bottom: title.bottom}, action: {left: action.left, right: action.right, top: action.top, bottom: action.bottom}};
+                        }"""
+                    )
+                    assert (
+                        abs(action_layout["title"]["top"] - action_layout["action"]["top"]) <= 8
+                        and action_layout["action"]["left"] >= action_layout["title"]["right"]
+                        and action_layout["action"]["left"] - action_layout["title"]["right"] < 24
+                    ), action_layout
+                    assert (
+                        page.locator(".current-understanding > summary").evaluate(
+                            "el => getComputedStyle(el).borderBottomStyle"
+                        )
+                        == "none"
+                    )
+                    assert "underline" in action.evaluate(
+                        "el => getComputedStyle(el).textDecorationLine"
+                    )
+                    content_inset = page.evaluate(
+                        """() => {
+                          const pane = document.querySelector('.current-understanding').getBoundingClientRect();
+                          const findings = document.querySelector('.current-understanding-columns').getBoundingClientRect();
+                          return findings.left - pane.left;
+                        }"""
+                    )
+                    assert content_inset >= 16, content_inset
                     page.context.grant_permissions(
                         ["clipboard-read", "clipboard-write"], origin=ui_url
                     )
@@ -339,6 +372,14 @@ from sigma.api import app
                         "({width:innerWidth,scrollWidth:document.documentElement.scrollWidth})"
                     )
                     assert dims["scrollWidth"] <= width, dims
+                    inset = page.evaluate(
+                        """() => {
+                          const pane = document.querySelector('.current-understanding').getBoundingClientRect();
+                          const findings = document.querySelector('.current-understanding-columns').getBoundingClientRect();
+                          return findings.left - pane.left;
+                        }"""
+                    )
+                    assert inset >= (12 if width <= 600 else 16), (width, inset)
                     dimensions.append(dims)
                     if width in (1440, 390) and not header_only:
                         summary.locator(":scope > summary").scroll_into_view_if_needed()
@@ -369,7 +410,7 @@ from sigma.api import app
                 reloaded_summary.wait_for()
                 assert reloaded_summary.get_attribute("open") == ""
                 assert (
-                    reloaded_summary.locator(":scope > summary").inner_text().strip()
+                    reloaded_summary.locator(":scope > summary > span").inner_text().strip()
                     == "Current understanding"
                 )
                 reread = page.request.get(
@@ -442,9 +483,9 @@ assert all(
 (EXPORTS / "CURRENT_STATE_MANIFEST.json").write_text(json.dumps(export_manifest, indent=2))
 if header_only:
     print(
-        "PASS real Chrome: current understanding heading, visible chevron, default-expanded native disclosure, no redundant session count, copy-only Markdown suggestion (provider endpoint mocked), 1440/390/320px layout, no real provider work"
+        "PASS real Chrome: existing Current understanding disclosure with same-row underlined strategy action, visible chevron, no copy-only note or separator, provider endpoint mocked, 1440/390/320px layout, no real provider work"
     )
 else:
     print(
-        "PASS real Chrome: current understanding heading, visible chevron, default-expanded native disclosure, no redundant session count, copy-only Markdown suggestion (provider endpoint mocked), exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
+        "PASS real Chrome: existing Current understanding disclosure with same-row underlined strategy action, visible chevron, no copy-only note or separator, exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
     )

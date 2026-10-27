@@ -95,7 +95,7 @@ def ready(url: str, instance_id: str | None = None) -> bool:
         return False
 
 
-def run_ui(*, navigate: bool = False, signin: bool = False) -> int:
+def run_ui(*, navigate: bool = False, signin: bool = False, mock_auth: bool = False) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
         return 2
@@ -111,6 +111,9 @@ def run_ui(*, navigate: bool = False, signin: bool = False) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
+        if signin and mock_auth:
+            print("--signin and --mock-auth cannot be combined.", file=sys.stderr)
+            return 2
         admin_email = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
         if signin and not admin_email:
             print(
@@ -152,6 +155,7 @@ def run_ui(*, navigate: bool = False, signin: bool = False) -> int:
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
+                child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )

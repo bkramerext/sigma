@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from sigma import cloud_auth
 from sigma.cloud_auth import Principal
 from sigma.ui_instance import private_directory
 
@@ -64,7 +65,9 @@ def enabled() -> bool:
         "true",
         "yes",
     }
-    return enabled and (persistent_disk_enabled() or not local_auth)
+    mock_auth = os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
+    mock_local = mock_auth and local_auth and cloud_auth._mock_enabled(cloud_auth.config())
+    return enabled and (persistent_disk_enabled() or not local_auth or mock_local)
 
 
 def current() -> Workspace | None:

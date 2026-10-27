@@ -1421,7 +1421,7 @@
       "outcome": {
         "assessment": "mixed",
         "label": "Mixed · unstructured argument, unassessed",
-        "summary": "A solution candidate was recorded. Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.",
+        "summary": "For every integer n≥0, the maximum number of connected regions formed by n distinct entire straight lines in the Euclidean plane is 1+n(n+1)/2. For n≥1, the lines y=kx+k², k=1,…,n, attain the maximum; the empty arrangement attains it for n=0.",
         "caveats": [
           "Agent-reported evidence is unverified; agreement is not independent verification.",
           "Historical or incomplete outcome record: no structured argument steps were preserved. Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed. Agent agreement is not verification."
@@ -1488,11 +1488,19 @@
             }
           ]
         },
-        "conclusion": "### Historical session\n\nNo Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.\n\nStructured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.",
+        "conclusion": null,
         "verification_label": "Convincing but unverified",
         "argument_availability": {
           "status": "narrative",
           "label": "Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed."
+        },
+        "execution_provenance": {
+          "records": [],
+          "unidentified_count": 0,
+          "completed_count": 0,
+          "completed_without_recorded_io_count": 0,
+          "other_count": 0,
+          "note": "No persisted Python/SageMath execution records; authored measurement claims are not established by a saved computation."
         },
         "metrics": {
           "operational": [
@@ -1653,6 +1661,7 @@
       },
       "terminal_reason": "stop_productive_conclusion",
       "elapsed_seconds": 149,
+      "next_step_guidance": "Review recorded calls and findings. For more research, start a new session with a call limit and provider spend you have reviewed and approved.",
       "token_usage_status": "complete"
     }
   ]

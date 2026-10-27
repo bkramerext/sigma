@@ -48,7 +48,7 @@ from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
-MAX_RECORD = 512_000
+MAX_RECORD = 2_000_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 32_000
 MAX_PRIOR_FAILURES = 12
@@ -60,7 +60,7 @@ MAX_CONTEXT_ARTIFACTS = 24
 MAX_CONCLUSION_CHARACTERS = 20_000
 MAX_CONTEXT_STRATEGIES = 24
 MAX_PEER_CONTEXT_ARTIFACTS = 12
-MAX_CONTEXT_OBLIGATIONS = 64
+MAX_CONTEXT_OBLIGATIONS = 128
 MAX_CONTEXT_OMISSION_POINTERS = 32
 MAX_CONTEXT_MANIFEST_BYTES = 12_000
 MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
@@ -2749,7 +2749,7 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
-    if project_path(path).suffix == ".json":
+    if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
         try:
@@ -2835,7 +2835,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
         finally:
             staged.unlink(missing_ok=True)
         fcntl.flock(lock, fcntl.LOCK_UN)
-    if cloud_workspaces.enabled():
+    if cloud_workspaces.enabled() and not record.get("simulated"):
         try:
             cloud_research.sync_job(record)
         except cloud_research.CloudResearchUnavailable as exc:
@@ -2989,6 +2989,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         not in {
             "project_path",
             "guard_hash",
+            "guard_state_hash",
             "identity_hash",
             "idempotency_key",
             "outcome_conclusion_version",
@@ -3204,8 +3205,249 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+def mock_session(
+    path: str, strategy_id: str, idempotency_key: str, scenario: str
+) -> dict[str, Any]:
+    """Persist a queued UI fixture through the normal session storage layer.
+
+    This entry point performs no provider, auth-context, or worker calls.
+    Only the authenticated local mock API may invoke it.
+    """
+    if scenario not in {"completed", "failed", "provider-error", "exhausted"}:
+        raise ProjectError("Unknown mock research scenario")
+    view, _guard = _snapshot(path)
+    strategy = next(
+        (
+            item
+            for item in view.project.strategies
+            if item.id == strategy_id and item.removed_at is None and item.enabled
+        ),
+        None,
+    )
+    if strategy is None:
+        raise ProjectError("Choose an enabled, saved strategy")
+    with _project_manager_lock(view.path):
+        records = _all(view.path)
+        previous = next(
+            (item for item in records if item.get("idempotency_key") == idempotency_key), None
+        )
+        if previous:
+            if previous.get("strategy_id") != strategy_id:
+                raise ProjectError("Idempotency key belongs to another strategy")
+            return _public(previous)
+        if any(item.get("status") in {"queued", "running"} for item in records):
+            raise ProjectError("A research session is already active")
+        now = _now()
+        message = {
+            "completed": "Simulated research completed. No provider was called.",
+            "failed": "Simulated research failed. No provider was called.",
+            "provider-error": "Simulated AI provider unavailable. No provider was called.",
+            "exhausted": "Simulated sponsorship allowance exhausted. No provider was called.",
+        }[scenario]
+        record = {
+            "schema_version": 1,
+            "id": str(uuid4()),
+            "session_number": _allocate_session_number(view.path, records),
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy.id,
+            "strategy_title": strategy.title,
+            "strategy_text": strategy.approach,
+            "strategy_ids": [strategy.id],
+            "strategy_runs": [
+                {
+                    "strategy_id": strategy.id,
+                    "strategy_title": strategy.title,
+                    "strategy_text": strategy.approach,
+                    "status": "queued",
+                    "current_action": "Queued",
+                    "cycle": 0,
+                    "calls_used": 0,
+                    "artifacts": [],
+                    "reason": message,
+                }
+            ],
+            "strategy_snapshot": [
+                {"id": strategy.id, "title": strategy.title, "eligibility": "eligible"}
+            ],
+            "problem": view.project.problem,
+            "investigation_type": view.project.investigation_type,
+            "model": "mock-deterministic",
+            "reasoning_effort": "none",
+            "mode": "mock",
+            "idempotency_key": idempotency_key,
+            "status": "queued",
+            "created_at": now,
+            "updated_at": now,
+            "started_at": now,
+            "calls_used": 0,
+            "call_limit": 0,
+            "cycle_limit": 1,
+            "cycle": 0,
+            "steps": [],
+            "artifacts": [],
+            "strategy_assessments": [],
+            "interventions": [],
+            "message": "Simulated research queued.",
+            "current_action": "Queued",
+            "events": [
+                {
+                    "sequence": 1,
+                    "timestamp": now,
+                    "kind": "simulation.queued",
+                    "role": None,
+                    "message": "Simulated research queued.",
+                }
+            ],
+            "mock_scenario": scenario,
+            "mock_stage": 0,
+            "simulated": True,
+        }
+        record["outcome"] = _outcome(record)
+        _save(view.path, record)
+        return _public(record)
+
+
+def _mock_artifact(record: dict[str, Any]) -> dict[str, Any]:
+    """A deliberately inconclusive, clearly labeled research fixture."""
+    strategy_id = record["strategy_id"]
+    claim = "SIMULATED: test whether the proposed approach survives a simple counterexample."
+    return {
+        "id": str(uuid4()),
+        "project_id": record["project_id"],
+        "session_id": record["id"],
+        "strategy_id": strategy_id,
+        "strategy_title": record["strategy_title"],
+        "sequence": 1,
+        "strategy_cycle": 1,
+        "created_at": _now(),
+        "claim_or_question": claim,
+        "method": "Deterministic UI fixture, not mathematical research",
+        "assumptions": ["No factual or mathematical validity is claimed."],
+        "evidence_status": "unverified",
+        "skeptic_response": "SIMULATED: the claim remains unverified.",
+        "objections": ["No independent evidence or proof was generated."],
+        "open_obligations": ["Validate the claim with genuine evidence."],
+        "investigator_output": {
+            "claim": claim,
+            "method": "Simulation only",
+            "evidence_status": "unverified",
+        },
+        "skeptic_output": {"response": "Simulation only; no verification performed."},
+        "reasoning_steps": [],
+        "coordinator_decision": "stop_no_progress",
+        "next_question": "Replace the simulated finding with actual research.",
+        "note": "LOCAL MOCK DATA. No model calls, evidence, or real conclusions.",
+        "objective_review": {
+            "status": "not_achieved",
+            "claim": "No research objective was established.",
+            "argument_summary": "Simulation produced no evidence.",
+            "argument_steps": [],
+            "verification_status": "incomplete",
+            "unresolved_objections": ["No real verification was performed."],
+            "basis_artifact_ids": [],
+        },
+        "strategy_review": {
+            "assessment": "inconclusive",
+            "rationale": "Synthetic UI fixture only.",
+            "basis_artifact_ids": [],
+        },
+        "simulated": True,
+    }
+
+
+def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
+    """Advance one deterministic UI polling step without dispatching a worker."""
+    if not record.get("simulated") or record.get("status") not in {"queued", "running"}:
+        return record
+    stage = int(record.get("mock_stage", 0))
+    if stage == 0:
+        record["status"] = "running"
+        record["current_action"] = "Investigator: examining the strategy"
+        record["message"] = "Simulated Investigator is examining the proposed approach."
+        record["mock_stage"] = 1
+    elif stage == 1:
+        record["current_action"] = "Skeptic: challenging the claim"
+        record["message"] = "Simulated Skeptic is checking assumptions and counterexamples."
+        record["mock_stage"] = 2
+        record["cycle"] = 1
+    else:
+        scenario = record["mock_scenario"]
+        failed = scenario != "completed"
+        message = {
+            "completed": "Simulated research completed. No provider was called.",
+            "failed": "Simulated research failed. No provider was called.",
+            "provider-error": "Simulated AI provider unavailable. No provider was called.",
+            "exhausted": "Simulated sponsorship allowance exhausted. No provider was called.",
+        }[scenario]
+        if not failed:
+            artifact = _mock_artifact(record)
+            record["artifacts"].append(artifact)
+            record["strategy_runs"][0]["artifacts"].append(artifact["id"])
+            record["strategy_runs"][0]["cycle"] = 1
+        record["status"] = "failed" if failed else "ended"
+        record["current_action"] = "Simulation finished"
+        record["message"] = message
+        record["strategy_runs"][0]["status"] = record["status"]
+        record["strategy_runs"][0]["current_action"] = record["current_action"]
+        record["strategy_runs"][0]["reason"] = message
+        record["mock_stage"] = 3
+        record["outcome"] = _outcome(record)
+    record["updated_at"] = _now()
+    _event(record, "simulation.progress", record["message"])
+    _save(record["project_path"], record)
+    return record
+
+
 def list_sessions(path: str) -> list[dict[str, Any]]:
-    return [_public(_recover(item)) for item in _all(path)]
+    return [
+        _public(_advance_mock(item) if item.get("simulated") else _recover(item))
+        for item in _all(path)
+    ]
+
+
+def control_mock_session(path: str, session_id: str, action: str) -> dict[str, Any] | None:
+    """Control an authenticated local simulation without entering provider resume logic."""
+    if action not in {"pause", "resume", "stop"}:
+        raise ProjectError("Unknown research session action")
+    record = _read(path, session_id)
+    if not record.get("simulated") or record.get("mode") != "mock":
+        return None
+    if action == "resume":
+        if record.get("status") not in {"paused", "stopped"}:
+            return _public(record)
+        if any(
+            item.get("id") != session_id and item.get("status") in {"queued", "running"}
+            for item in _all(path)
+        ):
+            raise ProjectError("Another research session is already active")
+        record["status"] = "queued"
+        record["current_action"] = "Queued"
+        record["message"] = "Simulated research resumed. No provider was called."
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"paused", "stopped"}:
+                branch["status"] = "queued"
+                branch["current_action"] = "Queued"
+                branch["reason"] = record["message"]
+        _event(record, "simulation.resumed", record["message"])
+    elif record.get("status") in {"queued", "running"}:
+        stopped = action == "stop"
+        record["status"] = "stopped" if stopped else "paused"
+        record["current_action"] = "Stopped" if stopped else "Paused"
+        record["message"] = (
+            "Simulated research stopped. No provider was called."
+            if stopped
+            else "Simulated research paused. No provider was called."
+        )
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"queued", "running"}:
+                branch["status"] = record["status"]
+                branch["current_action"] = record["current_action"]
+                branch["reason"] = record["message"]
+        _event(record, "simulation.stopped" if stopped else "simulation.paused", record["message"])
+    record["updated_at"] = _now()
+    _save(record["project_path"], record)
+    return _public(record)
 
 
 def has_active_session(path: str) -> bool:
@@ -3246,13 +3488,25 @@ async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
     if not cloud_workspaces.enabled():
         return
+    # A mock-only workspace must never touch the hosted job service.
+    queued = [
+        record
+        for record in _all(path)
+        if not record.get("simulated") and record.get("status") == "queued"
+    ]
+    if not queued:
+        return
     try:
         cloud_research.reconcile_orphaned_jobs()
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
     async with _manager_lock:
         for record in _all(path):
-            if record.get("status") != "queued" or record["id"] in _tasks:
+            if (
+                record.get("simulated")
+                or record.get("status") != "queued"
+                or record["id"] in _tasks
+            ):
                 continue
             event = asyncio.Event()
             _control[record["id"]] = event
@@ -3260,7 +3514,11 @@ async def ensure_queued_workers(path: str) -> None:
 
 
 def get_session(path: str, session_id: str) -> dict[str, Any]:
-    return _public(_recover(_read(path, session_id)))
+    return _public(
+        _advance_mock(record)
+        if (record := _read(path, session_id)).get("simulated")
+        else _recover(record)
+    )
 
 
 def _reject_intervention(
@@ -3514,6 +3772,133 @@ def _snapshot(path: str) -> tuple[Any, str]:
         return view, _digest(read_file(view.path, "project.json"))
     state = Path(view.path) / "project.json"
     return view, _digest(state.read_bytes())
+
+
+def _project_guard_state(project: Any) -> str:
+    """Hash persisted project semantics without its append-only audit history."""
+    state = {
+        "id": project.id,
+        "title": project.title,
+        "problem": project.problem,
+        "investigation_type": project.investigation_type.value,
+        "ai_model": project.ai_model,
+        "reasoning_effort": project.reasoning_effort,
+        "difficulty": project.difficulty.value if project.difficulty else None,
+        "show_advanced_outcome_details": project.show_advanced_outcome_details,
+        "active_order": list(project.active_order),
+        "strategies": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "approach": item.approach,
+                "author_kind": item.author_kind,
+                "created_at": item.created_at,
+                "removed_at": item.removed_at,
+                "stage": item.stage.value,
+                "summary": item.summary,
+                "provenance": (
+                    {
+                        "provider": item.provenance.provider,
+                        "model": item.provenance.model,
+                        "reasoning_effort": item.provenance.reasoning_effort,
+                    }
+                    if item.provenance
+                    else None
+                ),
+                "enabled": item.enabled,
+            }
+            for item in project.strategies
+        ],
+    }
+    return _digest(json.dumps(state, sort_keys=True, separators=(",", ":")))
+
+
+def _legacy_resume_state_matches(record: dict[str, Any], project: Any) -> bool:
+    """Conservatively recognize pre-semantic-guard sessions after safe migrations.
+
+    Older session records did not retain a full project state. Their audit trail
+    must therefore prove that only eligibility toggles occurred after start,
+    and the saved problem, eligibility list, and selected strategy text must
+    still match exactly.
+    """
+    started_at = record.get("started_at") or record.get("created_at")
+    if not isinstance(started_at, str):
+        return False
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return False
+    if started.tzinfo is None:
+        return False
+    if project.id != record.get("project_id") or project.problem != record.get("problem"):
+        return False
+    recorded_type = record.get("investigation_type")
+    if recorded_type is not None and recorded_type != project.investigation_type.value:
+        return False
+
+    snapshot = record.get("strategy_snapshot")
+    if not isinstance(snapshot, list):
+        return False
+    current_snapshot = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "eligibility": "disabled" if not item.enabled else "eligible",
+        }
+        for item in sorted(
+            (item for item in project.strategies if item.removed_at is None),
+            key=lambda item: (
+                project.active_order.index(item.id)
+                if item.id in project.active_order
+                else len(project.active_order)
+            ),
+        )
+    ]
+    if current_snapshot != snapshot:
+        return False
+
+    selected_ids = record.get("strategy_ids", [record.get("strategy_id")])
+    if not isinstance(selected_ids, list) or not selected_ids:
+        return False
+    saved_texts = {
+        item.get("strategy_id"): (item.get("strategy_title"), item.get("strategy_text"))
+        for item in record.get("strategy_runs", [])
+        if isinstance(item, dict)
+    }
+    saved_texts.setdefault(
+        record.get("strategy_id"),
+        (record.get("strategy_title"), record.get("strategy_text")),
+    )
+    current_strategies = {item.id: item for item in project.strategies}
+    for identifier in selected_ids:
+        current = current_strategies.get(identifier)
+        if (
+            current is None
+            or identifier not in saved_texts
+            or saved_texts[identifier] != (current.title, current.approach)
+        ):
+            return False
+
+    for event in project.events:
+        try:
+            event_time = datetime.fromisoformat(event.timestamp)
+        except (TypeError, ValueError):
+            return False
+        if event_time.tzinfo is None:
+            return False
+        if event_time <= started:
+            continue
+        change = event.enabled_change
+        if (
+            event.kind != "strategy.enabled_changed"
+            or event.strategy_id not in current_strategies
+            or change is None
+            or type(change.previous) is not bool
+            or type(change.enabled) is not bool
+            or change.previous == change.enabled
+        ):
+            return False
+    return True
 
 
 def _finding_source_readiness(finding: dict[str, Any]) -> dict[str, Any]:
@@ -3903,6 +4288,7 @@ async def start_session(
                 "mode": credential["mode"],
                 "identity_hash": _digest(credential["identity"]),
                 "guard_hash": guard,
+                "guard_state_hash": _project_guard_state(view.project),
                 "idempotency_key": idempotency_key,
                 "status": "queued",
                 "outcome_conclusion_version": 1,
@@ -4003,9 +4389,8 @@ async def start_session(
                     "obligations exceed the context bound. "
                     + "; ".join(blocked)
                     + ". Disable the affected strategy before starting another session. To pursue "
-                    "a narrower question, expand a saved session and choose Fork strategy from "
-                    "findings. Review its copied recent findings before saving; earlier evidence "
-                    "remains in the saved session. Editing the original strategy "
+                    "a narrower question, create a new strategy informed by the saved findings; "
+                    "earlier evidence remains in the saved session. Editing the original strategy "
                     "does not remove its history. Earlier sessions and evidence remain available."
                 )
             record["session_number"] = _allocate_session_number(view.path, records)
@@ -4151,10 +4536,19 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         return _public(record)
     view, guard = _snapshot(record["project_path"])
     credential = await auth_context()
-    if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+    guard_state_hash = _project_guard_state(view.project)
+    guard_matches = guard == record.get("guard_hash")
+    if not guard_matches:
+        saved_state_hash = record.get("guard_state_hash")
+        guard_matches = (
+            saved_state_hash == guard_state_hash
+            if isinstance(saved_state_hash, str)
+            else _legacy_resume_state_matches(record, view.project)
+        )
+    if not guard_matches or view.project.id != record["project_id"]:
         record["message"] = "Project or strategy changed; research remains paused."
         _save(record["project_path"], record)
-        return _public(record)
+        raise ProjectError(record["message"])
     config = await configuration(view=view, context=credential)
     if (
         not config["available"]
@@ -4165,14 +4559,14 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             "message", "Selected model is no longer available; session remains paused."
         )
         _save(record["project_path"], record)
-        return _public(record)
+        raise ProjectError(record["message"])
     if (
         credential["mode"] != record["mode"]
         or _digest(credential["identity"]) != record["identity_hash"]
     ):
         record["message"] = "AI account or billing identity changed; research remains paused."
         _save(record["project_path"], record)
-        return _public(record)
+        raise ProjectError(record["message"])
     if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
         record["status"] = "ended"
         record["message"] = (
@@ -4196,6 +4590,13 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
+            _, locked_guard = _snapshot(record["project_path"])
+            if locked_guard != guard:
+                record["message"] = "Project or strategy changed; research remains paused."
+                _save(record["project_path"], record)
+                raise ProjectError(record["message"])
+            record["guard_hash"] = guard
+            record["guard_state_hash"] = guard_state_hash
             others = [
                 _recover(item)
                 for item in _all(path)
@@ -5546,14 +5947,14 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
     for key, count, limit in (
         ("assumptions", 8, 300),
         ("objections", 12, 600),
-        ("open_obligations", 12, 600),
+        ("open_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
     ):
         if key in result:
             result[key] = _bounded_notes(result[key], count, limit)
     for key, count, limit in (
         ("assumptions", 8, 300),
         ("objections", 12, 600),
-        ("open_obligations", 12, 600),
+        ("open_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
     ):
         raw = source.get(key)
         if isinstance(raw, list) and (
@@ -5603,7 +6004,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
             result["extract_truncated_fields"].append("skeptic_output.response")
         for key, count, limit in (
             ("objections", 12, 600),
-            ("remaining_obligations", 12, 600),
+            ("remaining_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
             ("proof_obligations", 12, 600),
             ("unresolved_objections", 12, 600),
             ("assumptions_reviewed", 8, 300),

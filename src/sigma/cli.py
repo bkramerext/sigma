@@ -268,6 +268,11 @@ def main() -> None:
         commands, "start", help="Start or safely restart this checkout's browser UI"
     )
     ui_command.add_argument(
+        "--mock-auth",
+        action="store_true",
+        help="Run local-only mock identity switching for the hosted sign-in walkthrough",
+    )
+    ui_command.add_argument(
         "--signin",
         action="store_true",
         help="Start with a local admin identity from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
@@ -336,7 +341,7 @@ def main() -> None:
             sys.exit(2)
         sys.exit(0)
     if args.command == "start":
-        sys.exit(run_ui(navigate=args.navigate, signin=args.signin))
+        sys.exit(run_ui(navigate=args.navigate, signin=args.signin, mock_auth=args.mock_auth))
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:

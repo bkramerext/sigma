@@ -1,4 +1,4 @@
-"""Six-entry application access index for projects the user opened or created."""
+"""Application access index for projects the user opened or created."""
 
 import fcntl
 import json
@@ -16,14 +16,10 @@ from sigma.projects import (
     ROOT,
     ProjectError,
     ProjectView,
-    ResearchMode,
     _stage,
     inspect_project,
 )
 from sigma.ui_instance import private_directory
-
-MAX_PER_CATEGORY = 4
-MAX_ENTRIES = MAX_PER_CATEGORY * (len(ResearchMode) + 1)
 
 
 def state_directory() -> Path:
@@ -78,12 +74,8 @@ def _validate(value: Any) -> dict:
         or value["version"] != 1
     ):
         raise ValueError()
-    if (
-        not isinstance(value["entries"], list)
-        or len(value["entries"]) > MAX_ENTRIES
-        or not isinstance(value["bootstrapped_roots"], dict)
-    ):
-        raise ValueError()
+    if not isinstance(value["entries"], list) or not isinstance(value["bootstrapped_roots"], dict):
+        raise TypeError()
     seen = set()
     for item in value["entries"]:
         if not isinstance(item, dict) or set(item) != {
@@ -216,27 +208,7 @@ def record_access(view: ProjectView) -> None:
                 },
                 *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
             ]
-            category_counts: dict[str | None, int] = {}
-            retained = []
-            for entry in entries:
-                category: str | None
-                if entry["id"] == str(UUID(view.project.id)):
-                    category = view.project.investigation_type.value
-                else:
-                    try:
-                        existing = inspect_project(entry["path"])
-                        if str(UUID(existing.project.id)) != entry["id"]:
-                            category = None
-                        else:
-                            category = existing.project.investigation_type.value
-                    except (ProjectError, OSError, ValueError):
-                        category = None
-                count = category_counts.get(category, 0)
-                if count >= MAX_PER_CATEGORY:
-                    continue
-                category_counts[category] = count + 1
-                retained.append(entry)
-            index["entries"] = retained
+            index["entries"] = entries
     except ProjectError:
         print(
             "Recent Projects could not be updated. The project operation succeeded; check application state permissions.",
@@ -290,16 +262,11 @@ def recent_projects() -> dict:
     from sigma.research_sessions import has_active_session
 
     recent = []
-    category_counts: dict[str | None, int] = {}
     for entry in entries:
         try:
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
-            category = view.project.investigation_type.value
-            if category_counts.get(category, 0) >= MAX_PER_CATEGORY:
-                continue
-            category_counts[category] = category_counts.get(category, 0) + 1
             recent.append(
                 asdict(
                     RecentProject(
@@ -314,9 +281,6 @@ def recent_projects() -> dict:
                 )
             )
         except (ProjectError, OSError):
-            if category_counts.get(None, 0) >= MAX_PER_CATEGORY:
-                continue
-            category_counts[None] = category_counts.get(None, 0) + 1
             recent.append(
                 asdict(
                     RecentProject(
@@ -327,7 +291,7 @@ def recent_projects() -> dict:
                         difficulty=None,
                         research_running=False,
                         available=False,
-                        error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",
+                        error="Unavailable or changed identity. Restore the saved project file, or forget this entry.",
                     )
                 )
             )
