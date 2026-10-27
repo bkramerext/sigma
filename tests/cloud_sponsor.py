@@ -103,6 +103,20 @@ class SponsorTests(IsolatedAsyncioTestCase):
         async with ai_store.sponsor_transaction() as state:
             self.assertEqual(state["active"], "personal")
 
+    async def test_duplicate_sponsor_prefers_usable_account_after_personal_billing_choice(self):
+        stale = dict(self.account)
+        stale.pop("access_token")
+        stale.pop("refresh_token")
+        async with ai_store.sponsor_transaction() as state:
+            state["mode"] = "api_key"
+            state["active"] = "stale"
+            state["accounts"] = {"stale": stale, "usable": self.account}
+        self.assertEqual(await cloud_sponsor.sponsor_account_id(), "usable")
+        selected = await cloud_sponsor.sponsor_session()
+        self.assertEqual(selected["status"], "connected")
+        self.assertEqual(selected["account_id"], "usable")
+        self.assertEqual(selected["account"]["email"], "sponsor@example.test")
+
     async def test_import_selected_account_preserves_vm_host_and_is_used(self):
         async with ai_store.transaction() as state:
             host = state["ext_agent_host_id"]

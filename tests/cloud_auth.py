@@ -2120,6 +2120,93 @@ class CloudAuthTests(TestCase):
             self.assertEqual(allowed.status_code, 200, allowed.text)
             begin.assert_awaited_once_with(account_id="sponsor-id")
 
+    def test_local_personal_mode_cannot_use_or_disconnect_active_sponsor_credential(self):
+        import asyncio
+
+        from sigma.ai_store import sponsor_transaction
+
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-store"),
+                "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
+                "SIGMA_MOCK_AUTH": "0",
+            },
+        ):
+            admin_login = self.finish()
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "nontrivialzeero@gmail.com",
+                    "role": "member",
+                    "allowance_usd": 0.01,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23456)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            login = self.finish(
+                email="nontrivialzeero@gmail.com",
+                subject="local-sponsored-member",
+                client=member,
+            )
+            member.cookies.set("sigma_session", login.cookies["sigma_session"])
+
+            async def seed():
+                async with sponsor_transaction() as state:
+                    state["mode"] = "chatgpt"
+                    state["active"] = "sponsor"
+                    state["accounts"] = {
+                        "sponsor": {
+                            "email": "zetacontinuation@gmail.com",
+                            "client_id": "fixture-client",
+                            "access_token": "fixture-sponsor-token",
+                            "refresh_token": "fixture-refresh-token",
+                            "expires_at": time.time() + 3600,
+                            "scopes": ["resource.invoke", "chatgpt.tokens.use.direct"],
+                        }
+                    }
+
+            asyncio.run(seed())
+            with patch(
+                "sigma.openai_connection._check",
+                new=AsyncMock(side_effect=AssertionError("sponsor token reached personal catalog")),
+            ):
+                connection = member.get("/api/ai/connection")
+            self.assertEqual(connection.status_code, 200, connection.text)
+            self.assertEqual(connection.json()["status"], "disconnected")
+            self.assertNotIn("fixture-sponsor-token", connection.text)
+
+            renew = member.post(
+                "/api/ai/auth/begin",
+                json={"account_id": "sponsor"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(renew.status_code, 403, renew.text)
+            with patch(
+                "sigma.api.chatgpt_auth.disconnect",
+                new=AsyncMock(side_effect=AssertionError("sponsor credential was revoked")),
+            ):
+                disconnected = member.post("/api/ai/disconnect", headers={"Origin": local_origin})
+            self.assertEqual(disconnected.status_code, 403, disconnected.text)
+
+            async def assert_intact():
+                async with sponsor_transaction() as state:
+                    self.assertEqual(
+                        state["accounts"]["sponsor"]["access_token"], "fixture-sponsor-token"
+                    )
+
+            asyncio.run(assert_intact())
+
     def test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor(self):
         signed_in = self.finish()
         self.client.cookies.set(

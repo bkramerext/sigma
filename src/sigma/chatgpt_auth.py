@@ -489,7 +489,9 @@ async def callback(
 async def session(account_id: str | None = None) -> dict:
     """Return backend-only credential snapshot, refreshing serially when necessary."""
     async with transaction() as state:
-        mode = state["mode"]
+        # An explicitly selected account (the designated sponsor) is independent
+        # of the shared UI billing choice made by a local personal connection.
+        mode = "chatgpt" if account_id is not None else state["mode"]
         selected_id = account_id if account_id is not None else state["active"]
         account = state["accounts"].get(selected_id)
         if mode != "chatgpt":

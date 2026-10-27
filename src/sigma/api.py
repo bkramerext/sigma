@@ -1118,6 +1118,14 @@ class ApiKeyRequest(BaseModel):
 
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):
+    if cloud_auth.config().local and body.account_id is not None:
+        from sigma.ai_store import sponsor_transaction
+        from sigma.cloud_sponsor import expected_email
+
+        async with sponsor_transaction() as state:
+            account = state["accounts"].get(body.account_id) or {}
+            if account.get("email", "").casefold() == expected_email():
+                raise HTTPException(403, "Use Admin Settings to renew the sponsor account.")
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
 
 
@@ -1223,6 +1231,14 @@ async def auth_mode(body: AuthModeRequest, request: Request):
 
 @app.post("/api/ai/disconnect")
 async def auth_disconnect():
+    if cloud_auth.config().local:
+        from sigma.ai_store import sponsor_transaction
+        from sigma.cloud_sponsor import expected_email
+
+        async with sponsor_transaction() as state:
+            active = state["accounts"].get(state.get("active")) or {}
+            if active.get("email", "").casefold() == expected_email():
+                raise HTTPException(403, "The sponsor account cannot be disconnected here.")
     return await chatgpt_auth.disconnect()
 
 

@@ -37,6 +37,17 @@ The local administrator can renew the existing sponsor credential from **Admin
 Settings → Reconnect sponsor ChatGPT**. Member Google sign-in cannot renew it.
 Live Play remains blocked until that administrator sign-in completes.
 
+Follow-up after the reported reconnect guidance error: a metadata-only read
+found two designated sponsor registrations, both without access or refresh
+tokens. Rerunning the server alone cannot renew them. The shared local store
+also allowed an active sponsor registration to appear in personal mode or be
+revoked by the ordinary disconnect endpoint after an admin renewal. The server
+now reserves that registration for sponsored inference, blocks ordinary
+renew/disconnect operations on it, and selects a usable duplicate even when
+the shared billing mode is API-key. This prevents member personal inference
+from using the sponsor credential outside the sponsored spend ledger. The
+administrator must still complete the interactive ChatGPT renewal.
+
 The welcome appears on each fresh page entry for an eligible signed-in user,
 but not on browser refresh. It starts with “Welcome to SIGMA.” and one of 100
 distinct curiosity-themed lines. Invitation and reload requests remain
@@ -67,6 +78,12 @@ the guarded release procedure. Production was not enabled.
   personal-mode fallback and administrator-only renewal; `tests/cloud_sponsor.py`
   — 10 passed, including designated-account selection while a personal account
   is active. The real-Chrome check passed after the pill/recovery UI update.
+- Latest focused checks: `tests/cloud_auth.py` — 56 passed, including personal
+  mode isolation and blocked ordinary sponsor renew/disconnect;
+  `tests/cloud_sponsor.py` — 11 passed, including duplicate selection and
+  sponsor use after an API-key billing choice. The real-Chrome sponsored check
+  and `./sigma test` passed on this follow-up tree. No live OAuth or provider
+  call was made.
 - `./sigma test` passed again after the recovery changes and formatting fix;
   the real-Chrome sponsored connection check also passed on that final tree.
 - `git diff --check` — passed.

@@ -268,6 +268,18 @@ async def auth_context() -> AuthContext:
             identity="api_key",
         )
     account = selected.get("account") or {}
+    if cloud_auth.config().local:
+        from sigma.cloud_sponsor import expected_email
+
+        sponsor_account_selected = account.get("email", "").casefold() == expected_email()
+    else:
+        sponsor_account_selected = False
+    if sponsor_account_selected:
+        # The local credential store predates Google accounts and is shared.
+        # A member's personal choice must never spend the sponsor's ChatGPT plan.
+        return AuthContext(
+            token="", mode="chatgpt", status="disconnected", identity="local_personal_unconnected"
+        )
     return AuthContext(
         token=account.get("access_token", ""),
         mode=mode,

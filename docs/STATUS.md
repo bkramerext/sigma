@@ -6919,3 +6919,20 @@ that sign-in completes. No credential values or live model calls were used in
 the diagnosis or verification.
 The corrected tree passed `./sigma test` (including Ruff, Pyright and the
 frontend production build) and the real-Chrome sponsored connection check.
+
+Local sponsor credential follow-up: the private store was inspected through
+metadata only and had two registrations for the designated sponsor, neither
+with an access or refresh token. Rerunning SIGMA cannot restore a missing
+ChatGPT credential; the Google administrator must complete **Admin Settings →
+Reconnect sponsor ChatGPT** as `zetacontinuation@gmail.com`. A local personal
+connection now refuses to use the designated sponsor registration, and the
+ordinary sign-in and disconnect endpoints cannot renew or revoke it. Sponsored
+inference chooses the designated account even if a personal/API-key billing
+choice changes the shared store's active mode; duplicate registrations prefer
+one with usable tokens. This preserves the sponsored ledger and avoids an
+unmetered personal path after admin renewal. Focused `tests/cloud_auth.py`
+(56 tests) and `tests/cloud_sponsor.py` (11 tests) passed. The real-Chrome
+`browser_checks/hosted_sponsored_connection.py` passed, and `./sigma test`
+passed all steps after formatting the new test. No live ChatGPT sign-in or
+provider inference was performed; Play after admin renewal remains to be
+checked by the human.
