@@ -643,9 +643,7 @@ def download_project_bundle(path: str):
     return Response(
         content=download_bytes(authorized),
         media_type="application/json",
-        headers={
-            "Content-Disposition": f'attachment; filename="{authorized.name}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{authorized.name}"'},
     )
 
 
@@ -667,9 +665,9 @@ def import_project_bundle(body: ImportBundleRequest):
     )
 
     try:
-        document = json.loads(base64.b64decode(
-            body.bundle["files"]["project.json"], validate=True
-        ))
+        document = json.loads(
+            base64.b64decode(body.bundle["files"]["project.json"], validate=True)
+        )
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
