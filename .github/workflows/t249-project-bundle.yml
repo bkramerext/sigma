@@ -4,6 +4,10 @@ on:
     paths:
       - 'src/sigma/project_bundle.py'
       - 'src/sigma/projects.py'
+      - 'src/sigma/api.py'
+      - 'frontend/src/main.tsx'
+      - 'tests/project_creation.py'
+      - 'tests/t249_docker_lifecycle.py'
       - 'src/sigma/research_sessions.py'
       - 'src/sigma/python_sandbox.py'
       - 'tests/project_bundle.py'
@@ -20,6 +24,18 @@ jobs:
       - name: Install project
         run: python -m pip install -e .
       - name: Compile touched modules
-        run: python -m py_compile src/sigma/projects.py src/sigma/project_bundle.py src/sigma/research_sessions.py src/sigma/python_sandbox.py tests/project_bundle.py
+        run: python -m compileall -q src/sigma tests/project_bundle.py tests/project_creation.py tests/t249_docker_lifecycle.py
       - name: Execute project round-trip and public API tests
         run: python tests/project_bundle.py
+      - name: Execute project creation simulation
+        run: python tests/project_creation.py
+      - name: Execute Docker lifecycle and artifact persistence
+        run: python tests/t249_docker_lifecycle.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
