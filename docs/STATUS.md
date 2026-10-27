@@ -82,6 +82,34 @@ sponsorship.
 
 # SIGMA status
 
+## Issue #280 — sponsored allowance and forced-mode launch flag (2026-10-27)
+
+The hosted account/model pill is labeled **SIGMA-sponsored GPT Usage** and
+exposes the authenticated user's sponsored allowance on hover, keyboard focus,
+and tap. Its tooltip reports the per-user remaining amount, allowance ceiling,
+estimated use, held amount, and connection/check state. Allowance reads remain
+on the authenticated, no-store per-user budget endpoint; provider request
+completion triggers a refresh without making an inference call. Forced mode is
+identified in the accessible pill name and tooltip.
+
+`SIGMA_CLOUD_FORCE_SPONSORED_MODE` is a deployment-wide, default-off setting
+documented in [Cloud Deployment](CLOUD_DEPLOYMENT.md). When enabled together
+with sponsored access, authenticated eligible accounts receive sponsored mode
+at sign-in/reload, and the server rejects personal-mode changes. Ineligible and
+unauthenticated identities remain denied. Existing allowance, global spending,
+queue, concurrency, and ledger checks are unchanged. Production configuration
+was not changed and the flag was not enabled.
+
+Verification on branch `green/issue-280-sponsor-mode`, based on current main
+`918aee4`: `tests/cloud_auth.py` passed (48 tests); `tests/gce_host.py` passed
+(21 tests); `browser_checks/hosted_sponsored_connection.py` passed in real
+Chrome at 1440px and 390px, including hover, keyboard focus, mobile tap,
+allowance refresh after a simulated provider request, and forced mode over two
+reloads. `./sigma test` passed all steps, including Ruff (281 files), Pyright,
+frontend typecheck/build, and deployment checks. A build-size advisory remains
+the existing non-failing Vite warning. No live provider calls, paid inference,
+or production changes occurred. See the [Issue #280 R4R handoff](../messages/issue280_green_sponsored_allowance_r4r.txt).
+
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)
 
 The public 0.1.1 Home UI at `3f2426c6fa83866c655cb1b601a7e2df78e5e459`

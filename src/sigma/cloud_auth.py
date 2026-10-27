@@ -387,6 +387,15 @@ def sponsored_access_enabled() -> bool:
     }
 
 
+def force_sponsored_mode_enabled() -> bool:
+    """Opt in to server-enforced sponsorship for every otherwise eligible hosted user."""
+    return os.environ.get("SIGMA_CLOUD_FORCE_SPONSORED_MODE", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
@@ -421,6 +430,11 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
                 (principal.subject,),
             )
+        elif not cfg.local and force_sponsored_mode_enabled() and sponsorship_eligible:
+            db.execute(
+                "UPDATE user_state SET model_access='sponsored' WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
+                (principal.subject,),
+            )
         row = db.execute(
             "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status FROM user_state WHERE subject=?",
             (principal.subject,),
@@ -431,7 +445,12 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
         "access": {"status": "invited" if row["access_active"] else "revoked", "role": row["role"]},
         "workspace": {"available": bool(row["workspace_id"]), "id": row["workspace_id"]},
         "model_access": {"mode": row["model_access"], "connection": row["model_connection_status"]},
-        "sponsorship": {"eligible": bool(row["sponsorship_eligible"])},
+        "sponsorship": {
+            "eligible": bool(row["sponsorship_eligible"]),
+            "forced": bool(
+                not cfg.local and force_sponsored_mode_enabled() and row["sponsorship_eligible"]
+            ),
+        },
     }
 
 
@@ -462,11 +481,16 @@ def model_access_for_subject(subject: str) -> str:
         raise RuntimeError("Account connection choice is unavailable.")
     with _db(cfg) as db:
         row = db.execute(
-            "SELECT model_access FROM user_state WHERE subject=? AND access_active=1", (subject,)
+            "SELECT model_access,sponsorship_eligible FROM user_state WHERE subject=? AND access_active=1",
+            (subject,),
         ).fetchone()
     if row is None:
         raise RuntimeError("Authorized account state is unavailable.")
-    return str(row["model_access"]) if sponsored_access_enabled() else "personal"
+    if not sponsored_access_enabled():
+        return "personal"
+    if not cfg.local and force_sponsored_mode_enabled() and row["sponsorship_eligible"]:
+        return "sponsored"
+    return str(row["model_access"])
 
 
 def set_model_access(subject: str, mode: str) -> None:
@@ -478,6 +502,19 @@ def set_model_access(subject: str, mode: str) -> None:
     if not cfg.enabled or cfg.error or (cfg.local and not _mock_enabled(cfg)):
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
+        eligibility = db.execute(
+            "SELECT sponsorship_eligible FROM user_state WHERE subject=? AND access_active=1",
+            (subject,),
+        ).fetchone()
+        if (
+            mode == "personal"
+            and not cfg.local
+            and force_sponsored_mode_enabled()
+            and sponsored_access_enabled()
+            and eligibility is not None
+            and eligibility["sponsorship_eligible"]
+        ):
+            raise PermissionError("Sponsored mode is required for this account.")
         changed = db.execute(
             "UPDATE user_state SET model_access=?,updated_at=? WHERE subject=? AND access_active=1"
             + (" AND sponsorship_eligible=1" if mode == "sponsored" else ""),
@@ -1248,8 +1285,10 @@ async def callback(
             email,
             role,
             workspace_id,
-            int(not cfg.local),
-            "personal",
+            int(not cfg.local and sponsored_access_enabled()),
+            "sponsored"
+            if not cfg.local and sponsored_access_enabled() and force_sponsored_mode_enabled()
+            else "personal",
         )
         db.execute(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",

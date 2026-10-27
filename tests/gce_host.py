@@ -437,6 +437,7 @@ class GceHostToolingTests(unittest.TestCase):
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE": "/run/sigma-secrets/google-oauth-client-secret",
             "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/run/sigma-secrets/openai-api-key",
+            "SIGMA_CLOUD_FORCE_SPONSORED_MODE": "false",
             "SIGMA_INVITATION_SMTP_USERNAME": "notify@example.org",
             "SIGMA_INVITATION_SMTP_PASSWORD_FILE": "/run/sigma-secrets/invitation-smtp-password",
             "SIGMA_SANDBOX_DOCKER_SOCKET": "/run/user/1002/docker.sock",
@@ -465,6 +466,13 @@ class GceHostToolingTests(unittest.TestCase):
                 )
                 sponsor_values, _ = gce_preflight._parse_env(path)
                 self.assertEqual(sponsor_values is not None, valid)
+            for forced, valid in (("true", True), ("false", True), ("yes", False)):
+                candidate = values | {"SIGMA_CLOUD_FORCE_SPONSORED_MODE": forced}
+                path.write_text(
+                    "\n".join(f"{key}={value}" for key, value in candidate.items()) + "\n"
+                )
+                forced_values, _ = gce_preflight._parse_env(path)
+                self.assertEqual(forced_values is not None, valid)
         self.assertEqual(parsed, {**values, "SIGMA_CADDY_SCHEME": "https"})
         self.assertIn("valid", detail)
 
