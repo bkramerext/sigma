@@ -79,7 +79,8 @@ def main() -> None:
         assert read_file(migrated, "artifacts/new-evidence.bin") == b"binary\\x00data"
         assert read_file(migrated, "project.json") == original_project
         transformed = transform_file(
-            migrated, "legacy-data/second.json",
+            migrated,
+            "legacy-data/second.json",
             lambda previous: previous.replace(b"complete", b"reviewed"),
         )
         assert transformed == b'{"status":"reviewed"}'
@@ -94,7 +95,11 @@ def main() -> None:
 
         destination = root / "restored.sigma"
         restore(bundle, destination)
-        for relative in ("project.json", "research-sessions/session.json", "artifacts/evidence.bin"):
+        for relative in (
+            "project.json",
+            "research-sessions/session.json",
+            "artifacts/evidence.bin",
+        ):
             assert (destination / relative).read_bytes() == (source / relative).read_bytes()
         try:
             restore(bundle, destination)
@@ -137,7 +142,9 @@ def main() -> None:
         # Ten regression checks for the portable project interchange boundary.
         assert read_bundle(migrated)["format"] == bundle["format"]
         assert json.loads(download_bytes(migrated)) == read_bundle(migrated)
-        assert read_bundle(migrated)["files"]["artifacts/evidence.bin"] == base64.b64encode(original_evidence).decode("ascii")
+        assert read_bundle(migrated)["files"]["artifacts/evidence.bin"] == base64.b64encode(
+            original_evidence
+        ).decode("ascii")
         imported = root / "imported.json"
         assert import_bundle(read_bundle(migrated), imported) == imported
         assert read_bundle(imported) == read_bundle(migrated)
@@ -151,7 +158,9 @@ def main() -> None:
             raise AssertionError("Import overwrote an existing project")
         assert read_bundle(imported) == read_bundle(migrated)
         try:
-            import_bundle({**bundle, "files": {**bundle["files"], "../escape": "YQ=="}}, root / "unsafe.json")
+            import_bundle(
+                {**bundle, "files": {**bundle["files"], "../escape": "YQ=="}}, root / "unsafe.json"
+            )
         except BundleError:
             pass
         else:
@@ -225,10 +234,14 @@ def main() -> None:
             )
             execution_id = str(uuid4())
             execution = {
-                "id": execution_id, "project_id": created.project.id,
+                "id": execution_id,
+                "project_id": created.project.id,
                 "created_at": "2026-10-26T12:00:00+00:00",
-                "status": "running", "runtime": "python",
-                "session_id": str(uuid4()), "strategy_id": "strategy-1", "cycle": 1,
+                "status": "running",
+                "runtime": "python",
+                "session_id": str(uuid4()),
+                "strategy_id": "strategy-1",
+                "cycle": 1,
                 "source": "print('portable')",
             }
             runtime_directory = _execution_directory(created.path)
@@ -243,7 +256,8 @@ def main() -> None:
             assert get_execution(created.path, execution_id)["status"] == "interrupted"
             assert list_executions(created.path)[0]["status"] == "interrupted"
             duplicate = {
-                **execution, "id": str(uuid4()),
+                **execution,
+                "id": str(uuid4()),
             }
             try:
                 _save_record(runtime_directory, duplicate)
@@ -259,7 +273,8 @@ def main() -> None:
             else:
                 raise AssertionError("Running execution was finalized")
             _save_record(
-                runtime_directory, final_execution,
+                runtime_directory,
+                final_execution,
                 (("result.bin", "application/octet-stream", bytes(range(128))),),
                 finalizing=True,
             )
@@ -295,15 +310,12 @@ def main() -> None:
                 raise AssertionError("Unreserved execution was finalized")
             assert f"research-executions/{wrong_id}.json" not in list_files(created.path)
             assert {item["id"] for item in list_executions(created.path)} == {execution_id}
-            contents, media_type = get_execution_artifact(
-                created.path, execution_id, "result.bin"
-            )
+            contents, media_type = get_execution_artifact(created.path, execution_id, "result.bin")
             assert contents == bytes(range(128))
             assert media_type == "application/octet-stream"
             assert f"research-executions/{execution_id}.json" in list_files(created.path)
-            assert (
-                f"research-executions/{execution_id}.artifacts/result.bin"
-                in list_files(created.path)
+            assert f"research-executions/{execution_id}.artifacts/result.bin" in list_files(
+                created.path
             )
             # Duplicate output filenames and invalid finalizations must leave
             # the committed execution and its binary output unchanged.
