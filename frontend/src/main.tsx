@@ -1138,14 +1138,14 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       if (opened && !opened.closed) {
         if (exportType === 'html') opened.document.open(), opened.document.write(content), opened.document.close();
         else {
-          opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : 'Research Report'}`;
+          opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : exportType === 'bundle' ? 'Complete Project' : 'Research Report'}`;
           const pre = opened.document.createElement('pre');
           pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;padding:1rem';
           pre.textContent = content;
           opened.document.body.replaceChildren(pre);
         }
       }
-      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+      const mimeType = exportType === 'audit' || exportType === 'bundle' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
       const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
