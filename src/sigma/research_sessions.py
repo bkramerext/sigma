@@ -625,8 +625,9 @@ def _directory(path: str | Path) -> Path:
 
 def get_limits(path: str) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
-        from sigma.project_bundle import read_bundle
         import base64
+
+        from sigma.project_bundle import read_bundle
 
         members = read_bundle(path)["files"]
         if "research-sessions/limits.json" not in members:
