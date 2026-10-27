@@ -6402,3 +6402,11 @@ frontend typecheck, and production build. The build retains the existing >500 kB
 chunk advisory; the Python suite emits the existing Starlette/httpx deprecation
 and test-fixture resource warnings. No live sign-in, provider calls, or costs
 occurred. See the [PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).
+
+PR #259 follow-up: confirmed the failed T201 recovery CI job was caused by its
+stale `Welcome to SIGMA` assertion after merged T88 / PR #251 removed that Guest
+Home overlay. Updated `browser_checks/guest_samples.py` to assert the current
+Projects/sign-in/Samples/Recent Home and explicitly assert the removed overlay
+is absent, retaining the rest of the guest recovery workflow. The affected real
+Chrome guest sample check and a fresh `./sigma test` both passed. Updated-head
+GitHub checks are pending; see the handoff for the previous check dispositions.

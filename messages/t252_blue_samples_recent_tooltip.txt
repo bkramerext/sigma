@@ -4,7 +4,8 @@ PR: https://github.com/bkramerext/sigma/pull/259
 Ticket: T252 / GitHub issue #252
 Branch: fix/t252-samples-recent-click-tooltip
 Base: main at 14612ff553dd684db993e25c4aedaf83155465ff
-Head: f21ff22185d83eaaac431320de2b0e81b0232ab2 before this handoff commit
+Tooltip implementation: f21ff22185d83eaaac431320de2b0e81b0232ab2
+Guest acceptance correction: 236d242332c322d403c5ba71980d2e6cb8bcc8b3
 State: open for review; not merged. Do not self-merge.
 
 Changed the shared FloatingTooltip focus handler to display focus-triggered
@@ -36,3 +37,34 @@ criteria.
 
 R4R. The reproducible browser check is committed at
 `browser_checks/t252_samples_recent_tooltip.py`.
+
+## Review follow-up — T252 / PR #259
+
+Confirmed the earlier `recovery` CI failure is an inherited stale assertion,
+not a T252 product regression. PR #259's base is `14612ff`, the merge of T88 / PR
+#251, whose main.tsx change removed the anonymous Guest Home welcome prompt but
+kept the Projects page, sign-in button, and Samples/Recent tabs. The failing
+`browser_checks/guest_samples.py:170` expected the removed Welcome heading while
+the CI log showed the Projects page and tabs.
+
+Kept the acceptance strong by asserting Projects remains visible, the removed
+Welcome heading is absent, Sign in with Google is visible, and the existing
+Samples/Recent, sample opening, and guest restriction/recovery checks continue.
+No product UI or tooltip code changed in this follow-up.
+
+Follow-up verification on local branch head `236d242332c322d403c5ba71980d2e6cb8bcc8b3`:
+- `uv run --project . --with playwright python browser_checks/guest_samples.py`
+  — PASS in real Chrome; complete guest sample workflow passed.
+- `./sigma test` — PASS all scenarios, Ruff check/format, Pyright (0
+  diagnostics), frontend typecheck, and production build. Existing >500 kB
+  chunk advisory and Starlette/httpx fixture warnings remain.
+- `uv run --locked --no-sync ruff check browser_checks/guest_samples.py` and
+  `uv run --locked --no-sync ruff format --check browser_checks/guest_samples.py`
+  — PASS; `git diff --check` — PASS.
+
+Prior PR checks on `affc704f2d630929e8dc33509d5671a978e7e573`: T200 Model
+availability — PASS; T92 Recent Projects — PASS; T201 obligation recovery —
+FAIL solely at the stale Welcome heading assertion; SIGMA verification — PASS;
+Research Outcome — IN PROGRESS at the last check. This follow-up is pushed on
+the same branch. Results for checks triggered by the updated PR head will be
+recorded before final R4R.
