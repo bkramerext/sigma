@@ -603,6 +603,7 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
         if count >= MAX_PAPERS:
             raise ProjectError("This project has reached the 50 paper version limit")
         from sigma.projects import save_project_artifacts
+
         save_project_artifacts(target, {json_name: json_bytes, pdf_name: pdf})
         return
     directory = _paper_dir(path)
@@ -2388,6 +2389,7 @@ def list_papers(path: str) -> list[dict[str, Any]]:
             and "/" not in name[len("artifacts/papers/") :]
         )
         from sigma.projects import read_project_artifact
+
         files = [(Path(name).name, read_project_artifact(target, name)) for name in names]
     else:
         directory = _paper_dir(path, create=False)
@@ -2512,13 +2514,23 @@ def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
     try:
         if target.suffix == ".json":
             from sigma.projects import read_project_artifact
+
             contents = read_project_artifact(
                 target, f"artifacts/papers/{record.get('paper_id')}.pdf"
             )
-            return len(contents) == record.get("pdf_size_bytes") and len(contents) <= 80_000_000 and hashlib.sha256(contents).hexdigest() == record.get("pdf_sha256")
+            return (
+                len(contents) == record.get("pdf_size_bytes")
+                and len(contents) <= 80_000_000
+                and hashlib.sha256(contents).hexdigest() == record.get("pdf_sha256")
+            )
         file = _paper_dir(path, create=False) / f"{record.get('paper_id')}.pdf"
         info = file.lstat()
-        return stat.S_ISREG(info.st_mode) and info.st_size == record.get("pdf_size_bytes") and info.st_size <= 80_000_000 and hashlib.sha256(file.read_bytes()).hexdigest() == record.get("pdf_sha256")
+        return (
+            stat.S_ISREG(info.st_mode)
+            and info.st_size == record.get("pdf_size_bytes")
+            and info.st_size <= 80_000_000
+            and hashlib.sha256(file.read_bytes()).hexdigest() == record.get("pdf_sha256")
+        )
     except (OSError, ProjectError):
         return False
 
@@ -2530,5 +2542,6 @@ def get_pdf(path: str, paper_id: str) -> bytes:
     target = project_path(path)
     if target.suffix == ".json":
         from sigma.projects import read_project_artifact
+
         return read_project_artifact(target, f"artifacts/papers/{_paper_id(paper_id)}.pdf")
     return (_paper_dir(path) / f"{_paper_id(paper_id)}.pdf").read_bytes()
