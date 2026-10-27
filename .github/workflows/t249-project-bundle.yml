@@ -9,6 +9,8 @@ on:
       - 'src/sigma/python_sandbox.py'
       - 'src/sigma/papers.py'
       - 'src/sigma/text_views.py'
+      - 'src/sigma/agentic_evidence.py'
+      - 'src/sigma/proposals.py'
       - 'frontend/src/main.tsx'
       - 'tests/project_bundle.py'
       - 'tests/project_creation.py'

@@ -48,7 +48,8 @@ def _directory(path: Path, create: bool) -> Path:
 
 
 def _lock(path: Path):
-    fd = os.open(path / LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    lock_path = path.with_name("." + path.name + LOCK) if path.suffix == ".json" else path / LOCK
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     stream = os.fdopen(fd, "rb")
     lock_stat = os.fstat(stream.fileno())
     if (
@@ -101,6 +102,28 @@ def _entries(directory: Path, project_id: str) -> list[tuple[Path, int, dict[str
     return entries
 
 
+def _bundle_entries(path: Path, project_id: str) -> list[tuple[str, int, dict[str, Any]]]:
+    from sigma.project_bundle import list_files, read_file
+
+    prefix = "evidence/agentic-runs/"
+    entries: list[tuple[str, int, dict[str, Any]]] = []
+    for name in list_files(path):
+        if not name.startswith(prefix) or not re.fullmatch(r"[0-9a-f]{32}\.json", name[len(prefix):]):
+            continue
+        contents = read_file(path, name)
+        if len(contents) > MAX_RECORD_BYTES:
+            raise ProjectError("Agentic evidence record exceeds the 512 KB limit")
+        try:
+            record = json.loads(contents)
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
+            raise ProjectError(f"Agentic evidence record {name} is unreadable") from exc
+        if not isinstance(record, dict) or record.get("schema_version") != 1 or record.get("project_id") != project_id or record.get("run_id") != Path(name).stem:
+            raise ProjectError(f"Agentic evidence record {name} does not match this project")
+        entries.append((name, len(contents), record))
+    entries.sort(key=lambda item: (item[2].get("started_at", ""), item[0]))
+    return entries
+
+
 def save(path_value: str | Path, record: dict[str, Any]) -> None:
     from sigma.samples import SAMPLES
 
@@ -119,6 +142,24 @@ def save(path_value: str | Path, record: dict[str, Any]) -> None:
         raise ProjectError("Agentic evidence does not match this project copy")
     run_id = _run_id(record.get("run_id"))
     contents = _encoded(record)
+    if path.suffix == ".json":
+        from sigma.projects import save_project_artifacts
+        destination = f"evidence/agentic-runs/{run_id}.json"
+        with _lock(path):
+            entries = _bundle_entries(path, view.project.id)
+            retained = [(name, size, item) for name, size, item in entries if name != destination]
+            retained.append((destination, len(contents), record))
+            retained.sort(key=lambda item: (item[2].get("started_at", ""), item[0]))
+            total = sum(size for _, size, _ in retained)
+            changes: dict[str, bytes | None] = {destination: contents}
+            while len(retained) > MAX_RECORDS or total > MAX_TOTAL_BYTES:
+                oldest = retained.pop(0)
+                if oldest[0] == destination:
+                    raise ProjectError("Agentic evidence record exceeds total retention capacity")
+                changes[oldest[0]] = None
+                total -= oldest[1]
+            save_project_artifacts(path, changes)
+        return
     directory = _directory(path, create=True)
     with _lock(path):
         entries = _entries(directory, view.project.id)
@@ -166,38 +207,41 @@ def save(path_value: str | Path, record: dict[str, Any]) -> None:
 def list_runs(path_value: str | Path) -> list[dict[str, Any]]:
     view = inspect_project(path_value)
     path = project_path(path_value)
-    directory = _directory(path, create=False)
-    if not directory.exists():
-        return []
-    with _lock(path):
-        return [
-            {
-                "run_id": record["run_id"],
-                "started_at": record["started_at"],
-                "finished_at": record.get("finished_at"),
-                "status": (record.get("terminal") or {}).get("status", "running"),
-                "project_id": record["project_id"],
-            }
-            for _, _, record in reversed(_entries(directory, view.project.id))
-        ]
+    if path.suffix == ".json":
+        with _lock(path):
+            entries = _bundle_entries(path, view.project.id)
+    else:
+        directory = _directory(path, create=False)
+        if not directory.exists():
+            return []
+        with _lock(path):
+            entries = _entries(directory, view.project.id)
+    return [
+        {
+            "run_id": record["run_id"],
+            "started_at": record["started_at"],
+            "finished_at": record.get("finished_at"),
+            "status": (record.get("terminal") or {}).get("status", "running"),
+            "project_id": record["project_id"],
+        }
+        for _, _, record in reversed(entries)
+    ]
 
 
 def get_run(path_value: str | Path, run_id: str) -> dict[str, Any]:
     view = inspect_project(path_value)
     path = project_path(path_value)
     identifier = _run_id(run_id)
-    directory = _directory(path, create=False)
-    if not directory.exists():
-        raise ProjectError("Agentic run was not found in this project")
-    with _lock(path):
-        match = next(
-            (
-                record
-                for _, _, record in _entries(directory, view.project.id)
-                if record["run_id"] == identifier
-            ),
-            None,
-        )
+    if path.suffix == ".json":
+        with _lock(path):
+            entries = _bundle_entries(path, view.project.id)
+    else:
+        directory = _directory(path, create=False)
+        if not directory.exists():
+            raise ProjectError("Agentic run was not found in this project")
+        with _lock(path):
+            entries = _entries(directory, view.project.id)
+    match = next((record for _, _, record in entries if record["run_id"] == identifier), None)
     if match is None:
         raise ProjectError("Agentic run was not found in this project")
     return match
