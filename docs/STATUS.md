@@ -15,7 +15,10 @@ approved secret and fresh recovery point.
 An exact-source build of target `999db4362656fd5a22d6ebaaf733e64c8e87543e`
 failed before any service change: the frontend Vite build reads
 `pyproject.toml`, but the Dockerfile did not copy it. The focused fix copies
-that file into the image build stage. Production is unchanged; public 0.1.1
+that file into the image build stage. `./sigma test` and the local real-Chrome
+mock-auth walkthrough passed. Both corrected release images built on the VM
+from PR #266 commit `df3a5626748d4a5960ca5809d376fb5c7272cb76`, with
+matching OCI source labels. Production is unchanged; public 0.1.1
 acceptance is **UNMET** pending independent review, configuration, backup, and
 verified deployment. No paid provider calls were made.
 

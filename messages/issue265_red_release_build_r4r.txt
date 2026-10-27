@@ -22,5 +22,12 @@ published; coordinator must review and merge this fix, then approve the new
 full release SHA before cutover. No paid provider calls or secrets were used.
 
 Tests: focused deployment package test passed; release automation, image
-provenance, and state backup tests passed. Full ./sigma test result and corrected
-Docker build evidence will be added before final R4R.
+provenance, and state backup tests passed. `./sigma test` passed after
+`npm --prefix frontend ci` installed lockfile dependencies; this includes
+frontend typecheck/build, Ruff, Pyright, and the Python checks. Corrected
+Docker build from exact PR commit df3a5626748d4a5960ca5809d376fb5c7272cb76
+passed on sigma-gce-01 for both backend/frontend; release_image.py verify
+passed; frontend image ID sha256:57c594ad9bce508930b65d8eec1d64cc74a8e94307c6c78660893b8c8c0c75bd
+has matching OCI revision. The local real-Chrome T257 mock-auth walkthrough
+passed for Guest, Member A/B isolation, Administrator, Uninvited invitation,
+funding and provider cases. No public 0.1.1 browser acceptance yet.
