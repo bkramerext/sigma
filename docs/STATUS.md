@@ -6448,3 +6448,32 @@ Availability, Guest samples/Play, and T81 legal-page browser checks passed in
 real Chrome. Ruff check/format and `./sigma test` passed, including Pyright,
 typecheck, and production build. PR #246 is updated and open for review, not
 merged. See the [Blue R4R handoff](../messages/blue_guest_play_signin_r4r.md).
+
+## PR #259 (T252) — Samples/Recent click tooltip (2026-10-27)
+
+Changed the shared tooltip manager to display focus-triggered tooltips only for
+`:focus-visible` elements. Mouse-driven focus during Samples/Recent switching no
+longer displays tooltip text; delayed pointer hover and keyboard-visible focus
+remain eligible. View selection, tab labels, and Home behavior are unchanged.
+
+The focused `browser_checks/t252_samples_recent_tooltip.py` passed in real
+Chrome with isolated guest auth/workspace fixtures. Clicking Recent and Samples
+switches to the expected panel and leaves the tooltip absent after 600 ms;
+hovering each tab still displays its expected tooltip. No page errors occurred.
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build. The build retains the existing >500 kB
+chunk advisory; the Python suite emits the existing Starlette/httpx deprecation
+and test-fixture resource warnings. No live sign-in, provider calls, or costs
+occurred. See the [PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).
+
+PR #259 follow-up: confirmed the failed T201 recovery CI job was caused by its
+stale `Welcome to SIGMA` assertion after merged T88 / PR #251 removed that Guest
+Home overlay. Updated `browser_checks/guest_samples.py` to assert the current
+Projects/sign-in/Samples/Recent Home and explicitly assert the removed overlay
+is absent, retaining the rest of the guest recovery workflow. The affected real
+Chrome guest sample check and a fresh `./sigma test` both passed. All five
+GitHub checks passed on implementation/test head
+`5b574cf29ead711e20c32e86c5db2b73161d4444`: T200, T92, T201 recovery, Research
+Outcome, and SIGMA verification. The handoff/status-only follow-up commit will
+receive a fresh CI run before final R4R. See the
+[PR #259 / T252 handoff](../messages/t252_blue_samples_recent_tooltip.txt).

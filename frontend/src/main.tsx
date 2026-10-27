@@ -1503,7 +1503,11 @@ function FloatingTooltip() {
       suppressedAfterClick.current.add(element);
       hide(element);
     };
-    const onFocusIn = (event: FocusEvent) => { clearHoverTimer(); show(targetFor(event.target)); };
+    const onFocusIn = (event: FocusEvent) => {
+      clearHoverTimer();
+      const element = targetFor(event.target);
+      if (element?.matches(':focus-visible')) show(element);
+    };
     const onFocusOut = (event: FocusEvent) => {
       const element = targetFor(event.target);
       if (element && !element.matches(':hover') && !element.contains(event.relatedTarget as Node | null)) hide(element);
