@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import logging
 import os
 import secrets
 import time
@@ -13,6 +14,21 @@ import jwt
 from sigma import chatgpt_auth
 from sigma.ai_store import read, sponsor_directory, sponsor_transaction, use_directory
 from sigma.projects import ProjectError
+
+_LOG = logging.getLogger("sigma.sponsor")
+_last_issue: tuple[str, float] | None = None
+
+
+def _diagnose(issue: str | None) -> None:
+    """Report a bounded sponsor state to the server log without account secrets."""
+    global _last_issue
+    if issue is None:
+        _last_issue = None
+        return
+    now = time.monotonic()
+    if _last_issue is None or _last_issue[0] != issue or now - _last_issue[1] >= 60:
+        _LOG.warning("sponsor_connection status=%s", issue)
+        _last_issue = (issue, now)
 
 
 def inference_provider() -> str:
@@ -45,13 +61,28 @@ async def sponsor_session() -> dict:
         async with sponsor_transaction() as state:
             account_id = _designated_account_id(state, email)
             if account_id is None:
+                _diagnose("registration_missing")
                 return {"status": "disconnected"}
+            account = state["accounts"][account_id]
+            missing_credentials = not account.get("access_token") and not account.get(
+                "refresh_token"
+            )
         with use_directory(sponsor_directory()):
             selected = await chatgpt_auth.session(account_id=account_id)
         if (selected.get("account") or {}).get("email", "").casefold() != email:
+            _diagnose("identity_mismatch")
             return {"status": "forbidden"}
+        if selected.get("status") == "connected":
+            _diagnose(None)
+        else:
+            _diagnose(
+                "credential_missing"
+                if missing_credentials
+                else "credential_" + str(selected.get("status", "unavailable"))
+            )
         return selected
     except ProjectError:
+        _diagnose("storage_or_configuration_unavailable")
         return {"status": "unavailable"}
 
 

@@ -2091,7 +2091,8 @@ class CloudAuthTests(TestCase):
             self.assertEqual(connection.status_code, 200, connection.text)
             self.assertEqual(personal_session.await_count, 1)
             self.assertEqual(sponsor_session.await_count, 1)
-            self.assertIn("Admin Settings", connection.json()["guidance"])
+            self.assertIn("temporarily unavailable", connection.json()["guidance"])
+            self.assertNotIn("administrator", connection.json()["guidance"].lower())
             self.assertNotIn("Your ChatGPT session has expired", connection.json()["guidance"])
             status = member.get("/api/cloud-auth/status").json()
             self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
@@ -2118,7 +2119,7 @@ class CloudAuthTests(TestCase):
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
             self.assertEqual(allowed.status_code, 200, allowed.text)
-            begin.assert_awaited_once_with(account_id="sponsor-id")
+            begin.assert_awaited_once_with(account_id="sponsor-id", sponsor=True)
 
     def test_local_personal_mode_cannot_use_or_disconnect_active_sponsor_credential(self):
         import asyncio

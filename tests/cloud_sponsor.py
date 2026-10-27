@@ -84,7 +84,13 @@ class SponsorTests(IsolatedAsyncioTestCase):
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
 
     async def test_missing_session_never_uses_local_or_service_credentials(self):
-        context = await self.sponsor_context()
+        with (
+            patch.object(cloud_sponsor, "_last_issue", None),
+            patch.object(cloud_sponsor._LOG, "warning") as warning,
+        ):
+            context = await self.sponsor_context()
+            await self.sponsor_context()
+        warning.assert_called_once_with("sponsor_connection status=%s", "registration_missing")
         self.assertEqual(context["mode"], "chatgpt")
         self.assertEqual(context["status"], "disconnected")
         self.assertEqual(context["token"], "")

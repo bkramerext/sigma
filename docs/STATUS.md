@@ -6947,3 +6947,17 @@ test` passed with the new wording. No provider call was made. A metadata-only
 recheck after the reported Play error still found no access or refresh token
 for either designated sponsor registration, so live Play remains blocked on
 the administrator's interactive renewal.
+
+Member-facing sponsor outage correction: research and connection checks now
+say “SIGMA-sponsored ChatGPT is temporarily unavailable. Please try again
+later. Saved research is unchanged.” They do not direct members to perform an
+administrator action. The backend terminal emits token-free, rate-limited
+`sponsor_connection status=...` diagnostics and `sponsor_oauth status=...`
+renewal events, so the operator can distinguish
+missing registration, absent credentials, failed validation, and completed
+OAuth without exposing tokens or identities. The current local store still
+has no sponsor access or refresh token. This change improves diagnosis and
+member UX; it does not provision a sponsor session or claim live Play success.
+`tests/cloud_auth.py` (56 tests), `tests/cloud_sponsor.py` (11 tests), the
+real-Chrome sponsored connection check, and `./sigma test` passed. No live
+OAuth, inference, or paid provider call was made.

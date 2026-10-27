@@ -62,6 +62,16 @@ connection explanation. Forced/hosted pills do not show a switch instruction.
 Real-Chrome sponsored acceptance and `./sigma test` passed after this wording
 change. A metadata-only recheck still found no designated sponsor tokens.
 
+The member-facing failure no longer asks the member to contact or act as an
+administrator. It reports temporary sponsored-service unavailability and
+preserved research. Token-free, rate-limited `sponsor_connection status=...`
+diagnostics and `sponsor_oauth status=...` events appear in backend logs for operator
+diagnosis. The designated sponsor still needs a valid server-side credential;
+the change does not use the member's ChatGPT account or an API-key fallback.
+Focused cloud-auth/sponsor tests, real-Chrome sponsored acceptance, and
+`./sigma test` passed on this correction. Live Play remains unverified until a
+designated sponsor credential exists on the server.
+
 Configuration and rollback are documented in `docs/GETTING_STARTED.md` and
 `docs/CLOUD_DEPLOYMENT.md`. Rollback disables the hosted flag and restarts using
 the guarded release procedure. Production was not enabled.

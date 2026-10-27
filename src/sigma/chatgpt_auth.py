@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
@@ -180,6 +181,7 @@ class Attempt:
     nonce: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     verifier: str = field(default_factory=lambda: secrets.token_urlsafe(48))
     account_id: str | None = None
+    sponsor: bool = False
     client_id: str = "dynamic_agent_client"
     redirect_uri: str = ""
     status: str = "connecting"
@@ -197,6 +199,8 @@ _attempts: dict[str, Attempt] = {}
 
 def finish(attempt: Attempt, status: str, message: str) -> None:
     attempt.status, attempt.message = status, message
+    if attempt.sponsor:
+        logging.getLogger("sigma.sponsor").warning("sponsor_oauth status=%s", status)
     _urls.pop(attempt.id, None)
     if attempt.server:
         attempt.server.close()
@@ -207,7 +211,11 @@ def finish(attempt: Attempt, status: str, message: str) -> None:
 
 
 async def begin(
-    account_id: str | None = None, enable_plan: bool = False, retry_attempt_id: str | None = None
+    account_id: str | None = None,
+    enable_plan: bool = False,
+    retry_attempt_id: str | None = None,
+    *,
+    sponsor: bool = False,
 ) -> dict:
     for key, attempt in list(_attempts.items()):
         if time.monotonic() > attempt.expires + 60:
@@ -218,7 +226,7 @@ async def begin(
         )
     try:
         endpoints = await discovery()
-        attempt = Attempt(account_id=account_id)
+        attempt = Attempt(account_id=account_id, sponsor=sponsor)
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
             if (
@@ -280,6 +288,8 @@ async def begin(
         if enable_plan:
             params["prompt"] = "consent"
         _urls[attempt.id] = endpoints["authorization_endpoint"] + "?" + urlencode(params)
+        if sponsor:
+            logging.getLogger("sigma.sponsor").warning("sponsor_oauth status=started")
         return {
             "id": attempt.id,
             "status": attempt.status,
