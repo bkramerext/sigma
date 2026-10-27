@@ -2594,7 +2594,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
-    setProjects(data.projects); setError(''); setLoading(false);
+    setProjects(data.projects.slice(0, 10)); setError(''); setLoading(false);
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -2764,7 +2764,6 @@ function Home({ initialPath, onOpen }: {
   useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
   const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const nextCreditStreak = useRef(0);
@@ -2797,8 +2796,7 @@ function Home({ initialPath, onOpen }: {
     };
   }, []);
   function cancel() {
-    const trigger = entry === 'open' ? openButton : newButton;
-    setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
+    setEntry(null); requestAnimationFrame(() => newButton.current?.focus());
   }
   function closeAbout() {
     setAboutOpen(false);
@@ -2833,7 +2831,6 @@ function Home({ initialPath, onOpen }: {
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           {(!cloud?.enabled || cloud.authenticated) && <>
             <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
-            <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
           <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
           </>}
         </div>
