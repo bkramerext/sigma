@@ -29,6 +29,8 @@ jobs:
         run: python tests/project_bundle.py
       - name: Execute project creation simulation
         run: python tests/project_creation.py
+      - name: Build Python sandbox image
+        run: ./sigma sandbox-build --runtime python
       - name: Execute Docker lifecycle and artifact persistence
         run: python tests/t249_docker_lifecycle.py
       - uses: actions/setup-node@v4
