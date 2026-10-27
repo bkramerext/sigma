@@ -2374,14 +2374,24 @@ def preflight(
 def list_papers(path: str) -> list[dict[str, Any]]:
     target = project_path(path)
     if target.suffix == ".json":
-        names = sorted(name for name in _paper_artifact_names(target) if name.startswith("artifacts/papers/") and name.endswith(".json") and "/" not in name[len("artifacts/papers/"):])
+        names = sorted(
+            name
+            for name in _paper_artifact_names(target)
+            if name.startswith("artifacts/papers/")
+            and name.endswith(".json")
+            and "/" not in name[len("artifacts/papers/") :]
+        )
         from sigma.projects import read_project_artifact
         files = [(Path(name).name, read_project_artifact(target, name)) for name in names]
     else:
         directory = _paper_dir(path, create=False)
         if not directory.exists():
             return []
-        files = [(file, file.read_bytes()) for file in directory.glob("*.json") if not file.is_symlink() and file.is_file() and file.stat().st_size <= MAX_PAPER_BYTES]
+        files = [
+            (file, file.read_bytes())
+            for file in directory.glob("*.json")
+            if not file.is_symlink() and file.is_file() and file.stat().st_size <= MAX_PAPER_BYTES
+        ]
     records = []
     for file, contents in files:
         try:
@@ -2473,10 +2483,13 @@ def delete_paper(path: str, paper_id: str) -> None:
     target = project_path(path)
     if target.suffix == ".json":
         from sigma.projects import save_project_artifacts
-        save_project_artifacts(target, {
-            f"artifacts/papers/{identifier}.json": None,
-            f"artifacts/papers/{identifier}.pdf": None,
-        })
+        save_project_artifacts(
+            target,
+            {
+                f"artifacts/papers/{identifier}.json": None,
+                f"artifacts/papers/{identifier}.pdf": None,
+            },
+        )
         return
     directory = _paper_dir(path, create=False)
     for suffix in (".json", ".pdf"):
