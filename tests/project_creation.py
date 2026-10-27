@@ -199,13 +199,18 @@ def main() -> None:
                     __import__("base64").b64decode(portable["files"]["project.json"])
                 )
                 imported_document["title"] = "API math imported"
-                portable["files"]["project.json"] = __import__("base64").b64encode(
-                    (json.dumps(imported_document) + "\n").encode()
-                ).decode()
+                portable["files"]["project.json"] = (
+                    __import__("base64")
+                    .b64encode((json.dumps(imported_document) + "\n").encode())
+                    .decode()
+                )
                 imported = client.post("/api/projects/import", json={"bundle": portable})
                 assert imported.status_code == 201, imported.text
                 assert Path(imported.json()["path"]).suffix == ".json"
-                assert client.post("/api/projects/import", json={"bundle": portable}).status_code == 400
+                assert (
+                    client.post("/api/projects/import", json={"bundle": portable}).status_code
+                    == 400
+                )
                 assert inspect_project(imported.json()["path"]).project.title == "API math imported"
                 # Home discovery and Open Project must work for both original
                 # and imported single-file projects, not only legacy directories.
