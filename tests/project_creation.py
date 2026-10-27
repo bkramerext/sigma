@@ -186,6 +186,28 @@ def main() -> None:
                 assert chemistry.json()["project"]["investigation_type"] == "chemistry"
                 assert chemistry.json()["project"]["difficulty"] == "medium"
                 assert chemistry.json()["project"]["show_advanced_outcome_details"] is False
+                # Full portable download and authenticated-workspace import.
+                downloaded = client.get(
+                    "/api/projects/download", params={"path": response.json()["path"]}
+                )
+                assert downloaded.status_code == 200, downloaded.text
+                assert "attachment" in downloaded.headers["content-disposition"]
+                portable = downloaded.json()
+                assert portable["format"] == "sigma.project.bundle"
+                from sigma.project_bundle import read_bundle
+                assert portable == read_bundle(response.json()["path"])
+                imported_document = json.loads(
+                    __import__("base64").b64decode(portable["files"]["project.json"])
+                )
+                imported_document["title"] = "API math imported"
+                portable["files"]["project.json"] = __import__("base64").b64encode(
+                    (json.dumps(imported_document) + "\\n").encode()
+                ).decode()
+                imported = client.post("/api/projects/import", json={"bundle": portable})
+                assert imported.status_code == 201, imported.text
+                assert Path(imported.json()["path"]).suffix == ".json"
+                assert client.post("/api/projects/import", json={"bundle": portable}).status_code == 400
+                assert inspect_project(imported.json()["path"]).project.title == "API math imported"
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(
