@@ -344,9 +344,9 @@ def main() -> None:
                 name.startswith(f"research-executions/{extra_id}.artifacts/")
                 for name in list_files(created.path)
             )
-            assert get_execution_artifact(
-                created.path, execution_id, "result.bin"
-            )[0] == bytes(range(128))
+            assert get_execution_artifact(created.path, execution_id, "result.bin")[0] == bytes(
+                range(128)
+            )
             # Exercise the public asynchronous reservation/dispatch/finalize path
             # without requiring a Docker daemon or invoking untrusted code.
             import asyncio
@@ -373,16 +373,18 @@ def main() -> None:
                 )
             assert integrated["status"] == "completed"
             assert get_execution(created.path, integrated["id"])["stdout"] == "integration\\n"
-            assert get_execution_artifact(
-                created.path, integrated["id"], "integration.bin"
-            ) == (b"evidence", "application/octet-stream")
+            assert get_execution_artifact(created.path, integrated["id"], "integration.bin") == (
+                b"evidence",
+                "application/octet-stream",
+            )
             assert integrated["id"] in {item["id"] for item in list_executions(created.path)}
             # A complete export/import preserves executable evidence exactly.
             imported = root / "imported-execution.json"
             import_bundle(json.loads(export_complete_project(created.path)), imported)
             assert get_execution(imported, execution_id)["status"] == "completed"
             assert get_execution_artifact(imported, execution_id, "result.bin") == (
-                bytes(range(128)), "application/octet-stream"
+                bytes(range(128)),
+                "application/octet-stream",
             )
             assert {item["id"] for item in list_executions(imported)} == {
                 execution_id,
@@ -390,7 +392,8 @@ def main() -> None:
                 integrated["id"],
             }
             assert get_execution_artifact(imported, integrated["id"], "integration.bin") == (
-                b"evidence", "application/octet-stream"
+                b"evidence",
+                "application/octet-stream",
             )
             # Tampered binary evidence is rejected even when metadata survives.
             write_file(
@@ -414,9 +417,7 @@ def main() -> None:
                 raise AssertionError("Duplicate JSON project was created")
             legacy = root / "legacy.sigma"
             legacy.mkdir()
-            (legacy / "project.json").write_bytes(
-                read_file(created.path, "project.json")
-            )
+            (legacy / "project.json").write_bytes(read_file(created.path, "project.json"))
             (legacy / "research-sessions").mkdir()
             (legacy / "research-sessions" / "result.json").write_bytes(b'{"done":true}')
             (legacy / "artifacts").mkdir()
@@ -492,9 +493,9 @@ def main() -> None:
             # Reject a bundle whose session filename and embedded ID disagree.
             malformed_bundle = json.loads(export_complete_project(created.path))
             bad_session = dict(record, id=str(uuid4()))
-            malformed_bundle["files"][f"research-sessions/{session_id}.json"] = (
-                base64.b64encode(json.dumps(bad_session).encode()).decode("ascii")
-            )
+            malformed_bundle["files"][f"research-sessions/{session_id}.json"] = base64.b64encode(
+                json.dumps(bad_session).encode()
+            ).decode("ascii")
             rejected_path = root / "rejected-session.json"
             try:
                 import_bundle(malformed_bundle, rejected_path)
@@ -518,16 +519,18 @@ def main() -> None:
             assert _worker_lock_path(created.path, session_id).parent == Path(created.path).parent
             assert not (Path(created.path) / "research-sessions").exists()
             wrong = dict(record, project_id=str(uuid4()))
-            write_file(created.path, f"research-sessions/{session_id}.json",
-                       json.dumps(wrong).encode())
+            write_file(
+                created.path, f"research-sessions/{session_id}.json", json.dumps(wrong).encode()
+            )
             try:
                 _read(created.path, session_id)
             except ProjectError:
                 pass
             else:
                 raise AssertionError("Foreign session was accepted")
-            write_file(created.path, f"research-sessions/{session_id}.json",
-                       json.dumps(record).encode())
+            write_file(
+                created.path, f"research-sessions/{session_id}.json", json.dumps(record).encode()
+            )
             from sigma.research_sessions import (
                 DEFAULT_LIMITS,
                 _allocate_session_number,
@@ -554,9 +557,12 @@ def main() -> None:
                     executor.map(lambda _: _allocate_session_number(created.path, []), range(24))
                 )
             assert sorted(numbers) == list(range(4, 28))
-            assert json.loads(read_file(created.path, "research-sessions/sequence.json"))[
-                "next_session_number"
-            ] == 28
+            assert (
+                json.loads(read_file(created.path, "research-sessions/sequence.json"))[
+                    "next_session_number"
+                ]
+                == 28
+            )
             assert save_limits(created.path, dict(DEFAULT_LIMITS)) == dict(DEFAULT_LIMITS)
             assert get_limits(created.path) == dict(DEFAULT_LIMITS)
             # Limits writes preserve unrelated session and artifact members.
@@ -600,10 +606,13 @@ def main() -> None:
             else:
                 raise AssertionError("Artifact API allowed project overwrite")
             try:
-                transform_members(created.path, lambda members: {
-                    "artifacts/should-not-exist.bin": b"bad",
-                    "project.json": None,
-                })
+                transform_members(
+                    created.path,
+                    lambda members: {
+                        "artifacts/should-not-exist.bin": b"bad",
+                        "project.json": None,
+                    },
+                )
             except BundleError:
                 pass
             else:
