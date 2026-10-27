@@ -3598,7 +3598,7 @@ type CloudStatus = { mock_auth?: boolean; target?: 'local' | 'hosted'; enabled: 
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
-type CloudIdentityState = CloudStatus & { deniedEmail: string | null; funding: CloudFunding; openAccessManagement: () => void };
+type CloudIdentityState = CloudStatus & { deniedEmail: string | null; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
 function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undefined {
@@ -3710,7 +3710,13 @@ function GoogleIdentityPill() {
   const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState('');
+  const [invitationRecorded, setInvitationRecorded] = useState(false);
   const deniedEmail = cloud?.deniedEmail ?? null;
+  useEffect(() => {
+    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') {
+      setInvitationRecorded(true);
+    }
+  }, [cloud?.deniedInvitationStatus]);
   useEffect(() => {
     if (deniedEmail && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [deniedEmail]);
@@ -3735,19 +3741,28 @@ function GoogleIdentityPill() {
   return <>
     {cloud?.enabled && cloud.authenticated
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip-disabled><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
-      : <a className="project-google-signin" href="/api/cloud-auth/login"><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>}
-    <dialog ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedEmail) event.preventDefault(); }}>
+      : <>
+        <a className="project-google-signin" href="/api/cloud-auth/login"><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
+        {cloud?.enabled && !invitationRecorded && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}><span className="connection-dot" aria-hidden="true"/>Invite me</button>}
+      </>}
+    <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedEmail) event.preventDefault(); }}>
       <h2 id="google-invitation-heading">Request an invitation</h2>
-      <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
+      {deniedEmail
+        ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here. Read the <a href="/privacy">proposed privacy notice, version 1</a>.</p>
+        : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request. Read the <a href="/privacy">proposed privacy notice, version 1</a>.</p>}
       {deniedEmail && <p className="google-account-email">{deniedEmail}</p>}
-      <InvitationRequestControls/>
+      {deniedEmail
+        ? invitationRecorded
+          ? <p role="status">{cloud?.deniedInvitationStatus === 'sending' ? 'Your invitation request is already recorded and being processed.' : "Glad you're interested! Your request has been sent along to the right person!"}</p>
+          : <InvitationRequestControls onRecorded={() => setInvitationRecorded(true)}/>
+        : <a className="project-google-signin google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google to continue</a>}
       {error && <p role="alert">{error}</p>}
       <button type="button" className="google-text-action google-account-close" onClick={() => dialog.current?.close()}>Close</button>
     </dialog>
   </>;
 }
 
-function InvitationRequestControls() {
+function InvitationRequestControls({ onRecorded }: { onRecorded: () => void }) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -3757,11 +3772,12 @@ function InvitationRequestControls() {
       const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
       setSent(true);
+      onRecorded();
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
   return <div className="google-invitation-actions">
-    {sent ? <p role="status">Invitation requested. We'll get back to you.</p> : <button type="button" className="google-text-action" disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Requesting…' : 'Request invitation'}</button>}
+    {sent ? <p role="status">Glad you're interested! Your request has been sent along to the right person!</p> : <button type="button" className="google-text-action" disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : 'Invite me'}</button>}
     {error && <p role="alert">{error}</p>}
   </div>;
 }
@@ -3987,6 +4003,7 @@ function CloudAuthGate() {
   const [bootstrapAdmin, setBootstrapAdmin] = useState('');
   const [busy, setBusy] = useState(false);
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
+  const [deniedInvitationStatus, setDeniedInvitationStatus] = useState<string | null>(null);
   const [budget, setBudget] = useState<CloudResearchBudget | null>(null);
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [budgetError, setBudgetError] = useState<string | null>(null);
@@ -4002,9 +4019,12 @@ function CloudAuthGate() {
       const current = await response.json() as CloudStatus;
       if (current.enabled && !current.authenticated && new URLSearchParams(window.location.search).get('access') === 'denied') {
         const denied = await fetch('/api/cloud-auth/denied', { credentials: 'same-origin', cache: 'no-store' });
-        if (denied.ok) setDeniedEmail((await denied.json() as { email: string }).email);
-        else { setDeniedEmail(null); window.history.replaceState(null, '', '/'); }
-      } else setDeniedEmail(null);
+        if (denied.ok) {
+          const identity = await denied.json() as { email: string; invitation_status?: string | null };
+          setDeniedEmail(identity.email);
+          setDeniedInvitationStatus(identity.invitation_status ?? null);
+        } else { setDeniedEmail(null); setDeniedInvitationStatus(null); window.history.replaceState(null, '', '/'); }
+      } else { setDeniedEmail(null); setDeniedInvitationStatus(null); }
       setStatus(current); setFailure(current.ready ? '' : 'Google sign-in is not configured correctly.');
     } catch { setFailure('SIGMA could not check Google sign-in. Refresh this page or contact the administrator.'); }
   }, []);
@@ -4122,7 +4142,7 @@ function CloudAuthGate() {
     } finally { setSelectingConnection(false); }
   }, [refresh, refreshSponsoredConnection, selectingConnection, status?.mock_auth]);
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', selectConnection, connectionError, selectingConnection };
-  const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
+  const context: CloudIdentityState | null = status ? { ...status, deniedEmail, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;

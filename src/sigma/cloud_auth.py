@@ -1285,7 +1285,12 @@ def denied_identity(request: Request):
                 db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
             raise HTTPException(404, "No denied sign-in is available.")
         email = row["email"]
-    response = JSONResponse({"email": email})
+        invitation = db.execute(
+            "SELECT status FROM invitation_requests WHERE subject=?", (row["subject"],)
+        ).fetchone()
+    response = JSONResponse(
+        {"email": email, "invitation_status": invitation["status"] if invitation else None}
+    )
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response

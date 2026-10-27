@@ -6673,3 +6673,32 @@ head `57cdea354c752723a930ef45f3dddcd1c9982281`: SIGMA verification run
 verification `40462919506` (#80), T200 availability `40462919443` (#212), T92
 Recent Projects `40462919425` (#299), and Research Outcome `40462919416` (#368).
 No live OAuth or provider calls, paid inference, or cloud changes occurred.
+
+## Issue #279 — Invite me from the sign-in pill (2026-10-27)
+
+Guests now see an **Invite me** pill beside the existing Google sign-in pill.
+Opening it explains that Google verification is needed and links to the existing
+`/api/cloud-auth/login?invite=1` flow. After sign-in, uninvited verified users
+reach the existing invitation dialog, with their server-verified email and a
+link to the proposed privacy notice. Submission reuses T81's invitation API,
+recording, notifications, duplicate protection, and administrator review. While
+sending, the action is disabled; an error remains recoverable; success shows
+“Glad you're interested! Your request has been sent along to the right person!”
+and removes the Invite me pill. The denied-identity endpoint reports only that
+verified account's request status, so confirmation persists and the pill remains
+hidden after reload. Authorized members/admins do not see the action. No
+membership grant is made by requesting an invitation.
+
+Verification: `uv run python tests/cloud_auth.py` passed (47 tests). The
+real-Chrome check `uv run --with playwright python browser_checks/issue279_invite_me.py`
+passed for desktop/mobile guest layout,
+sign-in intent and explanation, verified invitation/privacy dialog, keyboard
+submission, retry after a mocked failure, success confirmation, pill removal
+after reload, and member visibility. The browser check uses deterministic API routes; live
+Google OAuth and SMTP delivery were not exercised. `npm --prefix frontend run
+build` passed (existing >500 kB chunk advisory). After formatting the new check,
+`./sigma test` passed all scenarios, Ruff check/format, Pyright, frontend
+typecheck, and production build. Existing Starlette/httpx deprecation and
+resource warnings were emitted; no checks failed. No provider calls, live OAuth,
+email, paid work, or production changes occurred. See
+[issue #279 handoff](../messages/issue_279_blue_r4r.md).

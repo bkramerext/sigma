@@ -1303,9 +1303,18 @@ class CloudAuthTests(TestCase):
         self.assertIn("Secure", denied.headers["set-cookie"])
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied_token)
         self.assertEqual(
-            self.client.get("/api/cloud-auth/denied").json(), {"email": "visitor@example.org"}
+            self.client.get("/api/cloud-auth/denied").json(),
+            {"email": "visitor@example.org", "invitation_status": None},
         )
         self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
+        with patch.object(cloud_auth, "_deliver_invitation"):
+            requested = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(requested.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/denied").json()["invitation_status"], "notified"
+        )
         public_demo = self.client.get("/api/cloud-demo/")
         self.assertEqual(public_demo.status_code, 200)
         self.assertEqual(public_demo.json()["project"]["title"], "Counting Pairwise Handshakes")
