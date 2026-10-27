@@ -2143,6 +2143,7 @@ type Destination = { root: string; path: string | null; exists: boolean };
 
 function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView) => void; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -2166,8 +2167,9 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
   return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
     <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
-    <form onSubmit={submit}><fieldset disabled={busy}><label htmlFor="import-project-file">Project file</label>
-      <div className="import-project-file-row"><input id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/><button className="import-project-submit" type="submit" disabled={!file}>{busy ? 'Importing…' : 'Import'}</button></div>
+    <form onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
+      <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
+      <div className="import-project-file-row"><div className="import-project-selected-file" aria-live="polite">{file?.name ?? 'No file chosen'}</div><button className="import-project-submit" type="submit" disabled={!file}>{busy ? 'Importing…' : 'Import'}</button></div>
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></form>
   </dialog>;
