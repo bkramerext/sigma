@@ -107,9 +107,12 @@ def main() -> int:
             [interpreter, str(path.relative_to(root))], timeout=240, env=env
         )
     report = {
-        "ticket": "T249", "branch": BRANCH, "tested_head": head["stdout"].strip(),
+        "ticket": "T249",
+        "branch": BRANCH,
+        "tested_head": head["stdout"].strip(),
         "utc": dt.datetime.now(dt.UTC).isoformat(),
-        "python": interpreter, "initial_git_status": status["stdout"],
+        "python": interpreter,
+        "initial_git_status": status["stdout"],
         "checks": checks,
         "passing": [key for key, value in checks.items() if value.get("exit_code") == 0],
         "failing_or_unavailable": [
