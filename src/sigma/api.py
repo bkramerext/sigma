@@ -643,7 +643,9 @@ def download_project_bundle(path: str):
     return Response(
         content=download_bytes(authorized),
         media_type="application/json",
-        headers={"Content-Disposition": "attachment; filename=\"" + authorized.name + "\""},
+        headers={
+            "Content-Disposition": f'attachment; filename="{authorized.name}"'
+        },
     )
 
 
