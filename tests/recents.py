@@ -13,7 +13,6 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from sigma.api import app
-from sigma.project_bundle import read_file
 from sigma.projects import (
     ROOT,
     ProjectError,
@@ -133,11 +132,13 @@ def check(root: Path, base: Path) -> None:
     moved = root / "saved-sample.sigma"
     collision.rename(moved)
     impostor = create_project(selected["id"], "Different research")
-    assert impostor.path == str(collision)
+    assert impostor.path == str(root / f"{selected['id']}.json")
+    assert inspect_project(impostor.path).project == impostor.project
     additional = open_sample_project(selected["id"])
-    assert additional.path != str(collision)
-    assert inspect_project(collision).project == impostor.project
-    collision.rename(root / "saved-impostor.json")
+    assert additional.path == str(collision)
+    assert additional.project.id not in {first.project.id, second.project.id}
+    assert inspect_project(collision).project == additional.project
+    collision.rename(root / "saved-impostor.sigma")
     moved.rename(collision)
     last_copy = open_sample_project(selected["id"])
     assert last_copy.project.id != edited.project.id
