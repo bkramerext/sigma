@@ -383,8 +383,7 @@ async def connection(
                 "welcome_pending": False,
                 "usage_url": None,
             }
-            if cloud_workspaces.enabled()
-            or str(context.get("identity", "")).startswith("cloud_sponsor:")
+            if cloud_workspaces.enabled() or str(context.get("identity", "")).startswith("cloud_")
             else await chatgpt_auth.preferences()
         )
     except ProjectError:

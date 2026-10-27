@@ -159,3 +159,15 @@ provider/launcher regressions and real-Chrome sponsored connection check
 passed using fake credentials and deterministic API responses.
 `./sigma test` passed all steps after formatting, including Ruff, Pyright,
 frontend typecheck, and production build. `git diff --check` passed.
+
+Follow-up: the local `nontrivialzeero@gmail.com` grant is now `$0.25` effective
+and `$0.25` remaining, changed through SIGMA's allowance service and read back
+from the admin snapshot. It remains an eligible sponsored member. A local
+Google-member API regression completes a two-call session with a fake service
+key and provider outputs at this grant with the local force flag off. It also
+verifies the account does not use the personal API key. The service-key
+connection view no longer reads
+ChatGPT preferences. The live sponsor credential is still missing; this test
+does not establish live paid Play. No user rerun was requested.
+The real-Chrome sponsored connection check and `./sigma test` passed all steps
+on this follow-up, including Ruff, Pyright, frontend typecheck, and build.

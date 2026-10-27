@@ -107,6 +107,16 @@ class SponsorTests(IsolatedAsyncioTestCase):
             unconfigured = await self.sponsor_context()
             self.assertEqual(unconfigured["status"], "unconfigured")
             self.assertEqual(unconfigured["token"], "")
+            with patch.object(
+                chatgpt_auth,
+                "preferences",
+                AsyncMock(
+                    side_effect=AssertionError("sponsored service key read ChatGPT preferences")
+                ),
+            ):
+                state = await openai_connection.connection(context=unconfigured)
+            self.assertEqual(state["mode"], "api_key")
+            self.assertEqual(state["accounts"], [])
 
             os.environ["SIGMA_CLOUD_INFERENCE_PROVIDER"] = "invalid"
             invalid = await self.sponsor_context()

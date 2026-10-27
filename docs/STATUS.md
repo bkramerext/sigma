@@ -7008,3 +7008,25 @@ real-Chrome `browser_checks/hosted_sponsored_connection.py` passed with
 deterministic mocked API responses. `./sigma test` passed all steps, including
 Ruff, Pyright, frontend typecheck, and production build. No paid request or
 production change was made.
+
+Follow-up: the active local grant for `nontrivialzeero@gmail.com` was changed
+through SIGMA's allowance service from `$0.01` to `$0.25`; the admin snapshot
+read back `$0.25` effective and `$0.25` remaining, with zero held or estimated
+usage. The account remains an eligible member in sponsored mode. The private
+sponsor store still has two registrations with no access or refresh token, and
+no dedicated sponsored API key is configured. Local sponsored service-key
+connection status no longer reads unrelated ChatGPT account preferences. A
+new isolated local Google-member API regression starts and completes a
+two-call research session at a `$0.25` grant using a fake sponsored key and
+fake provider outputs, with the member's saved sponsored choice and the local
+force flag off. It asserts the dedicated key path and allowance ledger.
+This establishes the local Play routing without making a paid provider call;
+live Play remains unverified until an approved credential is provisioned.
+An offline call to the current signed-in member's server-side auth context
+returned `mode=chatgpt`, `status=reauth_required`, and no credential; the
+private diagnostic recorded `sponsor_connection status=credential_missing`.
+The running local API process predates the service-key commit and will need a
+restart when a sponsored credential is configured. No user retry was requested.
+The focused local Play regression passed; the real-Chrome sponsored connection
+check passed with mocked API responses; `./sigma test` passed all steps,
+including Ruff, Pyright, frontend typecheck, and production build.

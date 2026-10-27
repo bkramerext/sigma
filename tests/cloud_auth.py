@@ -2039,6 +2039,198 @@ class CloudAuthTests(TestCase):
             self.assertTrue(allowance.json()["local_preview"])
             self.assertFalse(allowance.json()["simulated"])
 
+    def test_local_sponsored_service_key_starts_play_with_quarter_allowance(self):
+        import asyncio
+        from uuid import uuid4
+
+        from sigma import openai_connection, research_sessions
+
+        origin = "http://127.0.0.1:5173"
+        project_root = Path(self.temp.name) / "local-projects"
+        project_root.mkdir(mode=0o700)
+        workspace_root = Path(self.temp.name) / "local-workspaces"
+        workspace_root.mkdir(mode=0o700)
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": origin,
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+                "SIGMA_CLOUD_OPENAI_API_KEY": "fixture-sponsored-key",
+                "OPENAI_API_KEY": "personal-key-must-not-be-used",
+                "SIGMA_PROJECTS_ROOT": str(project_root),
+                "SIGMA_CLOUD_WORKSPACES_ROOT": str(workspace_root),
+                "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
+                "SIGMA_MOCK_AUTH": "0",
+            },
+        ):
+            admin_login = self.finish()
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "member@example.org",
+                    "role": "member",
+                    "allowance_usd": 0.25,
+                },
+                headers={"Origin": origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            with TestClient(app, base_url="http://127.0.0.1") as member:
+                login = self.finish(
+                    email="member@example.org",
+                    subject="local-service-key-member",
+                    client=member,
+                )
+                member.cookies.set("sigma_session", login.cookies["sigma_session"])
+                member.headers.update({"Origin": origin})
+                cloud_auth.set_model_access("local-service-key-member", "sponsored")
+                budget = member.get("/api/cloud-research/budget")
+                self.assertEqual(budget.status_code, 200, budget.text)
+                self.assertEqual(budget.json()["remaining_usd"], 0.25)
+
+                principal = cloud_auth.Principal(
+                    "local-service-key-member", "member@example.org", "member"
+                )
+                principal_token = cloud_auth._CURRENT_PRINCIPAL.set(principal)
+                try:
+                    credential = asyncio.run(openai_connection.auth_context())
+                finally:
+                    cloud_auth._CURRENT_PRINCIPAL.reset(principal_token)
+                self.assertEqual(credential["mode"], "api_key")
+                self.assertEqual(credential["token"], "fixture-sponsored-key")
+                self.assertTrue(openai_connection.cloud_credential(credential))
+
+                investigator = {
+                    "claim": "The base case suggests the recurrence bound.",
+                    "method": "Check the first recurrence value.",
+                    "assumptions": ["The recurrence applies at positive indices."],
+                    "evidence_status": "Unverified model derivation.",
+                    "open_obligations": ["Check the next value."],
+                    "python_code": None,
+                    "sage_code": None,
+                    "prior_session_failure_attempt_ids": [],
+                    "human_guidance_reviews": [],
+                    "computational_citations": [],
+                }
+                skeptic = {
+                    "assessment": "continue",
+                    "stop_reason": "recoverable_objection",
+                    "response": "The next value remains to be checked.",
+                    "objections": ["Verify the next value."],
+                    "remaining_obligations": ["Verify the next value."],
+                    "next_question": "What is the next recurrence value?",
+                    "objective_status": "partial",
+                    "solution_claim": "A partial bound is plausible.",
+                    "argument_summary": "The first value supports only a partial bound.",
+                    "assumptions_reviewed": ["The recurrence applies at positive indices."],
+                    "proof_obligations": ["Verify the next value."],
+                    "unresolved_objections": ["Verify the next value."],
+                    "supporting_cycles": [1],
+                    "verification_status": "incomplete",
+                    "strategy_contribution": "productive",
+                    "contribution_rationale": "The next check is explicit.",
+                    "cross_strategy_relations": [],
+                    "retracted_cross_strategy_source_artifact_ids": [],
+                    "peer_handoff_reviews": [],
+                    "human_guidance_reviews": [],
+                    "computational_citations": [],
+                }
+
+                async def fake_call(record, role, context, timeout_seconds=None, step_id=None):
+                    del record, context, timeout_seconds
+                    self.assertIsInstance(step_id, str)
+                    return (investigator if role == "investigator" else skeptic), {
+                        "input_tokens": 90,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 30,
+                    }
+
+                async def provider_fixture(request):
+                    self.assertEqual(
+                        request.headers["authorization"], "Bearer fixture-sponsored-key"
+                    )
+                    self.assertEqual(request.url.path, "/v1/models")
+                    return httpx.Response(
+                        200,
+                        json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+                    )
+
+                real_client = httpx.AsyncClient
+                with (
+                    patch.object(
+                        openai_connection.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                    patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                    patch.object(
+                        research_sessions, "_call", new=AsyncMock(side_effect=fake_call)
+                    ) as calls,
+                ):
+                    created = member.post(
+                        "/api/projects/create",
+                        json={"title": "Local sponsor Play", "problem": "Check a recurrence bound"},
+                    )
+                    self.assertEqual(created.status_code, 201, created.text)
+                    path = created.json()["path"]
+                    project_id = created.json()["project"]["id"]
+                    strategy = member.post(
+                        "/api/projects/strategies",
+                        json={
+                            "path": path,
+                            "title": "Induction",
+                            "approach": "Check the base case and induction step.",
+                        },
+                    )
+                    self.assertEqual(strategy.status_code, 201, strategy.text)
+                    strategies = member.get(
+                        "/api/projects/strategies", params={"path": path}
+                    ).json()["strategies"]
+                    limits = member.put(
+                        "/api/projects/research-limits",
+                        json={
+                            "path": path,
+                            "research_rounds": 1,
+                            "model_calls": 2,
+                            "session_duration_minutes": 15,
+                            "output_tokens_per_call": 256,
+                            "maximum_estimated_cost_usd": 0.25,
+                        },
+                    )
+                    self.assertEqual(limits.status_code, 200, limits.text)
+                    config = member.get("/api/projects/proposals/config", params={"path": path})
+                    self.assertEqual(config.status_code, 200, config.text)
+                    self.assertTrue(config.json()["available"], config.text)
+                    self.assertEqual(config.json()["binding"], credential["identity"])
+                    started = member.post(
+                        "/api/projects/research-sessions/start",
+                        json={
+                            "path": path,
+                            "strategy_id": strategies[0]["id"],
+                            "idempotency_key": str(uuid4()),
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                            "expected_limits": limits.json(),
+                        },
+                    )
+                    self.assertEqual(started.status_code, 200, started.text)
+                    session_id = started.json()["id"]
+                    saved = started.json()
+                    for _ in range(500):
+                        saved = member.get(
+                            f"/api/projects/research-sessions/{session_id}",
+                            params={"path": path},
+                        ).json()
+                        if saved["status"] in {"ended", "failed", "paused"}:
+                            break
+                        time.sleep(0.01)
+                    self.assertEqual(saved["status"], "ended", saved)
+                    self.assertEqual(calls.await_count, 2)
+
     def test_local_expired_personal_connection_restores_sponsorship_and_admin_can_renew(self):
         local_origin = "http://127.0.0.1:5173"
         with patch.dict(
