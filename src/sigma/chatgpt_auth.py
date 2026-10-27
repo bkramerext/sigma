@@ -553,6 +553,23 @@ async def session() -> dict:
         }
 
 
+async def save_api_key(value: str) -> None:
+    """Persist a user's explicitly supplied key in their private account store."""
+    api_key = value.strip()
+    if not 20 <= len(api_key) <= 1024 or any(character.isspace() for character in api_key):
+        raise ProjectError("Enter a valid API key.")
+    async with transaction() as state:
+        state["api_key"] = api_key
+        state["mode"] = "api_key"
+
+
+async def api_key_token() -> str | None:
+    """Return the server-only saved API key to the provider adapter."""
+    async with transaction() as state:
+        value = state.get("api_key")
+        return value if isinstance(value, str) and value else None
+
+
 async def preferences() -> dict:
     async with transaction() as state:
         return {
@@ -593,6 +610,7 @@ async def disconnect() -> dict:
         cancel(attempt.id)
     confirmed = False
     async with transaction() as state:
+        had_api_key = bool(state.pop("api_key", None))
         account = state["accounts"].get(state["active"])
         if account and account.get("refresh_token"):
             try:
@@ -621,7 +639,9 @@ async def disconnect() -> dict:
                 account.pop(key, None)
     return {
         "remote_revocation_confirmed": confirmed,
-        "message": "Disconnected; renewable session revoked."
+        "message": "Saved API key removed from SIGMA."
+        if had_api_key
+        else "Disconnected; renewable session revoked."
         if confirmed
         else "Local tokens cleared. Remote revocation was not confirmed; disconnect SIGMA in ChatGPT Settings → Usage if needed.",
     }

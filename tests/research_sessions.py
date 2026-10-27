@@ -20,6 +20,7 @@ from sigma.projects import (
     create_strategy,
     edit_strategy,
     initialize_project,
+    inspect_project,
     project_path,
     set_strategy_enabled,
 )
@@ -1634,7 +1635,7 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
                 {"text": f"Historical obligation {index}", "status": "unknown"}
             ],
         }
-        for index in range(100)
+        for index in range(research_sessions.MAX_CONTEXT_OBLIGATIONS + 36)
     ]
     bounded_ledger, omitted_obligations, omitted_obligation_ids = (
         research_sessions._obligation_ledger(many_unknown)
@@ -1826,6 +1827,48 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         routine_context["context_manifest"]["obligation_source_omissions"][0]["omitted_count"]
         >= 100
     )
+
+    # Coordinator reconciliation may add obligations beyond the provider's
+    # 12-item schema ceiling. Preserve that ledger-backed list up to the
+    # existing 64-obligation context bound so Resume does not truncate it.
+    reconciled_obligations = [f"Reconciled obligation {number}." for number in range(16)]
+    expanded_evidence = research_sessions._compact_context_artifact(
+        {
+            "id": "expanded-obligation-evidence",
+            "open_obligations": reconciled_obligations,
+            "investigator_output": {"open_obligations": reconciled_obligations},
+            "skeptic_output": {"remaining_obligations": reconciled_obligations},
+        },
+        view.path,
+    )
+    assert expanded_evidence["open_obligations"] == reconciled_obligations
+    assert expanded_evidence["skeptic_output"]["remaining_obligations"] == reconciled_obligations
+    assert expanded_evidence["extract_truncated_fields"] == []
+    long_reconciled_obligation = "A coordinator-retained obligation. " + "details " * 80
+    bounded_obligation = research_sessions._compact_context_artifact(
+        {
+            "id": "long-reconciled-obligation",
+            "open_obligations": [long_reconciled_obligation],
+            "skeptic_output": {"remaining_obligations": [long_reconciled_obligation]},
+        },
+        view.path,
+    )
+    assert bounded_obligation["open_obligations"] == [long_reconciled_obligation]
+    assert bounded_obligation["skeptic_output"]["remaining_obligations"] == [
+        long_reconciled_obligation
+    ]
+    assert bounded_obligation["extract_truncated_fields"] == []
+    beyond_context_bound = research_sessions._compact_context_artifact(
+        {
+            "id": "over-bound-obligations",
+            "open_obligations": [
+                f"Over-bound obligation {number}."
+                for number in range(research_sessions.MAX_CONTEXT_OBLIGATIONS + 1)
+            ],
+        },
+        view.path,
+    )
+    assert "open_obligations" in beyond_context_bound["extract_truncated_fields"]
 
     # A complete multi-step proof must survive the deterministic extract intact.
     long_proof = {
@@ -2226,8 +2269,17 @@ async def test_pause_counts_interrupted_call(path: Path):
     assert stopped["status"] == "stopped" and stopped["calls_used"] == 1
     assert stopped["steps"][-1]["status"] == "interrupted"
     with patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)):
-        rejected = await research_sessions.control_session(str(path), stopped_start["id"], "resume")
-    assert rejected["status"] == "stopped"  # unavailable configuration leaves it stopped
+        rejection_message = ""
+        try:
+            await research_sessions.control_session(str(path), stopped_start["id"], "resume")
+        except ProjectError as exc:
+            rejection_message = str(exc)
+            assert "authentication (401)" in rejection_message.lower()
+        else:
+            raise AssertionError("Rejected provider credentials must visibly reject resume")
+    rejected = research_sessions.get_session(str(path), stopped_start["id"])
+    assert rejected["status"] == "stopped"  # rejected credentials leave it stopped
+    assert rejected["message"] == rejection_message
 
 
 async def test_malformed_output_and_restart(path: Path):
@@ -2584,7 +2636,7 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
         except ProjectError as exc:
             message = str(exc)
             assert "Research was not started" in message
-            assert "Fork strategy from findings" in message
+            assert "create a new strategy informed by the saved findings" in message
             assert "Disable the affected strategy" in message
             assert omitted_id in message
             assert indexed[5][strategy.id][0]["text"] in message
@@ -3135,6 +3187,7 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
         "events": [],
         "artifacts": [artifact],
         "outcome_conclusion_version": 1,
+        "guard_state_hash": "project-state-fixture",
         "outcome": success,
     }
     research_sessions._save(view.path, persisted)
@@ -3142,6 +3195,7 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
     assert reloaded["outcome"]["conclusion"] == success["conclusion"]
     assert research_sessions._public(reloaded)["outcome"]["conclusion"] == success["conclusion"]
     assert "outcome_conclusion_version" not in research_sessions._public(reloaded)
+    assert "guard_state_hash" not in research_sessions._public(reloaded)
     snapshot, _ = papers._snapshot(view.path)
     session_source = next(item for item in snapshot["sources"] if item["kind"] == "session")
     assert session_source["data"]["outcome"]["conclusion"] == success["conclusion"]
@@ -5974,6 +6028,65 @@ async def test_changed_bindings_pause_before_provider(path: Path):
     assert paused["status"] == "paused" and paused["calls_used"] == 0
     assert "AI account or billing identity changed" in paused["message"]
     assert provider_calls == []
+
+
+async def test_legacy_resume_accepts_reverted_eligibility_events(path: Path):
+    view, strategy, credential, config = await setup(path)
+    gate_entered = asyncio.Event()
+    provider_calls = []
+
+    async def blocked_gate():
+        gate_entered.set()
+        await asyncio.Event().wait()
+
+    async def handler(request):
+        provider_calls.append(request)
+        role = json.loads(request.content)["text"]["format"]["name"]
+        output = investigation(1) if role == "research_investigator" else skeptic(1, "stop")
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_acquire_gates", new=blocked_gate),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(gate_entered.wait(), 2)
+        paused = await research_sessions.control_session(str(path), started["id"], "pause")
+        assert paused["status"] == "paused"
+
+    record = research_sessions._read(str(path), started["id"])
+    record.pop("guard_state_hash")  # Exercise records created before semantic guards existed.
+    research_sessions._save(str(path), record)
+    from sigma.projects import set_strategy_enabled
+
+    set_strategy_enabled(str(path), strategy.id, False)
+    set_strategy_enabled(str(path), strategy.id, True)
+    current = inspect_project(path).project
+    assert research_sessions._legacy_resume_state_matches(record, current)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+    assert finished["status"] == "ended"
+    assert len(provider_calls) == finished["calls_used"] == 6
 
 
 async def test_storage_limit_pauses_without_artifact(path: Path):

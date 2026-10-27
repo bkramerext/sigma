@@ -547,7 +547,6 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
   </div>;
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
-    {!!session.artifacts.length && <div className="research-session-actions"><button type="button" className="text-view-link" onClick={() => onForkFromFindings(session)}>Fork strategy from findings</button></div>}
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {provenancePrelude}
@@ -743,8 +742,8 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
   const findingRow = (row: CurrentFinding) => <li key={row.id}><strong>{row.strategy_title || 'Historical strategy'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.verification}</p><p>{sourceButton(row.source, 'Inspect finding')}</p></li>;
   const changeRow = (row: CurrentUnderstanding['changes'][number], index: number) => <li key={`${row.kind}-${row.source.session_id}-${row.source.artifact_id}-${index}`}><strong>{({ obligation_addressed: 'Resolution reported', obligation_superseded: 'Supersession reported', obligation_retracted: 'Retraction reported', local_refutation_reported: 'Local counterexample reported', later_finding_available: 'Later review saved', supersedes: 'Supersession reported', refutes: 'Refutation reported' } as Record<string, string>)[row.kind] || 'Saved assessment'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.caution}</p><p>{sourceButton(row.source, 'Inspect later evidence')}{row.earlier && <> · {sourceButton(row.earlier, 'Inspect earlier evidence')}</>}</p></li>;
   const questionRow = (row: CurrentQuestion) => <li key={row.id}><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.note}</p>{row.sources.length > 0 && <p>{sourceButton(row.sources.at(-1)!, 'Inspect obligation')}{row.narrative_resolution_sources.slice(-1).map(source => <span key={source.record_path}> · {sourceButton(source, 'Inspect narrative resolution')}</span>)}{row.dispositions.filter(item => item.valid).slice(-1).map(item => <span key={item.source.record_path}> · {sourceButton(item.source, 'Inspect disposition')}</span>)}</p>}</li>;
-  return <details className="outcome-subsection current-understanding" aria-label="Current understanding" open>
-    <summary><DisclosureChevron expanded={false}/><span>Current understanding</span></summary>
+  return <details className="outcome-subsection current-understanding" open>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>Suggesting…</span> : <button type="button" className="text-view-link strategy-suggestion-trigger" onClick={event => { event.preventDefault(); event.stopPropagation(); void suggestStrategy(); }}>{hasSuggestedResult ? 'Suggest another strategy' : 'Suggest a strategy'}</button>}</summary>
     <p className="hint current-understanding-scope">{state.scope_note}</p>
     <div className="current-understanding-columns">
       <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
@@ -756,10 +755,7 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
       </section>
     </div>
     <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map(note => <li key={note}>{note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
-    <div className="strategy-suggestion-action">
-      <button type="button" className="text-view-link" disabled={suggestionBusy} aria-busy={suggestionBusy} onClick={() => void suggestStrategy()}>{suggestionBusy ? 'Suggesting…' : hasSuggestedResult ? 'Suggest another strategy' : 'Suggest a Strategy'}</button>
-      <small>One copy-only Markdown suggestion based on Current Understanding and saved evidence. Nothing is saved to your strategies.</small>
-      {suggestionBusy && <p role="status">Reviewing Current Understanding and relevant session evidence…</p>}
+    <div className="strategy-suggestion-feedback">
       {suggestionError && <p className="error" role="alert">{suggestionError}</p>}
       {hasSuggestedResult && !suggestion && !suggestionError && <p role="status">No additional strategy is warranted by the available evidence.</p>}
       {suggestion && <details className="strategy-suggestion-result">
@@ -771,7 +767,8 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void }) {
+  const mockResearch = useCloudIdentity()?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
@@ -793,6 +790,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
   const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running');
+  useEffect(() => { onRunningChange(activeSession?.status === 'running'); }, [activeSession?.id, activeSession?.status, onRunningChange]);
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -855,6 +853,13 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
+      if (mockResearch) {
+        if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
+        setPendingStrategyIds(chosenIds);
+        setConfig({ available: true, model: 'mock-deterministic', reasoning_effort: 'none', mode: 'mock', binding: 'mock', message: 'Local simulation: no provider calls.' });
+        setConfirmStart(true);
+        return;
+      }
       const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
       const current = await response.json();
       if (!response.ok) throw new Error(current.error ?? 'Could not read AI configuration');
@@ -887,7 +892,9 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     try {
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
-      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current });
+      const next = mockResearch
+        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current })
+        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
@@ -911,7 +918,6 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   }, [load]);
 
   function requestResume(target: ResearchSession) {
-    revealSession(target.id);
     void control('resume', target);
   }
 
@@ -1010,11 +1016,11 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError || (!!activeSession && activeSession.id !== item.id)} onClick={() => requestResume(item)}>Resume</button>}
-                  {['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
+                  {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
-                <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}><i aria-hidden="true"/>{item.status === 'paused' ? 'stopped' : item.status}</span>
+                <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {(item.status === 'paused' || item.status === 'stopped') && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{item.outcome.label}{item.outcome.provisional ? ' · provisional' : ''}</span></small>
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
@@ -1023,7 +1029,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
             <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
           </li>;
         })}
-      </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
+      </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
     </div>
     {readError && <p className="error" role="alert">Unable to confirm session state. Last confirmed information is shown: {readError}</p>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -1421,6 +1427,8 @@ function FloatingTooltip() {
   const [active, setActive] = useState<{ element: HTMLElement; text: string } | null>(null);
   const tooltip = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLElement | null>(null);
+  const pointerPosition = useRef({ x: 0, y: 0 });
+  const tooltipPointerPosition = useRef({ x: 0, y: 0 });
   const suppressedAfterClick = useRef(new WeakSet<HTMLElement>());
   const previousDescriptions = useRef(new WeakMap<HTMLElement, string | null>());
   const hoverTimer = useRef<number | null>(null);
@@ -1434,6 +1442,16 @@ function FloatingTooltip() {
     if (!element?.isConnected || !hint) return;
     const anchor = element.getBoundingClientRect();
     const box = hint.getBoundingClientRect();
+    if (element.dataset.tooltipFollowCursor === 'true' && element.matches(':hover')) {
+      const left = Math.max(8, Math.min(window.innerWidth - box.width - 8, tooltipPointerPosition.current.x + 14));
+      const below = tooltipPointerPosition.current.y + 16;
+      const top = below + box.height <= window.innerHeight - 8
+        ? below
+        : Math.max(8, tooltipPointerPosition.current.y - box.height - 12);
+      hint.style.left = `${left}px`;
+      hint.style.top = `${top}px`;
+      return;
+    }
     const left = Math.max(8, Math.min(window.innerWidth - box.width - 8, anchor.left + anchor.width / 2 - box.width / 2));
     const below = anchor.bottom + 8;
     const top = below + box.height <= window.innerHeight - 8
@@ -1458,6 +1476,9 @@ function FloatingTooltip() {
     if (!element || !text) return;
     if (activeRef.current === element) { setActive({ element, text }); return; }
     const previous = element.getAttribute('aria-describedby');
+    if (element.dataset.tooltipFollowCursor === 'true' && element.matches(':hover')) {
+      tooltipPointerPosition.current = { ...pointerPosition.current };
+    }
     previousDescriptions.current.set(element, previous);
     element.setAttribute('aria-describedby', [previous, 'sigma-ui-tooltip'].filter(Boolean).join(' '));
     activeRef.current = element;
@@ -1468,6 +1489,7 @@ function FloatingTooltip() {
       ? target.closest<HTMLElement>('[data-tooltip]:not([data-tooltip-disabled]), button[aria-label]:not([data-tooltip-disabled])')
       : null;
     const onPointerOver = (event: PointerEvent) => {
+      pointerPosition.current = { x: event.clientX, y: event.clientY };
       const element = targetFor(event.target);
       if (document.querySelector('.project-model-confirm-popover')) { clearHoverTimer(); hide(); return; }
       if (element && suppressedAfterClick.current.has(element)) return;
@@ -1503,9 +1525,15 @@ function FloatingTooltip() {
       const element = targetFor(event.target);
       if (element && !element.matches(':hover') && !element.contains(event.relatedTarget as Node | null)) hide(element);
     };
+    const onPointerMove = (event: PointerEvent) => {
+      pointerPosition.current = { x: event.clientX, y: event.clientY };
+      if (activeRef.current && targetFor(event.target) === activeRef.current
+        && activeRef.current.dataset.tooltipFollowCursor !== 'true') position();
+    };
     const onMove = () => position();
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
+    document.addEventListener('pointermove', onPointerMove, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('focusout', onFocusOut, true);
@@ -1515,6 +1543,7 @@ function FloatingTooltip() {
       clearHoverTimer();
       document.removeEventListener('pointerover', onPointerOver, true);
       document.removeEventListener('pointerout', onPointerOut, true);
+      document.removeEventListener('pointermove', onPointerMove, true);
       document.removeEventListener('click', onClick, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
@@ -2049,31 +2078,26 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       {cloud?.enabled && cloud.ready && <FeedbackForm/>}
-      <p className="about-privacy-link"><a className="cloud-secondary-button" href="/privacy">Privacy Policy</a></p>
     </div>
-    <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
+    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href="/privacy">Privacy Policy</a><a className="about-privacy-link" href="/tos">Terms of Service</a></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
   </dialog></div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false, researchRunning = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean }) {
   const cloud = useCloudIdentity();
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
-      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork && close && <div className="project-back-row project-art-back-row">
-        <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" data-tooltip-disabled><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>
-        <button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption" data-tooltip-disabled>Back to home</button>
-      </div>}
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}</span></div>}</div>
+      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}{researchRunning && <span className="research-running-indicator" aria-hidden="true"/>}</span></div>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      {cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill compact/> : <><GoogleIdentityPill compact/><ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}
-    </> : <ConnectionStatus disabled={connectionDisabled}/>}
+      <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div>
+    </> : <ConnectionStatus/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
   </header>;
@@ -2097,9 +2121,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, connectionDisabled = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, connectionDisabled = false, researchRunning = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; connectionDisabled?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; connectionDisabled?: boolean; researchRunning?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -2112,7 +2136,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectArtwork connectionDisabled={connectionDisabled}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -2136,6 +2160,7 @@ type Destination = { root: string; path: string | null; exists: boolean };
 
 function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView) => void; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -2157,12 +2182,12 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
     finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
     <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
-    <form onSubmit={submit}><fieldset disabled={busy}><label htmlFor="import-project-file">Project file</label>
-      <input id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
+    <form id="import-project-form" onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
+      <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
+      <div className="import-project-file-row"><div className="import-project-selected-file" aria-live="polite">{file?.name ?? 'No file chosen'}</div></div>
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="entry-dialog-actions"><button type="submit" disabled={!file}>{busy ? 'Importing…' : 'Import Project'}</button></div>
     </fieldset></form>
   </dialog>;
 }
@@ -2185,8 +2210,8 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   }
   return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="entry-dialog-header"><h2 id="project-entry-heading">Open Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header><p className="entry-help">Choose an existing local project by its directory path.</p>
-    <form onSubmit={save}><fieldset disabled={busy}><label htmlFor="open-project-path">Project directory</label><input ref={first} id="open-project-path" required value={path} onChange={event => setPath(event.target.value)} aria-describedby="project-path-help"/><p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
-    {error && <p className="error" role="alert">{error}</p>}<div className="entry-dialog-actions"><button type="submit">{busy ? 'Opening…' : 'Open Project'}</button></div></fieldset></form>
+    <form onSubmit={save}><fieldset disabled={busy}><label htmlFor="open-project-path">Project directory</label><div className="open-project-path-row"><input ref={first} id="open-project-path" required value={path} onChange={event => setPath(event.target.value)} aria-describedby="project-path-help"/><button className="open-project-submit" type="submit">{busy ? 'Opening…' : 'Open'}</button></div><p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
+    {error && <p className="error" role="alert">{error}</p>}</fieldset></form>
   </dialog>;
 }
 
@@ -2317,11 +2342,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   const modelLabel = current ? `${current.label.split(' · ')[0]} ${current.relative_cost}` : view.project.ai_model;
   const modelDisabled = !catalogReady || busy || disabled || !nextModel || !nextModelEffort;
   const thinkingDisabled = !catalogReady || busy || disabled || !nextEffort;
-  const statusMessage = message || !catalogReady
-    ? message || 'Checking model availability…'
-    : current?.availability !== 'available'
-      ? 'Saved model access is not verified; settings were preserved.'
-      : '';
+  const statusMessage = message || !catalogReady ? message || 'Checking model availability…' : '';
   const nextEffortNotice = effortWillChange
     ? ` Switching to ${nextModel?.label.split(' · ')[0]} will also change Thinking from ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort} to ${thinkingLabels[nextModelEffort!]}.`
     : '';
@@ -2351,7 +2372,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     {statusMessage && <span className="project-controls-message" role="status">{statusMessage}</span>}
     {pendingModel && createPortal(<div ref={confirmationPopover} className="project-model-confirm-popover" role="group" aria-label={`Confirm switch to ${pendingModelName}`} style={confirmationPosition ? { left: confirmationPosition.left, top: confirmationPosition.top } : { left: -10000, top: -10000 }}>
       <p><strong>Switch to {pendingModelName}?</strong> {pendingModelName} has a higher relative published API token cost tier ({pendingModel.relative_cost} versus {current?.relative_cost}). Continue to save this model?</p>
-      <div className="project-model-confirm-actions session-remove-confirm-actions"><button ref={confirmButton} type="button" onClick={confirmModelChange}>Confirm</button><button type="button" onClick={() => setPendingModel(null)}>Cancel</button></div>
+      <div className="project-model-confirm-actions"><button ref={confirmButton} type="button" className="text-view-link" onClick={confirmModelChange}>Confirm</button><button type="button" className="text-view-link" onClick={() => setPendingModel(null)}>Cancel</button></div>
     </div>, document.body)}
   </div>;
 }
@@ -2586,10 +2607,11 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [opening, setOpening] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [error, setError] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
+    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
     setProjects(data.projects); setError(''); setLoading(false);
   }, []);
   useEffect(() => {
@@ -2644,13 +2666,19 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
-    {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new project.</p>}
-    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'}>
-      <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+    {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
+    {recentGroups.map(group => {
+      const groupKey = group.type ?? 'other';
+      const hiddenRunningProject = !expandedGroups[groupKey] && group.projects.some(entry => entry.research_running);
+      return <details className="recent-type-group" key={groupKey} onToggle={event => {
+        const isOpen = event.currentTarget.open;
+        setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
+      }}>
+      <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
           <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
           <span title={entry.path}>{entry.path}</span>
@@ -2658,7 +2686,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
       </li>)}</ul>
-    </details>)}
+    </details>;
+    })}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -2760,7 +2789,6 @@ function Home({ initialPath, onOpen }: {
   useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
   const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const nextCreditStreak = useRef(0);
@@ -2793,8 +2821,7 @@ function Home({ initialPath, onOpen }: {
     };
   }, []);
   function cancel() {
-    const trigger = entry === 'open' ? openButton : newButton;
-    setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
+    setEntry(null); requestAnimationFrame(() => newButton.current?.focus());
   }
   function closeAbout() {
     setAboutOpen(false);
@@ -2823,19 +2850,17 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
-      {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
-            {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
+      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           {(!cloud?.enabled || cloud.authenticated) && <>
             <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
-            <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
           <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
-      </section>}
+      </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; GPT Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'import' && <ImportProjectDialog onOpen={onOpen} onCancel={cancel}/>}
@@ -3182,6 +3207,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
+  const [researchRunning, setResearchRunning] = useState(false);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
@@ -3281,7 +3307,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null };
+  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null, researchRunning };
   function toggleStrategiesPane() {
     setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
   }
@@ -3506,7 +3532,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
       setView(next);
       setAnnouncement('Advanced Outcome enabled.');
-    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
+    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
@@ -3573,10 +3599,10 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -3617,86 +3643,134 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 }
 
 
-function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
+function MockAuthSelector() {
   const cloud = useCloudIdentity();
-  const [open, setOpen] = useState(false);
-  const disclosure = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [funding, setFunding] = useState<{ mode: string; allowance: { scenario: string; remaining_usd: number }; provider: string } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    const openFromGuestPrompt = () => { setError(''); setPosition(null); setOpen(true); };
-    window.addEventListener('sigma-open-google-signin', openFromGuestPrompt);
-    return () => window.removeEventListener('sigma-open-google-signin', openFromGuestPrompt);
-  }, []);
+    if (!cloud?.mock_auth || !cloud.authenticated) { setFunding(null); return; }
+    let cancelled = false;
+    fetch('/api/cloud-auth/mock/funding', { credentials: 'same-origin' })
+      .then(async response => { if (!response.ok) throw new Error('Mock funding unavailable'); return response.json(); })
+      .then(data => { if (!cancelled) setFunding(data); })
+      .catch(err => { if (!cancelled) setError(errorMessage(err)); });
+    return () => { cancelled = true; };
+  }, [cloud?.mock_auth, cloud?.authenticated, cloud?.user?.email]);
+  if (!cloud?.mock_auth) return null;
+  async function select(identity: string) {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/cloud-auth/mock/select?identity=' + encodeURIComponent(identity), {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error('Mock identity switch failed: ' + response.status);
+      window.localStorage.removeItem('sigma.currentProject');
+      window.location.assign(identity === 'uninvited' ? '/?access=denied' : '/');
+    } catch (err) {
+      setError(errorMessage(err)); setBusy(false);
+    }
+  }
+  async function update(kind: 'model-access' | 'allowance' | 'provider', value: string) {
+    setBusy(true); setError('');
+    try {
+      const parameter = kind === 'model-access' ? 'mode' : 'scenario';
+      const response = await fetch('/api/cloud-auth/mock/' + kind + '?' + parameter + '=' + encodeURIComponent(value), {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error('Mock scenario update failed: ' + response.status);
+      const latest = await fetch('/api/cloud-auth/mock/funding', { credentials: 'same-origin' });
+      if (!latest.ok) throw new Error('Mock funding refresh failed');
+      setFunding(await latest.json());
+    } catch (err) { setError(errorMessage(err)); }
+    finally { setBusy(false); }
+  }
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}>
+    <strong>MOCK AUTH · LOCAL ONLY</strong>
+    <select aria-label="Mock authentication identity" disabled={busy} defaultValue="" onChange={event => void select(event.target.value)}>
+      <option value="" disabled>Switch identity…</option>
+      <option value="guest">Guest</option>
+      <option value="member-a">Member A</option>
+      <option value="member-b">Member B</option>
+      <option value="admin">Administrator</option>
+      <option value="uninvited">Uninvited</option>
+    </select>
+    {funding && <>
+      <select aria-label="Mock funding mode" disabled={busy} value={funding.mode} onChange={event => void update('model-access', event.target.value)}>
+        <option value="personal">Personal</option><option value="sponsored">SIGMA-sponsored</option>
+      </select>
+      <select aria-label="Mock sponsorship allowance" disabled={busy} value={funding.allowance.scenario} onChange={event => void update('allowance', event.target.value)}>
+        <option value="available">Available</option><option value="low">Low</option><option value="exhausted">Exhausted</option>
+      </select>
+      <select aria-label="Mock provider state" disabled={busy} value={funding.provider} onChange={event => void update('provider', event.target.value)}>
+        <option value="connected">Provider connected</option><option value="unavailable">Provider unavailable</option><option value="error">Provider error</option>
+      </select>
+      <span aria-live="polite">Simulated allowance: ${funding.allowance.remaining_usd.toFixed(2)} remaining · Provider: {funding.provider} · Research execution disabled</span>
+    </>}
+    {error && <span role="alert">{error}</span>}
+  </span>;
+}
+
+function GoogleIdentityPill() {
+  const cloud = useCloudIdentity();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [error, setError] = useState('');
+  const deniedEmail = cloud?.deniedEmail ?? null;
   useEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const rect = disclosure.current?.getBoundingClientRect();
-      if (!rect || !panel.current) return;
-      const panelRect = panel.current.getBoundingClientRect();
-      const below = rect.bottom + 8 + panelRect.height <= window.innerHeight - 8;
-      const right = Math.min(Math.max(8, window.innerWidth - rect.right), Math.max(8, window.innerWidth - panelRect.width - 8));
-      setPosition({ top: below ? rect.bottom + 8 : Math.max(8, rect.top - panelRect.height - 8), right });
+    if (deniedEmail && dialog.current && !dialog.current.open) dialog.current.showModal();
+  }, [deniedEmail]);
+  useEffect(() => {
+    const open = () => {
+      document
+        .querySelector<HTMLAnchorElement>('.project-google-signin[href="/api/cloud-auth/login"]')
+        ?.click();
     };
-    const frame = requestAnimationFrame(() => {
-      place();
-      panel.current?.querySelector<HTMLElement>('button:not(:disabled), a[href]')?.focus();
-    });
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
-      if (event.key !== 'Tab' || !panel.current) return;
-      const items = Array.from(panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]')).filter(item => item.offsetParent !== null);
-      if (!items.length) { event.preventDefault(); panel.current.focus(); return; }
-      const first = items[0]; const last = items.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', escape);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', escape); };
-  }, [open]);
-  function close() { setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
-  function dismissBackdrop(event: ReactPointerEvent<HTMLDivElement>) { if (event.target === event.currentTarget) close(); }
+    window.addEventListener('sigma-open-google-signin', open);
+    return () => window.removeEventListener('sigma-open-google-signin', open);
+  }, []);
   async function signOut() {
     setError('');
     try {
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
+      window.localStorage.removeItem('sigma.currentProject');
       window.location.assign('/');
     } catch (cause) { setError(errorMessage(cause)); }
   }
-  const canSignIn = !!cloud?.enabled && cloud.ready;
-  const setupMissing = cloud?.local_setup_missing ?? [];
-  const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
-    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google connected' : canSignIn ? 'Sign in with Google' : 'Google setup required'}</span>
-    </button>
-    {open && createPortal(<>
-      <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
-      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
-      {!cloud ? <>
-        <h2 id="google-account-title">Checking Google sign-in</h2>
-        <p>SIGMA is checking the local Google authentication configuration.</p>
-      </> : !canSignIn && !cloud.authenticated ? <>
-        <h2 id="google-account-title">Google sign-in setup required</h2>
-        <p>Local Google sign-in is unavailable because the current SIGMA launch is missing required configuration.</p>
-        {setupMissing.length > 0 && <p className="google-setup-missing">Missing: {setupMissing.map(name => <code key={name}>{name}</code>)}</p>}
-        {setupMissing.length === 0 && <p>Local Google authentication is not enabled for this server process. Restart using <code>./sigma start --nav</code> after exporting the required settings.</p>}
-        <p>Set the missing values in the environment used to start SIGMA. Put the Google OAuth client ID and secret in this checkout’s <code>.env</code>. Set <code>SIGMA_CLOUD_ADMIN_CONTACT_EMAIL</code> to the public invitation contact. On a fresh auth database, this address also identifies the first administrator; after the first verified sign-in, the saved administrator identity remains bound if the contact changes. If the setting is in <code>~/.bashrc</code>, run <code>source ~/.bashrc</code> in the launching shell, then restart with <code>./sigma start --nav</code>.</p>
-        <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
-      </> : <>
-        {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
-        {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
-        {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Sign in with Google</a>}
-        {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
-      </>}
+    {cloud?.enabled && cloud.authenticated
+      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip-disabled><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
+      : <a className="project-google-signin" href="/api/cloud-auth/login"><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>}
+    <dialog ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedEmail) event.preventDefault(); }}>
+      <h2 id="google-invitation-heading">Request an invitation</h2>
+      <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
+      {deniedEmail && <p className="google-account-email">{deniedEmail}</p>}
+      <InvitationRequestControls/>
       {error && <p role="alert">{error}</p>}
-      </div>
-    </>, document.body)}
+      <button type="button" className="google-text-action google-account-close" onClick={() => dialog.current?.close()}>Close</button>
+    </dialog>
   </>;
 }
+
+function InvitationRequestControls() {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+  async function requestInvitation() {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
+      setSent(true);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <div className="google-invitation-actions">
+    {sent ? <p role="status">Invitation requested. We'll get back to you.</p> : <button type="button" className="google-text-action" disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Requesting…' : 'Request invitation'}</button>}
+    {error && <p role="alert">{error}</p>}
+  </div>;
+}
+
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
@@ -4041,14 +4115,17 @@ function CloudAuthGate() {
     if (selectingConnection) return;
     setSelectingConnection(true); setConnectionError(null);
     try {
-      const response = await fetch('/api/ai/mode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+      const response = status?.mock_auth
+        ? await fetch(`/api/cloud-auth/mock/model-access?mode=${encodeURIComponent(mode)}`, { method: 'POST', credentials: 'same-origin' })
+        : await fetch('/api/ai/mode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
       if (!response.ok) throw await cloudFailure(response, 'Connection choice could not be saved.');
       await refresh();
     } catch (cause) {
       setConnectionError(cause instanceof Error ? cause.message : 'Connection choice could not be saved.');
+      throw cause;
     } finally { setSelectingConnection(false); }
-  }, [refresh, selectingConnection]);
-  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', selectConnection, connectionError, selectingConnection };
+  }, [refresh, selectingConnection, status?.mock_auth]);
+  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', selectConnection, connectionError, selectingConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
@@ -4060,11 +4137,7 @@ function CloudAuthGate() {
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
-    <a className="cloud-secondary-button privacy-return-button" href="/">Return to SIGMA</a>
-    <a className="cloud-demo-brand" href="/">SIGMA</a>
-    <p className="cloud-auth-kicker">Version 1 · proposed draft</p>
-    <h1>SIGMA Privacy Notice</h1>
-    <p className="privacy-draft-alert" role="status">This proposed notice is awaiting owner approval. It is not approved public policy.</p>
+    <div className="privacy-notice-heading"><h1>SIGMA Privacy Notice</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
     <p><strong>Prepared October 26, 2026 · Version 1.0</strong></p>
     <h2>Information SIGMA handles</h2>
     <p>If you sign in, SIGMA receives your Google account identifier and verified email from Google and stores account, access, and session records. SIGMA uses browser cookies for Google sign-in and your SIGMA session. A denied sign-in can also create a short-lived record used to support an invitation request.</p>
@@ -4090,45 +4163,11 @@ function PrivacyNoticePage() {
 function TermsOfServicePage() {
   useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
-    <a className="cloud-demo-brand" href="/">SIGMA</a>
-    <p className="cloud-auth-kicker">Proposed terms · draft for review</p>
-    <h1>Terms of Service</h1>
-    <p className="privacy-draft-alert" role="status">These proposed terms are awaiting Brian's review and are not approved terms.</p>
-    <h2>Experimental research software</h2>
-    <p>SIGMA is an experimental research workbench. Features and results may be incomplete, inaccurate, or unavailable. Research outputs, including generated text, calculations, code, and reports, are not guaranteed to be correct or complete.</p>
-    <h2>Your review and use</h2>
-    <p>Review research outputs and verify important claims independently before relying on them or sharing them. A successful computation or agent review does not by itself establish a proof or a correct result.</p>
-    <p>Use SIGMA only with material you are authorized to provide. When you choose an AI feature, relevant prompts and project context may be sent to the provider for the selected connection. Review the applicable provider terms and settings before using that feature.</p>
-    <h2>Review status</h2>
-    <p>This draft needs Brian's review before it is published as operative terms. No additional operator policies or service commitments are stated here.</p>
-    <p><a className="cloud-text-button" href="/">Return to SIGMA</a></p>
+    <div className="privacy-notice-heading"><h1>Terms of Service</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
+    <p>No terms yet, except just have fun.</p>
   </article></main>;
 }
 
-function AccessNotGranted({ email }: { email: string }) {
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('invite') === '1') {
-      window.history.replaceState(null, '', '/?access=denied');
-      void submit();
-    }
-  }, []);
-  async function submit() {
-    setBusy(true); setError('');
-    try {
-      const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({})) as { detail?: string; error?: string };
-        throw new Error(result.detail || result.error || 'Your request could not be sent. Please try again later.');
-      }
-      setSent(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your request could not be sent. Please try again later.'); }
-    finally { setBusy(false); }
-  }
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Welcome to SIGMA</h1><p role="status">Your Google account is not yet invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{sent ? <p role="status">Glad you're interested! We'll get back to you!</p> : <button className="cloud-secondary-button" disabled={busy} onClick={() => void submit()}>{busy ? 'Sending…' : 'Invite Me'}</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a><a className="cloud-text-button" href="/demo">Continue as Guest</a><a className="cloud-text-button" href="/privacy">Proposed privacy notice · v1</a></div>{error && <p role="alert">{error}</p>}</section>;
-}
 
 installRequestErrorToasts();
 createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : window.location.pathname === '/tos' ? <TermsOfServicePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);

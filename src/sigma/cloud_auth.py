@@ -140,7 +140,7 @@ def config() -> Config:
             local
             and parsed.scheme == "http"
             and parsed.hostname in {"127.0.0.1", "localhost"}
-            and parsed.port == 5173
+            and parsed.port is not None
             and parsed.path == ""
             and not parsed.query
             and not parsed.fragment
@@ -381,7 +381,9 @@ def _configured_bootstrap_admin_email(cfg: Config) -> str | None:
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
-    if not cfg.local:
+    # Mock users need distinct workspace identities even though the local
+    # development server otherwise follows the local-storage path.
+    if not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")):
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:
@@ -391,7 +393,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     # Hosted users begin on their explicitly personal choice. Sponsored access
     # is available only after an authenticated user selects it.
     model_access = "personal"
-    sponsorship_eligible = int(not cfg.local)
+    sponsorship_eligible = int(
+        not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:"))
+    )
     with _db(cfg) as db:
         _upsert_user_state(
             db,
@@ -454,7 +458,7 @@ def set_model_access(subject: str, mode: str) -> None:
     if mode not in {"personal", "sponsored"}:
         raise ValueError("Unsupported model connection choice.")
     cfg = config()
-    if not cfg.enabled or cfg.error or cfg.local:
+    if not cfg.enabled or cfg.error or (cfg.local and not _mock_enabled(cfg)):
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
         changed = db.execute(
@@ -514,6 +518,7 @@ def resolve_session(raw: str | None) -> Principal | None:
         cfg.enabled
         and cfg.local
         and not cfg.error
+        and not _mock_enabled(cfg)
         and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
         and cfg.admin_contact_email
     ):
@@ -552,6 +557,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
+    public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
     demo_public = path in {"/api/cloud-demo/", "/api/cloud-demo/report"} and request.method in {
@@ -670,12 +676,278 @@ async def middleware(request: Request, call_next):
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )
+    if _mock_enabled(cfg) and principal.subject.startswith("mock:"):
+        # Keep normal project CRUD available for UI acceptance testing.
+        # The allowlisted mock research route is deterministic and provider-free.
+        # Keep live AI/provider and other research execution routes server-denied.
+        # Explicitly allow known provider-free project mutations. New routes
+        # fail closed until reviewed, instead of relying on name heuristics.
+        safe_project_writes = {
+            "/api/projects/open",
+            "/api/projects/init",
+            "/api/projects/close",
+            "/api/projects/create",
+            "/api/projects/update",
+            "/api/projects/research-limits",
+            "/api/projects/strategies",
+            "/api/projects/strategies/remove",
+            "/api/projects/strategies/edit",
+            "/api/projects/strategies/enabled",
+            "/api/projects/strategies/stage",
+            "/api/projects/strategies/reorder",
+            "/api/projects/text/source",
+            "/api/projects/recent/forget",
+            "/api/projects/samples/open",
+            "/api/projects/research-sessions/mock",
+        }
+        project_write = path.startswith("/api/projects/") and request.method not in {
+            "GET",
+            "HEAD",
+            "OPTIONS",
+        }
+        mock_session_control = (
+            request.method == "POST"
+            and re.fullmatch(r"/api/projects/research-sessions/[^/]+/control", path) is not None
+        )
+        if path.startswith(("/api/ai/", "/api/cloud-research/")) or (
+            project_write and path not in safe_project_writes and not mock_session_control
+        ):
+            scenario = _mock_allowance(cfg, principal.subject)
+            mode = model_access_for_subject(principal.subject)
+            message = (
+                "Simulated sponsorship allowance exhausted."
+                if mode == "sponsored" and scenario["scenario"] == "exhausted"
+                else "Mock walkthrough: research execution is disabled to prevent real provider charges."
+            )
+            return JSONResponse({"error": message, "simulated": True}, status_code=403)
     request.state.cloud_principal = principal
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    return response
+
+
+# Mock identities are available only on the loopback-only local auth server.
+_MOCK_IDENTITIES = {
+    "member-a": ("mock-member-a@localhost.invalid", "member"),
+    "member-b": ("mock-member-b@localhost.invalid", "member"),
+    "admin": ("mock-admin@localhost.invalid", "admin"),
+    "uninvited": ("mock-uninvited@localhost.invalid", None),
+}
+
+
+def _mock_enabled(cfg: Config) -> bool:
+    try:
+        origin = urlsplit(cfg.origin or "")
+        local_origin = (
+            origin.scheme == "http"
+            and origin.hostname in {"127.0.0.1", "localhost", "::1"}
+            and origin.port is not None
+            and not origin.username
+            and not origin.password
+            and not origin.path
+            and not origin.query
+            and not origin.fragment
+        )
+    except ValueError:
+        local_origin = False
+    return (
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
+        and local_origin
+        and os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().lower() in {"1", "true", "yes"}
+    )
+
+
+_MOCK_ALLOWANCES = {"available": 25.0, "low": 1.0, "exhausted": 0.0}
+
+
+def _mock_allowance(cfg: Config, subject: str) -> dict[str, Any]:
+    with _db(cfg) as db:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS mock_allowances (
+                subject TEXT PRIMARY KEY, scenario TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )"""
+        )
+        row = db.execute(
+            "SELECT scenario FROM mock_allowances WHERE subject=?", (subject,)
+        ).fetchone()
+    scenario = row["scenario"] if row else "available"
+    return {"scenario": scenario, "remaining_usd": _MOCK_ALLOWANCES[scenario], "simulated": True}
+
+
+@router.get("/mock/funding")
+def mock_funding(request: Request):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    _persist_user_state(cfg, principal)
+    return {
+        "mode": model_access_for_subject(principal.subject),
+        "allowance": _mock_allowance(cfg, principal.subject),
+        "provider": _mock_provider(cfg, principal.subject),
+    }
+
+
+@router.post("/mock/allowance")
+def mock_allowance(request: Request, scenario: str):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock authentication requires a loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    if scenario not in _MOCK_ALLOWANCES:
+        raise HTTPException(400, "Unknown mock allowance scenario.")
+    with _db(cfg) as db:
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS mock_allowances (
+                subject TEXT PRIMARY KEY, scenario TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )"""
+        )
+        db.execute(
+            """INSERT INTO mock_allowances(subject,scenario,updated_at) VALUES(?,?,?)
+            ON CONFLICT(subject) DO UPDATE SET scenario=excluded.scenario,
+            updated_at=excluded.updated_at""",
+            (principal.subject, scenario, _now()),
+        )
+    return _mock_allowance(cfg, principal.subject)
+
+
+_MOCK_PROVIDERS = {"connected", "unavailable", "error"}
+
+
+def _mock_provider(cfg: Config, subject: str) -> str:
+    with _db(cfg) as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS mock_providers (
+            subject TEXT PRIMARY KEY, scenario TEXT NOT NULL, updated_at INTEGER NOT NULL
+        )""")
+        row = db.execute(
+            "SELECT scenario FROM mock_providers WHERE subject=?", (subject,)
+        ).fetchone()
+    return str(row["scenario"]) if row else "connected"
+
+
+@router.post("/mock/provider")
+def mock_provider(request: Request, scenario: str):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if (
+        request.headers.get("origin") != cfg.origin
+        or request.client is None
+        or request.client.host not in {"127.0.0.1", "::1", "localhost"}
+    ):
+        raise HTTPException(403, "Mock scenario changes require a same-origin loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    if scenario not in _MOCK_PROVIDERS:
+        raise HTTPException(400, "Unknown mock provider scenario.")
+    with _db(cfg) as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS mock_providers (
+            subject TEXT PRIMARY KEY, scenario TEXT NOT NULL, updated_at INTEGER NOT NULL
+        )""")
+        db.execute(
+            """INSERT INTO mock_providers(subject,scenario,updated_at) VALUES(?,?,?)
+            ON CONFLICT(subject) DO UPDATE SET scenario=excluded.scenario,updated_at=excluded.updated_at""",
+            (principal.subject, scenario, _now()),
+        )
+    return {"provider": scenario, "simulated": True}
+
+
+@router.post("/mock/model-access")
+def mock_model_access(request: Request, mode: str):
+    """Change simulated funding without touching a real provider."""
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock authentication requires a loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None or not principal.subject.startswith("mock:"):
+        raise HTTPException(401, "Choose a mock member first.")
+    if mode not in {"personal", "sponsored"}:
+        raise HTTPException(400, "Unknown mock funding mode.")
+    _persist_user_state(cfg, principal)
+    set_model_access(principal.subject, mode)
+    return {"mode": mode, "simulated": True}
+
+
+@router.post("/mock/select")
+def mock_select(request: Request, identity: str):
+    cfg = config()
+    if not _mock_enabled(cfg):
+        raise HTTPException(404, "Not found")
+    if identity not in (*_MOCK_IDENTITIES, "guest"):
+        raise HTTPException(400, "Unknown mock identity")
+    # Do not allow a cross-origin page to switch the active local identity.
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
+    # Never accept mock identity changes through a remote-facing listener.
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Mock authentication requires a loopback client.")
+    old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+    with _db(cfg) as db:
+        if old:
+            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(old),))
+        if previous_denied:
+            db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(previous_denied),))
+        response = Response(status_code=204)
+        _clear_cookie(response, cfg, SESSION_COOKIE)
+        _clear_cookie(response, cfg, DENIED_COOKIE)
+        if identity != "guest":
+            email, role = _MOCK_IDENTITIES[identity]
+            if role is None:
+                denied_token = secrets.token_urlsafe(32)
+                db.execute(
+                    "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
+                    (_hash(denied_token), email, "mock:" + identity, _now() + DENIED_SECONDS),
+                )
+                response.set_cookie(
+                    _cookie_name(DENIED_COOKIE, cfg),
+                    denied_token,
+                    **_cookie_options(cfg, DENIED_COOKIE, max_age=DENIED_SECONDS),
+                )
+            else:
+                subject = "mock:" + identity
+                raw = secrets.token_urlsafe(32)
+                db.execute(
+                    "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
+                    "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+                    (subject, email, _now()),
+                )
+                db.execute(
+                    "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,?,1,?) "
+                    "ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1,updated_at=excluded.updated_at",
+                    (email, role, _now()),
+                )
+                _upsert_user_state(db, subject, email, role, None, 0, "personal")
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (_hash(raw), subject, email, _now() + SESSION_SECONDS),
+                )
+                response.set_cookie(
+                    _cookie_name(SESSION_COOKIE, cfg),
+                    raw,
+                    **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+                )
     return response
 
 
@@ -724,6 +996,7 @@ def status(request: Request):
             }
     return {
         "enabled": cfg.enabled,
+        "mock_auth": _mock_enabled(cfg),
         "ready": not cfg.error if cfg.enabled else True,
         # Names only: the setup panel can explain missing local prerequisites
         # without ever returning OAuth secrets or the configured admin email.
@@ -1092,7 +1365,8 @@ def request_invitation(request: Request):
             (now, subject),
         )
     try:
-        _deliver_invitation(identity["email"], requested_at)
+        if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
+            _deliver_invitation(identity["email"], requested_at)
     except RuntimeError as exc:
         with _db(cfg) as db:
             db.execute(

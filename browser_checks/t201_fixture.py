@@ -10,12 +10,13 @@ import httpx
 
 from browser_checks import provider_fixture as fixture
 from sigma import research_sessions
-from sigma.projects import create_strategy, initialize_project
+from sigma.projects import create_strategy, initialize_project, inspect_project
 from tests.research_sessions import investigation, provider_response, skeptic
 
 root = Path(os.environ["SIGMA_PROJECTS_ROOT"])
-path = root / "t201-overflow.sigma"
-view = initialize_project(path, "T201 overflow fixture", "A bounded mathematical question")
+path = root / "t201-overflow.json"
+initialize_project(path, "T201 overflow fixture", "A bounded mathematical question")
+view = inspect_project(path)
 strategy = create_strategy(
     path, "Overflowing strategy", "Investigate boundary cases."
 ).project.strategies[0]
@@ -42,7 +43,7 @@ for i in range(25):
     artifacts.append(artifact)
 session.update(
     id=session_id,
-    project_path=str(path),
+    project_path=view.path,
     project_id=view.project.id,
     strategy_id=strategy.id,
     strategy_title=strategy.title,
@@ -59,10 +60,11 @@ call_log.unlink(missing_ok=True)
 Path(os.environ["SIGMA_T201_INFO"]).write_text(
     json.dumps(
         {
-            "path": str(path),
+            "path": view.path,
             "session": session_id,
             "strategy": strategy.id,
             "omitted": index[4][strategy.id][0],
+            "omitted_text": index[5][strategy.id][0]["text"],
             "calls": str(call_log),
         }
     )

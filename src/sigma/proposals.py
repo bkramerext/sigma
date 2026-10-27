@@ -256,26 +256,132 @@ def suggestion_context_for(path: str, view: ProjectView | None = None) -> tuple[
     snapshot = view or inspect_project(path)
     project = snapshot.project
     from sigma.research_sessions import read_session_snapshot, strategy_generation_findings
-    from sigma.research_state import build_current_understanding
+    from sigma.research_state import RecordedObligation, build_current_understanding
 
     sessions, unavailable = read_session_snapshot(path)
     understanding = build_current_understanding(
         project.id, sessions, unavailable_records=unavailable
     )
+
     # Keep the synthesis cross-session while excluding the full raw transcript. Supporting
     # artifacts are selected separately by the existing bounded, relevance-aware helper.
+    def excerpt(value: Any, limit: int) -> str:
+        if not isinstance(value, str):
+            return ""
+        text = value.strip()
+        return (
+            text
+            if len(text) <= limit
+            else text[:limit].rstrip() + "… [excerpt; inspect cited source]"
+        )
+
+    def source_ref(source: Any) -> dict[str, Any] | None:
+        if not isinstance(source, dict):
+            return None
+        return {
+            key: source[key]
+            for key in ("project_id", "session_id", "session_number", "strategy_id", "artifact_id")
+            if key in source
+        }
+
+    def source_refs(value: Any) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        refs = [source_ref(item) for item in value]
+        return [item for item in refs if item is not None]
+
+    current_findings = [
+        row
+        for row in understanding["findings"]
+        if row["id"] in understanding["current_finding_ids"]
+    ]
+    selected_findings = current_findings[:8]
+    compact_findings = []
+    for row in selected_findings:
+        assumptions = row.get("assumptions", [])
+        objections = row.get("objections", [])
+        compact_findings.append(
+            {
+                "id": row["id"],
+                "summary": excerpt(row.get("text"), 1_200),
+                "investigated_claim": excerpt(row.get("investigated_claim"), 1_200),
+                "review_status": row.get("review_status"),
+                "status": row.get("status"),
+                "verification": row.get("verification"),
+                "strategy_title": row.get("strategy_title"),
+                "assumptions": [excerpt(item, 350) for item in assumptions[:3]],
+                "assumptions_omitted": max(0, len(assumptions) - 3),
+                "objections": [excerpt(item, 350) for item in objections[:3]],
+                "objections_omitted": max(0, len(objections) - 3),
+                "source": source_ref(row.get("source")),
+                "review_ref": row.get("review_ref"),
+                "evidence_kind": excerpt(row.get("evidence_kind"), 500),
+            }
+        )
+
+    changes = understanding["changes"]
+    compact_changes = [
+        {
+            "kind": row.get("kind"),
+            "summary": excerpt(row.get("text"), 900),
+            "caution": excerpt(row.get("caution"), 350),
+            "source": source_ref(row.get("source")),
+            "earlier": source_ref(row.get("earlier")),
+        }
+        for row in changes[:8]
+    ]
+
+    obligations = understanding["obligations"]
+
+    def obligation_rank(item: RecordedObligation) -> tuple[int, int, int]:
+        status_priority = {
+            "unresolved": 5,
+            "historical_unreconciled": 4,
+            "unknown": 3,
+            "resolved_reported": 2,
+            "superseded_reported": 1,
+            "retracted": 0,
+        }
+        latest_session = max(
+            (
+                source.get("session_number", 0)
+                for source in item.get("sources", [])
+                if isinstance(source, dict) and isinstance(source.get("session_number"), int)
+            ),
+            default=0,
+        )
+        return (
+            int(bool(item.get("actionable"))),
+            status_priority.get(item.get("status"), 0),
+            latest_session,
+        )
+
+    ordered_obligations = sorted(obligations, key=obligation_rank, reverse=True)
+    selected_obligations = ordered_obligations[:12]
+    compact_obligations = [
+        {
+            "id": row["id"],
+            "text": excerpt(row.get("text"), 900),
+            "kind": row.get("kind"),
+            "status": row.get("status"),
+            "actionable": row.get("actionable"),
+            "note": excerpt(row.get("note"), 180),
+            "source_refs": source_refs(row.get("sources", [])[:2]),
+            "source_refs_omitted": max(0, len(row.get("sources", [])) - 2),
+        }
+        for row in selected_obligations
+    ]
+
+    failures = understanding["failures"]
+    limitations = understanding["limitations"]
     synthesis = {
         "scope_note": understanding["scope_note"],
         "session_count": understanding["session_count"],
-        "current_findings": [
-            row
-            for row in understanding["findings"]
-            if row["id"] in understanding["current_finding_ids"]
-        ][:24],
-        "changes": understanding["changes"][:24],
-        "open_questions": understanding["obligations"][:24],
-        "execution_states": understanding["failures"][:16],
-        "limitations": understanding["limitations"][:12],
+        "current_findings": compact_findings,
+        "changes": compact_changes,
+        "open_questions": compact_obligations,
+        "execution_states": failures[:8],
+        "limitations": [excerpt(note, 500) for note in limitations[:8]],
         "unavailable_session_records": unavailable,
     }
     history = strategy_generation_findings(
@@ -288,6 +394,25 @@ def suggestion_context_for(path: str, view: ProjectView | None = None) -> tuple[
         "project_question": project.problem,
         "current_understanding": synthesis,
         "selected_session_evidence": history,
+        "context_selection": {
+            "policy": "Current Understanding is summarized from source-linked records; cited originals remain in project history.",
+            "omitted": {
+                "current_findings": max(0, len(current_findings) - len(selected_findings)),
+                "changes": max(0, len(changes) - len(compact_changes)),
+                "open_questions": max(0, len(obligations) - len(selected_obligations)),
+                "execution_states": max(0, len(failures) - len(synthesis["execution_states"])),
+                "limitations": max(0, len(limitations) - len(synthesis["limitations"])),
+                "open_question_ids": [
+                    row["id"] for row in ordered_obligations[len(selected_obligations) :][:32]
+                ],
+                "additional_open_question_ids_omitted": max(
+                    0, len(ordered_obligations) - len(selected_obligations) - 32
+                ),
+                "session_evidence_note": (
+                    "Selected evidence is relevance-ranked and bounded; full transcripts and other artifacts remain available in session history."
+                ),
+            },
+        },
         "existing_strategies_including_disabled": [
             {
                 "id": row.id,

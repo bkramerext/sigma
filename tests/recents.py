@@ -28,7 +28,8 @@ from sigma.samples import open_sample_project, sample_projects
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
-    assert len(catalog) == 17
+    assert len(catalog) == len(sources)
+    assert {entry["id"] for entry in catalog} == {path.parent.name for path in sources}
     assert {entry["title"] for entry in catalog} >= {
         "Nonconsecutive Subset Sums Modulo 3",
         "Did Jesus Use Cannabis?",
@@ -208,9 +209,13 @@ def check(root: Path, base: Path) -> None:
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])
     ]
-    assert all(
-        sum(entry["investigation_type"] == category for entry in actual) <= 4
-        for category in {entry["investigation_type"] for entry in actual}
+    assert all(view.project.id in {entry["id"] for entry in actual} for view in created)
+    assert (
+        max(
+            sum(entry["investigation_type"] == category for entry in actual)
+            for category in {entry["investigation_type"] for entry in actual}
+        )
+        > 4
     )
     open_project(created[0].path)
     assert recent_projects()["projects"][0]["id"] == created[0].project.id
@@ -226,10 +231,7 @@ def check(root: Path, base: Path) -> None:
         before = (state_directory() / "recents.json").read_bytes()
         api_recent = api.get("/api/projects/recent").json()["projects"]
         assert len(api_recent) == len(updated_recent)
-        assert all(
-            sum(entry["investigation_type"] == category for entry in api_recent) <= 4
-            for category in {entry["investigation_type"] for entry in api_recent}
-        )
+        assert len(api_recent) > 4
         assert (state_directory() / "recents.json").read_bytes() == before
         assert api.get("/api/projects/samples").json()["projects"] == sample_projects()["projects"]
         response = api.post("/api/projects/samples/open", json={"sample_id": selected["id"]})
@@ -270,7 +272,7 @@ def check(root: Path, base: Path) -> None:
     assert inspect_project(first.path).project == edited.project
     assert all(path.read_bytes() == original for path, original in sources.items())
     print(
-        "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and four-per-category recents"
+        "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and unlimited recents"
     )
 
 

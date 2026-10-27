@@ -183,6 +183,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             page.goto(target)
             row = page.locator(f'li[data-session-id="{session["id"]}"]')
             expect(row.locator(".session-status")).to_have_text("stopped")
+            assert row.locator(".session-status i").evaluate(
+                "element => element === element.parentElement.lastElementChild"
+            )
             clarity = row.locator(".stopped-session-guidance")
             expect(clarity).to_contain_text("session was interrupted when its backend work stopped")
             expect(clarity).to_contain_text("Saved research is preserved.")
@@ -191,6 +194,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             )
             expect(clarity).to_contain_text("Resume when you are ready")
             expect(row.locator('button[title="Resume Session 1"]')).to_be_visible()
+            expect(row.locator('button[title^="Stop Session"]')).to_have_count(0)
             expected_guidance = {
                 2: "stopped by user",
                 3: "required context exceeded the available context limit",
@@ -225,10 +229,12 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             expect(row.locator(".stopped-session-guidance")).to_contain_text(
                 "session was interrupted when its backend work stopped"
             )
-            page.locator('button[title="Resume Session 1"]').click()
+            scroll_before_resume = page.evaluate("window.scrollY")
+            page.locator('button[title="Resume Session 1"]').evaluate("element => element.click()")
             expect(page.get_by_role("alert")).to_be_visible(timeout=10000)
             expect(page.get_by_role("alert")).to_contain_text("AI connection changed")
             expect(row.locator(".session-status")).to_have_text("stopped")
+            assert page.evaluate("window.scrollY") == scroll_before_resume
             assert not session_starts, "Opening or viewing paused work must not start a session"
             assert not page_errors, page_errors
             page.screenshot(path="/tmp/sigma-t95-paused-mobile.png", full_page=True)

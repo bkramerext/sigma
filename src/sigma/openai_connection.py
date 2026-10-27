@@ -223,7 +223,7 @@ async def auth_context() -> AuthContext:
                 token="", mode="chatgpt", status="unavailable", identity="cloud_state_unavailable"
             )
         if selected_mode == "personal":
-            return cloud_personal.auth_context(subject_hash)
+            return await cloud_personal.auth_context(subject_hash)
         return await _cloud_sponsored_context(subject_hash)
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
@@ -372,7 +372,11 @@ async def connection(
         from sigma.cloud_personal import UNAVAILABLE_GUIDANCE
 
         guidance = UNAVAILABLE_GUIDANCE
-    elif cloud_workspaces.enabled() and mode == "chatgpt":
+    elif (
+        cloud_workspaces.enabled()
+        and mode == "chatgpt"
+        and str(context.get("identity", "")).startswith("cloud_sponsor:")
+    ):
         label = "SIGMA-sponsored ChatGPT · " + str(state["status"]).replace("_", " ")
         if state["status"] != "connected":
             guidance = (

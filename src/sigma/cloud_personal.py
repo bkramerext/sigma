@@ -1,28 +1,38 @@
-"""Hosted personal-model adapter boundary.
-
-Hosted ChatGPT-plan authorization is intentionally unavailable until SIGMA has
-an approved OpenAI access path. This module must never inspect or borrow the
-designated sponsor connection. Per-subject storage isolation is provided by
-``ai_store`` for a future approved adapter.
-"""
+"""User-owned model connection adapter for explicitly local authenticated workspaces."""
 
 from __future__ import annotations
 
 from sigma.openai_connection import AuthContext
 
-UNAVAILABLE_GUIDANCE = (
-    "Personal ChatGPT authentication is not available in hosted SIGMA yet. "
-    "Your personal credentials are not transferred or used. Choose sponsored "
-    "access explicitly if it is available, or continue with saved research."
-)
+UNAVAILABLE_GUIDANCE = "Personal ChatGPT authentication is unavailable in hosted SIGMA. Choose a configured sponsor or continue with saved research."
 
 
-def auth_context(subject_hash: str | None) -> AuthContext:
-    """Return a non-credential context until a supported hosted adapter exists."""
-    identity = "cloud_personal_unavailable:" + (subject_hash or "unbound")
+async def auth_context(subject_hash: str | None) -> AuthContext:
+    """Load the current local user's own credentials; never use these on hosted services."""
+    from sigma import chatgpt_auth, cloud_auth
+
+    if subject_hash is None or not cloud_auth.config().local:
+        return AuthContext(
+            token="",
+            mode="chatgpt",
+            status="unavailable",
+            identity="cloud_personal_unavailable:" + (subject_hash or "unbound"),
+        )
+    selected = await chatgpt_auth.session()
+    mode = selected.get("mode", "chatgpt")
+    if mode == "api_key":
+        token = await chatgpt_auth.api_key_token()
+        return AuthContext(
+            token=token or "",
+            mode="api_key",
+            status="connected" if token else "unconfigured",
+            identity=f"cloud_personal_api_key:{subject_hash}",
+        )
+    account = selected.get("account") or {}
     return AuthContext(
-        token="",
+        token=account.get("access_token", ""),
         mode="chatgpt",
-        status="unavailable",
-        identity=identity,
+        status=selected.get("status", "disconnected"),
+        identity=f"cloud_personal_chatgpt:{subject_hash}:{selected.get('account_id') or 'none'}",
+        account_label=account.get("email") or account.get("name"),
     )

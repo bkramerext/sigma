@@ -27,6 +27,8 @@ with (
     assert identity(link) == identity(other)
     unsafe = base / "unsafe"
     unsafe.mkdir(mode=0o755)
+    # mkdir modes are filtered by umask; force the deliberately unsafe mode.
+    unsafe.chmod(0o755)
     alias = base / "unsafe-alias"
     alias.symlink_to(root, target_is_directory=True)
     for path in (unsafe, alias):

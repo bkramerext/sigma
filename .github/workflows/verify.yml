@@ -49,3 +49,4 @@ jobs:
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
       - name: Run full repository verification
         run: ./sigma test
+

@@ -117,9 +117,597 @@ class CloudAuthTests(TestCase):
         )
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.context = TestClient(app)
+        self.context = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 12345))
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
+
+    def test_mock_queue_recovery_never_contacts_hosted_research(self):
+        import asyncio
+
+        from sigma import cloud_research, cloud_workspaces, research_sessions
+
+        with (
+            patch.object(cloud_workspaces, "enabled", return_value=True),
+            patch.object(
+                research_sessions,
+                "_all",
+                return_value=[{"id": "mock-1", "status": "queued", "simulated": True}],
+            ),
+            patch.object(
+                cloud_research,
+                "reconcile_orphaned_jobs",
+                side_effect=AssertionError("Mock queue contacted hosted jobs"),
+            ),
+            patch.object(
+                research_sessions,
+                "_worker",
+                side_effect=AssertionError("Mock queue dispatched a provider worker"),
+            ),
+        ):
+            asyncio.run(research_sessions.ensure_queued_workers("/mock/private-a"))
+
+    def test_mock_save_skips_cloud_job_sync(self):
+        from sigma import cloud_research, cloud_workspaces, research_sessions
+
+        with (
+            patch.object(cloud_workspaces, "enabled", return_value=True),
+            patch.object(research_sessions, "_directory", return_value=Path(self.temp.name)),
+            patch.object(
+                cloud_research,
+                "sync_job",
+                side_effect=AssertionError("Mock session synced a hosted job"),
+            ),
+        ):
+            research_sessions._save(
+                "/mock/private-a",
+                {
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "status": "queued",
+                    "simulated": True,
+                },
+            )
+
+    def test_mock_session_lifecycle_is_deterministic_and_provider_free(self):
+        from sigma import research_sessions
+
+        record = {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "project_path": "/mock/private-a",
+            "project_id": "project-a",
+            "strategy_id": "strategy-a",
+            "strategy_title": "Test strategy",
+            "strategy_runs": [
+                {"strategy_id": "strategy-a", "artifacts": [], "status": "queued", "calls_used": 0}
+            ],
+            "status": "queued",
+            "mock_stage": 0,
+            "mock_scenario": "completed",
+            "simulated": True,
+            "artifacts": [],
+            "events": [],
+        }
+        with (
+            patch.object(research_sessions, "_save") as saved,
+            patch.object(research_sessions, "_outcome", return_value={"assessment": "mixed"}),
+            patch.object(
+                research_sessions,
+                "_worker",
+                side_effect=AssertionError("No provider worker may run"),
+            ),
+        ):
+            for expected in ("running", "running", "ended"):
+                research_sessions._advance_mock(record)
+                self.assertEqual(record["status"], expected)
+            self.assertEqual(len(record["artifacts"]), 1)
+            self.assertTrue(record["artifacts"][0]["simulated"])
+            self.assertEqual(
+                record["strategy_runs"][0]["artifacts"], [record["artifacts"][0]["id"]]
+            )
+            self.assertEqual(record["strategy_runs"][0]["calls_used"], 0)
+            self.assertEqual([e["sequence"] for e in record["events"]], [1, 2, 3])
+            research_sessions._advance_mock(record)
+            self.assertEqual(saved.call_count, 3)
+            self.assertEqual(len(record["artifacts"]), 1)
+
+    def test_mock_session_resume_continues_simulation_without_provider_calls(self):
+        from sigma import research_sessions
+
+        session_id = "11111111-1111-4111-8111-111111111111"
+        record = {
+            "id": session_id,
+            "project_path": "/mock/private-a",
+            "project_id": "project-a",
+            "strategy_id": "strategy-a",
+            "strategy_title": "Test strategy",
+            "strategy_runs": [
+                {
+                    "strategy_id": "strategy-a",
+                    "status": "stopped",
+                    "current_action": "Stopped",
+                    "artifacts": [],
+                    "calls_used": 0,
+                }
+            ],
+            "status": "stopped",
+            "mode": "mock",
+            "simulated": True,
+            "mock_stage": 1,
+            "mock_scenario": "completed",
+            "events": [],
+            "artifacts": [],
+        }
+        with (
+            patch.object(research_sessions, "_read", return_value=record),
+            patch.object(research_sessions, "_all", return_value=[record]),
+            patch.object(research_sessions, "_save") as save,
+        ):
+            resumed = research_sessions.control_mock_session(
+                "/mock/private-a", session_id, "resume"
+            )
+            assert resumed is not None
+            self.assertEqual(resumed["status"], "queued")
+            self.assertEqual(resumed["mock_stage"], 1)
+            self.assertTrue(resumed["simulated"])
+            self.assertIn("No provider was called", resumed["message"])
+            self.assertEqual(resumed["events"][-1]["kind"], "simulation.resumed")
+            self.assertEqual(record["strategy_runs"][0]["status"], "queued")
+            save.assert_called_once()
+
+    def test_mock_failure_scenarios_never_create_fake_evidence(self):
+        from sigma import research_sessions
+
+        for scenario in ("failed", "provider-error", "exhausted"):
+            record = {
+                "project_path": "/mock/private-a",
+                "project_id": "project-a",
+                "strategy_id": "strategy-a",
+                "strategy_title": "Test strategy",
+                "strategy_runs": [{"artifacts": [], "status": "queued", "calls_used": 0}],
+                "status": "queued",
+                "mock_stage": 2,
+                "mock_scenario": scenario,
+                "simulated": True,
+                "artifacts": [],
+                "events": [],
+            }
+            with (
+                self.subTest(scenario=scenario),
+                patch.object(research_sessions, "_save"),
+                patch.object(research_sessions, "_outcome", return_value={}),
+            ):
+                research_sessions._advance_mock(record)
+                self.assertEqual(record["status"], "failed")
+                self.assertEqual(record["artifacts"], [])
+                self.assertIn("No provider was called", record["message"])
+
+    def test_mock_research_route_never_invokes_live_start(self):
+        from sigma import research_sessions
+
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": "member-a"},
+                    headers=origin,
+                ).status_code,
+                204,
+            )
+            created = self.client.post(
+                "/api/projects/create",
+                json={"title": "Research fixture", "problem": "Test mock research."},
+                headers=origin,
+            )
+            self.assertEqual(created.status_code, 201, created.text)
+            project = created.json()
+            with (
+                patch.object(
+                    research_sessions,
+                    "start_session",
+                    side_effect=AssertionError("Real research start must never run in mock mode"),
+                ),
+                patch.object(
+                    research_sessions,
+                    "mock_session",
+                    return_value={
+                        "id": "mock-session",
+                        "status": "queued",
+                        "simulated": True,
+                    },
+                ) as fake,
+            ):
+                response = self.client.post(
+                    "/api/projects/research-sessions/mock",
+                    json={
+                        "path": project["path"],
+                        "strategy_id": "fixture-strategy",
+                        "expected_project_id": project["project"]["id"],
+                        "idempotency_key": "11111111-1111-4111-8111-111111111111",
+                    },
+                    headers=origin,
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()["simulated"])
+                fake.assert_called_once()
+            with (
+                patch.object(
+                    research_sessions,
+                    "control_mock_session",
+                    return_value={"id": "mock-session", "status": "queued", "simulated": True},
+                ) as mock_control,
+                patch.object(
+                    research_sessions,
+                    "control_session",
+                    side_effect=AssertionError("Mock resume must not enter provider resume checks"),
+                ),
+            ):
+                resumed = self.client.post(
+                    "/api/projects/research-sessions/mock-session/control",
+                    json={"path": project["path"], "action": "resume"},
+                    headers=origin,
+                )
+                self.assertEqual(resumed.status_code, 200, resumed.text)
+                self.assertTrue(resumed.json()["simulated"])
+                mock_control.assert_called_once_with(project["path"], "mock-session", "resume")
+            with (
+                patch.object(research_sessions, "control_mock_session", return_value=None),
+                patch.object(
+                    research_sessions,
+                    "control_session",
+                    side_effect=AssertionError("Mock identities must not resume real sessions"),
+                ),
+            ):
+                denied_resume = self.client.post(
+                    "/api/projects/research-sessions/real-session/control",
+                    json={"path": project["path"], "action": "resume"},
+                    headers=origin,
+                )
+                self.assertEqual(denied_resume.status_code, 404, denied_resume.text)
+            blocked = self.client.post(
+                "/api/projects/research-sessions/start",
+                json={},
+                headers=origin,
+            )
+            self.assertEqual(blocked.status_code, 403)
+
+    def test_mock_members_cannot_read_each_others_session_records(self):
+        from sigma import research_sessions
+
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": "member-a"},
+                    headers=origin,
+                ).status_code,
+                204,
+            )
+            created = self.client.post(
+                "/api/projects/create",
+                json={"title": "Private mock session", "problem": "Test isolation"},
+                headers=origin,
+            )
+            self.assertEqual(created.status_code, 201, created.text)
+            path = created.json()["path"]
+            session_id = "11111111-1111-4111-8111-111111111111"
+            # The session file belongs to Member A's project workspace.
+            with patch.object(research_sessions, "_snapshot") as snapshot:
+                # A project-scoped read must resolve through the active workspace,
+                # never through a supplied path belonging to another member.
+                self.assertEqual(
+                    self.client.get(
+                        "/api/projects/research-sessions",
+                        params={"path": path},
+                    ).status_code,
+                    200,
+                )
+                self.assertFalse(snapshot.called)
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": "member-b"},
+                    headers=origin,
+                ).status_code,
+                204,
+            )
+            for endpoint in (
+                "/api/projects/research-sessions",
+                f"/api/projects/research-sessions/{session_id}",
+            ):
+                denied = self.client.get(endpoint, params={"path": path})
+                self.assertIn(denied.status_code, {400, 403, 404}, denied.text)
+            artifact = self.client.get(
+                "/api/projects/research-executions/11111111-1111-4111-8111-111111111111/"
+                "artifacts/evidence.txt",
+                params={"path": path},
+            )
+            self.assertIn(artifact.status_code, {400, 403, 404}, artifact.text)
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": "member-a"},
+                    headers=origin,
+                ).status_code,
+                204,
+            )
+            self.assertEqual(
+                self.client.get(
+                    "/api/projects/research-sessions",
+                    params={"path": path},
+                ).status_code,
+                200,
+            )
+
+    def test_mock_member_projects_are_not_visible_to_other_members(self):
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        member_a_path = ""
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            for identity in ("member-a", "member-b"):
+                selected = self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": identity},
+                    headers=origin,
+                )
+                self.assertEqual(selected.status_code, 204)
+                created = self.client.post(
+                    "/api/projects/create",
+                    json={
+                        "title": "Mock isolation " + identity,
+                        "problem": "Verify member project isolation.",
+                    },
+                    headers=origin,
+                )
+                self.assertEqual(created.status_code, 201, created.text)
+                project = created.json()
+                self.assertIn("path", project)
+                if identity == "member-a":
+                    member_a_path = project["path"]
+                    self.assertEqual(
+                        self.client.get(
+                            "/api/projects/inspect", params={"path": member_a_path}
+                        ).status_code,
+                        200,
+                    )
+                else:
+                    denied = self.client.get(
+                        "/api/projects/inspect",
+                        params={"path": member_a_path},
+                    )
+                    self.assertIn(denied.status_code, {400, 403, 404})
+                    denied_open = self.client.post(
+                        "/api/projects/open",
+                        json={"path": member_a_path},
+                        headers=origin,
+                    )
+                    self.assertIn(denied_open.status_code, {400, 403, 404})
+            switched = self.client.post(
+                "/api/cloud-auth/mock/select",
+                params={"identity": "member-a"},
+                headers=origin,
+            )
+            self.assertEqual(switched.status_code, 204)
+            self.assertEqual(
+                self.client.get(
+                    "/api/projects/inspect", params={"path": member_a_path}
+                ).status_code,
+                200,
+            )
+
+    def test_mock_member_switches_bind_separate_project_workspaces(self):
+        from sigma import cloud_workspaces
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            self.assertTrue(cloud_workspaces.enabled())
+            seen = []
+            for identity in ("member-a", "member-b", "member-a"):
+                response = self.client.post(
+                    "/api/cloud-auth/mock/select",
+                    params={"identity": identity},
+                    headers={"Origin": "http://127.0.0.1:5173"},
+                )
+                self.assertEqual(response.status_code, 204)
+                status = self.client.get("/api/cloud-auth/status")
+                self.assertEqual(status.status_code, 200)
+                self.assertTrue(status.json()["authenticated"])
+                seen.append(status.json()["account"]["workspace"]["id"])
+                # The project endpoint executes through the same workspace
+                # dependency used by all project operations.
+                projects = self.client.get("/api/projects/recent")
+                self.assertEqual(projects.status_code, 200)
+            self.assertNotEqual(seen[0], seen[1])
+            self.assertEqual(seen[0], seen[2])
+
+    def test_mock_project_mutations_are_not_blanket_blocked(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            selected = self.client.post(
+                "/api/cloud-auth/mock/select?identity=member-a",
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertEqual(selected.status_code, 204)
+            # A normal project mutation may fail validation, but must not be
+            # rejected by the mock execution guard.
+            project = self.client.post(
+                "/api/projects/close",
+                json={"path": "/nonexistent/mock-project"},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertNotIn("research execution is disabled", project.text)
+            execution = self.client.post(
+                "/api/projects/research-sessions",
+                json={},
+                headers={"Origin": "http://127.0.0.1:5173"},
+            )
+            self.assertEqual(execution.status_code, 403)
+            self.assertTrue(execution.json()["simulated"])
+            provider = self.client.get("/api/ai/connection")
+            self.assertEqual(provider.status_code, 403)
+
+    def test_mock_members_receive_distinct_stable_workspaces(self):
+        from sigma.cloud_workspaces import workspace_for_subject
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            cfg = cloud_auth.config()
+            self.assertIsNone(cfg.error)
+            first = cloud_auth._persist_user_state(
+                cfg,
+                cloud_auth.Principal("mock:member-a", "mock-member-a@localhost.invalid", "member"),
+            )
+            second = cloud_auth._persist_user_state(
+                cfg,
+                cloud_auth.Principal("mock:member-b", "mock-member-b@localhost.invalid", "member"),
+            )
+            first_again = cloud_auth._persist_user_state(
+                cfg,
+                cloud_auth.Principal("mock:member-a", "mock-member-a@localhost.invalid", "member"),
+            )
+        self.assertTrue(first["workspace"]["available"])
+        self.assertTrue(second["workspace"]["available"])
+        self.assertNotEqual(first["workspace"]["id"], second["workspace"]["id"])
+        self.assertEqual(first["workspace"]["id"], first_again["workspace"]["id"])
+        self.assertEqual(
+            workspace_for_subject("mock:member-a").workspace_id,
+            first["workspace"]["id"],
+        )
+
+    def test_mock_auth_requires_explicit_loopback_local_configuration(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+                "GOOGLE_OIDC_CLIENT_ID": "",
+                "GOOGLE_OIDC_CLIENT_SECRET": "",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "",
+            },
+        ):
+            cfg = cloud_auth.config()
+            self.assertIsNone(cfg.error)
+            self.assertTrue(cfg.local)
+            self.assertTrue(cloud_auth._mock_enabled(cfg))
+            with patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5182"}):
+                self.assertTrue(cloud_auth._mock_enabled(cloud_auth.config()))
+            with patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.example.org"}):
+                self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+            for invalid_origin in (
+                "http://example.org:5182",
+                "http://127.0.0.1:5182/path",
+                "https://127.0.0.1:5182",
+                "http://user@127.0.0.1:5182",
+            ):
+                with (
+                    self.subTest(origin=invalid_origin),
+                    patch.dict(os.environ, {"SIGMA_CLOUD_PUBLIC_ORIGIN": invalid_origin}),
+                ):
+                    self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+
+    def test_mock_auth_disabled_for_hosted_and_nonlocal_configurations(self):
+        with patch.dict(os.environ, {"SIGMA_MOCK_AUTH": "1"}):
+            self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+            response = self.client.post(
+                "/api/cloud-auth/mock/select?identity=admin",
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(
+                response.status_code, 401
+            )  # Protected by auth middleware when mock mode is off.
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": ORIGIN,
+            },
+        ):
+            self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+
+    def test_mock_auth_rejects_cross_origin_and_remote_clients(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            },
+        ):
+            self.assertTrue(cloud_auth._mock_enabled(cloud_auth.config()))
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select?identity=admin",
+                    headers={"Origin": "http://evil.example"},
+                ).status_code,
+                403,
+            )
+            # A remote ASGI peer must be rejected even with an allowed Origin.
+            from fastapi.testclient import TestClient
+
+            with TestClient(
+                app, base_url="http://127.0.0.1", client=("198.51.100.8", 12345)
+            ) as remote:
+                self.assertEqual(
+                    remote.post(
+                        "/api/cloud-auth/mock/select?identity=admin",
+                        headers={"Origin": "http://127.0.0.1:5173"},
+                    ).status_code,
+                    403,
+                )
 
     def start_flow(self, client=None):
         client = client or self.client

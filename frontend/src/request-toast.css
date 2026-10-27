@@ -13,7 +13,7 @@
   display: grid;
   grid-template-rows: 1fr;
   padding-bottom: 10px;
-  transition: grid-template-rows 320ms ease, padding-bottom 320ms ease;
+  transition: grid-template-rows 960ms ease, padding-bottom 960ms ease;
 }
 .request-toast-item-inner { min-height: 0; overflow: hidden; }
 .request-toast-item[data-phase="exiting"] { grid-template-rows: 0fr; padding-bottom: 0; }
@@ -32,7 +32,7 @@
   font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 320ms ease, transform 320ms ease;
+  transition: opacity 960ms ease, transform 960ms ease;
 }
 .request-toast[data-phase="exiting"] { opacity: 0; transform: translateY(calc(100% + 10px)); }
 .request-toast-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
