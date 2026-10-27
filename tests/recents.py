@@ -99,7 +99,7 @@ def check(root: Path, base: Path) -> None:
     assert first.path == str(root / f"{selected['id']}.sigma")
     assert first.project.id != json.loads(sources[source_path])["id"]
     assert first.project.title == f"{selected['title']} v1"
-    assert Path(first.path, "project.json").read_bytes() != sources[source_path]
+    assert (Path(first.path) / "project.json").read_bytes() != sources[source_path]
     second = open_sample_project(selected["id"])
     assert second.path != first.path and second.project.id != first.project.id
     assert second.project.title == f"{selected['title']} v2"
@@ -132,10 +132,12 @@ def check(root: Path, base: Path) -> None:
     moved = root / "saved-sample.sigma"
     collision.rename(moved)
     impostor = create_project(selected["id"], "Different research")
-    assert impostor.path == str(collision)
+    assert impostor.path == str(root / f"{selected['id']}.json")
+    assert inspect_project(impostor.path).project == impostor.project
     additional = open_sample_project(selected["id"])
-    assert additional.path != str(collision)
-    assert inspect_project(collision).project == impostor.project
+    assert additional.path == str(collision)
+    assert additional.project.id not in {first.project.id, second.project.id}
+    assert inspect_project(collision).project == additional.project
     collision.rename(root / "saved-impostor.sigma")
     moved.rename(collision)
     last_copy = open_sample_project(selected["id"])
@@ -144,7 +146,7 @@ def check(root: Path, base: Path) -> None:
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
     from sigma import research_sessions
 
-    active = created[-1]
+    active = first  # Legacy directory project exercises worker-lock status reads.
     idle = created[-2]
     idle_directory = Path(idle.path) / "research-sessions"
     assert not idle_directory.exists()
@@ -152,7 +154,7 @@ def check(root: Path, base: Path) -> None:
     assert not idle_directory.exists(), "Home status must not create session storage"
 
     directory = Path(active.path) / "research-sessions"
-    directory.mkdir()
+    directory.mkdir(exist_ok=True)
     session_id = str(uuid4())
     session_file = directory / f"{session_id}.json"
     record = {
@@ -189,20 +191,20 @@ def check(root: Path, base: Path) -> None:
     actual = recent_projects()["projects"]
     running_project = created[-1]
     session_id = str(uuid4())
-    session_dir = Path(running_project.path) / "research-sessions"
-    session_dir.mkdir(exist_ok=True)
-    session_path = session_dir / f"{session_id}.json"
-    session_path.write_text(
+    from sigma.project_bundle import write_file
+
+    write_file(
+        running_project.path,
+        f"research-sessions/{session_id}.json",
         json.dumps(
             {
                 "id": session_id,
                 "project_id": running_project.project.id,
                 "project_path": running_project.path,
-                "status": "running",
+                "status": "stopped",
             }
-        )
+        ).encode("utf-8"),
     )
-    session_path.write_text(session_path.read_text().replace('"running"', '"stopped"'))
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])
     ]

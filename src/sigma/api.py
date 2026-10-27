@@ -630,6 +630,60 @@ def export_project_view(path: str):
     }
 
 
+@app.get("/api/projects/download")
+def download_project_bundle(path: str):
+    """Download the complete portable project, not the audit-only export."""
+    from sigma.project_bundle import download_bytes
+    from sigma.projects import project_path
+
+    authorized = project_path(path)
+    inspect_project(authorized)
+    if authorized.suffix != ".json":
+        raise ProjectError("Download requires a single-file JSON project")
+    return Response(
+        content=download_bytes(authorized),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{authorized.name}"'},
+    )
+
+
+class ImportBundleRequest(BaseModel):
+    bundle: dict[str, Any]
+
+
+@app.post("/api/projects/import", status_code=201)
+def import_project_bundle(body: ImportBundleRequest):
+    """Import into the authenticated workspace without replacing existing work."""
+    import base64
+
+    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.projects import (
+        _project_name,
+        _require_available_title,
+        _title_registry_lock,
+        projects_root,
+    )
+
+    try:
+        document = json.loads(base64.b64decode(body.bundle["files"]["project.json"], validate=True))
+        title = document["title"]
+        if not isinstance(document.get("id"), str):
+            raise ProjectError("Imported project identity is invalid")
+        _, name = _project_name(title)
+        root = projects_root()
+        destination = (root / name).with_suffix(".json")
+        with _title_registry_lock(root):
+            _require_available_title(title, root)
+            imported = import_bundle(body.bundle, destination)
+        view = inspect_project(imported)
+        from sigma.recents import record_access
+
+        record_access(view)
+        return asdict(view)
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError, BundleError) as exc:
+        raise ProjectError(f"Cannot import project bundle: {exc}") from exc
+
+
 @app.get("/api/projects/export/report")
 def export_project_report_view(path: str, format: str = "txt"):
     """Create a deterministic, escaped report from the same evidence as the JSON audit."""

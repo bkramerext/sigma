@@ -13,6 +13,7 @@ import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
 from sigma.api import app
+from sigma.project_bundle import read_file
 from sigma.projects import (
     ROOT,
     STATE,
@@ -55,7 +56,7 @@ def main() -> None:
                 assert created.project.difficulty is not None
                 assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
-                raw = json.loads((Path(created.path) / STATE).read_bytes())
+                raw = json.loads(read_file(Path(created.path), STATE))
                 assert raw["investigation_type"] == mode.value
                 assert raw["show_advanced_outcome_details"] is False
                 assert open_project(created.path) == created
@@ -67,11 +68,11 @@ def main() -> None:
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
                 assert removed.project.schema_version == 9
-                snapshot = (Path(created.path) / STATE).read_bytes()
+                snapshot = Path(created.path).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
                 )
-                assert (Path(created.path) / STATE).read_bytes() == snapshot
+                assert Path(created.path).read_bytes() == snapshot
             print(
                 "PASS all research types serialized/reopened, destination preview, collision and strategy integrity"
             )
@@ -122,18 +123,19 @@ def main() -> None:
                     f"sigma.projects.os.{operation}", side_effect=OSError("publication failed")
                 ):
                     rejects(lambda: create_project("Failed publication", "Question"))
-                assert not (managed / "failed-publication.sigma").exists()
+                assert not (managed / "failed-publication.json").exists()
 
             # If another local process inserts research into a reserved directory, never remove it.
             def inserted_research(path, *args):
-                (Path(path) / "notes.txt").write_text("Concurrent research")
+                # Simulate another writer publishing research during initialization.
+                # The mocked initializer must create its own destination because
+                # create_project delegates directory creation to initialize_project.
+                Path(path).write_text("Concurrent research")
                 raise ProjectError("Initialization failed")
 
             with patch("sigma.projects.initialize_project", side_effect=inserted_research):
                 rejects(lambda: create_project("Preserve partial", "Question"))
-            assert (
-                managed / "preserve-partial.sigma/notes.txt"
-            ).read_text() == "Concurrent research"
+            assert (managed / "preserve-partial.json").read_text() == "Concurrent research"
 
             def competing_create(index):
                 try:
@@ -153,7 +155,7 @@ def main() -> None:
             with TestClient(app) as client:
                 preview = client.get("/api/projects/destination", params={"title": "API math"})
                 assert preview.status_code == 200
-                assert preview.json()["path"] == str(managed / "api-math.sigma")
+                assert preview.json()["path"] == str(managed / "api-math.json")
                 body = {
                     "title": "API math",
                     "problem": "A mathematical question",
@@ -183,6 +185,50 @@ def main() -> None:
                 assert chemistry.json()["project"]["investigation_type"] == "chemistry"
                 assert chemistry.json()["project"]["difficulty"] == "medium"
                 assert chemistry.json()["project"]["show_advanced_outcome_details"] is False
+                # Full portable download and authenticated-workspace import.
+                downloaded = client.get(
+                    "/api/projects/download", params={"path": response.json()["path"]}
+                )
+                assert downloaded.status_code == 200, downloaded.text
+                assert "attachment" in downloaded.headers["content-disposition"]
+                portable = downloaded.json()
+                assert portable["format"] == "sigma.project.bundle"
+                from sigma.project_bundle import read_bundle
+
+                assert portable == read_bundle(response.json()["path"])
+                imported_document = json.loads(
+                    __import__("base64").b64decode(portable["files"]["project.json"])
+                )
+                imported_document["title"] = "API math imported"
+                portable["files"]["project.json"] = (
+                    __import__("base64")
+                    .b64encode((json.dumps(imported_document) + "\n").encode())
+                    .decode()
+                )
+                imported = client.post("/api/projects/import", json={"bundle": portable})
+                assert imported.status_code == 201, imported.text
+                assert Path(imported.json()["path"]).suffix == ".json"
+                assert (
+                    client.post("/api/projects/import", json={"bundle": portable}).status_code
+                    == 400
+                )
+                assert inspect_project(imported.json()["path"]).project.title == "API math imported"
+                # Home discovery and Open Project must work for both original
+                # and imported single-file projects, not only legacy directories.
+                from sigma.projects import list_json_projects
+
+                discovered = {view.path for view in list_json_projects()}
+                assert response.json()["path"] in discovered
+                assert imported.json()["path"] in discovered
+                for project_path in (response.json()["path"], imported.json()["path"]):
+                    reopened = client.post("/api/projects/open", json={"path": project_path})
+                    assert reopened.status_code == 200, reopened.text
+                    assert reopened.json()["path"] == project_path
+                recents = client.get("/api/projects/recent")
+                assert recents.status_code == 200, recents.text
+                recent_paths = {item["path"] for item in recents.json()["projects"]}
+                assert imported.json()["path"] in recent_paths
+
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(

@@ -517,7 +517,12 @@ def _paper_dir(path: str, create: bool = True) -> Path:
         raise ProjectError(
             "Paper generation is unavailable for immutable sample sources; open a project copy"
         )
-    directory = target / "papers"
+    if target.suffix == ".json":
+        # Mutable generation checkpoints live beside the project; finalized
+        # paper records and PDFs are embedded in the portable project bundle.
+        directory = target.with_name("." + target.name + ".papers")
+    else:
+        directory = target / "papers"
     if directory.is_symlink():
         raise ProjectError("Paper storage directory must not be a symbolic link")
     if not directory.exists() and not directory.is_symlink():
@@ -531,33 +536,77 @@ def _paper_dir(path: str, create: bool = True) -> Path:
     return directory
 
 
+def _paper_artifact_names(path: Path) -> set[str]:
+    try:
+        bundle = json.loads(path.read_text(encoding="utf-8"))
+        files = bundle.get("files") if isinstance(bundle, dict) else None
+        if not isinstance(files, dict):
+            raise TypeError("invalid bundle files")
+        return set(files)
+    except (OSError, ValueError, TypeError) as exc:
+        raise ProjectError("Project artifacts are unreadable") from exc
+
+
 def _paper_id(value: str) -> str:
     if not re.fullmatch(r"[0-9a-f]{32}", value):
         raise ProjectError("Invalid paper identifier")
     return value
 
 
-def _read_one(directory: Path, identifier: str) -> dict[str, Any]:
-    file = directory / f"{_paper_id(identifier)}.json"
-    if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_PAPER_BYTES:
-        raise ProjectError("Paper record is missing or unsafe")
-    try:
-        record = json.loads(file.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise ProjectError("Paper record is unreadable") from exc
+def _read_one(path: str, identifier: str) -> dict[str, Any]:
+    identifier = _paper_id(identifier)
+    target = project_path(path)
+    if target.suffix == ".json":
+        from sigma.projects import read_project_artifact
+
+        try:
+            contents = read_project_artifact(target, f"artifacts/papers/{identifier}.json")
+            if len(contents) > MAX_PAPER_BYTES:
+                raise ProjectError("Paper record is missing or unsafe")
+            record = json.loads(contents)
+        except (OSError, ValueError) as exc:
+            raise ProjectError("Paper record is unreadable") from exc
+    else:
+        directory = _paper_dir(path, create=False)
+        file = directory / f"{identifier}.json"
+        if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_PAPER_BYTES:
+            raise ProjectError("Paper record is missing or unsafe")
+        try:
+            record = json.loads(file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ProjectError("Paper record is unreadable") from exc
     if not isinstance(record, dict) or record.get("paper_id") != identifier:
         raise ProjectError("Paper record is invalid")
     return record
 
 
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
-    directory = _paper_dir(path)
+    target = project_path(path)
     identifier = _paper_id(record["paper_id"])
     record["pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
     record["pdf_size_bytes"] = len(pdf)
     json_bytes = _json(record)
     if len(json_bytes) + len(pdf) > MAX_PAPER_BYTES:
         raise ProjectError("Paper record exceeds the 12 MB storage limit")
+    if target.suffix == ".json":
+        names = _paper_artifact_names(target)
+        json_name = f"artifacts/papers/{identifier}.json"
+        pdf_name = f"artifacts/papers/{identifier}.pdf"
+        if json_name in names or pdf_name in names:
+            raise ProjectError("Paper version identifier already exists")
+        count = sum(
+            name.startswith("artifacts/papers/")
+            and name.endswith(".json")
+            and "/" not in name[len("artifacts/papers/") :]
+            for name in names
+        )
+        if count >= MAX_PAPERS:
+            raise ProjectError("This project has reached the 50 paper version limit")
+        from sigma.projects import save_project_artifacts
+
+        save_project_artifacts(target, {json_name: json_bytes, pdf_name: pdf})
+        return
+    directory = _paper_dir(path)
     destination = directory / f"{identifier}.json"
     pdf_destination = directory / f"{identifier}.pdf"
     if (
@@ -2330,15 +2379,31 @@ def preflight(
 
 
 def list_papers(path: str) -> list[dict[str, Any]]:
-    directory = _paper_dir(path, create=False)
-    if not directory.exists():
-        return []
+    target = project_path(path)
+    if target.suffix == ".json":
+        names = sorted(
+            name
+            for name in _paper_artifact_names(target)
+            if name.startswith("artifacts/papers/")
+            and name.endswith(".json")
+            and "/" not in name[len("artifacts/papers/") :]
+        )
+        from sigma.projects import read_project_artifact
+
+        files = [(Path(name).name, read_project_artifact(target, name)) for name in names]
+    else:
+        directory = _paper_dir(path, create=False)
+        if not directory.exists():
+            return []
+        files = [
+            (file, file.read_bytes())
+            for file in directory.glob("*.json")
+            if not file.is_symlink() and file.is_file() and file.stat().st_size <= MAX_PAPER_BYTES
+        ]
     records = []
-    for file in directory.glob("*.json"):
-        if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_PAPER_BYTES:
-            continue
+    for file, contents in files:
         try:
-            value = json.loads(file.read_text(encoding="utf-8"))
+            value = json.loads(contents)
             if (
                 isinstance(value, dict)
                 and value.get("project_id") == inspect_project(path).project.id
@@ -2355,7 +2420,7 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                             for key, item in value["generation"].items()
                             if key not in {"omitted_evidence", "reduction_source_refs_omitted"}
                         },
-                        "pdf_available": _valid_pdf_file(directory, value),
+                        "pdf_available": _valid_pdf_file(path, value),
                     }
                 )
         except (OSError, ValueError, KeyError, TypeError):
@@ -2364,10 +2429,10 @@ def list_papers(path: str) -> list[dict[str, Any]]:
 
 
 def get_paper(path: str, paper_id: str) -> dict[str, Any]:
-    record = _read_one(_paper_dir(path, create=False), paper_id)
+    record = _read_one(path, paper_id)
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
-    record["pdf_available"] = _valid_pdf_file(_paper_dir(path, create=False), record)
+    record["pdf_available"] = _valid_pdf_file(path, record)
     return record
 
 
@@ -2419,14 +2484,25 @@ def paper_tex(path: str, paper_id: str) -> str:
 
 
 def delete_paper(path: str, paper_id: str) -> None:
-    directory = _paper_dir(path, create=False)
     record = get_paper(path, paper_id)
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
-    # A version owns only its JSON record and compiled PDF. Leave all other
-    # papers, checkpoints, and project research history untouched.
+    identifier = _paper_id(paper_id)
+    target = project_path(path)
+    if target.suffix == ".json":
+        from sigma.projects import save_project_artifacts
+
+        save_project_artifacts(
+            target,
+            {
+                f"artifacts/papers/{identifier}.json": None,
+                f"artifacts/papers/{identifier}.pdf": None,
+            },
+        )
+        return
+    directory = _paper_dir(path, create=False)
     for suffix in (".json", ".pdf"):
-        artifact = directory / f"{_paper_id(paper_id)}{suffix}"
+        artifact = directory / f"{identifier}{suffix}"
         try:
             if artifact.is_symlink() or artifact.is_file():
                 artifact.unlink()
@@ -2434,9 +2510,21 @@ def delete_paper(path: str, paper_id: str) -> None:
             pass
 
 
-def _valid_pdf_file(directory: Path, record: dict[str, Any]) -> bool:
-    file = directory / f"{record.get('paper_id')}.pdf"
+def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:
+    target = project_path(path)
     try:
+        if target.suffix == ".json":
+            from sigma.projects import read_project_artifact
+
+            contents = read_project_artifact(
+                target, f"artifacts/papers/{record.get('paper_id')}.pdf"
+            )
+            return (
+                len(contents) == record.get("pdf_size_bytes")
+                and len(contents) <= 80_000_000
+                and hashlib.sha256(contents).hexdigest() == record.get("pdf_sha256")
+            )
+        file = _paper_dir(path, create=False) / f"{record.get('paper_id')}.pdf"
         info = file.lstat()
         return (
             stat.S_ISREG(info.st_mode)
@@ -2444,14 +2532,17 @@ def _valid_pdf_file(directory: Path, record: dict[str, Any]) -> bool:
             and info.st_size <= 80_000_000
             and hashlib.sha256(file.read_bytes()).hexdigest() == record.get("pdf_sha256")
         )
-    except OSError:
+    except (OSError, ProjectError):
         return False
 
 
 def get_pdf(path: str, paper_id: str) -> bytes:
-    directory = _paper_dir(path)
-    file = directory / f"{_paper_id(paper_id)}.pdf"
     record = get_paper(path, paper_id)
     if not record["pdf_available"]:
         raise ProjectError("Compiled PDF is missing or unsafe")
-    return file.read_bytes()
+    target = project_path(path)
+    if target.suffix == ".json":
+        from sigma.projects import read_project_artifact
+
+        return read_project_artifact(target, f"artifacts/papers/{_paper_id(paper_id)}.pdf")
+    return (_paper_dir(path) / f"{_paper_id(paper_id)}.pdf").read_bytes()
