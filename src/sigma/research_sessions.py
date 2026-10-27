@@ -613,6 +613,8 @@ def _directory(path: str | Path) -> Path:
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
     if target.is_relative_to(samples):
         raise ProjectError("Research sessions cannot be stored in sample projects")
+    if target.suffix == ".json":
+        raise ProjectError("JSON project research sessions are stored inside the project file")
     directory = target / "research-sessions"
     if directory.is_symlink():
         raise ProjectError("Research session directory must not be a symbolic link")
@@ -622,6 +624,35 @@ def _directory(path: str | Path) -> Path:
 
 
 def get_limits(path: str) -> dict[str, Any]:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import read_bundle
+        import base64
+
+        members = read_bundle(path)["files"]
+        if "research-sessions/limits.json" not in members:
+            limits = dict(DEFAULT_LIMITS)
+        else:
+            data = base64.b64decode(members["research-sessions/limits.json"], validate=True)
+            if len(data) > 4096:
+                raise ProjectError("Research limits file is unsafe or too large")
+            try:
+                raw = json.loads(data)
+                if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
+                    raise ValueError("Invalid limits")
+                try:
+                    limits = _validate_limits(raw)
+                except ProjectError as current_error:
+                    try:
+                        limits = _validate_previous_limits(raw)
+                    except ProjectError:
+                        try:
+                            limits = _validate_legacy_limits(raw)
+                        except ProjectError:
+                            raise current_error
+            except ValueError as exc:
+                raise ProjectError("Research limits are invalid") from exc
+        return (cloud_research.evaluation_session_limits(limits)
+                if cloud_workspaces.enabled() else limits)
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
@@ -1879,11 +1910,18 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     project_path_value = record.get("project_path")
     session_id = record.get("id")
     if isinstance(project_path_value, str) and isinstance(session_id, str):
-        target = Path(project_path_value) / "research-sessions" / f"{session_id}.json"
         try:
-            if not target.is_symlink() and target.is_file():
-                research_artifact_bytes = target.stat().st_size
-        except OSError:
+            if Path(project_path_value).suffix == ".json":
+                from sigma.project_bundle import read_file
+
+                research_artifact_bytes = len(
+                    read_file(project_path_value, f"research-sessions/{session_id}.json")
+                )
+            else:
+                target = Path(project_path_value) / "research-sessions" / f"{session_id}.json"
+                if not target.is_symlink() and target.is_file():
+                    research_artifact_bytes = target.stat().st_size
+        except (OSError, ValueError):
             pass
     storage_label = (
         f"{len(artifacts)} finding(s) · {python_storage_label} · "
@@ -2218,6 +2256,57 @@ HUMAN_INTERVENTION_GUIDANCE = (
 
 
 def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import transform_members
+
+        project_id = inspect_project(path).project.id
+        allocated: list[int] = []
+
+        def allocate(members: dict[str, bytes]) -> dict[str, bytes]:
+            current = max(
+                (item.get("session_number", 0) for item in records
+                 if type(item.get("session_number")) is int and item["session_number"] > 0),
+                default=0,
+            ) + 1
+            for name, data in members.items():
+                if not name.startswith("research-sessions/") or not name.endswith(".json"):
+                    continue
+                if name in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
+                    continue
+                try:
+                    if str(UUID(name.removeprefix("research-sessions/").removesuffix(".json"))) != name.removeprefix("research-sessions/").removesuffix(".json"):
+                        continue
+                    stored_record = json.loads(data)
+                    number = stored_record.get("session_number") if isinstance(stored_record, dict) else None
+                    if (isinstance(stored_record, dict)
+                        and stored_record.get("project_id") == project_id
+                        and type(number) is int and number > 0):
+                        current = max(current, number + 1)
+                except (ValueError, UnicodeDecodeError, TypeError, AttributeError):
+                    continue
+            counter = members.get("research-sessions/sequence.json")
+            if counter is not None:
+                try:
+                    stored = json.loads(counter)
+                    if (not isinstance(stored, dict)
+                        or stored.get("project_id") != project_id
+                        or type(stored.get("next_session_number")) is not int
+                        or stored["next_session_number"] < 1):
+                        raise ValueError("Invalid session sequence")
+                    current = max(current, stored["next_session_number"])
+                except (ValueError, TypeError, UnicodeDecodeError) as exc:
+                    raise ProjectError("Research session sequence file is unreadable") from exc
+            allocated.append(current)
+            payload = {
+                "schema_version": 1,
+                "project_id": project_id,
+                "next_session_number": current + 1,
+            }
+            return {"research-sessions/sequence.json":
+                    (json.dumps(payload, sort_keys=True) + "\n").encode()}
+
+        transform_members(path, allocate)
+        return allocated[0]
     directory = _directory(path)
     counter = directory / "sequence.json"
     if counter.is_symlink():
@@ -2562,6 +2651,20 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
 
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import transform_members
+
+        limits = _validate_limits(raw)
+        if cloud_workspaces.enabled():
+            limits = cloud_research.evaluation_session_limits(limits)
+        encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        try:
+            transform_members(path, lambda members: {
+                "research-sessions/limits.json": encoded,
+            })
+        except (OSError, ValueError) as exc:
+            raise ProjectError(f"Cannot save research limits: {exc}") from exc
+        return limits
     limits = _validate_limits(raw)
     if cloud_workspaces.enabled():
         limits = cloud_research.evaluation_session_limits(limits)
@@ -2580,6 +2683,13 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     return limits
 
 
+def _worker_lock_path(path: str, session_id: str) -> Path:
+    project = project_path(path)
+    if project.suffix == ".json":
+        return project.with_name(f".{project.name}.{session_id}.worker.lock")
+    return _directory(path) / f"{session_id}.worker.lock"
+
+
 def _lock(directory: Path):
     fd = os.open(directory / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     return os.fdopen(fd, "r+")
@@ -2588,6 +2698,17 @@ def _lock(directory: Path):
 @contextmanager
 def _project_manager_lock(path: str):
     """Serialize session admission/resume across SIGMA processes for one project."""
+    if project_path(path).suffix == ".json":
+        target = project_path(path)
+        lock_path = target.with_name("." + target.name + ".manager.lock")
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "r+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+        return
     directory = _directory(path)
     fd = os.open(
         directory / ".manager.lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
@@ -2601,6 +2722,59 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import transform_members
+
+        try:
+            encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        except (TypeError, ValueError) as exc:
+            raise ProjectError("Research session record cannot be serialized") from exc
+        if len(encoded) > MAX_RECORD:
+            raise ProjectError("Research session storage limit reached")
+        try:
+            session_id = str(UUID(record["id"]))
+        except (KeyError, ValueError, TypeError, AttributeError) as exc:
+            raise ProjectError("Invalid research session identifier") from exc
+        if session_id != record["id"]:
+            raise ProjectError("Research session identifier must be canonical")
+        view = inspect_project(path)
+        if record.get("project_id") != view.project.id or record.get("project_path") != view.path:
+            raise ProjectError("Research session does not belong to this project")
+        if type(record.get("session_number")) is not int or record["session_number"] < 1:
+            raise ProjectError("Research session number must be a positive integer")
+        if not isinstance(record.get("status"), str):
+            raise ProjectError("Research session status must be a string")
+        member = f"research-sessions/{session_id}.json"
+
+        def update(members: dict[str, bytes]) -> dict[str, bytes]:
+            existing = members.get(member)
+            if existing is not None:
+                try:
+                    previous = json.loads(existing)
+                except (ValueError, UnicodeDecodeError) as exc:
+                    raise ProjectError("Existing research session record is unreadable") from exc
+                if (not isinstance(previous, dict)
+                    or previous.get("project_id") != view.project.id
+                    or previous.get("project_path") != view.path
+                    or previous.get("id") != session_id
+                    or previous.get("session_number") != record["session_number"]):
+                    raise ProjectError("Research session identity cannot change")
+            total = sum(
+                len(data) for name, data in members.items()
+                if name.startswith("research-sessions/") and name.endswith(".json")
+                and name != member
+            )
+            if total + len(encoded) > MAX_TOTAL:
+                raise ProjectError("Research session storage limit reached; session paused without dropping artifacts")
+            return {member: encoded}
+
+        transform_members(path, update)
+        if cloud_workspaces.enabled():
+            try:
+                cloud_research.sync_job(record)
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise ProjectError(str(exc)) from exc
+        return
     directory = _directory(path)
     encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_RECORD:
@@ -2634,6 +2808,23 @@ def _save(path: str, record: dict[str, Any]) -> None:
 
 
 def _read(path: str, session_id: str) -> dict[str, Any]:
+    if project_path(path).suffix == ".json":
+        from sigma.project_bundle import BundleError, read_file
+
+        try:
+            if not isinstance(session_id, str) or str(UUID(session_id)) != session_id:
+                raise ValueError("Noncanonical session ID")
+            raw = json.loads(read_file(path, f"research-sessions/{session_id}.json"))
+        except (ValueError, BundleError, TypeError) as exc:
+            raise ProjectError("Research session not found or unreadable") from exc
+        if (not isinstance(raw, dict)
+            or raw.get("id") != session_id
+            or raw.get("project_path") != str(project_path(path))
+            or raw.get("project_id") != inspect_project(path).project.id
+            or type(raw.get("session_number")) is not int
+            or raw["session_number"] < 1):
+            raise ProjectError("Research session record does not match this project")
+        return raw
     try:
         UUID(session_id)
     except ValueError as exc:
@@ -2656,6 +2847,10 @@ def _read(path: str, session_id: str) -> dict[str, Any]:
 
 
 def _all(path: str) -> list[dict[str, Any]]:
+    if project_path(path).suffix == ".json":
+        records, _ = read_session_snapshot(path)
+        records.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+        return records
     directory = _directory(path)
     records = []
     for file in sorted(directory.glob("*.json")):
@@ -2683,6 +2878,36 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     absent evidence or followed into another project.
     """
     view = inspect_project(path)
+    if Path(view.path).suffix == ".json":
+        from sigma.project_bundle import read_bundle
+        import base64
+
+        records: list[dict[str, Any]] = []
+        unavailable = 0
+        members = read_bundle(view.path)["files"]
+        for name, encoded in members.items():
+            if not name.startswith("research-sessions/") or not name.endswith(".json"):
+                continue
+            stem = name.removeprefix("research-sessions/").removesuffix(".json")
+            if stem in {"limits", "sequence"} or "/" in stem:
+                continue
+            try:
+                data = base64.b64decode(encoded, validate=True)
+                if len(data) > MAX_RECORD:
+                    raise ValueError("Session record exceeds limit")
+                raw = json.loads(data)
+                if str(UUID(stem)) != stem:
+                    raise ValueError("Noncanonical session ID")
+                if (not isinstance(raw, dict) or raw.get("id") != stem
+                    or raw.get("project_id") != view.project.id
+                    or raw.get("project_path") != view.path
+                    or type(raw.get("session_number")) is not int
+                    or raw["session_number"] < 1):
+                    raise ValueError("Session does not match project")
+                records.append(raw)
+            except (ValueError, OSError, TypeError, UnicodeDecodeError):
+                unavailable += 1
+        return records, unavailable
     directory = Path(view.path) / "research-sessions"
     if directory.is_symlink():
         raise ProjectError("Research session directory must not be a symbolic link")
@@ -2858,8 +3083,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     # replayed automatically; _recover below records them as interrupted.
     if record["status"] == "queued" and cloud_workspaces.enabled():
         return record
-    directory = _directory(record["project_path"])
-    lock_path = directory / f"{record['id']}.worker.lock"
+    lock_path = _worker_lock_path(record["project_path"], record["id"])
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         try:
@@ -2951,7 +3175,6 @@ def has_active_session(path: str) -> bool:
     durable and remain eligible for dispatch after reconnect.
     """
     records, _unavailable = read_session_snapshot(path)
-    directory = Path(project_path(path)) / "research-sessions"
     for record in records:
         status = record.get("status")
         if status not in {"queued", "running"}:
@@ -2961,7 +3184,7 @@ def has_active_session(path: str) -> bool:
             return True
         if status == "queued" and cloud_workspaces.enabled():
             return True
-        lock_path = directory / f"{record['id']}.worker.lock"
+        lock_path = _worker_lock_path(path, record["id"])
         try:
             fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
         except OSError:
@@ -3214,6 +3437,12 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
             raise ProjectError(
                 "Session work is still active; refresh its status before removing it"
             )
+        if project_path(path).suffix == ".json":
+            from sigma.project_bundle import delete_file
+
+            delete_file(path, f"research-sessions/{session_id}.json")
+            return {"removed": True, "id": session_id,
+                    "session_number": record["session_number"]}
         target = _directory(path) / f"{session_id}.json"
         if target.is_symlink() or not target.is_file():
             raise ProjectError("Research session not found")
@@ -3239,6 +3468,10 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
 
 def _snapshot(path: str) -> tuple[Any, str]:
     view = inspect_project(path)
+    if Path(view.path).suffix == ".json":
+        from sigma.project_bundle import read_file
+
+        return view, _digest(read_file(view.path, "project.json"))
     state = Path(view.path) / "project.json"
     return view, _digest(state.read_bytes())
 
@@ -8105,7 +8338,7 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
 
 
 async def _worker(session_id: str, path: str) -> None:
-    worker_lock = _directory(path) / f"{session_id}.worker.lock"
+    worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     role: str | None = None
     try:
