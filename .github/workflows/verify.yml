@@ -47,10 +47,10 @@ jobs:
           test "$(id -u)" -ne 0
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/gce_host.py
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
-      - name: Run full repository verification
-        run: ./sigma test
-
       - name: Run T88 real-browser sign-in acceptance
         run: |
           uv run --locked --no-sync playwright install --with-deps chromium
           SIGMA_BROWSER_EXECUTABLE="$(uv run --locked --no-sync python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')" uv run --locked --no-sync python browser_checks/t23_1_google_signin.py
+      - name: Run full repository verification
+        run: ./sigma test
+
