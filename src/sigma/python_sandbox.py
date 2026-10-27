@@ -921,9 +921,12 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
                 record = json.loads(raw)
             except (ValueError, UnicodeDecodeError):
                 continue
-            if (not isinstance(record, dict) or record.get("project_id") != project_id
+            if (
+                not isinstance(record, dict)
+                or record.get("project_id") != project_id
                 or name != _bundle_execution_member(str(record.get("id", "")))
-                or not isinstance(record.get("created_at"), str)):
+                or not isinstance(record.get("created_at"), str)
+            ):
                 continue
             try:
                 if _metadata_id(record["id"], "execution") != record["id"]:
