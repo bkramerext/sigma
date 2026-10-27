@@ -2965,7 +2965,6 @@ def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: st
         if any(item.get("status") in {"queued", "running"} for item in records):
             raise ProjectError("A research session is already active")
         now = _now()
-        failed = scenario != "completed"
         message = {
             "completed": "Simulated research completed. No provider was called.",
             "failed": "Simulated research failed. No provider was called.",
