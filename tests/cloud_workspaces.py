@@ -160,6 +160,16 @@ def check_proposal_cancellation_scope() -> None:
     asyncio.run(exercise_cancel_scope())
 
 
+
+
+def project_document_bytes(path: str | Path) -> bytes:
+    """Read the authoritative project document from legacy or bundled storage."""
+    target = Path(path)
+    if target.suffix == ".json":
+        from sigma.project_bundle import read_file
+        return read_file(target, "project.json")
+    return (target / "project.json").read_bytes()
+
 def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
     server = Server(root)
     try:
@@ -391,7 +401,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
             )
             assert b_strategy.status_code == 201
             strategy_id = b_strategy.json()["project"]["strategies"][0]["id"]
-            b_project_before_denials = (Path(b_path) / "project.json").read_bytes()
+            b_project_before_denials = project_document_bytes(b_path)
 
             # Actual execution service writes the record and binary artifact to
             # the owning project; the test runtime is deterministic and local.
@@ -488,7 +498,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
             expect_hidden(cross_write)
             # A rejected direct reference must not mutate the victim project,
             # even when the caller guesses an existing strategy ID.
-            assert (Path(b_path) / "project.json").read_bytes() == b_project_before_denials
+            assert project_document_bytes(b_path) == b_project_before_denials
             denied_strategy_remove = request(
                 user_a,
                 "POST",
@@ -537,7 +547,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
             ]
             for denied in denied_mutations:
                 expect_hidden(denied)
-            assert (Path(b_path) / "project.json").read_bytes() == b_project_before_denials
+            assert project_document_bytes(b_path) == b_project_before_denials
             assert {
                 path.name: path.read_bytes()
                 for path in (Path(b_path) / "research-executions").glob("*.json")
@@ -601,7 +611,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 timeout=5,
             )
             assert revoked.status_code == 401
-            assert (Path(a_path) / "project.json").is_file()
+            assert bool(project_document_bytes(a_path))
             assert (
                 request(user_a, "GET", "/api/projects/recent").json()["projects"][0]["id"] == a_id
             )
