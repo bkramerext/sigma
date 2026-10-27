@@ -194,6 +194,7 @@ def main() -> None:
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
                 from sigma.project_bundle import read_bundle
+
                 assert portable == read_bundle(response.json()["path"])
                 imported_document = json.loads(
                     __import__("base64").b64decode(portable["files"]["project.json"])
@@ -215,6 +216,7 @@ def main() -> None:
                 # Home discovery and Open Project must work for both original
                 # and imported single-file projects, not only legacy directories.
                 from sigma.projects import list_json_projects
+
                 discovered = {view.path for view in list_json_projects()}
                 assert response.json()["path"] in discovered
                 assert imported.json()["path"] in discovered
