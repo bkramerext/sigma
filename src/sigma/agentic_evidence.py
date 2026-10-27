@@ -155,11 +155,7 @@ def save(path_value: str | Path, record: dict[str, Any]) -> None:
         destination = f"evidence/agentic-runs/{run_id}.json"
         with _lock(path):
             entries = _bundle_entries(path, view.project.id)
-            retained = [
-                (name, size, item)
-                for name, size, item in entries
-                if name != destination
-            ]
+            retained = [(name, size, item) for name, size, item in entries if name != destination]
             retained.append((destination, len(contents), record))
             retained.sort(key=lambda item: (item[2].get("started_at", ""), item[0]))
             total = sum(size for _, size, _ in retained)
