@@ -20,7 +20,6 @@ from sigma.projects import (
     ProjectError,
     ResearchMode,
     create_project,
-    create_json_project,
     create_strategy,
     edit_strategy,
     initialize_project,
