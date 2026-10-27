@@ -665,9 +665,7 @@ def import_project_bundle(body: ImportBundleRequest):
     )
 
     try:
-        document = json.loads(
-            base64.b64decode(body.bundle["files"]["project.json"], validate=True)
-        )
+        document = json.loads(base64.b64decode(body.bundle["files"]["project.json"], validate=True))
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
@@ -679,6 +677,7 @@ def import_project_bundle(body: ImportBundleRequest):
             imported = import_bundle(body.bundle, destination)
         view = inspect_project(imported)
         from sigma.recents import record_access
+
         record_access(view)
         return asdict(view)
     except (KeyError, TypeError, ValueError, UnicodeDecodeError, BundleError) as exc:
