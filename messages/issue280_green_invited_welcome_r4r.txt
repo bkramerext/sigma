@@ -3,7 +3,8 @@
 - **Ticket:** Issue #280
 - **Branch:** `green/issue-280-invited-welcome`
 - **PR:** [#285](https://github.com/bkramerext/sigma/pull/285)
-- **Head:** `71e7a8baa478d215af905850b718163150154d38`
+- **Head:** `6c7e17c` (includes current `origin/main` at
+  `e2f4f6e89ea4a83f9e01b74aa63ae3f1b267a910`)
 - **Production force flag:** unchanged and default-off. No production setting was changed.
 
 ## Review scope
@@ -51,6 +52,10 @@ the guarded release procedure. Production was not enabled.
 - `tests/cloud_sponsor.py` — 9 passed, including local default provider and
   designated administrator identity.
 - `git diff --check` — passed.
+- The branch was merged with current `origin/main` using a normal merge commit;
+  the ticket tracker conflict retained both the T279 entry and main's T277
+  update. `./sigma test` and the real-Chrome acceptance passed again on the
+  merged tree.
 - Restarted the local service with `./sigma start --nav` after backend changes.
   Signed-in status, local allowance, and AI connection endpoints returned
   HTTP 200. No live generation was attempted, so actual sponsored-session
