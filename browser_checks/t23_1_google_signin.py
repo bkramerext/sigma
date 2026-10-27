@@ -327,7 +327,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             expect(status_pill).to_contain_text("Regular user")
             expect(status_pill).to_contain_text("Personal ChatGPT · unavailable")
             status_pill.click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             expect(
                 account.get_by_text(
                     "Connect your own ChatGPT account through OpenAI authentication."
@@ -391,7 +391,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             # Account switch is another fixture redirect; the API must expose only B's
             # workspace after the browser identity changes and the app reloads.
             google.click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             expect(account.get_by_text(ACCOUNTS["A"]["email"], exact=True)).to_be_visible()
             expect(account.get_by_role("heading", name="Model access")).to_be_visible()
             expect(
@@ -431,7 +431,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             google = page.locator(".account-model-status > summary")
             expect(google).to_contain_text("allowance exhausted")
             google.click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             expect(
                 account.get_by_role("button", name="Or you can use your allowance that's on us.")
             ).to_have_count(0)
@@ -487,7 +487,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             # A valid but ungranted fixture identity returns the rejected-access UI
             # and still has no private API principal.
             page.locator(".account-model-status > summary").click()
-            account = page.get_by_role("dialog", name="AI connection settings")
+            account = page.get_by_role("dialog", name="Account and model settings")
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
             page.locator(".api-connection > summary").click()
             expect(page.get_by_role("dialog")).to_contain_text("Guest · Explore SIGMA")
