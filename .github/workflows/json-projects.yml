@@ -15,3 +15,12 @@ jobs:
         run: uv sync --frozen
       - name: Run project bundle and creation simulations
         run: uv run python scripts/test_t249_integration.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Typecheck and build frontend
+        run: npm run build --prefix frontend
