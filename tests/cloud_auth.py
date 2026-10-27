@@ -110,6 +110,7 @@ class CloudAuthTests(TestCase):
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
                 "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
                 "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+                "SIGMA_CLOUD_FORCE_SPONSORED_MODE": "false",
                 "SIGMA_CLOUD_DEMO_AUDIT": str(
                     Path(__file__).resolve().parents[1] / "cloud-demo/handshake-demo-audit.json"
                 ),
@@ -1303,9 +1304,18 @@ class CloudAuthTests(TestCase):
         self.assertIn("Secure", denied.headers["set-cookie"])
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied_token)
         self.assertEqual(
-            self.client.get("/api/cloud-auth/denied").json(), {"email": "visitor@example.org"}
+            self.client.get("/api/cloud-auth/denied").json(),
+            {"email": "visitor@example.org", "invitation_status": None},
         )
         self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
+        with patch.object(cloud_auth, "_deliver_invitation"):
+            requested = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(requested.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/denied").json()["invitation_status"], "notified"
+        )
         public_demo = self.client.get("/api/cloud-demo/")
         self.assertEqual(public_demo.status_code, 200)
         self.assertEqual(public_demo.json()["project"]["title"], "Counting Pairwise Handshakes")
@@ -1718,6 +1728,52 @@ class CloudAuthTests(TestCase):
             personal = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
             self.assertEqual(personal.status_code, 200)
             self.assertEqual(personal.json()["status"], "unavailable")
+
+    def test_force_sponsored_mode_is_opt_in_and_enforced_for_eligible_users(self):
+        self.assertFalse(cloud_auth.force_sponsored_mode_enabled())
+        admin = self.finish()
+        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
+        granted = self.client.post(
+            "/api/cloud-auth/admin/grants",
+            headers={"Origin": ORIGIN},
+            json={
+                "kind": "email",
+                "value": "member@example.org",
+                "role": "member",
+                "allowance_usd": 0.75,
+            },
+        )
+        self.assertEqual(granted.status_code, 200, granted.text)
+
+        headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
+        with patch.dict(os.environ, {"SIGMA_CLOUD_FORCE_SPONSORED_MODE": "true"}):
+            self.assertTrue(cloud_auth.force_sponsored_mode_enabled())
+            admin_status = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(admin_status["account"]["sponsorship"]["forced"])
+            self.assertEqual(admin_status["account"]["model_access"]["mode"], "sponsored")
+            denied_change = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(denied_change.status_code, 403)
+
+            member = self.finish(email="member@example.org", subject="forced-member")
+            self.client.cookies.set(
+                cloud_auth.SESSION_COOKIE, member.cookies[cloud_auth.SESSION_COOKIE]
+            )
+            member_status = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(member_status["account"]["sponsorship"]["eligible"])
+            self.assertTrue(member_status["account"]["sponsorship"]["forced"])
+            self.assertEqual(member_status["account"]["model_access"]["mode"], "sponsored")
+            denied_change = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(denied_change.status_code, 403)
+
+            self.client.cookies.clear()
+            guest = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
+            self.assertEqual(guest.status_code, 401)
+
+        self.assertFalse(cloud_auth.force_sponsored_mode_enabled())
 
     def test_session_expiration_is_enforced(self):
         signed_in = self.finish()

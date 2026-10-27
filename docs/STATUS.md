@@ -82,6 +82,34 @@ sponsorship.
 
 # SIGMA status
 
+## Issue #280 — sponsored allowance and forced-mode launch flag (2026-10-27)
+
+The hosted account/model pill is labeled **SIGMA-sponsored GPT Usage** and
+exposes the authenticated user's sponsored allowance on hover, keyboard focus,
+and tap. Its tooltip reports the per-user remaining amount, allowance ceiling,
+estimated use, held amount, and connection/check state. Allowance reads remain
+on the authenticated, no-store per-user budget endpoint; provider request
+completion triggers a refresh without making an inference call. Forced mode is
+identified in the accessible pill name and tooltip.
+
+`SIGMA_CLOUD_FORCE_SPONSORED_MODE` is a deployment-wide, default-off setting
+documented in [Cloud Deployment](CLOUD_DEPLOYMENT.md). When enabled together
+with sponsored access, authenticated eligible accounts receive sponsored mode
+at sign-in/reload, and the server rejects personal-mode changes. Ineligible and
+unauthenticated identities remain denied. Existing allowance, global spending,
+queue, concurrency, and ledger checks are unchanged. Production configuration
+was not changed and the flag was not enabled.
+
+Verification on branch `green/issue-280-sponsor-mode`, based on current main
+`918aee4`: `tests/cloud_auth.py` passed (48 tests); `tests/gce_host.py` passed
+(21 tests); `browser_checks/hosted_sponsored_connection.py` passed in real
+Chrome at 1440px and 390px, including hover, keyboard focus, mobile tap,
+allowance refresh after a simulated provider request, and forced mode over two
+reloads. `./sigma test` passed all steps, including Ruff (281 files), Pyright,
+frontend typecheck/build, and deployment checks. A build-size advisory remains
+the existing non-failing Vite warning. No live provider calls, paid inference,
+or production changes occurred. See the [Issue #280 R4R handoff](../messages/issue280_green_sponsored_allowance_r4r.txt).
+
 ## Issue #265 — hosted sponsorship disabled (2026-10-27)
 
 The public 0.1.1 Home UI at `3f2426c6fa83866c655cb1b601a7e2df78e5e459`
@@ -6673,3 +6701,47 @@ head `57cdea354c752723a930ef45f3dddcd1c9982281`: SIGMA verification run
 verification `40462919506` (#80), T200 availability `40462919443` (#212), T92
 Recent Projects `40462919425` (#299), and Research Outcome `40462919416` (#368).
 No live OAuth or provider calls, paid inference, or cloud changes occurred.
+
+## Issue #279 — Invite me from the sign-in pill (2026-10-27)
+
+Guests now see an **Invite me** pill beside the existing Google sign-in pill.
+Opening it explains that Google verification is needed and links to the existing
+`/api/cloud-auth/login?invite=1` flow. After sign-in, uninvited verified users
+reach the existing invitation dialog, with their server-verified email and a
+link to the proposed privacy notice. Submission reuses T81's invitation API,
+recording, notifications, duplicate protection, and administrator review. While
+sending, the action is disabled; an error remains recoverable; success shows
+“Glad you're interested! Your request has been sent along to the right person!”
+and removes the Invite me pill. The denied-identity endpoint reports only that
+verified account's request status, so confirmation persists and the pill remains
+hidden after reload. Authorized members/admins do not see the action. No
+membership grant is made by requesting an invitation.
+
+Verification: `uv run python tests/cloud_auth.py` passed (47 tests). The
+real-Chrome check `uv run --with playwright python browser_checks/issue279_invite_me.py`
+passed for desktop/mobile guest layout,
+sign-in intent and explanation, verified invitation/privacy dialog, keyboard
+submission, retry after a mocked failure, success confirmation, pill removal
+after reload, and member visibility. The browser check uses deterministic API routes; live
+Google OAuth and SMTP delivery were not exercised. `npm --prefix frontend run
+build` passed (existing >500 kB chunk advisory). After formatting the new check,
+`./sigma test` passed all scenarios, Ruff check/format, Pyright, frontend
+typecheck, and production build. Existing Starlette/httpx deprecation and
+resource warnings were emitted; no checks failed. No provider calls, live OAuth,
+email, paid work, or production changes occurred. See
+[issue #279 handoff](../messages/issue_279_blue_r4r.md).
+
+PR #281 is open against `main` at `918aee4ecf9d4a54d89e5c2d7dd97009ebc401ad`,
+mergeable, and not merged. Its pushed implementation and R4R handoff are on
+`blue/issue-279-invite-me`.
+
+### Issue #279 human-requested allowance-zero correction
+
+The guest pill now reads **Invite me!**. When the current hosted allowance
+reports `remaining_usd <= 0`, signed-in users see **Reload me!** in the same
+header-actions slot used by **Admin**. The action reloads the page; the existing
+budget refresh updates the zero-allowance state. The extended real-Chrome check
+passed at desktop and mobile widths, including positive-to-zero transition,
+slot placement, page reload, and mobile overflow. Frontend typecheck and a fresh
+`./sigma test` passed. This correction is part of PR #281; no live or paid
+provider work was run.
