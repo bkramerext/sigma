@@ -37,15 +37,23 @@ Verification:
 - `uv run --locked --no-sync python tests/model_connection.py` — PASS.
 - `./sigma test` — PASS for final code/test head, including Ruff, Pyright,
   frontend typecheck, and production build.
-- Real Chrome `browser_checks/a20_paper.py` — UNVERIFIED/failed to reach sample
-  open. It timed out waiting for “Open Maximum Regions Formed by Lines”; local
-  fixture port 8012 was already occupied. No live inference was used.
+- Real Chrome `browser_checks/a20_paper.py` — two attempts did not reach paper
+  authoring because the isolated mock API returns 404 for `/api/samples`, so
+  its expected sample-open control is absent. Browser acceptance remains
+  UNVERIFIED; no live inference was used.
+- One-shot fault recovery regression: compile fails once after a mocked valid
+  draft; preflight reports zero calls remaining; the next explicit Generate
+  retry compiles/publishes the PDF without invoking the provider again. The
+  checkpoint is tied to project, snapshot, binding/mode, model, effort, and
+  authoring mode, and is cleared only after publication. Explicit restart keeps
+  attempt history. This extends existing long-form checkpoint recovery.
 - No provider calls/costs, secrets read, production configuration changes, or
   redeployment.
 
 Acceptance:
-- Safe diagnostic classification and deterministic one-shot/long-form HTTP
-  400/no-retry fixture behavior: MET.
+- Safe diagnostic classification, deterministic one-shot/long-form HTTP
+  400/no-retry fixture behavior, and one-shot compiler-failure recovery without
+  repeat inference: MET.
 - Actual production cause, successful hosted paper generation, live accounting
   reconciliation, production TeX/PDF durability, and browser acceptance:
   UNVERIFIED. No live paid test was authorized by T277.
