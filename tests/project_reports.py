@@ -557,6 +557,7 @@ def main() -> None:
         with TestClient(app) as client:
             # Legacy directory projects must export as complete, importable JSON bundles.
             from sigma.project_bundle import snapshot
+
             downloaded = client.get("/api/projects/download", params={"path": str(path)})
             assert downloaded.status_code == 200, downloaded.text
             assert downloaded.json() == snapshot(path)
