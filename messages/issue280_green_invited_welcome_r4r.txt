@@ -187,3 +187,9 @@ members remain denied, and this does not grant admin settings access. The
 pill's normal click still starts a personal ChatGPT sign-in when the sponsor
 connection is healthy. Real-Chrome coverage verifies the member reconnect
 path. Live sponsor OAuth and inference have not been attempted.
+
+Pill interaction correction: the allowance amount button stops propagation for
+its tooltip. While sponsor ChatGPT needs reauthorization, that button now
+starts sponsor reconnect too. Real Chrome verifies the amount click reaches
+`/api/ai/sponsor-auth/begin` and renders no stray text below the pill.
+`./sigma test` passed all steps on this fix.

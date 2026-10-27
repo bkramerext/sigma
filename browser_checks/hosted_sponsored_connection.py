@@ -769,7 +769,7 @@ def exercise(origin: str) -> None:
         )
         posts.clear()
         with page.expect_request("**/api/ai/sponsor-auth/begin"):
-            sponsored_summary.click()
+            page.get_by_role("button", name="Sponsored allowance details").click()
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
         assert any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
         expect(page.locator(".connection-pill-message")).to_have_count(0)

@@ -7049,3 +7049,11 @@ connection. Real-Chrome acceptance covers the member flow, and the focused
 auth regression verifies eligible access, ineligible denial, and admin access.
 `./sigma test` passed all steps. The running app was restarted on the updated
 branch; no OAuth completion or inference call has yet been made.
+
+Pill-click correction: the allowance amount is a nested button that stops
+click propagation so it can show its tooltip. In sponsor `reauth_required`
+state, clicking that amount now starts the same sponsor reconnect action as
+clicking the pill label. The Chrome regression uses the amount button, verifies
+the `/api/ai/sponsor-auth/begin` request and checks that no extra message appears
+under the pill. The real-Chrome check passed, and `./sigma test` passed all
+steps on this fix. No paid request is sent.
