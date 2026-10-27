@@ -31,7 +31,10 @@ def command(argv: list[str], *, timeout: int = 180, env: dict[str, str] | None =
             env=env,
             check=False,
         )
-        print(f"DONE exit={result.returncode} elapsed={time.monotonic() - started:.1f}s", flush=True)
+        print(
+            f"DONE exit={result.returncode} elapsed={time.monotonic() - started:.1f}s",
+            flush=True,
+        )
         return {
             "command": argv,
             "exit_code": result.returncode,
@@ -64,7 +67,10 @@ def main() -> int:
     os.chdir(root)
     branch = command(["git", "branch", "--show-current"])
     if branch["exit_code"] != 0 or branch["stdout"].strip() != BRANCH:
-        print(f"Switch to {BRANCH} first. Current: {branch.get('stdout', '').strip()}", file=sys.stderr)
+        print(
+            f"Switch to {BRANCH} first. Current: {branch.get('stdout', '').strip()}",
+            file=sys.stderr,
+        )
         return 2
     head = command(["git", "rev-parse", "HEAD"])
     status = command(["git", "status", "--porcelain"])
@@ -73,10 +79,19 @@ def main() -> int:
     python = root / ".venv" / "bin" / "python"
     interpreter = str(python) if python.is_file() else sys.executable
     checks = {
-        "compile": command([interpreter, "-m", "compileall", "-q", "src/sigma", "tests/project_bundle.py"], env=env),
-        "bundle_simulation": command([interpreter, "tests/project_bundle.py"], timeout=300, env=env),
-        "docker_info": command(["docker", "info", "--format", "{{json .ServerVersion}}"], timeout=20),
-        "docker_images": command(["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"], timeout=20),
+        "compile": command(
+            [interpreter, "-m", "compileall", "-q", "src/sigma", "tests/project_bundle.py"],
+            env=env,
+        ),
+        "bundle_simulation": command(
+            [interpreter, "tests/project_bundle.py"], timeout=300, env=env
+        ),
+        "docker_info": command(
+            ["docker", "info", "--format", "{{json .ServerVersion}}"], timeout=20
+        ),
+        "docker_images": command(
+            ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"], timeout=20
+        ),
     }
     checks["docker_lifecycle"] = command(
         [interpreter, "tests/t249_docker_lifecycle.py"], timeout=180, env=env
@@ -93,7 +108,7 @@ def main() -> int:
         )
     report = {
         "ticket": "T249", "branch": BRANCH, "tested_head": head["stdout"].strip(),
-        "utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "utc": dt.datetime.now(dt.UTC).isoformat(),
         "python": interpreter, "initial_git_status": status["stdout"],
         "checks": checks,
         "passing": [key for key, value in checks.items() if value.get("exit_code") == 0],
@@ -119,7 +134,9 @@ def main() -> int:
         print("Other staged changes detected; report saved but not committed.", file=sys.stderr)
         return 4
     if staged["stdout"].strip():
-        commit = command(["git", "commit", "-m", "test(t249): capture local verification results"])
+        commit = command(
+            ["git", "commit", "-m", "test(t249): capture local verification results"]
+        )
         if commit["exit_code"] != 0:
             print("Report saved; commit failed:", commit["stderr"], file=sys.stderr)
             return 5
