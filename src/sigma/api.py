@@ -633,7 +633,6 @@ def export_project_view(path: str):
 @app.get("/api/projects/download")
 def download_project_bundle(path: str):
     """Download the complete portable project, not the audit-only export."""
-    from pathlib import Path
     from sigma.project_bundle import download_bytes
     from sigma.projects import project_path
 
@@ -655,12 +654,15 @@ class ImportBundleRequest(BaseModel):
 @app.post("/api/projects/import", status_code=201)
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
+    import base64
+
     from sigma.project_bundle import BundleError, import_bundle
     from sigma.projects import (
-        _project_name, _require_available_title,
-        _title_registry_lock, projects_root,
+        _project_name,
+        _require_available_title,
+        _title_registry_lock,
+        projects_root,
     )
-    import base64
 
     try:
         document = json.loads(base64.b64decode(
