@@ -2795,9 +2795,8 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/>{cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
-      {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
-            {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
+      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><GoogleIdentityPill/></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           {(!cloud?.enabled || cloud.authenticated) && <>
@@ -2806,7 +2805,7 @@ function Home({ initialPath, onOpen }: {
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
-      </section>}
+      </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; GPT Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
@@ -3726,7 +3725,8 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
       </> : <>
         {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
         {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
-        {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
+        {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}. You can request an invitation below.</p>}
+        {cloud?.deniedEmail && <InvitationRequestControls/>}
         {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Sign in with Google</a>}
         {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
       </>}
@@ -3735,6 +3735,26 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
     </>, document.body)}
   </>;
 }
+function InvitationRequestControls() {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+  async function requestInvitation() {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
+      setSent(true);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <div className="google-invitation-actions">
+    {sent ? <p role="status">Invitation requested. We'll get back to you.</p> : <button type="button" className="google-text-action" disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Requesting…' : 'Request invitation'}</button>}
+    <a className="google-text-action" href="/api/cloud-auth/login">Use another account</a>
+    {error && <p role="alert">{error}</p>}
+  </div>;
+}
+
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
