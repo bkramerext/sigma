@@ -3707,7 +3707,7 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
     <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google connected' : canSignIn ? 'Sign in with Google' : 'Google setup required'}</span>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span className="google-identity-lines"><span>{cloud?.authenticated ? (cloud.user?.role === 'admin' ? 'Administrator' : 'Regular user') : 'Guest'}</span><span>{cloud?.authenticated ? 'Google connected' : 'Explore only · Sign in with Google'}</span></span>
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
