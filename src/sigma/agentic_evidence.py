@@ -109,7 +109,8 @@ def _bundle_entries(path: Path, project_id: str) -> list[tuple[str, int, dict[st
     entries: list[tuple[str, int, dict[str, Any]]] = []
     for name in list_files(path):
         if not name.startswith(prefix) or not re.fullmatch(
-            r"[0-9a-f]{32}\.json", name[len(prefix):]
+            r"[0-9a-f]{32}\.json",
+            name[len(prefix) :],
         ):
             continue
         contents = read_file(path, name)
