@@ -49,6 +49,7 @@ def main() -> None:
     assert "SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces" in gce_compose
     assert "SIGMA_PROJECTS_ROOT" not in compose + gce_compose
     assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" in compose
+    assert "SIGMA_CLOUD_SPONSORED_ENABLED: ${SIGMA_CLOUD_SPONSORED_ENABLED:-false}" in compose
     assert "SIGMA_RESEARCH_DOCKER_HOST" in compose
     assert "GOOGLE_OIDC_CLIENT_SECRET_FILE" in compose
     assert "SIGMA_CLOUD_AUTH_LOCAL" not in compose

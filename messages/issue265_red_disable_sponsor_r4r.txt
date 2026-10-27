@@ -1,0 +1,24 @@
+RED / Issue #265 — disable nonworking hosted sponsorship
+
+Base: 3f2426c6fa83866c655cb1b601a7e2df78e5e459.
+User direction: preserve the Connect to ChatGPT pill after Google login,
+grant both named Google accounts administrator access, and disable the
+currently nonworking SIGMA-sponsored ChatGPT path in production.
+
+The production Compose stack now defaults hosted sponsorship to false.
+Server account state demotes any saved sponsored choice to personal, marks
+sponsorship ineligible, rejects new sponsored choices, and prevents sponsor
+credential use or connection checks while disabled. Local and mock behavior
+remains available for testing. The Home Google and ChatGPT pills are unchanged;
+existing real-Chrome coverage asserts that the ChatGPT pill enables after
+Google sign-in and disables after sign-out.
+
+Focused checks run before deployment: tests/cloud_auth.py (46 passed),
+tests/cloud_research_sponsored_api.py (passed), tests/gce_host.py (21 passed),
+tests/deployment_package.py (passed), Ruff for changed files, git diff check.
+Full ./sigma test was started but is not a release gate per user direction.
+
+Production account grants are operational state, not this code patch.
+No provider calls or secret values were used in these tests. Hosted personal
+ChatGPT authorization remains unavailable by existing design, so this change
+does not claim working hosted inference.

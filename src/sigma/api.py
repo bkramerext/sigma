@@ -186,7 +186,7 @@ def cloud_research_budget():
 @app.get("/api/cloud-research/connection")
 async def cloud_sponsored_connection(request: Request):
     """Check only the server-held sponsored credential's model-catalog access."""
-    if not cloud_workspaces.enabled():
+    if not cloud_workspaces.enabled() or not cloud_auth.sponsored_access_enabled():
         raise HTTPException(404, "Sponsored cloud connection is unavailable.")
     principal = getattr(request.state, "cloud_principal", None)
     if not isinstance(principal, cloud_auth.Principal):
@@ -1154,6 +1154,8 @@ async def auth_mode(body: AuthModeRequest, request: Request):
         if body.mode not in {"personal", "sponsored"} or body.account_id is not None:
             raise HTTPException(422, "Choose personal or sponsored access.")
         if body.mode == "sponsored":
+            if not cloud_auth.sponsored_access_enabled():
+                raise HTTPException(403, "Sponsored access is disabled.")
             try:
                 allowance = cloud_research.snapshot()
             except cloud_research.CloudResearchUnavailable as exc:

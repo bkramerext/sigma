@@ -33,6 +33,7 @@ ALLOWED_ENV_KEYS = {
     "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
     "SIGMA_CLOUD_INFERENCE_PROVIDER",
     "SIGMA_CLOUD_SPONSOR_EMAIL",
+    "SIGMA_CLOUD_SPONSORED_ENABLED",
     "GOOGLE_OIDC_CLIENT_ID",
     "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
     "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
@@ -118,6 +119,8 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
     if not re.fullmatch(r"[A-Za-z0-9.-]+", values["SIGMA_DOMAIN"]):
         return None, "domain format is invalid"
     provider = values.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    if values.get("SIGMA_CLOUD_SPONSORED_ENABLED", "false") not in {"true", "false"}:
+        return None, "sponsored access setting must be true or false"
     if provider not in {"api_key", "chatgpt"}:
         return None, "inference provider is invalid"
     if provider == "chatgpt" and not re.fullmatch(

@@ -1673,6 +1673,30 @@ class CloudAuthTests(TestCase):
         refreshed = self.client.get("/api/cloud-auth/status").json()
         self.assertEqual(refreshed["account"]["model_access"]["mode"], "personal")
 
+    def test_operator_can_disable_sponsor_without_removing_personal_connection(self):
+        signed_in = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
+        with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSORED_ENABLED": "false"}):
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(status["authenticated"])
+            self.assertEqual(status["account"]["model_access"]["mode"], "personal")
+            self.assertFalse(status["account"]["sponsorship"]["eligible"])
+            with patch(
+                "sigma.api.cloud_research.snapshot",
+                side_effect=AssertionError("disabled sponsor checked allowance"),
+            ):
+                blocked = self.client.post(
+                    "/api/ai/mode", json={"mode": "sponsored"}, headers=headers
+                )
+            self.assertEqual(blocked.status_code, 403)
+            self.assertEqual(self.client.get("/api/cloud-research/connection").status_code, 404)
+            personal = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
+            self.assertEqual(personal.status_code, 200)
+            self.assertEqual(personal.json()["status"], "unavailable")
+
     def test_session_expiration_is_enforced(self):
         signed_in = self.finish()
         raw = signed_in.cookies[cloud_auth.SESSION_COOKIE]
