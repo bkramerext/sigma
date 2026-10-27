@@ -6,9 +6,10 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from sigma import cloud_auth, cloud_runtime_check, openai_connection
+from sigma import cloud_auth, cloud_runtime_check, deployment_health, openai_connection
 from sigma.config_secrets import SecretConfigurationError, secret_value
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +90,24 @@ def main() -> None:
     assert 'chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$disk/auth"' in startup
     assert 'chmod 0700 "$disk/auth"' in startup
     assert "gcloud" not in backend.lower() and "OPENAI_API_KEY=" not in compose
+
+    # A disabled sponsor must not make the whole production stack unhealthy.
+    with (
+        patch.object(
+            deployment_health.cloud_auth,
+            "config",
+            return_value=SimpleNamespace(enabled=True, error=None),
+        ),
+        patch.object(deployment_health.cloud_auth, "sponsored_access_enabled", return_value=False),
+        patch("sigma.storage.validate_startup"),
+        patch.object(
+            deployment_health.openai_connection, "sponsored_auth_context", new_callable=AsyncMock
+        ) as sponsor,
+        patch.object(deployment_health.subprocess, "run") as docker_info,
+    ):
+        assert deployment_health.main() == 0
+        sponsor.assert_not_called()
+        docker_info.assert_called_once()
 
     with tempfile.TemporaryDirectory(prefix="sigma-secret-test-") as directory:
         path = Path(directory) / "secret"
