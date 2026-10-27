@@ -201,7 +201,7 @@ def main() -> None:
                 )
                 imported_document["title"] = "API math imported"
                 portable["files"]["project.json"] = __import__("base64").b64encode(
-                    (json.dumps(imported_document) + "\\n").encode()
+                    (json.dumps(imported_document) + "\n").encode()
                 ).decode()
                 imported = client.post("/api/projects/import", json={"bundle": portable})
                 assert imported.status_code == 201, imported.text
