@@ -443,7 +443,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 user_a.get("/api/projects/export/report", params={"path": b_path}),
                 user_a.get("/api/projects/research-sessions", params={"path": b_path}),
                 user_a.get(
-                    "/api/projects/research-sessions/00000000-0000-4000-8000-000000000000",
+                    "/api/projects/research-sessions/00000000000040008000000000000000",
                     params={"path": b_path},
                 ),
                 user_a.get("/api/projects/research-executions", params={"path": b_path}),
@@ -464,7 +464,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 user_a.get("/api/projects/proposals/config", params={"path": b_path}),
                 user_a.get("/api/projects/proposals/agentic/runs", params={"path": b_path}),
                 user_a.get(
-                    "/api/projects/papers/00000000-0000-4000-8000-000000000000/pdf",
+                    "/api/projects/papers/00000000000040008000000000000000/pdf",
                     params={"path": b_path},
                 ),
             ]
