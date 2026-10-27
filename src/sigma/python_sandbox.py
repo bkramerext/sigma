@@ -1191,6 +1191,7 @@ def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -
     bundle_path = _execution_bundle_path(execution_directory)
     if bundle_path is not None:
         from sigma.project_bundle import read_file
+
         member = f"research-executions/{record['id']}.artifacts/{filename}"
         try:
             content = read_file(bundle_path, member)
