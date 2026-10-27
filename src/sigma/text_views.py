@@ -65,6 +65,7 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
         member = "artifacts/" + STATE
         try:
             from sigma.project_bundle import read_file
+
             contents = read_file(path, member)
         except (OSError, ValueError) as exc:
             try:
@@ -181,6 +182,7 @@ def _save(path: Path, project: Project, raw: dict[str, Any]) -> None:
     contents = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
     if path.suffix == ".json":
         from sigma.projects import save_project_artifacts
+
         save_project_artifacts(path, {"artifacts/" + STATE: contents})
         return
     staged = _stage(path, contents)
