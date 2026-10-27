@@ -186,7 +186,9 @@ def exercise(ui_url: str, root: Path) -> None:
         assert recent_responses == [], recent_responses
         page.get_by_role("tab", name="Samples").click()
         page.locator(".api-connection > summary").click()
-        expect(page.get_by_role("dialog", name="Account and model settings")).to_contain_text("Guest · Explore SIGMA")
+        expect(page.get_by_role("dialog", name="Account and model settings")).to_contain_text(
+            "Guest · Explore SIGMA"
+        )
         sign_in = page.get_by_role("link", name="Sign in with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
         page.keyboard.press("Escape")

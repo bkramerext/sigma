@@ -393,7 +393,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     # Hosted users begin on their explicitly personal choice. Sponsored access
     # is available only after an authenticated user selects it.
     model_access = "personal"
-    sponsorship_eligible = int(not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")))
+    sponsorship_eligible = int(
+        not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:"))
+    )
     with _db(cfg) as db:
         _upsert_user_state(
             db,
@@ -698,13 +700,13 @@ async def middleware(request: Request, call_next):
             "/api/projects/samples/open",
             "/api/projects/research-sessions/mock",
         }
-        project_write = (
-            path.startswith("/api/projects/")
-            and request.method not in {"GET", "HEAD", "OPTIONS"}
-        )
-        if (
-            path.startswith(("/api/ai/", "/api/cloud-research/"))
-            or (project_write and path not in safe_project_writes)
+        project_write = path.startswith("/api/projects/") and request.method not in {
+            "GET",
+            "HEAD",
+            "OPTIONS",
+        }
+        if path.startswith(("/api/ai/", "/api/cloud-research/")) or (
+            project_write and path not in safe_project_writes
         ):
             scenario = _mock_allowance(cfg, principal.subject)
             mode = model_access_for_subject(principal.subject)
@@ -721,8 +723,6 @@ async def middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
     return response
-
-
 
 
 # Mock identities are available only on the loopback-only local auth server.
@@ -772,9 +772,11 @@ def mock_funding(request: Request):
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     _persist_user_state(cfg, principal)
-    return {"mode": model_access_for_subject(principal.subject),
-            "allowance": _mock_allowance(cfg, principal.subject),
-            "provider": _mock_provider(cfg, principal.subject)}
+    return {
+        "mode": model_access_for_subject(principal.subject),
+        "allowance": _mock_allowance(cfg, principal.subject),
+        "provider": _mock_provider(cfg, principal.subject),
+    }
 
 
 @router.post("/mock/allowance")
@@ -815,7 +817,9 @@ def _mock_provider(cfg: Config, subject: str) -> str:
         db.execute("""CREATE TABLE IF NOT EXISTS mock_providers (
             subject TEXT PRIMARY KEY, scenario TEXT NOT NULL, updated_at INTEGER NOT NULL
         )""")
-        row = db.execute("SELECT scenario FROM mock_providers WHERE subject=?", (subject,)).fetchone()
+        row = db.execute(
+            "SELECT scenario FROM mock_providers WHERE subject=?", (subject,)
+        ).fetchone()
     return str(row["scenario"]) if row else "connected"
 
 
@@ -824,7 +828,11 @@ def mock_provider(request: Request, scenario: str):
     cfg = config()
     if not _mock_enabled(cfg):
         raise HTTPException(404, "Not found")
-    if request.headers.get("origin") != cfg.origin or request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+    if (
+        request.headers.get("origin") != cfg.origin
+        or request.client is None
+        or request.client.host not in {"127.0.0.1", "::1", "localhost"}
+    ):
         raise HTTPException(403, "Mock scenario changes require a same-origin loopback client.")
     principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
     if principal is None or not principal.subject.startswith("mock:"):
@@ -835,9 +843,11 @@ def mock_provider(request: Request, scenario: str):
         db.execute("""CREATE TABLE IF NOT EXISTS mock_providers (
             subject TEXT PRIMARY KEY, scenario TEXT NOT NULL, updated_at INTEGER NOT NULL
         )""")
-        db.execute("""INSERT INTO mock_providers(subject,scenario,updated_at) VALUES(?,?,?)
+        db.execute(
+            """INSERT INTO mock_providers(subject,scenario,updated_at) VALUES(?,?,?)
             ON CONFLICT(subject) DO UPDATE SET scenario=excluded.scenario,updated_at=excluded.updated_at""",
-            (principal.subject, scenario, _now()))
+            (principal.subject, scenario, _now()),
+        )
     return {"provider": scenario, "simulated": True}
 
 
@@ -893,7 +903,8 @@ def mock_select(request: Request, identity: str):
                     (_hash(denied_token), email, "mock:" + identity, _now() + DENIED_SECONDS),
                 )
                 response.set_cookie(
-                    _cookie_name(DENIED_COOKIE, cfg), denied_token,
+                    _cookie_name(DENIED_COOKIE, cfg),
+                    denied_token,
                     **_cookie_options(cfg, DENIED_COOKIE, max_age=DENIED_SECONDS),
                 )
             else:
@@ -915,10 +926,12 @@ def mock_select(request: Request, identity: str):
                     (_hash(raw), subject, email, _now() + SESSION_SECONDS),
                 )
                 response.set_cookie(
-                    _cookie_name(SESSION_COOKIE, cfg), raw,
+                    _cookie_name(SESSION_COOKIE, cfg),
+                    raw,
                     **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
                 )
     return response
+
 
 @router.get("/status")
 def status(request: Request):

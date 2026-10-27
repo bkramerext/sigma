@@ -2939,7 +2939,9 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: str) -> dict[str, Any]:
+def mock_session(
+    path: str, strategy_id: str, idempotency_key: str, scenario: str
+) -> dict[str, Any]:
     """Persist a queued UI fixture through the normal session storage layer.
 
     This entry point performs no provider, auth-context, or worker calls.
@@ -2949,15 +2951,20 @@ def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: st
         raise ProjectError("Unknown mock research scenario")
     view, _guard = _snapshot(path)
     strategy = next(
-        (item for item in view.project.strategies
-         if item.id == strategy_id and item.removed_at is None and item.enabled),
+        (
+            item
+            for item in view.project.strategies
+            if item.id == strategy_id and item.removed_at is None and item.enabled
+        ),
         None,
     )
     if strategy is None:
         raise ProjectError("Choose an enabled, saved strategy")
     with _project_manager_lock(view.path):
         records = _all(view.path)
-        previous = next((item for item in records if item.get("idempotency_key") == idempotency_key), None)
+        previous = next(
+            (item for item in records if item.get("idempotency_key") == idempotency_key), None
+        )
         if previous:
             if previous.get("strategy_id") != strategy_id:
                 raise ProjectError("Idempotency key belongs to another strategy")
@@ -2972,30 +2979,63 @@ def mock_session(path: str, strategy_id: str, idempotency_key: str, scenario: st
             "exhausted": "Simulated sponsorship allowance exhausted. No provider was called.",
         }[scenario]
         record = {
-            "schema_version": 1, "id": str(uuid4()),
+            "schema_version": 1,
+            "id": str(uuid4()),
             "session_number": _allocate_session_number(view.path, records),
-            "project_path": view.path, "project_id": view.project.id,
-            "strategy_id": strategy.id, "strategy_title": strategy.title,
-            "strategy_text": strategy.approach, "strategy_ids": [strategy.id],
-            "strategy_runs": [{
-                "strategy_id": strategy.id, "strategy_title": strategy.title,
-                "strategy_text": strategy.approach,
-                "status": "queued",
-                "current_action": "Queued", "cycle": 0,
-                "calls_used": 0, "artifacts": [], "reason": message,
-            }],
-            "strategy_snapshot": [{"id": strategy.id, "title": strategy.title, "eligibility": "eligible"}],
-            "problem": view.project.problem, "investigation_type": view.project.investigation_type,
-            "model": "mock-deterministic", "reasoning_effort": "none",
-            "mode": "mock", "idempotency_key": idempotency_key,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy.id,
+            "strategy_title": strategy.title,
+            "strategy_text": strategy.approach,
+            "strategy_ids": [strategy.id],
+            "strategy_runs": [
+                {
+                    "strategy_id": strategy.id,
+                    "strategy_title": strategy.title,
+                    "strategy_text": strategy.approach,
+                    "status": "queued",
+                    "current_action": "Queued",
+                    "cycle": 0,
+                    "calls_used": 0,
+                    "artifacts": [],
+                    "reason": message,
+                }
+            ],
+            "strategy_snapshot": [
+                {"id": strategy.id, "title": strategy.title, "eligibility": "eligible"}
+            ],
+            "problem": view.project.problem,
+            "investigation_type": view.project.investigation_type,
+            "model": "mock-deterministic",
+            "reasoning_effort": "none",
+            "mode": "mock",
+            "idempotency_key": idempotency_key,
             "status": "queued",
-            "created_at": now, "updated_at": now, "started_at": now,
-            "calls_used": 0, "call_limit": 0, "cycle_limit": 1,
-            "cycle": 0, "steps": [], "artifacts": [], "strategy_assessments": [],
-            "interventions": [], "message": "Simulated research queued.", "current_action": "Queued",
-            "events": [{"sequence": 1, "timestamp": now, "kind": "simulation.queued",
-                        "role": None, "message": "Simulated research queued."}],
-            "mock_scenario": scenario, "mock_stage": 0, "simulated": True,
+            "created_at": now,
+            "updated_at": now,
+            "started_at": now,
+            "calls_used": 0,
+            "call_limit": 0,
+            "cycle_limit": 1,
+            "cycle": 0,
+            "steps": [],
+            "artifacts": [],
+            "strategy_assessments": [],
+            "interventions": [],
+            "message": "Simulated research queued.",
+            "current_action": "Queued",
+            "events": [
+                {
+                    "sequence": 1,
+                    "timestamp": now,
+                    "kind": "simulation.queued",
+                    "role": None,
+                    "message": "Simulated research queued.",
+                }
+            ],
+            "mock_scenario": scenario,
+            "mock_stage": 0,
+            "simulated": True,
         }
         record["outcome"] = _outcome(record)
         _save(view.path, record)
@@ -3007,10 +3047,14 @@ def _mock_artifact(record: dict[str, Any]) -> dict[str, Any]:
     strategy_id = record["strategy_id"]
     claim = "SIMULATED: test whether the proposed approach survives a simple counterexample."
     return {
-        "id": str(uuid4()), "project_id": record["project_id"],
-        "session_id": record["id"], "strategy_id": strategy_id,
-        "strategy_title": record["strategy_title"], "sequence": 1,
-        "strategy_cycle": 1, "created_at": _now(),
+        "id": str(uuid4()),
+        "project_id": record["project_id"],
+        "session_id": record["id"],
+        "strategy_id": strategy_id,
+        "strategy_title": record["strategy_title"],
+        "sequence": 1,
+        "strategy_cycle": 1,
+        "created_at": _now(),
         "claim_or_question": claim,
         "method": "Deterministic UI fixture, not mathematical research",
         "assumptions": ["No factual or mathematical validity is claimed."],
@@ -3018,21 +3062,28 @@ def _mock_artifact(record: dict[str, Any]) -> dict[str, Any]:
         "skeptic_response": "SIMULATED: the claim remains unverified.",
         "objections": ["No independent evidence or proof was generated."],
         "open_obligations": ["Validate the claim with genuine evidence."],
-        "investigator_output": {"claim": claim, "method": "Simulation only",
-                                "evidence_status": "unverified"},
+        "investigator_output": {
+            "claim": claim,
+            "method": "Simulation only",
+            "evidence_status": "unverified",
+        },
         "skeptic_output": {"response": "Simulation only; no verification performed."},
-        "reasoning_steps": [], "coordinator_decision": "stop_no_progress",
+        "reasoning_steps": [],
+        "coordinator_decision": "stop_no_progress",
         "next_question": "Replace the simulated finding with actual research.",
         "note": "LOCAL MOCK DATA. No model calls, evidence, or real conclusions.",
         "objective_review": {
-            "status": "not_achieved", "claim": "No research objective was established.",
+            "status": "not_achieved",
+            "claim": "No research objective was established.",
             "argument_summary": "Simulation produced no evidence.",
-            "argument_steps": [], "verification_status": "incomplete",
+            "argument_steps": [],
+            "verification_status": "incomplete",
             "unresolved_objections": ["No real verification was performed."],
             "basis_artifact_ids": [],
         },
         "strategy_review": {
-            "assessment": "inconclusive", "rationale": "Synthetic UI fixture only.",
+            "assessment": "inconclusive",
+            "rationale": "Synthetic UI fixture only.",
             "basis_artifact_ids": [],
         },
         "simulated": True,
@@ -3083,7 +3134,10 @@ def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_sessions(path: str) -> list[dict[str, Any]]:
-    return [_public(_advance_mock(item) if item.get("simulated") else _recover(item)) for item in _all(path)]
+    return [
+        _public(_advance_mock(item) if item.get("simulated") else _recover(item))
+        for item in _all(path)
+    ]
 
 
 def has_active_session(path: str) -> bool:
@@ -3127,7 +3181,8 @@ async def ensure_queued_workers(path: str) -> None:
         return
     # A mock-only workspace must never touch the hosted job service.
     queued = [
-        record for record in _all(path)
+        record
+        for record in _all(path)
         if not record.get("simulated") and record.get("status") == "queued"
     ]
     if not queued:
@@ -3138,7 +3193,11 @@ async def ensure_queued_workers(path: str) -> None:
         raise ProjectError(str(exc)) from exc
     async with _manager_lock:
         for record in _all(path):
-            if record.get("simulated") or record.get("status") != "queued" or record["id"] in _tasks:
+            if (
+                record.get("simulated")
+                or record.get("status") != "queued"
+                or record["id"] in _tasks
+            ):
                 continue
             event = asyncio.Event()
             _control[record["id"]] = event
@@ -3146,7 +3205,11 @@ async def ensure_queued_workers(path: str) -> None:
 
 
 def get_session(path: str, session_id: str) -> dict[str, Any]:
-    return _public(_advance_mock(record) if (record := _read(path, session_id)).get("simulated") else _recover(record))
+    return _public(
+        _advance_mock(record)
+        if (record := _read(path, session_id)).get("simulated")
+        else _recover(record)
+    )
 
 
 def _reject_intervention(

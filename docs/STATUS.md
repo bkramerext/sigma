@@ -1,5 +1,48 @@
 # SIGMA status
 
+## PR #257 — T88 Stream A Batches 1–2 (2026-10-27)
+
+Continued the existing `feature/local-mock-auth-walkthrough` PR from
+`05cabb5c743b884156cb423433f20e6700b69c2f`, based on current `main`
+`14612ff553dd684db993e25c4aedaf83155465ff`. Applied Ruff formatting to the
+six CI-identified Python files; review of the whitespace-insensitive diff
+shows no behavior changes from formatting. Extended the local mock-identity
+request regression to cover cross-member artifact URL access as well as
+project and session access. Extended the T88 real-Chrome check to assert one
+identity pill and save screenshots of Home and Project with the account dialog
+open beneath the pill.
+
+Added `browser_checks/t257_mock_auth.py` as a reproducible real-Chrome check of
+the actual local mock selector and API. It covers Guest's empty scoped Recent,
+Member A/B project separation, Administrator role with the same allowance as a
+member, Uninvited denial and invitation request, and simulated sponsor
+exhaustion/provider unavailability through the mock research route. The test
+uses temporary storage and blank provider credentials. Screenshots are
+[Home](evaluations/t257/screenshots/home-account-dialog.png) and
+[Project](evaluations/t257/screenshots/project-account-dialog.png).
+
+Verification on the candidate tree: `tests/cloud_auth.py` passed 44 tests;
+Ruff check/format and `git diff --check` passed. Real Chrome passed
+`browser_checks/t23_1_google_signin.py`,
+`browser_checks/t257_mock_auth.py`, `browser_checks/model_availability.py`,
+`browser_checks/t92_recent_running.py`, `browser_checks/t201_overflow.py`,
+`browser_checks/t81_public_legal_pages.py`, `browser_checks/guest_samples.py`,
+and `browser_checks/t47_conclusion.py` (Research Outcome). T201 was run with
+`TMPDIR=/private/tmp` to avoid macOS `/tmp` symlink mismatch in its fixture.
+The complete `./sigma test` passed, including Ruff (274 files formatted),
+Pyright (0 diagnostics), frontend typecheck, and production build; the build
+retains its existing >500 kB chunk advisory.
+
+No live OAuth, production deployment, GCP change, paid inference, or provider
+credential was used. The browser screenshots show the two-line identity/model
+pill and the unified pill-anchored dialog, with no welcome dialog or duplicate
+identity pill. This is R4R for independent review, not acceptance. The
+separately scoped hosted personal-inference authorization remains unavailable;
+live Google/OAuth, hosted provider, GCE, and production multi-account behavior
+remain unverified. Batch 3 was not started. See the
+[T88 Stream A handoff](../messages/t88_green_pr257_stream_a.txt) for criterion
+dispositions and exact commands.
+
 ## T81 PR #242 reconciliation with current main (2026-10-26)
 
 Reconciled PR #242 with `origin/main` at

@@ -22,6 +22,7 @@ import httpx
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
+SCREENSHOTS = ROOT / "docs" / "evaluations" / "t257" / "screenshots"
 CHROME = os.environ.get(
     "SIGMA_BROWSER_EXECUTABLE",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -328,11 +329,16 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             expect(status_pill).to_contain_text("Personal ChatGPT · unavailable")
             status_pill.click()
             account = page.get_by_role("dialog", name="Account and model settings")
+            expect(page.locator(".account-model-status > summary")).to_have_count(1)
             expect(
                 account.get_by_text(
                     "Connect your own ChatGPT account through OpenAI authentication."
                 )
             ).to_be_visible()
+            SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+            page.screenshot(
+                path=str(SCREENSHOTS / "home-account-dialog.png"), animations="disabled"
+            )
             expect(
                 account.get_by_text(
                     "Hosted personal ChatGPT authentication is unavailable", exact=False
@@ -383,6 +389,16 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             chatgpt = controls.locator(".project-chatgpt-signin > summary")
             for control in (model, thinking, difficulty, google, chatgpt):
                 expect(control).to_be_visible()
+            expect(controls.locator(".account-model-status > summary")).to_have_count(1)
+            google.click()
+            account = page.get_by_role("dialog", name="Account and model settings")
+            expect(account).to_be_visible()
+            page.set_viewport_size({"width": 1280, "height": 1400})
+            page.screenshot(
+                path=str(SCREENSHOTS / "project-account-dialog.png"), animations="disabled"
+            )
+            page.set_viewport_size({"width": 1280, "height": 800})
+            page.locator(".connection-backdrop").click(position={"x": 2, "y": 2})
             for width, height in ((1280, 800), (390, 844), (320, 700)):
                 page.set_viewport_size({"width": width, "height": height})
                 expect(google).to_be_visible()

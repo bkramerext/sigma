@@ -503,7 +503,9 @@ class MockResearchStartRequest(OpenRequest):
 
 
 @app.post("/api/projects/research-sessions/mock")
-def mock_research_start_view(body: MockResearchStartRequest, request: Request, scenario: str = "completed"):
+def mock_research_start_view(
+    body: MockResearchStartRequest, request: Request, scenario: str = "completed"
+):
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
     if (
@@ -521,7 +523,9 @@ def mock_research_start_view(body: MockResearchStartRequest, request: Request, s
         scenario = "provider-error"
     if inspect_project(body.path).project.id != body.expected_project_id:
         raise HTTPException(409, "Project changed; reopen it before starting research")
-    return research_sessions.mock_session(body.path, body.strategy_id, body.idempotency_key, scenario)
+    return research_sessions.mock_session(
+        body.path, body.strategy_id, body.idempotency_key, scenario
+    )
 
 
 @app.post("/api/projects/research-sessions/start")

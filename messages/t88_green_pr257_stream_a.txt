@@ -1,0 +1,114 @@
+# T88 Stream A Batches 1–2 — Green handoff for PR #257
+
+## Delivery
+
+- PR: https://github.com/bkramerext/sigma/pull/257
+- Branch: `feature/local-mock-auth-walkthrough`
+- Base: `main` at `14612ff553dd684db993e25c4aedaf83155465ff`
+- Fetched starting head: `05cabb5c743b884156cb423433f20e6700b69c2f`
+- Final PR head: the handoff commit containing this file; its full SHA is
+  repeated in the R4R notice and the PR's latest commit record.
+- Scope: Stream A, Batches 1 and 2. Batch 3 was not started. No merge or
+  acceptance is claimed.
+
+## Changes
+
+- Applied Ruff formatting to the six files flagged by CI:
+  `browser_checks/guest_samples.py`, `scripts/t257_verify.py`,
+  `src/sigma/api.py`, `src/sigma/cloud_auth.py`,
+  `src/sigma/research_sessions.py`, and `tests/cloud_auth.py`. The
+  whitespace-insensitive diff confirms no behavior changes from formatting.
+- Added a request-level cross-identity artifact-route denial assertion to the
+  existing mock member session isolation test.
+- Extended `browser_checks/t23_1_google_signin.py` to assert one identity pill
+  on Home and Project and to save both requested screenshots.
+- Added `browser_checks/t257_mock_auth.py`, which launches a temporary local
+  SIGMA API and Vite UI and exercises the actual mock selector, authorization,
+  workspaces, invitation request, allowance, provider-failure, and simulated
+  research paths in real Chrome.
+
+## Acceptance dispositions
+
+### MET
+
+- The invited member and administrator views show one two-line identity/model
+  pill. The single account dialog is anchored beneath that pill on Home and
+  Project. The browser check asserts no standalone welcome heading, and the
+  screenshots show the pill/dialog placement and no duplicate identity pill.
+- Guest, Member A, Member B, Administrator, and Uninvited mock journeys ran
+  against the real local API. Guest and Uninvited have no private member
+  projects; Member B cannot inspect Member A's project. The administrator has
+  the same default mock allowance as a regular member.
+- Sign-in identity switching, sign-out, invitation request, connection checks
+  and recovery, funding-source selection, sponsor exhaustion, and provider
+  unavailability were exercised with deterministic boundaries.
+- Project, session, and artifact requests are isolated by owner. Evidence:
+  `browser_checks/t257_mock_auth.py`, the cross-member project/session/artifact
+  requests in `tests/cloud_auth.py`, and `tests/cloud_workspaces.py`'s
+  cross-owner execution-artifact checks.
+- No provider call, live OAuth, paid inference, GCP operation, or production
+  change was made. Provider credentials were blank in the actual mock-auth
+  browser walkthrough.
+- Focused Chrome regressions passed: T88 sign-in,
+  `browser_checks/t257_mock_auth.py`, T200 model availability, T92 Recent
+  Projects, T201 obligation recovery, public legal pages, Guest samples, and
+  Research Outcome. The full `./sigma test` passed.
+
+### UNMET
+
+- Hosted personal ChatGPT inference remains unavailable until a supported,
+  owner-authorized plan-access path is established. The UI reports unavailable
+  and does not claim a saved or absent credential is connected. This external
+  connection work is outside Stream A Batches 1–2; see
+  `docs/T88_HOSTED_PERSONAL_CONNECTION.md`.
+
+### UNVERIFIED
+
+- Live Google OAuth, hosted/GCE deployment, real multi-account isolation in a
+  deployed service, and live provider connectivity were not exercised. No
+  live access or paid inference was authorized for this run.
+- The full T88 issue is broader than this Stream A assignment. Independent
+  coordinator review and acceptance are pending.
+
+## Tests and results
+
+- `.venv/bin/ruff format` on the six CI-named files — PASS, six files
+  reformatted.
+- `.venv/bin/ruff check` and `.venv/bin/ruff format --check` on those six
+  files; `git diff --check` — PASS.
+- `./.venv/bin/python tests/cloud_auth.py` — PASS, 44 tests.
+- `uv run --locked --with playwright python browser_checks/t23_1_google_signin.py`
+  — PASS in installed Google Chrome with deterministic Google/provider
+  boundaries.
+- `SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  uv run --locked --with playwright python browser_checks/t257_mock_auth.py`
+  — PASS in installed Google Chrome against the actual local API and UI.
+- `browser_checks/model_availability.py` — PASS in real Chrome with the
+  deterministic provider fixture; no inference call.
+- `browser_checks/t92_recent_running.py` — PASS in real Chrome.
+- `browser_checks/t201_overflow.py` — PASS in real Chrome with a fake provider;
+  `browser_checks/t81_public_legal_pages.py` and
+  `browser_checks/guest_samples.py` — PASS. `TMPDIR=/private/tmp` was used
+  because macOS aliases `/tmp` to `/private/tmp` and the T201 fixture stores a
+  literal project path.
+- `browser_checks/t47_conclusion.py` (Research Outcome) — PASS in real Chrome;
+  no provider call.
+- `./sigma test` — PASS all repository scenarios, Ruff, formatting (274 files),
+  Pyright (0 diagnostics), frontend typecheck, and frontend production build.
+  Existing advisory: one JavaScript chunk is larger than 500 kB.
+
+## Browser evidence and costs
+
+- Home: `docs/evaluations/t257/screenshots/home-account-dialog.png`
+- Project: `docs/evaluations/t257/screenshots/project-account-dialog.png`
+- Provider/OAuth/GCP costs: `$0`; no such calls or operations occurred.
+- Limitations: screenshots use synthetic fixture identities and deterministic
+  provider state; they do not establish live OAuth/provider behavior.
+
+## CI
+
+At the fetched handoff head `05cabb5c743b884156cb423433f20e6700b69c2f`,
+Outcome, recovery, Recent Projects, and model-availability checks were
+completed successfully; the repository `verify` job was still running when
+that snapshot was inspected. CI for the pushed final handoff head is reported
+from the current PR status checks in the R4R notice.
