@@ -1,25 +1,52 @@
-name: T249 project bundle verification
+name: T249 integrated project verification
 on:
   pull_request:
     paths:
       - 'src/sigma/project_bundle.py'
       - 'src/sigma/projects.py'
+      - 'src/sigma/api.py'
       - 'src/sigma/research_sessions.py'
       - 'src/sigma/python_sandbox.py'
+      - 'src/sigma/papers.py'
+      - 'src/sigma/text_views.py'
+      - 'frontend/src/main.tsx'
       - 'tests/project_bundle.py'
+      - 'tests/project_creation.py'
+      - 'tests/t249_docker_lifecycle.py'
+      - 'tests/cloud_workspaces.py'
+      - 'tests/cloud_research_api.py'
       - '.github/workflows/t249-project-bundle.yml'
   workflow_dispatch:
 jobs:
-  bundle:
+  integrated:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install project
-        run: python -m pip install -e .
-      - name: Compile touched modules
-        run: python -m py_compile src/sigma/projects.py src/sigma/project_bundle.py src/sigma/research_sessions.py src/sigma/python_sandbox.py tests/project_bundle.py
-      - name: Execute project round-trip and public API tests
+      - name: Install project and test dependencies
+        run: python -m pip install -e . httpx uv
+      - name: Compile modified Python modules
+        run: python -m compileall -q src/sigma tests/project_bundle.py tests/project_creation.py tests/t249_docker_lifecycle.py tests/cloud_workspaces.py tests/cloud_research_api.py
+      - name: Verify project bundle
         run: python tests/project_bundle.py
+      - name: Verify project creation and API
+        run: python tests/project_creation.py
+      - name: Build Python sandbox image
+        run: ./sigma sandbox-build --runtime python
+      - name: Verify Docker lifecycle and artifact persistence
+        run: python tests/t249_docker_lifecycle.py
+      - name: Verify cloud workspace paper storage and isolation
+        run: uv run --locked --no-sync python tests/cloud_workspaces.py
+      - name: Verify cloud research API artifact persistence
+        run: uv run --locked --no-sync python tests/cloud_research_api.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
