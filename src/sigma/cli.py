@@ -350,7 +350,7 @@ def main() -> None:
             run_ui(
                 navigate=args.navigate,
                 signin=args.signin,
-                mock_auth=args.mock_auth or args.sponsored,
+                mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
             )
         )

@@ -6975,3 +6975,12 @@ An offline call through the real `sponsor_session()` path wrote a 71-byte
 designated registrations. No token refresh or model call was attempted.
 `tests/cloud_sponsor.py` (12 tests), `tests/cloud_auth.py` (56 tests), the
 real-Chrome sponsored connection check, and `./sigma test` passed.
+
+The launcher now passes `--sponsored` and `--mock-auth` independently to the
+local UI. `--sponsored` alone forces the eligible signed-in account's sponsor
+state without enabling mock identities or controls; combining both flags still
+enables the explicit mock walkthrough. A CLI regression checks both invocations.
+`tests/tooling.py`, the real-Chrome sponsored connection check, and `./sigma
+test` passed after this correction. The older `browser_checks/t257_mock_auth.py`
+stops at a stale `.project-google-signin` locator now matching both Sign out
+and invitation sign-in controls; it was not used as evidence of a pass.

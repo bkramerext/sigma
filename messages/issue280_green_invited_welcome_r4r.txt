@@ -82,6 +82,14 @@ check: `sponsor_connection status=credential_missing`, two designated records,
 no token refresh/model call. The file was 0600 and 71 bytes. Focused tests,
 real-Chrome sponsored acceptance, and `./sigma test` passed.
 
+Launcher wiring follow-up: `./sigma start --sponsored` no longer implicitly
+enables `--mock-auth`. A CLI regression covers the sponsored-only and combined
+flag cases. This restores the requested distinction between live local
+eligibility testing and the simulated mock walkthrough.
+`tests/tooling.py`, real-Chrome sponsored connection acceptance, and `./sigma
+test` passed. The older T257 mock browser script stops at its stale Google
+pill locator and is not claimed as passing on this branch.
+
 Configuration and rollback are documented in `docs/GETTING_STARTED.md` and
 `docs/CLOUD_DEPLOYMENT.md`. Rollback disables the hosted flag and restarts using
 the guarded release procedure. Production was not enabled.
