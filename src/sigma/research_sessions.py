@@ -2267,24 +2267,39 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
         allocated: list[int] = []
 
         def allocate(members: dict[str, bytes]) -> dict[str, bytes | None]:
-            current = max(
-                (item.get("session_number", 0) for item in records
-                 if type(item.get("session_number")) is int and item["session_number"] > 0),
-                default=0,
-            ) + 1
+            current = (
+                max(
+                    (
+                        item.get("session_number", 0)
+                        for item in records
+                        if type(item.get("session_number")) is int and item["session_number"] > 0
+                    ),
+                    default=0,
+                )
+                + 1
+            )
             for name, data in members.items():
                 if not name.startswith("research-sessions/") or not name.endswith(".json"):
                     continue
                 if name in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
                     continue
                 try:
-                    if str(UUID(name.removeprefix("research-sessions/").removesuffix(".json"))) != name.removeprefix("research-sessions/").removesuffix(".json"):
+                    if str(
+                        UUID(name.removeprefix("research-sessions/").removesuffix(".json"))
+                    ) != name.removeprefix("research-sessions/").removesuffix(".json"):
                         continue
                     stored_record = json.loads(data)
-                    number = stored_record.get("session_number") if isinstance(stored_record, dict) else None
-                    if (isinstance(stored_record, dict)
+                    number = (
+                        stored_record.get("session_number")
+                        if isinstance(stored_record, dict)
+                        else None
+                    )
+                    if (
+                        isinstance(stored_record, dict)
                         and stored_record.get("project_id") == project_id
-                        and type(number) is int and number > 0):
+                        and type(number) is int
+                        and number > 0
+                    ):
                         current = max(current, number + 1)
                 except (ValueError, UnicodeDecodeError, TypeError, AttributeError):
                     continue
@@ -2292,10 +2307,12 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
             if counter is not None:
                 try:
                     stored = json.loads(counter)
-                    if (not isinstance(stored, dict)
+                    if (
+                        not isinstance(stored, dict)
                         or stored.get("project_id") != project_id
                         or type(stored.get("next_session_number")) is not int
-                        or stored["next_session_number"] < 1):
+                        or stored["next_session_number"] < 1
+                    ):
                         raise ValueError("Invalid session sequence")
                     current = max(current, stored["next_session_number"])
                 except (ValueError, TypeError, UnicodeDecodeError) as exc:
@@ -2306,8 +2323,11 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
                 "project_id": project_id,
                 "next_session_number": current + 1,
             }
-            return {"research-sessions/sequence.json":
-                    (json.dumps(payload, sort_keys=True) + "\n").encode()}
+            return {
+                "research-sessions/sequence.json": (
+                    json.dumps(payload, sort_keys=True) + "\n"
+                ).encode()
+            }
 
         transform_members(path, allocate)
         return allocated[0]
@@ -2663,9 +2683,12 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
             limits = cloud_research.evaluation_session_limits(limits)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         try:
-            transform_members(path, lambda members: {
-                "research-sessions/limits.json": encoded,
-            })
+            transform_members(
+                path,
+                lambda members: {
+                    "research-sessions/limits.json": encoded,
+                },
+            )
         except (OSError, ValueError) as exc:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
@@ -2730,7 +2753,9 @@ def _save(path: str, record: dict[str, Any]) -> None:
         from sigma.project_bundle import transform_members
 
         try:
-            encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+            encoded = (
+                json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+            ).encode()
         except (TypeError, ValueError) as exc:
             raise ProjectError("Research session record cannot be serialized") from exc
         if len(encoded) > MAX_RECORD:
