@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces
+from sigma import cloud_research
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
@@ -654,7 +654,7 @@ def get_limits(path: str) -> dict[str, Any]:
                 raise ProjectError("Research limits are invalid") from exc
         return (
             cloud_research.evaluation_session_limits(limits)
-            if cloud_workspaces.enabled()
+            if cloud_research.billing_enabled()
             else limits
         )
     directory = _directory(path)
@@ -663,7 +663,7 @@ def get_limits(path: str) -> dict[str, Any]:
         limits = dict(DEFAULT_LIMITS)
         return (
             cloud_research.evaluation_session_limits(limits)
-            if cloud_workspaces.enabled()
+            if cloud_research.billing_enabled()
             else limits
         )
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
@@ -685,7 +685,9 @@ def get_limits(path: str) -> dict[str, Any]:
             except ProjectError:
                 raise current_error
     return (
-        cloud_research.evaluation_session_limits(limits) if cloud_workspaces.enabled() else limits
+        cloud_research.evaluation_session_limits(limits)
+        if cloud_research.billing_enabled()
+        else limits
     )
 
 
@@ -2679,7 +2681,7 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             limits = cloud_research.evaluation_session_limits(limits)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         try:
@@ -2693,7 +2695,7 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
     limits = _validate_limits(raw)
-    if cloud_workspaces.enabled():
+    if cloud_research.billing_enabled():
         limits = cloud_research.evaluation_session_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
@@ -2804,7 +2806,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
             return {member: encoded}
 
         transform_members(path, update)
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             try:
                 cloud_research.sync_job(record)
             except cloud_research.CloudResearchUnavailable as exc:
@@ -2835,7 +2837,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
         finally:
             staged.unlink(missing_ok=True)
         fcntl.flock(lock, fcntl.LOCK_UN)
-    if cloud_workspaces.enabled() and not record.get("simulated"):
+    if cloud_research.billing_enabled() and not record.get("simulated"):
         try:
             cloud_research.sync_job(record)
         except cloud_research.CloudResearchUnavailable as exc:
@@ -3123,7 +3125,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     # Queued cloud sessions have not crossed a provider-dispatch boundary and
     # can be safely picked up when an owner reconnects. Running calls are never
     # replayed automatically; _recover below records them as interrupted.
-    if record["status"] == "queued" and cloud_workspaces.enabled():
+    if record["status"] == "queued" and cloud_research.billing_enabled():
         return record
     lock_path = _worker_lock_path(record["project_path"], record["id"])
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -3137,7 +3139,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         for step in record.get("steps", []):
             if step.get("status") == "running":
                 if (
-                    cloud_workspaces.enabled()
+                    cloud_research.billing_enabled()
                     and step.get("attempt_status") == "preparing"
                     and isinstance(step.get("attempt_id"), str)
                 ):
@@ -3192,7 +3194,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             record["estimated_cost_usd"] = None
         _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             try:
                 cloud_research.recover_job(record["id"])
             except cloud_research.CloudResearchUnavailable as exc:
@@ -3465,7 +3467,7 @@ def has_active_session(path: str) -> bool:
         task = _tasks.get(record["id"])
         if task is not None and not task.done():
             return True
-        if status == "queued" and cloud_workspaces.enabled():
+        if status == "queued" and cloud_research.billing_enabled():
             return True
         lock_path = _worker_lock_path(path, record["id"])
         try:
@@ -3486,7 +3488,7 @@ def has_active_session(path: str) -> bool:
 
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
-    if not cloud_workspaces.enabled():
+    if not cloud_research.billing_enabled():
         return
     # A mock-only workspace must never touch the hosted job service.
     queued = [
@@ -4150,7 +4152,7 @@ async def start_session(
         raise ProjectError("Choose a saved, active strategy before investigating")
     if not strategy.enabled:
         raise ProjectError("This strategy is disabled; enable it before starting research")
-    if cloud_workspaces.enabled():
+    if cloud_research.billing_enabled():
         try:
             cloud_research.reconcile_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
@@ -4181,7 +4183,9 @@ async def start_session(
                         "Idempotency key is already bound to a different research request"
                     )
                 return _public(_recover(existing))
-            if not cloud_workspaces.enabled() and any(not task.done() for task in _tasks.values()):
+            if not cloud_research.billing_enabled() and any(
+                not task.done() for task in _tasks.values()
+            ):
                 raise ProjectError("Another research worker is active. No provider call was made.")
             active = next((r for r in records if r["status"] in {"queued", "running"}), None)
             if active:
@@ -4206,7 +4210,7 @@ async def start_session(
                 )
             from sigma.openai_connection import cloud_credential
 
-            if cloud_workspaces.enabled() and (
+            if cloud_research.billing_enabled() and (
                 not cloud_credential(credential)
                 or limits["maximum_estimated_cost_usd"] is None
                 or config["model"] not in TOKEN_PRICES_PER_MILLION
@@ -4215,7 +4219,7 @@ async def start_session(
                     "Cloud research requires the configured sponsor credential, a per-session cost limit, and a model with a reviewed price."
                 )
             if limits.get("maximum_input_tokens_per_session") is not None and (
-                (credential["mode"] != "api_key" and not cloud_workspaces.enabled())
+                (credential["mode"] != "api_key" and not cloud_research.billing_enabled())
                 or limits.get("maximum_estimated_cost_usd") is None
                 or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
@@ -4312,12 +4316,12 @@ async def start_session(
                 "token_usage_status": "pending",
                 "tokens_reserved": 0,
                 "maximum_estimated_cost_usd": limits["maximum_estimated_cost_usd"],
-                "cloud_sponsored": cloud_workspaces.enabled(),
+                "cloud_sponsored": cloud_research.billing_enabled(),
                 "estimated_cost_usd": 0.0
-                if credential["mode"] == "api_key" or cloud_workspaces.enabled()
+                if credential["mode"] == "api_key" or cloud_research.billing_enabled()
                 else None,
                 "cost_status": "available"
-                if (credential["mode"] == "api_key" or cloud_workspaces.enabled())
+                if (credential["mode"] == "api_key" or cloud_research.billing_enabled())
                 and config["model"] in TOKEN_PRICES_PER_MILLION
                 else "unavailable",
                 "cycle": 0,
@@ -4427,7 +4431,7 @@ async def start_session(
                 record["prior_session_failure_omitted_attempt_ids"],
             ) = _prior_session_failures_index(view.path, record["id"])
             _event(record, "queued", record["message"])
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 try:
                     cloud_research.prepare_job(record)
                 except cloud_research.CloudResearchUnavailable as exc:
@@ -4443,7 +4447,7 @@ async def start_session(
 async def control_session(path: str, session_id: str, action: str) -> dict[str, Any]:
     if action not in {"pause", "resume", "stop"}:
         raise ProjectError("Unknown research session action")
-    if action == "resume" and cloud_workspaces.enabled():
+    if action == "resume" and cloud_research.billing_enabled():
         try:
             cloud_research.reconcile_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
@@ -4606,7 +4610,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                 raise ProjectError(
                     "Another research session is active or needs attention in this project"
                 )
-            if not cloud_workspaces.enabled() and any(
+            if not cloud_research.billing_enabled() and any(
                 task_id != session_id and not task.done() for task_id, task in _tasks.items()
             ):
                 raise ProjectError(
@@ -4634,7 +4638,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             )
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 try:
                     cloud_research.prepare_job(record)
                 except cloud_research.CloudResearchUnavailable as exc:
@@ -7424,7 +7428,7 @@ async def _portfolio_role_call(
                 )
                 reserve = float(budget_reservation["cost_bound_usd"])
                 record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
-            if cloud_workspaces.enabled() and (
+            if cloud_research.billing_enabled() and (
                 int(record.get("tokens_used") or 0)
                 + int(record.get("tokens_reserved", 0))
                 + token_reserve
@@ -7484,14 +7488,14 @@ async def _portfolio_role_call(
             )
             step_id = record["current_step"]
             timeout_seconds = _call_timeout_seconds(record)
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 _event(record, "call.preparing", record["message"], role)
             else:
                 _event(record, "call.started", record["message"], role)
             step = {
                 "id": step_id,
                 "attempt_id": step_id,
-                "attempt_status": "preparing" if cloud_workspaces.enabled() else None,
+                "attempt_status": "preparing" if cloud_research.billing_enabled() else None,
                 "cycle": cycle,
                 "role": role,
                 "strategy_id": strategy_id,
@@ -7532,8 +7536,10 @@ async def _portfolio_role_call(
                 "human_intervention_ids": [item["intervention_id"] for item in human_guidance],
                 "computation_inspections": _context_computation_inspections(context),
                 "cost_reserve": reserve,
-                "global_cost_reservation_usd": reserve if cloud_workspaces.enabled() else None,
-                "token_reservation": token_reserve if cloud_workspaces.enabled() else None,
+                "global_cost_reservation_usd": reserve
+                if cloud_research.billing_enabled()
+                else None,
+                "token_reservation": token_reserve if cloud_research.billing_enabled() else None,
             }
             step["provider_input_audit"] = request_audit
             _record_guidance_delivery(
@@ -7546,7 +7552,7 @@ async def _portfolio_role_call(
             )
             record["steps"].append(step)
             _save(path, record)
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 try:
                     if reserve is None:
                         raise cloud_research.CloudResearchUnavailable(
@@ -7597,7 +7603,7 @@ async def _portfolio_role_call(
             )
             _validate_guidance_acknowledgments(human_guidance, output)
         except asyncio.CancelledError:
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 cloud_research.mark_call_unknown(session_id, step_id)
             async with state_lock:
                 interrupted = _read(path, session_id)
@@ -7689,7 +7695,7 @@ async def _portfolio_role_call(
                 step = next(item for item in record["steps"] if item["id"] == step_id)
                 if isinstance(record.get("hard_budget_ledger"), dict):
                     mark_unknown(record["hard_budget_ledger"], call_id=step_id)
-                if cloud_workspaces.enabled():
+                if cloud_research.billing_enabled():
                     cloud_research.mark_call_unknown(session_id, step_id)
                     step["attempt_status"] = "unknown"
                 step["token_usage_status"] = "unavailable"
@@ -7762,7 +7768,7 @@ async def _portfolio_role_call(
                 output=output,
             )
             step.update({"status": "completed", "finished_at": _now(), "output": output})
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 input_tokens = usage.get("input_tokens") if usage else None
                 output_tokens = usage.get("output_tokens") if usage else None
@@ -8054,6 +8060,20 @@ def _commit_portfolio_review_safely(
         )
 
 
+def _portfolio_failure_message(runs: list[dict[str, Any]]) -> str:
+    messages: list[str] = []
+    seen: set[str] = set()
+    for branch in runs:
+        if branch.get("status") != "failed":
+            continue
+        reason = str(branch.get("reason") or "A strategy branch failed.").strip()
+        normalized = " ".join(reason.split())
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            messages.append(reason)
+    return "; ".join(messages)
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     semaphore = asyncio.Semaphore(3)
@@ -8134,18 +8154,13 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     else "ended"
                 )
                 record["current_action"] = "Completed" if record["status"] == "ended" else "Failed"
-                failures = [
-                    branch.get("reason", "A strategy branch failed.")
-                    for branch in runs
-                    if branch["status"] == "failed"
-                ]
                 incomplete_branches = [
                     branch
                     for branch in runs
                     if branch.get("current_action") == "Incomplete · output limit"
                 ]
                 record["message"] = (
-                    "; ".join(failures)
+                    _portfolio_failure_message(runs)
                     if record["status"] == "failed"
                     else "One or more provider responses were clipped; saved partial output and usage are incomplete. No clipped call was retried."
                     if incomplete_branches
@@ -8752,7 +8767,7 @@ def _prior_session_failures_index(
 
 
 async def _claim_cloud_job(session_id: str, path: str) -> bool:
-    if not cloud_workspaces.enabled():
+    if not cloud_research.billing_enabled():
         return True
     while True:
         record = _read(path, session_id)
@@ -9261,7 +9276,7 @@ async def _worker(session_id: str, path: str) -> None:
                 step["token_usage_status"] = "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):
                     step["provider_input_audit"]["status"] = "call_interrupted_dispatch_unknown"
-                if cloud_workspaces.enabled() and step.get("attempt_id"):
+                if cloud_research.billing_enabled() and step.get("attempt_id"):
                     step["attempt_status"] = "unknown"
                     try:
                         cloud_research.mark_call_unknown(record["id"], step["attempt_id"])
@@ -9370,7 +9385,7 @@ async def _worker(session_id: str, path: str) -> None:
         except (ProjectError, OSError):
             pass
     finally:
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             try:
                 current = _read(path, session_id)
                 cloud_research.release_job(

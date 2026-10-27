@@ -6,7 +6,7 @@ export class RequestToastStore {
     setTimer = globalThis.setTimeout.bind(globalThis),
     clearTimer = globalThis.clearTimeout.bind(globalThis),
     prefersReducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
-    maxVisible = 4,
+    maxVisible = 5,
   } = {}) {
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;

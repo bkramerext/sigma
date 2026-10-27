@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, main
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -281,6 +281,64 @@ class CloudAuthTests(TestCase):
                 self.assertEqual(record["status"], "failed")
                 self.assertEqual(record["artifacts"], [])
                 self.assertIn("No provider was called", record["message"])
+
+    def test_local_sponsored_test_flag_selects_mock_and_rejects_personal_switch(self):
+        origin = {"Origin": "http://127.0.0.1:5173"}
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_MOCK_AUTH": "1",
+                "SIGMA_LOCAL_SPONSORED_TEST_MODE": "1",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root),
+            },
+        ):
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(status["sponsored_test_mode"])
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select?identity=member-a", headers=origin
+                ).status_code,
+                204,
+            )
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(status["account"]["sponsorship"]["eligible"])
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+            denied = self.client.post(
+                "/api/cloud-auth/mock/model-access?mode=personal", headers=origin
+            )
+            self.assertEqual(denied.status_code, 403)
+            direct_provider_mode = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=origin
+            )
+            self.assertEqual(direct_provider_mode.status_code, 403)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            funding = self.client.get("/api/cloud-auth/mock/funding")
+            self.assertEqual(funding.status_code, 200, funding.text)
+            self.assertTrue(funding.json()["allowance"]["simulated"])
+            self.assertEqual(funding.json()["provider"], "connected")
+            disconnected = self.client.post(
+                "/api/cloud-auth/mock/provider?scenario=unavailable", headers=origin
+            )
+            self.assertEqual(disconnected.status_code, 200, disconnected.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/mock/funding").json()["provider"], "unavailable"
+            )
+            # The next launch's automatic identity selection rediscovers the sponsored state.
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select?identity=member-a", headers=origin
+                ).status_code,
+                204,
+            )
+            funding = self.client.get("/api/cloud-auth/mock/funding").json()
+            self.assertEqual(funding["mode"], "sponsored")
+            self.assertEqual(funding["provider"], "connected")
 
     def test_mock_research_route_never_invokes_live_start(self):
         from sigma import research_sessions
@@ -713,15 +771,17 @@ class CloudAuthTests(TestCase):
 
     def start_flow(self, client=None):
         client = client or self.client
+        cfg = cloud_auth.config()
         response = client.get("/api/cloud-auth/login", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertIn("Secure", response.headers["set-cookie"])
+        self.assertEqual("Secure" in response.headers["set-cookie"], not cfg.local)
         self.assertIn("HttpOnly", response.headers["set-cookie"])
         self.assertIn("SameSite=lax", response.headers["set-cookie"])
         query = parse_qs(urlsplit(response.headers["location"]).query)
         self.assertEqual(query["code_challenge_method"], ["S256"])
         self.assertEqual(query["prompt"], ["select_account"])
-        return query["state"][0], response.cookies[cloud_auth.FLOW_COOKIE]
+        flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
+        return query["state"][0], response.cookies[flow_cookie]
 
     def test_guest_sample_projects_use_temporary_workspace_without_recents(self):
         from sigma import cloud_workspaces
@@ -824,7 +884,9 @@ class CloudAuthTests(TestCase):
                 "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
             ).fetchone()["nonce"]
         GoogleClient.token = token(nonce=nonce, email=email, subject=subject, **(changes or {}))
-        client.cookies.set(cloud_auth.FLOW_COOKIE, flow_cookie)
+        client.cookies.set(
+            cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cloud_auth.config()), flow_cookie
+        )
         with patch.object(cloud_auth.httpx, "AsyncClient", GoogleClient):
             return client.get(
                 "/api/cloud-auth/callback",
@@ -1038,6 +1100,21 @@ class CloudAuthTests(TestCase):
         row = requests.json()["requests"][0]
         self.assertEqual(row["email"], "visitor@example.org")
         self.assertEqual(row["status"], "notified")
+        authorized = self.client.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "email", "value": "Visitor@Example.org", "role": "member"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(authorized.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"], []
+        )
+        revoked = self.client.delete(
+            "/api/cloud-auth/admin/grants/email/visitor%40example.org",
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(revoked.status_code, 200)
+        row = self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"][0]
         updated = self.client.put(
             f"/api/cloud-auth/admin/invitation-requests/{row['subject']}",
             json={"status": "reviewed"},
@@ -1045,6 +1122,9 @@ class CloudAuthTests(TestCase):
         )
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["status"], "reviewed")
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"], []
+        )
         self.assertEqual(
             visitor.post("/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}).json()[
                 "duplicate"
@@ -1395,7 +1475,7 @@ class CloudAuthTests(TestCase):
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied_token)
         self.assertEqual(
             self.client.get("/api/cloud-auth/denied").json(),
-            {"email": "visitor@example.org", "invitation_status": None},
+            {"identity_available": True, "invitation_status": None},
         )
         self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
         with patch.object(cloud_auth, "_deliver_invitation"):
@@ -1575,6 +1655,52 @@ class CloudAuthTests(TestCase):
         self.assertEqual(revoked["status"], "revoked")
         self.assertFalse(revoked["authorized"])
         self.assertIn("held_usd", revoked["spending"])
+
+    def test_nontrivialzeeros_domain_login_and_reload_request(self):
+        admin_login = self.finish()
+        self.assertEqual(admin_login.status_code, 303)
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        grant = self.client.post(
+            "/api/cloud-auth/admin/grants",
+            json={
+                "kind": "domain",
+                "value": "nontrivialzeeros.com",
+                "role": "member",
+                "allowance_usd": 1.25,
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(grant.status_code, 200, grant.text)
+        user_context = TestClient(app)
+        user = user_context.__enter__()
+        self.addCleanup(user_context.__exit__, None, None, None)
+        login = self.finish(
+            email="tester@nontrivialzeeros.com",
+            subject="nontrivialzeeros-test-account",
+            client=user,
+        )
+        self.assertEqual(login.status_code, 303)
+        user.cookies.set(cloud_auth.SESSION_COOKIE, login.cookies[cloud_auth.SESSION_COOKIE])
+        user_status = user.get("/api/cloud-auth/status").json()
+        self.assertTrue(user_status["authenticated"])
+        self.assertTrue(user_status["account"]["sponsorship"]["eligible"])
+        self.assertEqual(user_status["account"]["access"]["role"], "member")
+        with patch.object(cloud_auth, "_deliver_invitation") as deliver:
+            reload_request = user.post(
+                "/api/cloud-auth/invitation-request",
+                json={"request_type": "reload"},
+                headers={"Origin": ORIGIN},
+            )
+        self.assertEqual(reload_request.status_code, 200, reload_request.text)
+        deliver.assert_called_once()
+        self.assertEqual(deliver.call_args.args[0], "tester@nontrivialzeeros.com")
+        self.assertEqual(deliver.call_args.kwargs["request_type"], "reload")
+        requests = self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["request_type"], "reload")
+        self.assertEqual(requests[0]["email"], "tester@nontrivialzeeros.com")
 
     def test_spending_allowance_admin_policy_and_email_precedence(self):
         admin_context = TestClient(app)
@@ -1767,6 +1893,151 @@ class CloudAuthTests(TestCase):
             },
         ):
             self.assertIsNotNone(cloud_auth.config().error)
+
+    def test_local_explicitly_authorized_google_member_can_view_sponsored_allowance(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            admin_login = self.finish(client=admin)
+            self.assertEqual(admin_login.status_code, 303)
+            admin.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            member_context = TestClient(app)
+            member_client = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            denied = self.finish(
+                email="nontrivialzeeros@gmail.com",
+                subject="nontrivialzeeros-local-member",
+                client=member_client,
+            )
+            self.assertEqual(denied.status_code, 303)
+            self.assertIn("access=denied", denied.headers["location"])
+            self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+            grant = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": "nontrivialzeeros@gmail.com", "role": "member"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            signed_member = self.finish(
+                email="nontrivialzeeros@gmail.com",
+                subject="nontrivialzeeros-local-member",
+                client=member_client,
+            )
+            self.assertEqual(signed_member.status_code, 303)
+            member_client.cookies.set("sigma_session", signed_member.cookies["sigma_session"])
+            status = member_client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["target"], "local")
+            self.assertTrue(status["authenticated"])
+            self.assertTrue(status["account"]["sponsorship"]["eligible"])
+
+    def test_local_sponsored_flag_forces_eligible_google_account_and_reads_its_grant(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_LOCAL_SPONSORED_TEST_MODE": "1",
+                "SIGMA_MOCK_AUTH": "0",
+            },
+        ):
+            admin_login = self.finish()
+            self.assertEqual(admin_login.status_code, 303)
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "local-sponsor@example.org",
+                    "role": "member",
+                    "allowance_usd": 1.25,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23456)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            login = self.finish(
+                email="local-sponsor@example.org",
+                subject="local-sponsored-test-user",
+                client=member,
+            )
+            self.assertEqual(login.status_code, 303)
+            member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            status = member.get("/api/cloud-auth/status").json()
+            self.assertFalse(status["mock_auth"])
+            self.assertFalse(status["mock_identity"])
+            self.assertTrue(status["sponsored_test_mode"])
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+            self.assertTrue(status["account"]["sponsorship"]["forced"])
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
+                    },
+                ),
+                patch(
+                    "sigma.cloud_sponsor.sponsor_session",
+                    new=AsyncMock(
+                        return_value={
+                            "status": "connected",
+                            "account_id": "designated-admin",
+                            "account": {
+                                "email": "zetacontinuation@gmail.com",
+                                "access_token": "sponsor-token",
+                            },
+                        }
+                    ),
+                ) as sponsor_session,
+                patch(
+                    "sigma.openai_connection.chatgpt_auth.session",
+                    new=AsyncMock(side_effect=AssertionError("local ChatGPT session was used")),
+                ),
+                patch(
+                    "sigma.openai_connection._check",
+                    new=AsyncMock(
+                        return_value={
+                            "status": "connected",
+                            "checked_at": "2026-10-27T00:00:00Z",
+                            "ttl_seconds": 60,
+                        }
+                    ),
+                ),
+            ):
+                os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
+                connection = member.get("/api/ai/connection")
+            self.assertEqual(connection.status_code, 200, connection.text)
+            self.assertEqual(connection.json()["mode"], "chatgpt")
+            self.assertTrue(connection.json()["label"].startswith("SIGMA-sponsored ChatGPT"))
+            self.assertEqual(sponsor_session.await_count, 1)
+            budget = member.get("/api/cloud-research/budget")
+            self.assertEqual(budget.status_code, 200, budget.text)
+            self.assertEqual(budget.json()["allowance_usd"], 1.25)
+            self.assertEqual(budget.json()["remaining_usd"], 1.25)
+            personal = member.post(
+                "/api/ai/mode",
+                json={"mode": "personal"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(personal.status_code, 403, personal.text)
+            allowance = member.get("/api/cloud-auth/local-sponsored-allowance")
+            self.assertEqual(allowance.status_code, 200, allowance.text)
+            self.assertEqual(allowance.json()["allowance_usd"], 1.25)
+            self.assertEqual(allowance.json()["remaining_usd"], 1.25)
+            self.assertTrue(allowance.json()["local_preview"])
+            self.assertFalse(allowance.json()["simulated"])
 
     def test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor(self):
         signed_in = self.finish()

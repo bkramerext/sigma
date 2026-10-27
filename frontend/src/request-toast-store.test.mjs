@@ -114,10 +114,26 @@ test('dispose and burst eviction clear all timers', () => {
   const clock = new FakeClock();
   const store = makeStore(clock);
   store.add('oldest');
-  for (let index = 0; index < 4; index += 1) store.add(`new ${index}`);
-  assert.equal(store.getSnapshot().length, 4);
-  assert.equal(clock.timers.size, 4);
+  for (let index = 0; index < 5; index += 1) store.add(`new ${index}`);
+  assert.deepEqual(store.getSnapshot().map(item => item.message), ['new 0', 'new 1', 'new 2', 'new 3', 'new 4']);
+  assert.equal(store.getSnapshot().length, 5);
+  assert.equal(clock.timers.size, 5);
   store.dispose();
+  assert.equal(store.getSnapshot().length, 0);
+  assert.equal(clock.timers.size, 0);
+});
+
+test('adding a sixth toast immediately removes the oldest and keeps five visible', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const toasts = Array.from({ length: 6 }, (_, index) => store.add(`toast ${index}`));
+  assert.deepEqual(store.getSnapshot().map(item => item.id), toasts.slice(1).map(item => item.id));
+  assert.deepEqual(store.getSnapshot().map(item => item.message), [
+    'toast 1', 'toast 2', 'toast 3', 'toast 4', 'toast 5',
+  ]);
+  assert.equal(clock.timers.size, 5);
+  clock.advance(REQUEST_TOAST_LIFETIME_MS);
+  clock.advance(REQUEST_TOAST_EXIT_MS);
   assert.equal(store.getSnapshot().length, 0);
   assert.equal(clock.timers.size, 0);
 });

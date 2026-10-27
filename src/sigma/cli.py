@@ -273,6 +273,11 @@ def main() -> None:
         help="Run local-only mock identity switching for the hosted sign-in walkthrough",
     )
     ui_command.add_argument(
+        "--sponsored",
+        action="store_true",
+        help="Force sponsored presentation for eligible local Google accounts and show their configured allowance",
+    )
+    ui_command.add_argument(
         "--signin",
         action="store_true",
         help="Start with a local admin identity from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
@@ -341,7 +346,14 @@ def main() -> None:
             sys.exit(2)
         sys.exit(0)
     if args.command == "start":
-        sys.exit(run_ui(navigate=args.navigate, signin=args.signin, mock_auth=args.mock_auth))
+        sys.exit(
+            run_ui(
+                navigate=args.navigate,
+                signin=args.signin,
+                mock_auth=args.mock_auth or args.sponsored,
+                sponsored=args.sponsored,
+            )
+        )
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:

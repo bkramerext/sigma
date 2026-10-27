@@ -13,6 +13,23 @@ On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.
 
 Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop SIGMA with **Ctrl+C**, or use `./sigma shutdown` from another terminal. Running `./sigma start` again replaces a verified local instance; unrelated services using the ports are left alone.
 
+To preview sponsored mode locally for the Google account you sign in with, run
+`./sigma start --sponsored`. For eligible accounts, the pill shows the
+remaining allowance from the local sponsored ledger and forces sponsored
+provider selection. Sponsored inference uses SIGMA's designated
+`zetacontinuation@gmail.com` ChatGPT account, never the signed-in member's
+ChatGPT session. For local use, SIGMA reads that account from the private
+`SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
+spend is reserved against the signed-in member's configured allowance before
+provider dispatch. Local sponsored inference selects ChatGPT even when
+`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset; hosted deployments continue to use
+their explicit provider setting. The option does not enable the hosted
+forced-sponsored setting. Use `./sigma start` to return to normal local mode.
+
+To test with mock identities and controls, use `./sigma start --mock-auth`.
+The mock member's $25 allowance is simulated. For its sponsored presentation,
+combine the options: `./sigma start --mock-auth --sponsored`.
+
 ## Start a project
 
 Home offers **Samples** and **Recent** projects. Choose a sample to create your own editable copy, reopen a recent project, or select **New Project** to enter a title, research problem, research type, and difficulty.

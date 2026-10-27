@@ -36,10 +36,38 @@ class CloudResearchUnavailable(RuntimeError):
 
 
 def _workspace_id() -> str:
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     return workspace.workspace_id
+
+
+def _ledger_workspace():
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        from sigma import cloud_auth
+
+        principal = cloud_auth.local_sponsored_principal(require_selected=False)
+        if principal is not None:
+            from dataclasses import replace
+
+            from sigma.projects import projects_root
+
+            workspace = replace(
+                cloud_workspaces.workspace_for_subject(principal.subject),
+                path=projects_root(),
+                email=principal.email,
+            )
+    return workspace
+
+
+def billing_enabled() -> bool:
+    """Whether provider calls must use the durable sponsored-spend ledger."""
+    if cloud_workspaces.enabled():
+        return True
+    from sigma import cloud_auth
+
+    return cloud_auth.local_sponsored_principal() is not None
 
 
 def _positive_int(name: str, default: int) -> int:
@@ -67,6 +95,12 @@ def _money_ceiling(name: str, *, maximum: Decimal, message: str) -> Decimal:
 
 
 def _spend_ceiling_decimal() -> Decimal:
+    from sigma import cloud_auth
+
+    if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
+    ):
+        return Decimal(str(MAX_SESSION_SPEND_USD))
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,
@@ -83,14 +117,37 @@ def _user_spend_ceiling_decimal() -> Decimal:
 
 
 def _effective_user_spend_ceiling_decimal() -> Decimal:
-    default = _user_spend_ceiling_decimal()
-    workspace = cloud_workspaces.current()
+    from sigma import cloud_auth
+
+    workspace = _ledger_workspace()
+    try:
+        default = _user_spend_ceiling_decimal()
+    except CloudResearchUnavailable:
+        if workspace is None or not workspace.email:
+            raise
+        default = None
     if workspace is None or not workspace.email:
+        if default is None:
+            raise CloudResearchUnavailable("Cloud research user allowance is unavailable.")
         return default
     try:
         from sigma.cloud_auth import effective_spending_allowance
 
-        value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
+        if default is None:
+            from sigma.cloud_auth import _allowance_in_db, _configured_default_allowance, _db
+
+            cfg = cloud_auth.config()
+            with _db(cfg) as db:
+                allowance = _allowance_in_db(
+                    db,
+                    cloud_auth._normalize_email(workspace.email),
+                    _configured_default_allowance(),
+                )
+            if allowance is None:
+                raise ValueError("No per-account sponsored allowance is configured.")
+            value = Decimal(str(allowance))
+        else:
+            value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
     except Exception as exc:
         raise CloudResearchUnavailable("Cloud access spending policy is unavailable.") from exc
     if not value.is_finite() or not Decimal("0.01") <= value <= MAX_GLOBAL_SPEND_USD:
@@ -254,7 +311,9 @@ def _transaction() -> Iterator[sqlite3.Connection]:
 def prepare_job(record: dict[str, Any]) -> None:
     """Atomically reserve a bounded queue slot for a persisted session ID."""
     owner = _workspace_id()
-    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    from sigma.cloud_sponsor import inference_provider
+
+    provider = inference_provider()
     if record.get("mode") != provider or provider not in {"api_key", "chatgpt"}:
         raise CloudResearchUnavailable(
             "Cloud research requires the explicitly configured sponsor provider."
@@ -281,7 +340,7 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable(
             "Cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
         )
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     project_relpath = _project_relpath(record, workspace.path)
@@ -382,11 +441,13 @@ def begin_standalone_inference(project_id: str, project_path: str) -> str:
     """Reserve an owner-scoped execution slot for one non-session AI operation."""
     if not isinstance(project_id, str) or not project_id or not isinstance(project_path, str):
         raise CloudResearchUnavailable("Cloud inference project identity is invalid.")
+    from sigma.cloud_sponsor import inference_provider
+
     session_id = str(uuid4())
     prepare_job(
         {
             "id": session_id,
-            "mode": os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key"),
+            "mode": inference_provider(),
             "project_id": project_id,
             "project_path": project_path,
             "idempotency_key": str(uuid4()),
@@ -476,7 +537,7 @@ def start_provider_attempt(
     project_id: str, project_path: str, model: str, payload: Any, output_tokens: int
 ) -> ProviderAttempt | None:
     """Reserve one non-session provider attempt; local calls remain unchanged."""
-    if not cloud_workspaces.enabled():
+    if not billing_enabled():
         return None
     job_id = begin_standalone_inference(project_id, project_path)
     call_id = uuid4().hex
@@ -545,7 +606,7 @@ def finish_provider_attempt(attempt: ProviderAttempt | None) -> None:
 def sync_job(record: dict[str, Any]) -> None:
     """Persist lifecycle transitions as an owner-checked ledger projection."""
     owner = _workspace_id()
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     project_relpath = _project_relpath(record, workspace.path)
@@ -604,7 +665,7 @@ def reconcile_orphaned_jobs() -> list[str]:
     uncertain path/state or any provider-call row is preserved; age is never
     evidence for releasing a job or spend reservation.
     """
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     owner = workspace.workspace_id

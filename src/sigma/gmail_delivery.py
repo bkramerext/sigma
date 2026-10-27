@@ -19,7 +19,9 @@ TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 
 
-def send_invitation(email: str, requested_at: int, *, recipient: str) -> None:
+def send_invitation(
+    email: str, requested_at: int, *, recipient: str, request_type: str = "invitation"
+) -> None:
     """Send one invitation notification using the Gmail API and OAuth refresh."""
     token_file = os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip()
     sender = os.environ.get("SIGMA_INVITATION_GMAIL_SENDER", "").strip().lower()
@@ -55,10 +57,18 @@ def send_invitation(email: str, requested_at: int, *, recipient: str) -> None:
         message = EmailMessage()
         message["From"] = sender
         message["To"] = recipient
-        message["Subject"] = "SIGMA invitation request"
+        message["Subject"] = (
+            "SIGMA sponsorship reload request"
+            if request_type == "reload"
+            else "SIGMA invitation request"
+        )
         message.set_content(
-            "A verified Google account requested SIGMA access.\n\n"
-            f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
+            (
+                "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
+                if request_type == "reload"
+                else "A verified Google account requested SIGMA access.\n\n"
+            )
+            + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
         )
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
         request = Request(

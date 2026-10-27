@@ -16,11 +16,12 @@ import smtplib
 import sqlite3
 import ssl
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
@@ -96,6 +97,33 @@ class Principal:
 
     def public(self) -> dict[str, str]:
         return {"email": self.email, "role": self.role}
+
+
+_CURRENT_PRINCIPAL: ContextVar[Principal | None] = ContextVar(
+    "sigma_cloud_auth_principal", default=None
+)
+
+
+def current_principal() -> Principal | None:
+    """Return the verified account bound to this request or its async worker."""
+    return _CURRENT_PRINCIPAL.get()
+
+
+def local_sponsored_principal(*, require_selected: bool = True) -> Principal | None:
+    """Return the eligible local account, optionally requiring its sponsored choice."""
+    cfg = config()
+    principal = current_principal()
+    if not cfg.local or principal is None:
+        return None
+    try:
+        account = _persist_user_state(cfg, principal)
+        if not account["sponsorship"]["eligible"]:
+            return None
+        if require_selected and model_access_for_subject(principal.subject) != "sponsored":
+            return None
+    except (OSError, RuntimeError, sqlite3.Error):
+        return None
+    return principal
 
 
 def _normalize_email(value: str) -> str:
@@ -279,7 +307,8 @@ def _initialize(path: Path) -> None:
                 requested_at INTEGER NOT NULL,
                 status TEXT NOT NULL CHECK(status IN ('pending','sending','notified','reviewed','declined')),
                 notification_error TEXT,
-                notification_started_at INTEGER
+                notification_started_at INTEGER,
+                request_type TEXT NOT NULL DEFAULT 'invitation' CHECK(request_type IN ('invitation','reload'))
             );
             CREATE TABLE IF NOT EXISTS feedback_requests (
                 id TEXT PRIMARY KEY,
@@ -320,6 +349,10 @@ def _initialize(path: Path) -> None:
         }
         if "notification_started_at" not in request_columns:
             db.execute("ALTER TABLE invitation_requests ADD COLUMN notification_started_at INTEGER")
+        if "request_type" not in request_columns:
+            db.execute(
+                "ALTER TABLE invitation_requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'invitation' CHECK(request_type IN ('invitation','reload'))"
+            )
     if not existed:
         path.chmod(0o600)
 
@@ -370,6 +403,23 @@ def _authorization_in_db(
     return allowed["role"] if allowed and allowed["active"] else None
 
 
+def _sponsorship_eligibility_in_db(
+    db: sqlite3.Connection, cfg: Config, subject: str, email: str, role: str | None
+) -> int:
+    if not sponsored_access_enabled() or role is None:
+        return 0
+    if not cfg.local:
+        return 1
+    if _mock_enabled(cfg) and subject.startswith("mock:"):
+        return 1
+    domain = email.rsplit("@", 1)[-1]
+    grant = db.execute(
+        "SELECT 1 FROM grants WHERE active=1 AND ((kind='email' AND value=?) OR (kind='domain' AND value=?)) LIMIT 1",
+        (email, domain),
+    ).fetchone()
+    return int(grant is not None)
+
+
 def _bootstrap_admin_email(db: sqlite3.Connection, cfg: Config) -> str | None:
     """Keep an established bootstrap identity independent from contact metadata."""
     bound = db.execute("SELECT email FROM bootstrap_subject").fetchall()
@@ -418,11 +468,10 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     # Hosted users begin on their explicitly personal choice. Sponsored access
     # is available only after an authenticated user selects it.
     model_access = "personal"
-    sponsorship_eligible = int(
-        sponsored_access_enabled()
-        and (not cfg.local or (_mock_enabled(cfg) and principal.subject.startswith("mock:")))
-    )
     with _db(cfg) as db:
+        sponsorship_eligible = _sponsorship_eligibility_in_db(
+            db, cfg, principal.subject, principal.email, principal.role
+        )
         _upsert_user_state(
             db,
             principal.subject,
@@ -437,7 +486,10 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
                 (principal.subject,),
             )
-        elif not cfg.local and force_sponsored_mode_enabled() and sponsorship_eligible:
+        elif (
+            (not cfg.local and force_sponsored_mode_enabled())
+            or (cfg.local and _local_sponsored_test_mode(cfg))
+        ) and sponsorship_eligible:
             db.execute(
                 "UPDATE user_state SET model_access='sponsored' WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
                 (principal.subject,),
@@ -455,7 +507,11 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
         "sponsorship": {
             "eligible": bool(row["sponsorship_eligible"]),
             "forced": bool(
-                not cfg.local and force_sponsored_mode_enabled() and row["sponsorship_eligible"]
+                (
+                    (not cfg.local and force_sponsored_mode_enabled())
+                    or (cfg.local and _local_sponsored_test_mode(cfg))
+                )
+                and row["sponsorship_eligible"]
             ),
         },
         "invitation_welcome_pending": bool(row["invitation_welcome_pending"]),
@@ -496,7 +552,10 @@ def model_access_for_subject(subject: str) -> str:
         raise RuntimeError("Authorized account state is unavailable.")
     if not sponsored_access_enabled():
         return "personal"
-    if not cfg.local and force_sponsored_mode_enabled() and row["sponsorship_eligible"]:
+    if (
+        (not cfg.local and force_sponsored_mode_enabled())
+        or (cfg.local and _local_sponsored_test_mode(cfg))
+    ) and row["sponsorship_eligible"]:
         return "sponsored"
     return str(row["model_access"])
 
@@ -507,7 +566,7 @@ def set_model_access(subject: str, mode: str) -> None:
     if mode == "sponsored" and not sponsored_access_enabled():
         raise PermissionError("Sponsored access is disabled.")
     cfg = config()
-    if not cfg.enabled or cfg.error or (cfg.local and not _mock_enabled(cfg)):
+    if not cfg.enabled or cfg.error:
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
         eligibility = db.execute(
@@ -516,8 +575,10 @@ def set_model_access(subject: str, mode: str) -> None:
         ).fetchone()
         if (
             mode == "personal"
-            and not cfg.local
-            and force_sponsored_mode_enabled()
+            and (
+                (not cfg.local and force_sponsored_mode_enabled())
+                or _local_sponsored_test_mode(cfg)
+            )
             and sponsored_access_enabled()
             and eligibility is not None
             and eligibility["sponsorship_eligible"]
@@ -567,7 +628,7 @@ def _sync_user_state_in_db(db: sqlite3.Connection, cfg: Config) -> None:
             (
                 role or row["role"],
                 int(role is not None),
-                int(role is not None and not cfg.local and sponsored_access_enabled()),
+                _sponsorship_eligibility_in_db(db, cfg, row["subject"], row["email"], role),
                 int(sponsored_access_enabled()),
                 _now(),
                 row["subject"],
@@ -606,7 +667,7 @@ def resolve_session(raw: str | None) -> Principal | None:
             "UPDATE user_state SET role=?,access_active=1,sponsorship_eligible=?,model_access=CASE WHEN ? THEN model_access ELSE 'personal' END,updated_at=? WHERE subject=?",
             (
                 role,
-                int(not cfg.local and sponsored_access_enabled()),
+                _sponsorship_eligibility_in_db(db, cfg, row["subject"], row["email"], role),
                 int(sponsored_access_enabled()),
                 _now(),
                 row["subject"],
@@ -790,7 +851,11 @@ async def middleware(request: Request, call_next):
             )
             return JSONResponse({"error": message, "simulated": True}, status_code=403)
     request.state.cloud_principal = principal
-    response = await call_next(request)
+    principal_token = _CURRENT_PRINCIPAL.set(principal)
+    try:
+        response = await call_next(request)
+    finally:
+        _CURRENT_PRINCIPAL.reset(principal_token)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -829,6 +894,32 @@ def _mock_enabled(cfg: Config) -> bool:
         and os.environ.get("SIGMA_MOCK_AUTH", "").strip() == "1"
         and local_origin
         and os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().lower() in {"1", "true", "yes"}
+    )
+
+
+def _local_sponsored_test_mode(cfg: Config) -> bool:
+    """Force sponsored UI state only in an explicitly enabled loopback launch."""
+    try:
+        origin = urlsplit(cfg.origin or "")
+        loopback = (
+            origin.scheme == "http"
+            and origin.hostname in {"127.0.0.1", "localhost", "::1"}
+            and origin.port is not None
+            and not origin.username
+            and not origin.password
+            and not origin.path
+            and not origin.query
+            and not origin.fragment
+        )
+    except ValueError:
+        loopback = False
+    return (
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and loopback
+        and os.environ.get("SIGMA_LOCAL_SPONSORED_TEST_MODE", "").strip().lower()
+        in {"1", "true", "yes"}
     )
 
 
@@ -954,7 +1045,10 @@ def mock_model_access(request: Request, mode: str):
     if mode not in {"personal", "sponsored"}:
         raise HTTPException(400, "Unknown mock funding mode.")
     _persist_user_state(cfg, principal)
-    set_model_access(principal.subject, mode)
+    try:
+        set_model_access(principal.subject, mode)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
     return {"mode": mode, "simulated": True}
 
 
@@ -1008,6 +1102,25 @@ def mock_select(request: Request, identity: str):
                     (email, role, _now()),
                 )
                 _upsert_user_state(db, subject, email, role, None, 0, "personal")
+                if _local_sponsored_test_mode(cfg):
+                    eligible = _sponsorship_eligibility_in_db(db, cfg, subject, email, role)
+                    if eligible:
+                        db.execute(
+                            "UPDATE user_state SET sponsorship_eligible=1,model_access='sponsored' WHERE subject=? AND access_active=1",
+                            (subject,),
+                        )
+                    db.execute(
+                        """CREATE TABLE IF NOT EXISTS mock_providers (
+                            subject TEXT PRIMARY KEY, scenario TEXT NOT NULL,
+                            updated_at INTEGER NOT NULL
+                        )"""
+                    )
+                    db.execute(
+                        """INSERT INTO mock_providers(subject,scenario,updated_at)
+                        VALUES(?, 'connected', ?) ON CONFLICT(subject) DO UPDATE SET
+                        scenario='connected',updated_at=excluded.updated_at""",
+                        (subject, _now()),
+                    )
                 db.execute(
                     "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
                     (_hash(raw), subject, email, _now() + SESSION_SECONDS),
@@ -1066,6 +1179,10 @@ def status(request: Request):
     return {
         "enabled": cfg.enabled,
         "mock_auth": _mock_enabled(cfg),
+        "mock_identity": bool(
+            principal and _mock_enabled(cfg) and principal.subject.startswith("mock:")
+        ),
+        "sponsored_test_mode": _local_sponsored_test_mode(cfg),
         "ready": not cfg.error if cfg.enabled else True,
         # Names only: the setup panel can explain missing local prerequisites
         # without ever returning OAuth secrets or the configured admin email.
@@ -1076,6 +1193,29 @@ def status(request: Request):
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
     }
+
+
+@router.get("/local-sponsored-allowance")
+def local_sponsored_allowance(request: Request):
+    """Return the signed-in sponsored account's real local ledger balance."""
+    cfg = config()
+    if not cfg.local or cfg.error:
+        raise HTTPException(404, "Not found")
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
+        raise HTTPException(403, "Local sponsored preview requires a loopback client.")
+    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    if principal is None:
+        raise HTTPException(401, "Sign in with an eligible account to view its allowance.")
+    account = _persist_user_state(cfg, principal)
+    if not account["sponsorship"]["eligible"]:
+        raise HTTPException(403, "This account has no sponsored allowance configured.")
+    from sigma import cloud_research
+
+    try:
+        budget = cloud_research.snapshot()
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise HTTPException(503, "Sponsored allowance ledger is unavailable.") from exc
+    return {**budget, "local_preview": True, "simulated": False}
 
 
 @router.get("/login")
@@ -1306,7 +1446,7 @@ async def callback(
             email,
             role,
             workspace_id,
-            int(not cfg.local and sponsored_access_enabled()),
+            _sponsorship_eligibility_in_db(db, cfg, subject, email, role),
             "sponsored"
             if not cfg.local and sponsored_access_enabled() and force_sponsored_mode_enabled()
             else "personal",
@@ -1363,31 +1503,35 @@ def denied_identity(request: Request):
         raise HTTPException(404, "No denied sign-in is available.")
     with _db(cfg) as db:
         row = db.execute(
-            "SELECT email,subject,expires_at FROM denied_access WHERE token_hash=?",
+            "SELECT subject,expires_at FROM denied_access WHERE token_hash=?",
             (_hash(denied_cookie),),
         ).fetchone()
         if not row or row["expires_at"] <= _now():
             if row:
                 db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
             raise HTTPException(404, "No denied sign-in is available.")
-        email = row["email"]
         invitation = db.execute(
             "SELECT status FROM invitation_requests WHERE subject=?", (row["subject"],)
         ).fetchone()
     response = JSONResponse(
-        {"email": email, "invitation_status": invitation["status"] if invitation else None}
+        {
+            "identity_available": True,
+            "invitation_status": invitation["status"] if invitation else None,
+        }
     )
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
-def _deliver_invitation(email: str, requested_at: int) -> None:
+def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "invitation") -> None:
     """Send via Gmail API when configured, otherwise use the existing SMTP transport."""
     if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
         from sigma.gmail_delivery import send_invitation
 
-        send_invitation(email, requested_at, recipient=INVITATION_RECIPIENT)
+        send_invitation(
+            email, requested_at, recipient=INVITATION_RECIPIENT, request_type=request_type
+        )
         return
 
     raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
@@ -1407,12 +1551,20 @@ def _deliver_invitation(email: str, requested_at: int) -> None:
         if not host or not 1 <= port <= 65535:
             raise ValueError
         message = EmailMessage()
-        message["Subject"] = "SIGMA invitation request"
+        message["Subject"] = (
+            "SIGMA sponsorship reload request"
+            if request_type == "reload"
+            else "SIGMA invitation request"
+        )
         message["From"] = username
         message["To"] = INVITATION_RECIPIENT
         message.set_content(
-            f"A verified Google account requested SIGMA access.\n\n"
-            f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
+            (
+                "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
+                if request_type == "reload"
+                else "A verified Google account requested SIGMA access.\n\n"
+            )
+            + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
         )
         with smtplib.SMTP(host, port, timeout=10) as client:
             client.ehlo()
@@ -1424,29 +1576,60 @@ def _deliver_invitation(email: str, requested_at: int) -> None:
         raise RuntimeError("Invitation notification could not be delivered.") from exc
 
 
+class InvitationRequestBody(BaseModel):
+    request_type: Literal["invitation", "reload"] = "invitation"
+
+
 @router.post("/invitation-request")
-def request_invitation(request: Request):
-    """Use the short-lived, server-issued verified denied-login cookie only."""
+def request_invitation(request: Request, body: InvitationRequestBody | None = None):
+    """Record an invitation or an eligible signed-in member's reload request."""
+    body = body or InvitationRequestBody()
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.database:
         raise HTTPException(503, "Invitation requests are temporarily unavailable.")
-    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    if not denied_cookie or len(denied_cookie) > 128:
-        raise HTTPException(401, "Sign in with Google before requesting an invitation.")
+    denied_cookie: str | None = None
+    if body.request_type == "reload":
+        raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+        principal = resolve_session(raw_session)
+        if principal is None:
+            raise HTTPException(401, "Sign in with Google before requesting a reload.")
+        with _db(cfg) as db:
+            eligible = db.execute(
+                "SELECT 1 FROM user_state WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
+                (principal.subject,),
+            ).fetchone()
+        if not sponsored_access_enabled() or eligible is None:
+            raise HTTPException(403, "This account is not eligible for sponsored reload requests.")
+        identity = {"email": principal.email, "subject": principal.subject}
+    else:
+        denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+        if not denied_cookie or len(denied_cookie) > 128:
+            raise HTTPException(401, "Sign in with Google before requesting an invitation.")
+        with _db(cfg) as db:
+            identity = db.execute(
+                "SELECT email,subject,expires_at FROM denied_access WHERE token_hash=?",
+                (_hash(denied_cookie),),
+            ).fetchone()
+        if not identity or identity["expires_at"] <= _now():
+            raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
     now = _now()
     with _db(cfg) as db:
-        identity = db.execute(
-            "SELECT email,subject,expires_at FROM denied_access WHERE token_hash=?",
-            (_hash(denied_cookie),),
-        ).fetchone()
-        if not identity or identity["expires_at"] <= now:
-            raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
         # Bind to the verified Google subject without relying on browser-supplied identity.
-        subject = identity["subject"] or f"legacy-denied:{_hash(denied_cookie)}"
+        subject = identity["subject"]
+        if subject is None and body.request_type == "invitation":
+            assert denied_cookie is not None
+            subject = f"legacy-denied:{_hash(denied_cookie)}"
         existing = db.execute(
-            "SELECT status,requested_at,notification_started_at FROM invitation_requests WHERE subject=?",
+            "SELECT status,requested_at,notification_started_at,request_type FROM invitation_requests WHERE subject=?",
             (subject,),
         ).fetchone()
+        if (
+            body.request_type == "reload"
+            and existing
+            and existing["request_type"] == "reload"
+            and existing["status"] in {"pending", "sending", "notified"}
+        ):
+            return {"status": existing["status"], "duplicate": True}
         if existing and existing["status"] != "pending":
             if existing["status"] == "sending":
                 if (
@@ -1461,8 +1644,19 @@ def request_invitation(request: Request):
                     (subject,),
                 )
                 existing = {"status": "pending", "requested_at": existing["requested_at"]}
+            elif body.request_type == "reload":
+                db.execute(
+                    "UPDATE invitation_requests SET email=?,requested_at=?,status='pending',request_type='reload',notification_started_at=NULL,notification_error=NULL WHERE subject=?",
+                    (identity["email"], now, subject),
+                )
+                existing = None
             else:
                 return {"status": existing["status"], "duplicate": True}
+        if existing and body.request_type == "reload":
+            db.execute(
+                "UPDATE invitation_requests SET request_type='reload',email=? WHERE subject=?",
+                (identity["email"], subject),
+            )
         recent = db.execute(
             "SELECT COUNT(*) AS n FROM invitation_requests WHERE email=? AND requested_at>?",
             (identity["email"], now - 86400),
@@ -1472,8 +1666,9 @@ def request_invitation(request: Request):
         requested_at = int(existing["requested_at"]) if existing else now
         if not existing:
             db.execute(
-                "INSERT INTO invitation_requests(subject,email,requested_at,status) VALUES(?,?,?,'pending')",
-                (subject, identity["email"], requested_at),
+                "INSERT INTO invitation_requests(subject,email,requested_at,status,request_type) VALUES(?,?,?,'pending',?) "
+                "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,requested_at=excluded.requested_at,status='pending',request_type=excluded.request_type,notification_started_at=NULL,notification_error=NULL",
+                (subject, identity["email"], requested_at, body.request_type),
             )
         db.execute(
             "UPDATE invitation_requests SET status='sending',notification_started_at=?,notification_error=NULL WHERE subject=?",
@@ -1481,7 +1676,7 @@ def request_invitation(request: Request):
         )
     try:
         if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
-            _deliver_invitation(identity["email"], requested_at)
+            _deliver_invitation(identity["email"], requested_at, request_type=body.request_type)
     except RuntimeError as exc:
         with _db(cfg) as db:
             db.execute(
@@ -1506,9 +1701,32 @@ def list_invitation_requests():
     cfg = config()
     with _db(cfg) as db:
         rows = db.execute(
-            "SELECT subject,email,requested_at,status FROM invitation_requests ORDER BY requested_at DESC LIMIT 500"
+            "SELECT subject,email,requested_at,status,request_type FROM invitation_requests "
+            "WHERE status NOT IN ('reviewed','declined') ORDER BY requested_at DESC LIMIT 500"
         ).fetchall()
-    return {"requests": [dict(row) for row in rows]}
+        grants = db.execute(
+            "SELECT kind,value FROM grants WHERE active=1 AND kind IN ('email','domain')"
+        ).fetchall()
+    active_emails = set()
+    active_domains = set()
+    for grant in grants:
+        try:
+            normalized = (
+                _normalize_email(grant["value"])
+                if grant["kind"] == "email"
+                else _normalize_domain(grant["value"])
+            )
+        except ValueError:
+            continue
+        (active_emails if grant["kind"] == "email" else active_domains).add(normalized)
+    requests = []
+    for row in rows:
+        email = str(row["email"]).strip().casefold()
+        domain = email.rsplit("@", 1)[-1].removesuffix(".")
+        if row["request_type"] != "reload" and (email in active_emails or domain in active_domains):
+            continue
+        requests.append(dict(row))
+    return {"requests": requests}
 
 
 @router.put("/admin/invitation-requests/{subject:path}")

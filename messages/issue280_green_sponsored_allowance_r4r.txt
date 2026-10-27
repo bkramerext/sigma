@@ -8,7 +8,7 @@ PR: created after this handoff file was committed (link in PR description)
 
 ## Result
 
-- MET — The hosted account/model pill reads “SIGMA-sponsored GPT Usage”. Its
+- MET — The hosted account/model pill reads “Sponsored ChatGPT”. Its
   authenticated tooltip reports per-user allowance remaining, ceiling,
   estimated and held use, and provider connection/check status. It supports
   pointer hover, keyboard focus, and a tap-to-toggle mobile affordance. Budget

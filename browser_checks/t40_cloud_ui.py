@@ -514,12 +514,17 @@ def main() -> None:
             add_panel.get_by_label("New ChatGPT allowance").fill("4.50")
             add_box = add_panel.get_by_role("button", name="Add", exact=True).bounding_box()
             cancel_box = add_panel.get_by_role("button", name="Cancel", exact=True).bounding_box()
-            assert add_box and cancel_box
-            assert abs(cancel_box["x"] - add_box["x"]) <= 2, (add_box, cancel_box)
-            assert cancel_box["y"] >= add_box["y"] + add_box["height"] - 1, (
+            title_box = add_panel.get_by_role("heading", name="New Email or Domain").bounding_box()
+            assert add_box and cancel_box and title_box
+            assert add_box["x"] >= title_box["x"] + title_box["width"] + 10, (
+                title_box,
+                add_box,
+            )
+            assert cancel_box["x"] >= add_box["x"] + add_box["width"] - 1, (
                 add_box,
                 cancel_box,
             )
+            assert abs(cancel_box["y"] - add_box["y"]) <= 1, (add_box, cancel_box)
             assert not any(
                 request.startswith("POST ") and "/grants" in request for request in admin_requests
             )
@@ -547,8 +552,8 @@ def main() -> None:
             expect(dialog.get_by_text("Authorization added.", exact=True)).to_have_count(0)
             added.get_by_label("Role for reviewer@example.org").select_option("admin")
             added.get_by_label("ChatGPT allowance for reviewer@example.org").fill("5.25")
-            dialog.get_by_role("button", name="Save Updates").click()
-            expect(dialog.get_by_role("button", name="Save Updates")).to_have_count(0)
+            dialog.get_by_role("button", name="Save").click()
+            expect(dialog.get_by_role("button", name="Save")).to_have_count(0)
             table_before_remove = grants_table.bounding_box()
             added.get_by_role("button", name="Remove", exact=True).click()
             removal = page.get_by_role(

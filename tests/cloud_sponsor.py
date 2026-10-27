@@ -67,6 +67,22 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def sponsor_context(self):
         return await openai_connection.sponsored_auth_context("a" * 64)
 
+    async def test_local_sponsor_defaults_to_the_designated_admin_identity(self):
+        from sigma import cloud_auth
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root / "local-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            self.assertEqual(cloud_sponsor.expected_email(), cloud_auth.INVITATION_RECIPIENT)
+            os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
+            self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
+
     async def test_missing_session_never_uses_local_or_service_credentials(self):
         context = await self.sponsor_context()
         self.assertEqual(context["mode"], "chatgpt")

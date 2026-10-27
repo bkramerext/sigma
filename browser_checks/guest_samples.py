@@ -198,7 +198,7 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(sample_group.locator("button.sample-open")).to_be_visible()
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
 
-        page.get_by_role("button", name="About", exact=True).click()
+        page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
         policy = page.get_by_role("link", name="Privacy Policy")
         policy.scroll_into_view_if_needed()

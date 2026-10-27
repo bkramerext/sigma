@@ -84,7 +84,7 @@ sponsorship.
 
 ## Issue #280 — sponsored allowance and forced-mode launch flag (2026-10-27)
 
-The hosted account/model pill is labeled **SIGMA-sponsored GPT Usage** and
+The hosted account/model pill is labeled **Sponsored ChatGPT** and
 exposes the authenticated user's sponsored allowance on hover, keyboard focus,
 and tap. Its tooltip reports the per-user remaining amount, allowance ceiling,
 estimated use, held amount, and connection/check state. Allowance reads remain
@@ -6795,3 +6795,72 @@ passed at desktop and mobile widths, including positive-to-zero transition,
 slot placement, page reload, and mobile overflow. Frontend typecheck and a fresh
 `./sigma test` passed. This correction is part of PR #281; no live or paid
 provider work was run.
+
+### Issue #280 follow-up — sponsor welcome and pill state
+
+The sponsored welcome appears on each fresh page entry for an authenticated
+sponsorship-eligible account, and does not reopen on a browser reload. It
+starts with “Welcome to SIGMA.” followed by the randomly selected curiosity
+sentence as normal dialog text. The browser check verifies a new page entry
+shows the greeting again while a reload does not. The sponsored pill now keeps
+cloud funding context in every header render path. Clicking a connected local
+sponsored pill disconnects the local ChatGPT connection; sponsored mode is
+rediscovered on reload. Server-side grant eligibility,
+provider admission and spending limits remain enforced. The reload action now
+records an administrator-reviewed reload request rather than refreshing the
+page. During a running research session, the outcome label now shows a summary
+of the current action and focus, refreshed as session state updates and capped
+at 50 words. It falls back to “Pending · provisional” when no status text is
+available. Reopening an active project through its Home Recent project title
+expands Sessions and scrolls to the running session.
+
+Verification: `uv run --with playwright python
+browser_checks/hosted_sponsored_connection.py` passed in real Chrome with
+deterministic API fixtures, including sponsor welcome entry/reload behavior,
+normal text styling, sponsored allowance text/hover/focus/tap, and connection
+flow. `tests/cloud_auth.py` passes (54 tests), including local signed-in grant
+allowance preview, mock allowance, server-rejected personal switch, and restored
+sponsored mode after reload. `npm --prefix frontend run typecheck` and
+Pyright pass. The A17 browser script currently stops at an obsolete export
+dialog assertion before its new running-session checks; it is not recorded as
+passing. `browser_checks/issue279_invite_me.py` passed desktop/mobile
+invitation and reload-request cases. The default local checkout Cloud Auth
+configuration is disabled. `--sponsored` applies only to an eligible, actually
+signed-in local Google account; it does not enable mock auth. The pill reads
+that account's balance from its local sponsored-spend ledger. Sponsored model
+calls use SIGMA's designated ChatGPT account, pinned to
+`zetacontinuation@gmail.com`, rather than the member's ChatGPT session. The
+ledger reserves per-account cost before provider dispatch. Only explicit
+`--mock-auth` enables mock identities, controls, and the simulated `$25`
+allowance. Restart SIGMA after upgrading to clear a previously running process
+launched with the old flag behavior. No production config or default-off hosted
+flag was changed.
+
+The local `./sigma start --sponsored` option is loopback-only and applies to an
+eligible Google account actually signed in to the local app. It does not enable
+mock auth or select a simulated member. The pill reads that account's
+balance from its local sponsored ledger; the tooltip uses the custom SIGMA
+tooltip without a duplicate portal tooltip. In this mode inference uses the
+designated sponsor account `zetacontinuation@gmail.com`, and spend is reserved
+against the member's allowance. At zero, the sponsored control changes to
+**Reload me!** and records an administrator-reviewed reload request. Only
+explicit `--mock-auth` enables mock identities, scenario controls, and the
+simulated `$25` member allowance. The server rejects personal-mode changes while
+the local force flag is active. This option does not set
+`SIGMA_CLOUD_FORCE_SPONSORED_MODE`, which remains default-off.
+
+Local play failure follow-up: the local sponsored provider now defaults to the
+designated ChatGPT sponsor even when `SIGMA_CLOUD_INFERENCE_PROVIDER` is unset.
+Connection checks, credential validation, and spend-ledger job records use the
+same provider selection, so a member's expired personal ChatGPT session cannot
+block sponsored research. `./sigma test` passed after this change, and
+`browser_checks/hosted_sponsored_connection.py` passed in real Chrome. The
+local UI was restarted with `./sigma start --nav`; no live model generation was
+used for verification.
+
+Request error toasts are capped at five visible items. Adding a sixth removes
+the oldest toast and clears its timers before inserting the new item.
+
+The portfolio research failure summary now deduplicates repeated branch error
+messages, so parallel responses over the existing 1 MB transport safety bound
+report the reason once. The response-size safety bound itself is unchanged.

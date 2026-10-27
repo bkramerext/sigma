@@ -15,9 +15,25 @@ from sigma.ai_store import read, sponsor_directory, sponsor_transaction, use_dir
 from sigma.projects import ProjectError
 
 
+def inference_provider() -> str:
+    """Return the provider bound to sponsored inference in this deployment."""
+    from sigma import cloud_auth, cloud_workspaces
+
+    if cloud_auth.config().local and not cloud_workspaces.enabled():
+        # Local sponsored access is explicitly the designated administrator's
+        # ChatGPT session. Never fall back to a user's local session or API key.
+        return "chatgpt"
+    return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+
+
 def expected_email() -> str:
     email = os.environ.get("SIGMA_CLOUD_SPONSOR_EMAIL", "").strip().casefold()
-    if not email or "@" not in email:
+    if not email:
+        from sigma import cloud_auth, cloud_workspaces
+
+        if cloud_auth.config().local and not cloud_workspaces.enabled():
+            return cloud_auth.INVITATION_RECIPIENT
+    if "@" not in email:
         raise ProjectError("Configure the explicit SIGMA_CLOUD_SPONSOR_EMAIL first.")
     return email
 

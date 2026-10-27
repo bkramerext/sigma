@@ -5884,6 +5884,18 @@ async def test_single_project_admission(path: Path):
 
 
 async def test_response_transport_and_parsed_bounds(path: Path):
+    repeated_transport_failure = "Research provider transport exceeded the 1 MB safety bound"
+    assert (
+        research_sessions._portfolio_failure_message(
+            [
+                {"status": "failed", "reason": repeated_transport_failure},
+                {"status": "failed", "reason": f"  {repeated_transport_failure}  "},
+                {"status": "failed", "reason": "A separate branch failed."},
+                {"status": "completed", "reason": repeated_transport_failure},
+            ]
+        )
+        == f"{repeated_transport_failure}; A separate branch failed."
+    )
     view, strategy, credential, config = await setup(path)
     oversized_projects = path.parent / "transport.sigma"
     transport_view, transport_strategy, _, _ = await setup(oversized_projects)

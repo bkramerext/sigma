@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -42,7 +43,7 @@ with sync_playwright() as playwright:
             content_type="application/json",
             body=json.dumps(
                 {
-                    "email": "visitor@example.org",
+                    "identity_available": True,
                     "invitation_status": "notified" if len(posts) > 1 else None,
                 }
             ),
@@ -92,25 +93,23 @@ with sync_playwright() as playwright:
     page.goto(f"{BASE_URL}/?access=denied&invite=1", wait_until="networkidle")
     dialog = page.get_by_role("dialog", name="Request an invitation")
     expect(dialog).to_be_visible()
-    expect(dialog.get_by_text("visitor@example.org")).to_be_visible()
-    expect(dialog.get_by_role("link", name="proposed privacy notice, version 1")).to_have_attribute(
-        "href", "/privacy"
+    expect(dialog.locator(".google-account-email")).to_have_count(0)
+    expect(dialog.get_by_role("link", name="Privacy Notice")).to_have_attribute(
+        "href", re.compile(r"^/privacy")
     )
-    invite_button = dialog.get_by_role("button", name="Invite me")
-    invite_button.focus()
-    expect(invite_button).to_be_focused()
-    invite_button.press("Enter")
     expect(dialog.locator(".google-invitation-actions [role='alert']")).to_contain_text(
         "Your request could not be sent. Please try again later."
     )
-    expect(dialog.get_by_role("button", name="Invite me")).to_be_enabled()
-    dialog.get_by_role("button", name="Invite me").click()
-    expect(
-        dialog.get_by_text(
-            "Glad you're interested! Your request has been sent along to the right person!",
-            exact=True,
-        )
-    ).to_be_visible()
+    retry = dialog.get_by_role("button", name="Try again")
+    expect(retry).to_be_enabled()
+    assert retry.evaluate("element => getComputedStyle(element).backgroundColor") == (
+        "rgba(0, 0, 0, 0)"
+    )
+    assert retry.evaluate("element => getComputedStyle(element).textDecorationLine") == "underline"
+    retry.focus()
+    expect(retry).to_be_focused()
+    retry.press("Enter")
+    expect(dialog).not_to_be_visible()
     expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
     assert posts == [
         {"method": "POST", "body": {}},
@@ -131,6 +130,7 @@ with sync_playwright() as playwright:
 
     member_page = browser.new_page(viewport={"width": 1280, "height": 850})
     allowance = {"remaining_usd": 1.0}
+    reload_posts: list[dict] = []
     member_page.route(
         "**/api/cloud-auth/status",
         lambda route: route.fulfill(
@@ -142,6 +142,10 @@ with sync_playwright() as playwright:
                     "ready": True,
                     "authenticated": True,
                     "user": {"email": "member@example.org", "role": "member"},
+                    "account": {
+                        "model_access": {"mode": "sponsored", "connection": "connected"},
+                        "sponsorship": {"eligible": True, "forced": False},
+                    },
                     "admin_contact_email": "zetacontinuation@gmail.com",
                     "target": "hosted",
                 }
@@ -165,6 +169,17 @@ with sync_playwright() as playwright:
             ),
         ),
     )
+    member_page.route(
+        "**/api/cloud-auth/invitation-request",
+        lambda route: (
+            reload_posts.append(route.request.post_data_json)
+            or route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='{"status":"notified","duplicate":false}',
+            )
+        ),
+    )
     member_page.goto(BASE_URL, wait_until="networkidle")
     expect(member_page.get_by_role("button", name="Invite me!")).to_have_count(0)
     expect(member_page.get_by_role("button", name="Sign out of Google")).to_be_visible()
@@ -174,11 +189,11 @@ with sync_playwright() as playwright:
     reload_button = member_page.get_by_role("button", name="Reload me!")
     expect(reload_button).to_be_visible()
     expect(reload_button.locator("xpath=..")).to_have_class("home-header-actions")
-    with member_page.expect_navigation(wait_until="domcontentloaded"):
-        reload_button.click()
-    expect(member_page.get_by_role("button", name="Reload me!")).to_be_visible()
+    reload_button.click()
+    expect(member_page.get_by_text("Reload requested", exact=True)).to_be_visible()
+    assert reload_posts == [{"request_type": "reload"}]
     member_page.set_viewport_size({"width": 390, "height": 844})
-    expect(member_page.get_by_role("button", name="Reload me!")).to_be_visible()
+    expect(member_page.get_by_text("Reload requested", exact=True)).to_be_visible()
     assert member_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     browser.close()
 

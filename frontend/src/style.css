@@ -174,7 +174,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-atmosphere { position: fixed; inset: 0; background: #020711 url('/sigma-home-background-copper.png') center top / cover no-repeat; }
 .home-atmosphere::before, .home-atmosphere::after { content: none; }
 .home-content { width: 100%; min-height: 100dvh; padding: 0 clamp(26px, 5.4vw, 90px) 72px 0; }
-.home-page .home-topline { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; height: 52px; padding: 26px 0; }
+.home-page .home-topline { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px 24px; height: 52px; padding: 26px 0; }
 .home-page .home-slogan {
  position: absolute; z-index: 0; top: 0;
  left: 0;
@@ -234,7 +234,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-atmosphere { z-index: -1; }
 @media (max-width: 700px) {
  .home-page .home-topline { font-size: 9px; letter-spacing: .08em; }
- .home-page .home-topline { height: auto; min-height: 70px; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px 12px; padding: 0; }
+ .home-page .home-topline { height: auto; min-height: 70px; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px 14.4px; padding: 0; }
  .home-page .home-auth-pills > .api-connection.api-connection { top: 0; justify-self: end; min-width: 0; width: max-content; max-width: min(240px, calc(100vw - 32px)); margin-left: 0; }
  .home-page .home-topline .api-connection > summary { max-width: 100%; white-space: normal; }
  .home-page .home-topline .api-connection > summary [role="status"] { min-width: 0; white-space: normal; }

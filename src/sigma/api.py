@@ -172,7 +172,7 @@ def ui_instance() -> dict[str, str | None]:
 @app.get("/api/cloud-research/budget")
 def cloud_research_budget():
     """Return only the authenticated workspace's persisted inference budget."""
-    if not cloud_workspaces.enabled():
+    if not cloud_research.billing_enabled():
         raise HTTPException(404, "Cloud research budget is unavailable.")
     try:
         return JSONResponse(
@@ -1154,6 +1154,25 @@ async def auth_cancel(identifier: str):
 async def auth_mode(body: AuthModeRequest, request: Request):
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
+    if cfg.local and isinstance(principal, cloud_auth.Principal):
+        if body.mode not in {"personal", "sponsored"} or body.account_id is not None:
+            raise HTTPException(422, "Choose personal or sponsored access.")
+        if body.mode == "sponsored":
+            if not cloud_auth.sponsored_access_enabled():
+                raise HTTPException(403, "Sponsored access is disabled.")
+            try:
+                allowance = cloud_research.snapshot()
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise HTTPException(503, "Sponsored allowance is unavailable.") from exc
+            if float(allowance.get("remaining_usd", 0)) <= 0:
+                raise HTTPException(409, "No sponsored allowance remains.")
+        try:
+            cloud_auth.set_model_access(principal.subject, body.mode)
+        except PermissionError as exc:
+            raise HTTPException(403, "This account cannot select sponsored access.") from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(503, "Connection choice could not be saved.") from exc
+        return await connection(refresh=True)
     if cfg.enabled and not cfg.local:
         if not isinstance(principal, cloud_auth.Principal):
             raise HTTPException(401, "Authentication required.")

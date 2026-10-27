@@ -121,6 +121,16 @@ def check_command_help() -> None:
         assert "Example:" in help_text and "SIGMA_PROJECTS_ROOT" in help_text
 
     output = StringIO()
+    with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("start --help did not exit")
+    assert "--sponsored" in output.getvalue()
+
+    output = StringIO()
     with patch("sys.argv", ["sigma", "-h"]), redirect_stdout(output):
         try:
             cli_main()
@@ -275,6 +285,33 @@ def check_local_google_startup() -> None:
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
     assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+
+
+def check_sponsored_local_startup() -> None:
+    backend, frontend = Mock(), Mock()
+    backend.poll.return_value = frontend.poll.return_value = None
+    owner = MagicMock()
+    owner.__enter__.return_value.replacement_request.return_value = None
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("sigma.ui.Instance", return_value=owner),
+        patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.wait_for_ports"),
+        patch("sigma.ui.subprocess.Popen", side_effect=[backend, frontend]) as launch,
+        patch("sigma.ui.ready", return_value=True),
+        patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
+        patch("sigma.ui.stop_servers"),
+    ):
+        assert run_ui(sponsored=True) == 0
+    backend_env = launch.call_args_list[0].kwargs["env"]
+    assert backend_env["SIGMA_MOCK_AUTH"] == "0"
+    assert backend_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] == "1"
+    assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+    assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
 
 
 def check_local_google_setup_warning() -> None:
@@ -439,6 +476,7 @@ def main() -> None:
         check_command_help()
         check_ui()
         check_local_google_startup()
+        check_sponsored_local_startup()
         check_local_google_setup_warning()
         check_partial_google_startup_remains_guest_without_admin()
         check_signin_without_admin_contact_fails_before_launch()
