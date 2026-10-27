@@ -553,7 +553,7 @@ def _execution_bundle_path(directory: Path) -> Path | None:
     name = directory.name
     if not (name.startswith(".") and name.endswith(".json.runtime")):
         return None
-    candidate = directory.with_name(name[1:-len(".runtime")])
+    candidate = directory.with_name(name[1 : -len(".runtime")])
     return candidate if candidate.suffix == ".json" else None
 
 
@@ -614,7 +614,11 @@ def _save_record(
                         and all(
                             prior.get(key) == record.get(key)
                             for key in (
-                                "project_id", "session_id", "strategy_id", "cycle", "source"
+                                "project_id",
+                                "session_id",
+                                "strategy_id",
+                                "cycle",
+                                "source",
                             )
                         )
                     ):
@@ -636,8 +640,16 @@ def _save_record(
                     or any(
                         reserved.get(key) != record.get(key)
                         for key in (
-                            "id", "project_id", "session_id", "strategy_id", "cycle",
-                            "source", "runtime_version", "syntax", "source_sha256", "agent"
+                            "id",
+                            "project_id",
+                            "session_id",
+                            "strategy_id",
+                            "cycle",
+                            "source",
+                            "runtime_version",
+                            "syntax",
+                            "source_sha256",
+                            "agent",
                         )
                     )
                 ):
@@ -655,24 +667,32 @@ def _save_record(
                     or filename in {".", ".."}
                 ):
                     raise ProjectError("Research output artifact is invalid")
-                artifact_records.append({
-                    "filename": filename, "media_type": media_type,
-                    "size_bytes": len(content), "sha256": hashlib.sha256(content).hexdigest(),
-                })
+                artifact_records.append(
+                    {
+                        "filename": filename,
+                        "media_type": media_type,
+                        "size_bytes": len(content),
+                        "sha256": hashlib.sha256(content).hexdigest(),
+                    }
+                )
                 changes[prefix + filename] = content
             record["artifacts"] = artifact_records
-            encoded_record = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+            encoded_record = (
+                json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+            ).encode()
             if len(encoded_record) > MAX_ARTIFACT_BYTES:
                 raise ProjectError("Research execution artifact exceeded its storage limit")
             changes[member] = encoded_record
             # The execution quota applies to execution members, not the
             # unrelated project document, research sessions or reports.
             total = sum(
-                len(value) for name, value in members.items()
+                len(value)
+                for name, value in members.items()
                 if name.startswith("research-executions/") and name not in changes
             )
             total += sum(
-                len(value) for name, value in changes.items()
+                len(value)
+                for name, value in changes.items()
                 if name.startswith("research-executions/") and value is not None
             )
             if total > MAX_STORAGE_BYTES:
@@ -845,6 +865,7 @@ def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
     bundle_path = _execution_bundle_path(directory)
     if bundle_path is not None:
         from sigma.project_bundle import BundleError, read_file
+
         try:
             raw = read_file(bundle_path, _bundle_execution_member(identifier))
             if len(raw) > MAX_ARTIFACT_BYTES:
@@ -852,8 +873,11 @@ def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
             record = json.loads(raw)
         except (BundleError, ValueError, UnicodeDecodeError) as exc:
             raise ProjectError("Research execution artifact not found or unreadable") from exc
-        if (not isinstance(record, dict) or record.get("id") != identifier
-            or record.get("project_id") != inspect_project(path).project.id):
+        if (
+            not isinstance(record, dict)
+            or record.get("id") != identifier
+            or record.get("project_id") != inspect_project(path).project.id
+        ):
             raise ProjectError("Research execution artifact does not match this project")
         return _execution_state(record, directory)
     target = directory / f"{identifier}.json"
@@ -880,6 +904,7 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
         import base64
 
         from sigma.project_bundle import read_bundle
+
         try:
             members = read_bundle(bundle_path)["files"]
         except (OSError, ValueError) as exc:
