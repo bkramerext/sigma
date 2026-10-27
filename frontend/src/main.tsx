@@ -1099,8 +1099,8 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'audit' | 'text' | 'html'>('audit');
-  const isReport = exportType !== 'audit';
+  const [exportType, setExportType] = useState<'audit' | 'text' | 'html' | 'bundle'>('audit');
+  const isReport = exportType === 'text' || exportType === 'html';
   const reportFormat = exportType === 'text' ? 'txt' : 'html';
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
@@ -1124,13 +1124,13 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
     }
-    const extension = exportType === 'audit' ? 'json' : reportFormat;
+    const extension = exportType === 'audit' || exportType === 'bundle' ? 'json' : reportFormat;
     const downloadName = `${stem}.${extension}`;
     const opened = openInTab ? window.open('about:blank', '_blank') : null;
     if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const route = demo ? (exportType === 'audit' ? '/api/cloud-demo/' : '/api/cloud-demo/report') : (exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report');
+      const route = demo ? (exportType === 'audit' ? '/api/cloud-demo/' : '/api/cloud-demo/report') : (exportType === 'bundle' ? '/api/projects/download' : exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report');
       const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}) });
       const suffix = query.toString();
       const response = await fetch(`${route}${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' });
@@ -1147,14 +1147,14 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       if (opened && !opened.closed) {
         if (exportType === 'html') opened.document.open(), opened.document.write(content), opened.document.close();
         else {
-          opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : 'Research Report'}`;
+          opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : exportType === 'bundle' ? 'Complete Project' : 'Research Report'}`;
           const pre = opened.document.createElement('pre');
           pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;padding:1rem';
           pre.textContent = content;
           opened.document.body.replaceChildren(pre);
         }
       }
-      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+      const mimeType = exportType === 'audit' || exportType === 'bundle' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
       const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
@@ -1179,6 +1179,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
         <fieldset className="export-type-options" disabled={busy}>
           <legend>Report type</legend>
           <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
+          {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Complete Project (JSON)</label>}
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
         </fieldset>
@@ -2140,6 +2141,39 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
 
 type Destination = { root: string; path: string | null; exists: boolean };
 
+function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView) => void; onCancel: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!file || busy) return;
+    setBusy(true); setError('');
+    try {
+      const bundle = JSON.parse(await file.text());
+      const response = await fetch('/api/projects/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundle }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Project import failed');
+      onOpen(result as ProjectView);
+    } catch (reason) { setError(errorMessage(reason)); }
+    finally { setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
+    <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
+    <form onSubmit={submit}><fieldset disabled={busy}><label htmlFor="import-project-file">Project file</label>
+      <input id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="entry-dialog-actions"><button type="submit" disabled={!file}>{busy ? 'Importing…' : 'Import Project'}</button></div>
+    </fieldset></form>
+  </dialog>;
+}
+
 function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   initialPath: string; onOpen: (view: ProjectView) => void; onCancel: () => void;
 }) {
@@ -2724,7 +2758,7 @@ function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
-  const [entry, setEntry] = useState<'open' | 'new' | null>(null);
+  const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
   const aboutButton = useRef<HTMLButtonElement>(null);
@@ -2799,12 +2833,14 @@ function Home({ initialPath, onOpen }: {
           {(!cloud?.enabled || cloud.authenticated) && <>
             <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
             <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
+          <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
           </>}
         </div>
         <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; GPT Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      {entry === 'import' && <ImportProjectDialog onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}

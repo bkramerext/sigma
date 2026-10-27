@@ -143,6 +143,19 @@ async def configuration(
 def _project_input_digest(path: str) -> str:
     project = project_path(path)
     digest = hashlib.sha256()
+    if project.suffix == ".json":
+        from sigma.project_bundle import list_files, read_file
+
+        names = set(list_files(project))
+        members = [("project.json", "project.json")]
+        if "artifacts/text-representations.json" in names:
+            members.append(("text-representations.json", "artifacts/text-representations.json"))
+        for label, member in members:
+            contents = read_file(project, member)
+            digest.update(label.encode())
+            digest.update(len(contents).to_bytes(8, "big"))
+            digest.update(contents)
+        return digest.hexdigest()
     for name in ("project.json", "text-representations.json"):
         target = project / name
         if target.is_symlink():
