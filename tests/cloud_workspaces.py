@@ -160,15 +160,15 @@ def check_proposal_cancellation_scope() -> None:
     asyncio.run(exercise_cancel_scope())
 
 
-
-
 def project_document_bytes(path: str | Path) -> bytes:
     """Read the authoritative project document from legacy or bundled storage."""
     target = Path(path)
     if target.suffix == ".json":
         from sigma.project_bundle import read_file
+
         return read_file(target, "project.json")
     return (target / "project.json").read_bytes()
+
 
 def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
     server = Server(root)
