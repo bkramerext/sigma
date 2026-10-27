@@ -5,7 +5,6 @@ import base64
 import hashlib
 import hmac
 import json
-import logging
 import re
 import secrets
 import time
@@ -19,6 +18,7 @@ import jwt
 
 from sigma.ai_store import transaction
 from sigma.projects import ProjectError
+from sigma.sponsor_diagnostics import record
 
 ISSUER = "https://auth.openai.com"
 RESOURCE = "https://api.openai.com/v1"
@@ -200,7 +200,7 @@ _attempts: dict[str, Attempt] = {}
 def finish(attempt: Attempt, status: str, message: str) -> None:
     attempt.status, attempt.message = status, message
     if attempt.sponsor:
-        logging.getLogger("sigma.sponsor").warning("sponsor_oauth status=%s", status)
+        record("sponsor_oauth", status)
     _urls.pop(attempt.id, None)
     if attempt.server:
         attempt.server.close()
@@ -289,7 +289,7 @@ async def begin(
             params["prompt"] = "consent"
         _urls[attempt.id] = endpoints["authorization_endpoint"] + "?" + urlencode(params)
         if sponsor:
-            logging.getLogger("sigma.sponsor").warning("sponsor_oauth status=started")
+            record("sponsor_oauth", "started")
         return {
             "id": attempt.id,
             "status": attempt.status,

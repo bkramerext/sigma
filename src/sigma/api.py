@@ -1147,9 +1147,9 @@ async def sponsor_auth_begin(request: Request):
         account_id = await sponsor_account_id()
         return await chatgpt_auth.begin(account_id=account_id, sponsor=True)
     except ProjectError as exc:
-        import logging
+        from sigma.sponsor_diagnostics import record
 
-        logging.getLogger("sigma.sponsor").warning("sponsor_oauth status=begin_failed")
+        record("sponsor_oauth", "begin_failed")
         raise HTTPException(503, str(exc)) from exc
 
 

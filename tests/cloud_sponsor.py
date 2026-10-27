@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase, main
 from unittest.mock import AsyncMock, patch
 
-from sigma import ai_store, chatgpt_auth, cloud_sponsor, openai_connection
+from sigma import ai_store, chatgpt_auth, cloud_sponsor, openai_connection, sponsor_diagnostics
 from sigma.projects import ProjectError
 
 
@@ -86,15 +86,40 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def test_missing_session_never_uses_local_or_service_credentials(self):
         with (
             patch.object(cloud_sponsor, "_last_issue", None),
-            patch.object(cloud_sponsor._LOG, "warning") as warning,
+            patch.object(cloud_sponsor, "record") as record,
         ):
             context = await self.sponsor_context()
             await self.sponsor_context()
-        warning.assert_called_once_with("sponsor_connection status=%s", "registration_missing")
+        record.assert_called_once_with("sponsor_connection", "registration_missing")
         self.assertEqual(context["mode"], "chatgpt")
         self.assertEqual(context["status"], "disconnected")
         self.assertEqual(context["token"], "")
         self.assertFalse((self.root / "local-must-not-be-used").exists())
+
+    async def test_local_diagnostics_are_private_bounded_and_token_free(self):
+        path = self.root / sponsor_diagnostics.LOG_NAME
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_LOCAL": "true"}),
+            patch.object(sponsor_diagnostics, "ROOT", self.root),
+            patch.object(sponsor_diagnostics._LOG, "warning") as warning,
+        ):
+            sponsor_diagnostics.record("sponsor_connection", "credential_missing")
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertIn("sponsor_connection status=credential_missing", path.read_text())
+            self.assertNotIn(self.account["email"], path.read_text())
+            self.assertNotIn(self.account["access_token"], path.read_text())
+            path.write_bytes(b"x" * 65536)
+            sponsor_diagnostics.record("sponsor_oauth", "started")
+            self.assertLess(path.stat().st_size, 256)
+            self.assertIn("sponsor_oauth status=started", path.read_text())
+            path.unlink()
+            target = self.root / "protected-target"
+            target.write_text("unchanged")
+            path.symlink_to(target)
+            sponsor_diagnostics.record("sponsor_connection", "credential_missing")
+            self.assertEqual(target.read_text(), "unchanged")
+            self.assertIn("sponsor_diagnostics status=file_unavailable", str(warning.call_args))
 
     async def test_designated_sponsor_is_used_when_a_personal_account_is_active(self):
         personal = dict(self.account, email="personal@example.test", subject="personal-subject")

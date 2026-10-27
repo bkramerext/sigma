@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import logging
 import os
 import secrets
 import time
@@ -14,8 +13,8 @@ import jwt
 from sigma import chatgpt_auth
 from sigma.ai_store import read, sponsor_directory, sponsor_transaction, use_directory
 from sigma.projects import ProjectError
+from sigma.sponsor_diagnostics import record
 
-_LOG = logging.getLogger("sigma.sponsor")
 _last_issue: tuple[str, float] | None = None
 
 
@@ -27,7 +26,7 @@ def _diagnose(issue: str | None) -> None:
         return
     now = time.monotonic()
     if _last_issue is None or _last_issue[0] != issue or now - _last_issue[1] >= 60:
-        _LOG.warning("sponsor_connection status=%s", issue)
+        record("sponsor_connection", issue)
         _last_issue = (issue, now)
 
 

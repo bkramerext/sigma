@@ -72,6 +72,16 @@ Focused cloud-auth/sponsor tests, real-Chrome sponsored acceptance, and
 `./sigma test` passed on this correction. Live Play remains unverified until a
 designated sponsor credential exists on the server.
 
+Local diagnostics now also append fixed, token-free event codes to
+`sponsor-diagnostics.log` in the checkout root. The 0600 file is Git-ignored,
+64 KiB bounded, and rejects unsafe replacements. This lets a developer in the
+same checkout inspect the failure without asking a member to find terminal
+output. Hosted service logs remain unchanged.
+The developer read the resulting local file after an offline sponsor-status
+check: `sponsor_connection status=credential_missing`, two designated records,
+no token refresh/model call. The file was 0600 and 71 bytes. Focused tests,
+real-Chrome sponsored acceptance, and `./sigma test` passed.
+
 Configuration and rollback are documented in `docs/GETTING_STARTED.md` and
 `docs/CLOUD_DEPLOYMENT.md`. Rollback disables the hosted flag and restarts using
 the guarded release procedure. Production was not enabled.

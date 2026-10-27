@@ -6961,3 +6961,17 @@ member UX; it does not provision a sponsor session or claim live Play success.
 `tests/cloud_auth.py` (56 tests), `tests/cloud_sponsor.py` (11 tests), the
 real-Chrome sponsored connection check, and `./sigma test` passed. No live
 OAuth, inference, or paid provider call was made.
+
+Local sponsor diagnostics are now also written to the checkout-root
+`sponsor-diagnostics.log` (owned 0600, ignored by Git, capped at 64 KiB).
+Only fixed event and status codes with timestamps are stored; credentials,
+account identities, provider responses, and request payloads are excluded.
+Writes refuse symlinks and unsafe files and cannot block research. The
+operator or developer can inspect the same file with `tail -n 20
+sponsor-diagnostics.log` after a failed Play or renewal attempt. Hosted
+deployments continue to use their service logs.
+An offline call through the real `sponsor_session()` path wrote a 71-byte
+0600 file in this checkout and reported `credential_missing` for two
+designated registrations. No token refresh or model call was attempted.
+`tests/cloud_sponsor.py` (12 tests), `tests/cloud_auth.py` (56 tests), the
+real-Chrome sponsored connection check, and `./sigma test` passed.

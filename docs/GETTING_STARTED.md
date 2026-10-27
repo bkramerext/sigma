@@ -27,11 +27,14 @@ their explicit provider setting. The option does not enable the hosted
 forced-sponsored setting. Use `./sigma start` to return to normal local mode.
 
 If sponsored Play is temporarily unavailable, the signed-in member's research
-is preserved. The backend terminal reports a token-free `sponsor_connection
-status=...` reason; `credential_missing` means the server has no usable sponsor
-session. The operator can sign in with a local Google administrator account,
+is preserved. The backend reports token-free `sponsor_connection status=...`
+reasons both in the terminal and in the private, bounded
+`sponsor-diagnostics.log` file at the checkout root. Run
+`tail -n 20 sponsor-diagnostics.log` there to read the latest entries.
+`credential_missing` means the server has no usable sponsor session. The
+operator can sign in with a local Google administrator account,
 open **Admin Settings**, and choose **Reconnect sponsor ChatGPT**, completing
-ChatGPT sign-in as `zetacontinuation@gmail.com`. The backend logs
+ChatGPT sign-in as `zetacontinuation@gmail.com`. The same log records
 `sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
 the operator can tell whether renewal completed. A member's Google sign-in
 does not renew the server's sponsor credential. A failed personal ChatGPT
