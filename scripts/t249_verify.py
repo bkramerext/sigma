@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """T249 reproducible verification: run locally, commit and push a diagnostic report.
 
 Run from the SIGMA checkout on fix/t249-single-file-projects:
