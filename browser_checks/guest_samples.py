@@ -249,7 +249,7 @@ def exercise(ui_url: str, root: Path) -> None:
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         page.keyboard.press("Escape")
         expect(google_dialog).to_have_count(0)
-        expect(page.get_by_role("button", name="Sign in with Google")).to_be_focused()
+        expect(page.locator(".api-connection > summary")).to_be_focused()
         play.click()
         expect(play_dialog).to_be_visible()
         play_dialog.get_by_role("button", name="Cancel").click()
