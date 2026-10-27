@@ -18,10 +18,6 @@ Create a project or start from a sample, write or generate strategies, then choo
 
 ![SIGMA Home page](assets/screenshot_home_page.png)
 
-**Research project workspace** — investigate strategies and review research progress.
-
-![SIGMA project page](assets/screenshot_project_page.png)
-
 ## Run SIGMA locally
 
 The local development setup supports macOS and Linux. Install:
