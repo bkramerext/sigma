@@ -692,31 +692,46 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
         assert abs(global_reserved_spend() - 16.00) < 1e-6
-        # Once the ceiling is reached, no further provider reservation is allowed.
-        final_user = workspace(root, "f" * 32)
-        project = initialize_project(
-            final_user.path / "pilot.sigma", "Last pilot", "Question"
-        )
-        binding = cloud_workspaces._CURRENT.set(final_user)
-        try:
-            record = job(final_user.workspace_id)
-            record.update(
-                project_id=project.project.id,
-                project_path=project.path,
-                maximum_estimated_cost_usd=None,
+        # Fill the global cap with separate users, then attempt one more call
+        # from an account whose personal allowance is still untouched. A single
+        # account would fail at its $2 per-user cap first and would not test the
+        # $20 global boundary.
+        for extra_number, amount in enumerate((2.00, 2.00, 0.01), start=10):
+            member = workspace(root, f"{extra_number:032x}")
+            project = initialize_project(
+                member.path / "pilot.sigma", f"Pilot {extra_number}", "Question"
             )
-            cloud_research.prepare_job(record)
-            assert cloud_research.claim_job(record["id"])
-            cloud_research.reserve_call(record["id"], "remaining-global", 2.0, 100)
-            assert abs(global_reserved_spend() - 18.0) < 1e-6
+            binding = cloud_workspaces._CURRENT.set(member)
             try:
-                cloud_research.reserve_call(record["id"], "over-global", 2.01, 100)
-            except cloud_research.CloudResearchUnavailable as exc:
-                assert "global inference-spend ceiling" in str(exc), str(exc)
-            else:
-                raise AssertionError("An over-ceiling provider call was admitted")
-        finally:
-            cloud_workspaces._CURRENT.reset(binding)
+                record = job(member.workspace_id)
+                record.update(
+                    project_id=project.project.id,
+                    project_path=project.path,
+                    maximum_estimated_cost_usd=None,
+                )
+                cloud_research.prepare_job(record)
+                assert cloud_research.claim_job(record["id"])
+                if extra_number < 12:
+                    cloud_research.reserve_call(
+                        record["id"], f"at-global-{extra_number}", amount, 100
+                    )
+                    assert cloud_research.snapshot()["held_usd"] == amount
+                else:
+                    assert abs(global_reserved_spend() - 20.00) < 1e-6
+                    assert cloud_research.snapshot()["remaining_usd"] == 2.00
+                    try:
+                        cloud_research.reserve_call(
+                            record["id"], "over-global", amount, 100
+                        )
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        assert "global inference-spend ceiling" in str(exc), str(exc)
+                    else:
+                        raise AssertionError(
+                            "An over-ceiling call by a funded user was admitted"
+                        )
+            finally:
+                cloud_workspaces._CURRENT.reset(binding)
+
 
 
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
