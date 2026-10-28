@@ -7451,8 +7451,8 @@ matches its saved index identity. Focused recents tests and Ruff passed.
 
 ## Sponsored ChatGPT pill spacing (2026-10-28)
 
-Reduced the gap between the Sponsored ChatGPT label and dollar allowance to
-zero in the pill on Home and workspace views. Frontend build passed.
+The Sponsored ChatGPT pill now matches the Sign out indicator-to-label gap and
+tightens the label-to-allowance gap. Frontend build passed.
 
 Request toast Dismiss actions use the same yellow text-action color as other
 actions in the app.
