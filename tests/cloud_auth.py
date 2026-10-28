@@ -1012,7 +1012,7 @@ class CloudAuthTests(TestCase):
         self.assertTrue(status["account"]["workspace"]["available"])
         self.assertEqual(
             status["account"]["model_access"],
-            {"mode": "personal", "connection": "checking"},
+            {"mode": "sponsored", "connection": "checking"},
         )
         self.assertTrue(status["account"]["sponsorship"]["eligible"])
         self.assertEqual(status["admin_contact_email"], "admin@example.org")
@@ -1050,7 +1050,7 @@ class CloudAuthTests(TestCase):
                 1,
                 status["account"]["workspace"]["id"],
                 1,
-                "personal",
+                "sponsored",
                 "checking",
             ),
         )
@@ -1300,12 +1300,17 @@ class CloudAuthTests(TestCase):
         try:
             columns = {row[1] for row in db.execute("PRAGMA table_info(user_state)")}
             self.assertIn("invitation_welcome_pending", columns)
+            self.assertIn("model_access_explicit", columns)
             pending = db.execute(
                 "SELECT invitation_welcome_pending FROM user_state WHERE subject='legacy-subject'"
+            ).fetchone()[0]
+            explicit = db.execute(
+                "SELECT model_access_explicit FROM user_state WHERE subject='legacy-subject'"
             ).fetchone()[0]
         finally:
             db.close()
         self.assertEqual(pending, 0)
+        self.assertEqual(explicit, 0)
 
     def test_invitation_request_fails_closed_when_notification_unconfigured(self):
         denied = self.finish(email="visitor@example.org", subject="request-retry")
@@ -2430,7 +2435,7 @@ class CloudAuthTests(TestCase):
             ):
                 connection = member.get("/api/ai/connection")
             self.assertEqual(connection.status_code, 200, connection.text)
-            self.assertEqual(personal_session.await_count, 1)
+            self.assertEqual(personal_session.await_count, 0)
             self.assertEqual(sponsor_session.await_count, 1)
             self.assertIn("temporarily unavailable", connection.json()["guidance"])
             self.assertNotIn("administrator", connection.json()["guidance"].lower())
@@ -2508,6 +2513,12 @@ class CloudAuthTests(TestCase):
                 client=member,
             )
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            personal_choice = member.post(
+                "/api/ai/mode",
+                json={"mode": "personal"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(personal_choice.status_code, 200, personal_choice.text)
 
             async def seed():
                 async with sponsor_transaction() as state:
@@ -2561,7 +2572,7 @@ class CloudAuthTests(TestCase):
             cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
         )
         initial = self.client.get("/api/cloud-auth/status").json()
-        self.assertEqual(initial["account"]["model_access"]["mode"], "personal")
+        self.assertEqual(initial["account"]["model_access"]["mode"], "sponsored")
         headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
         with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
             selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)

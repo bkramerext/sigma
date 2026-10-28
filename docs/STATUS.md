@@ -7502,3 +7502,15 @@ check was run. Hosted personal ChatGPT authorization remains disabled by the
 existing hosted integration, so hosted personal-account switching is blocked
 and unchanged; no authorization requirement was bypassed. No live or paid
 provider calls were made.
+
+## Sponsored account initial connection (2026-10-28)
+
+Eligible accounts now start with SIGMA sponsorship selected until the user
+explicitly chooses a connection. The selection is persisted so a personal
+choice remains personal on refresh. Added a migration-safe explicit-choice
+field and updated auth regression cases.
+
+Verification was deferred for local user testing. A `tests/cloud_auth.py` run
+started just before that request and failed two scenarios that assumed new
+eligible accounts began in personal mode; those cases were updated but not
+rerun. The browser check was stopped before completion.
