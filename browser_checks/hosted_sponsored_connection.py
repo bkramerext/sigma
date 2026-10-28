@@ -100,6 +100,9 @@ def exercise(origin: str) -> None:
         forced = {"value": False}
         local_sponsored_mode = {"value": False}
         local_sponsor_reauth = {"value": False}
+        personal_active_account = {"value": None}
+        sponsorship_eligible = {"value": True}
+        personal_signin_pending = {"value": False}
         sponsored_test_mode = {"value": False}
         mock_provider = {"value": "connected"}
         local_connect_succeeds = {"value": False}
@@ -219,7 +222,10 @@ def exercise(origin: str) -> None:
                         "access": {"status": "invited", "role": "member"},
                         "workspace": {"available": True, "id": "workspace-test"},
                         "model_access": {"mode": selected["mode"], "connection": "connected"},
-                        "sponsorship": {"eligible": True, "forced": forced["value"]},
+                        "sponsorship": {
+                            "eligible": sponsorship_eligible["value"],
+                            "forced": forced["value"],
+                        },
                         "invitation_welcome_pending": welcome_pending["value"],
                     },
                     "admin_contact_email": "admin@example.test",
@@ -267,7 +273,8 @@ def exercise(origin: str) -> None:
                     }
                 else:
                     payload = {
-                        "mode": "api_key",
+                        "mode": "chatgpt" if personal_active_account["value"] else "api_key",
+                        "active_account": personal_active_account["value"],
                         "status": "connected"
                         if selected["mode"] == "sponsored" or local_connect_succeeds["value"]
                         else "disconnected",
@@ -289,7 +296,11 @@ def exercise(origin: str) -> None:
                 if local_connect_succeeds["value"]:
                     local_sponsor_reauth["value"] = False
                 payload = {
-                    "status": "connected" if local_connect_succeeds["value"] else "failed",
+                    "status": "connecting"
+                    if personal_signin_pending["value"]
+                    else "connected"
+                    if local_connect_succeeds["value"]
+                    else "failed",
                     "retryable": False,
                     "message": "ChatGPT sign-in did not complete.",
                 }
@@ -789,6 +800,36 @@ def exercise(origin: str) -> None:
         assert any(
             path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts
         ), posts
+
+        # A regular member can have the designated sponsor registration active
+        # in the local ChatGPT store. Connecting their own account must begin a
+        # new account flow instead of trying to reauthorize the sponsor record.
+        selected["mode"] = "personal"
+        sponsorship_eligible["value"] = False
+        personal_active_account["value"] = "designated-sponsor-registration"
+        local_connect_succeeds["value"] = False
+        page.goto(origin + "/?regular-member=1", wait_until="domcontentloaded")
+        regular_connect = page.locator(".api-connection > summary")
+        expect(regular_connect).to_have_attribute("aria-label", "Connect to ChatGPT")
+        personal_signin_pending["value"] = True
+        posts.clear()
+        with page.expect_request("**/api/ai/auth/begin") as regular_signin:
+            regular_connect.click()
+        assert regular_signin.value.post_data_json == {
+            "enable_plan": False,
+        }, regular_signin.value.post_data_json
+        expect(page.get_by_text("Complete sign-in in the browser.")).to_be_visible()
+        expect(page.locator(".api-connection").get_by_role("button", name="Cancel")).to_have_count(
+            0
+        )
+        personal_signin_pending["value"] = False
+        local_connect_succeeds["value"] = True
+        expect(page.locator(".api-connection > summary")).to_have_attribute(
+            "aria-label", "Disconnect from ChatGPT"
+        )
+        expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
+        sponsorship_eligible["value"] = True
+        personal_active_account["value"] = None
 
         selected["mode"] = "sponsored"
         local_sponsor_reauth["value"] = True

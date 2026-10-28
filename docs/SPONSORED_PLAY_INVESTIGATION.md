@@ -6,6 +6,39 @@
 **Latest pushed code:** `99c2927`. Current uncommitted changes are welcome-dialog sizing/spacing and this new diagnostic observation.
 **State:** The current Play failure is identified as a pre-inference admission rejection. The payload-level reason remains under investigation. Do not describe sponsored Play as fixed yet.
 
+## Regular-account ChatGPT connection follow-up (2026-10-27)
+
+At 7:15 PM PDT the user reported that a signed-in, non-sponsored member saw the
+**Connect to ChatGPT** pill. Clicking it displayed a red `AI account change
+failed` message below the pill. This differs from the sponsored path, which
+uses SIGMA's sponsored provider and does not need the member's personal
+ChatGPT registration.
+
+Source tracing found a specific failure path: for an authenticated local
+member without sponsorship eligibility, the pill passed the globally active
+ChatGPT registration ID to `/api/ai/auth/begin`. If that active registration is
+the designated sponsor account, the server correctly rejects personal
+reauthorization through the sponsor account. The frontend `aiPost` helper read
+only JSON `error`, while FastAPI returns HTTP exceptions in JSON `detail`, so
+the user saw the generic fallback instead of the server's reason. The
+screenshot itself does not expose which account ID was sent, so that detail is
+a source-verified mechanism matching the failure, not a captured live request.
+
+The user also explicitly required that no Cancel button appear below the
+ChatGPT pill. That inline action was removed. Closing the ChatGPT sign-in
+popup now cancels the pending attempt; the real-Chrome acceptance verifies
+there is no Cancel button under the pill while the normal-member connection is
+pending.
+
+The local non-sponsored member path now starts a new ChatGPT account flow
+without sending the globally active account ID. `aiPost` also displays
+FastAPI's `detail` when a request fails. Real-Chrome acceptance sets a
+non-sponsored member's active registration to the sponsor registration and
+verifies that the new flow omits `account_id` and completes, while existing
+sponsored selection and sponsor renewal checks still pass. `./sigma test`
+passed all steps, including Ruff, Pyright, frontend typecheck, and production
+build. No live OAuth, paid provider call, or production change was made.
+
 ## Retrospective: what is known
 
 The user is signed in locally with `nontrivialzeeros@gmail.com`. The account has shown the sponsored ChatGPT pill. SIGMA's designated sponsor ChatGPT account is `zetacontinuation@gmail.com`; the user authorized that account in the browser and received the “Return to SIGMA to continue” confirmation. The private diagnostic log recorded sponsor OAuth `started` at `2026-10-27T22:37:03Z` and `connected` at `2026-10-27T22:37:18Z` (3:37 PM PDT). An earlier read-only account-state check also showed the member eligible for sponsored access and model mode `sponsored`. These facts establish the sign-in and sponsorship state; by themselves, they do not establish that inference works.

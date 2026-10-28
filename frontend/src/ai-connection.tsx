@@ -69,7 +69,11 @@ export function useAI() { const value = useContext(Context); if (!value) throw n
 const message = (error: unknown) => error instanceof Error ? error.message : 'Could not reach the local server.';
 export async function aiPost<T>(route: string, body: object = {}, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/ai/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
-  const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'AI account change failed'); return data;
+  let data: { error?: string; detail?: string };
+  try { data = await response.json() as typeof data; }
+  catch { data = {}; }
+  if (!response.ok) throw new Error(data.error ?? data.detail ?? 'AI account change failed');
+  return data as T;
 }
 export function AIProvider({ children, unavailable = false }: { children: ReactNode; unavailable?: boolean }) {
   const [info, setInfo] = useState<ConnectionInfo | null>(null);
@@ -211,6 +215,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
           retryAttempt.current = state.retryable ? { id: data.id, accountId: options.accountId } : null;
           setError(state.message); return false;
         }
+        if (popup?.closed) { controller.abort(); return false; }
         await new Promise<void>(resolve => { const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve(); }; const timer = window.setTimeout(done, 500); controller.signal.addEventListener('abort', done, { once: true }); });
       }
       return false;
@@ -312,7 +317,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         await ai.refresh('manual');
         return;
       }
-      await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted' });
+      const newLocalMemberAccount = !!cloudFunding?.authenticationEnabled
+        && !!cloudFunding.authorized
+        && !cloudFunding.sponsorshipEligible;
+      await ai.signIn({
+        accountId: newLocalMemberAccount ? undefined : ai.info?.active_account,
+        newAccount: newLocalMemberAccount,
+        enablePlan: ai.info?.status === 'plan_not_permitted',
+      });
     } catch {
       // The connection error is shown beside the pill by the AI provider state.
     }
@@ -325,7 +337,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Sponsored allowance details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip-disabled onClick={event => { event.stopPropagation(); event.preventDefault(); if (localSponsorNeedsReconnect) void connect(); else setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorTooltip}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>
-    {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>} <button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel</button></p>}
+    {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>}
     {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}
     {cloudFunding?.connectionError && <p className="connection-pill-message" role="alert">{cloudFunding.connectionError}</p>}
   </details>;

@@ -1,5 +1,16 @@
 ## Sponsored welcome shows current remaining balance (2026-10-27)
 
+Regular local members now start a fresh ChatGPT account authorization from the
+Connect to ChatGPT pill instead of reusing the globally active ChatGPT
+registration, which may be the designated SIGMA sponsor. This avoids sending
+the sponsor registration through the personal connection route. ChatGPT API
+errors now display FastAPI's `detail` field rather than the generic “AI account
+change failed.” Real Chrome verifies a non-sponsored member with the sponsor
+registration active can connect a personal account without submitting the
+sponsor account ID; the sponsored selection/reconnect paths remain covered.
+The pending-sign-in status no longer puts a Cancel button under the pill;
+closing the ChatGPT sign-in popup cancels that pending attempt.
+
 The sponsored welcome dialog now uses the budget's `remaining_usd`, matching the
 Sponsored ChatGPT pill, instead of showing the account's original grant. For a
 small sponsored balance it says how much remains. Real-Chrome
