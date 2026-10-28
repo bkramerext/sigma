@@ -1525,6 +1525,42 @@ class CloudAuthTests(TestCase):
             403,
         )
 
+    def test_explicit_additional_admin_bypasses_invitation_with_bound_subject(self):
+        # A contact address is not a privilege grant. An explicitly configured
+        # administrator is, even if another bootstrap identity already exists.
+        bootstrap = self.finish(email="admin@example.org", subject="original-admin")
+        self.assertEqual(bootstrap.status_code, 303)
+        os.environ["SIGMA_CLOUD_ADMIN_EMAILS"] = "zetacontinuation@gmail.com"
+        second_context = TestClient(app)
+        second = second_context.__enter__()
+        self.addCleanup(second_context.__exit__, None, None, None)
+        login = self.finish(
+            email="zetacontinuation@gmail.com", subject="sponsor-admin-subject", client=second
+        )
+        self.assertEqual(login.status_code, 303)
+        self.assertNotIn("access=denied", login.headers["location"])
+        second.cookies.set(cloud_auth.SESSION_COOKIE, login.cookies[cloud_auth.SESSION_COOKIE])
+        status = second.get("/api/cloud-auth/status").json()
+        self.assertEqual(status["user"]["role"], "admin")
+        self.assertFalse(status["account"]["invitation_welcome_pending"])
+        with cloud_auth._db(cloud_auth.config()) as db:
+            bound = db.execute(
+                "SELECT subject FROM configured_admin_subject WHERE email=?",
+                ("zetacontinuation@gmail.com",),
+            ).fetchone()
+            self.assertEqual(bound["subject"], "sponsor-admin-subject")
+        mismatch_context = TestClient(app)
+        mismatch = mismatch_context.__enter__()
+        self.addCleanup(mismatch_context.__exit__, None, None, None)
+        denied = self.finish(
+            email="zetacontinuation@gmail.com", subject="different-google-subject",
+            client=mismatch,
+        )
+        self.assertEqual(denied.headers["location"], "/?access=denied")
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        os.environ.pop("SIGMA_CLOUD_ADMIN_EMAILS")
+        self.assertEqual(second.get("/api/projects/recent").status_code, 401)
+
     def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)
