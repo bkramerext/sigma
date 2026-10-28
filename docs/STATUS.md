@@ -10,6 +10,10 @@ session's admission snapshot.
 Admission and resume count queued/running sessions for that project while
 holding the existing cross-process project manager lock. The hosted reservation
 ledger also checks the per-project count inside its SQLite write transaction.
+For pre-upgrade rows, it verifies a matching saved session record and project ID
+before counting a legacy row or assigning its slot marker. Legacy rows with an
+empty project path are resolved against the current project's record; standalone
+inference rows without a research-session record remain outside this limit.
 Other projects are no longer blocked by a local active-session check. Raising
 the value admits new sessions immediately; lowering it leaves current sessions
 alone and blocks additional admission while the count is at or above the new
@@ -32,6 +36,11 @@ local fixture. The full `./sigma test` passed every step, including Ruff,
 formatting, Pyright, frontend typecheck, and production build. Vite emitted the
 existing advisory for the 519 kB main JavaScript chunk. No paid or live
 provider calls, OAuth, or production changes occurred.
+
+PR #287 review follow-up: `tests/cloud_research.py` now models an active
+pre-migration session row with `session_slot=0` and an empty legacy project path,
+then verifies it blocks a second session after upgrade. The complete
+`./sigma test` passed again after this correction.
 
 The browser-exercised sample copy was exported with SIGMA's complete project
 export service; exact bytes and source/session manifest are in

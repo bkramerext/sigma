@@ -269,6 +269,37 @@ def test_orphaned_job_reconciliation(
                 item["events"] = []
                 return item
 
+            # Existing databases migrate the new column to zero. An active
+            # legacy job with a saved session record must still consume a slot.
+            legacy = derived_job("queued")
+            legacy["max_concurrent_sessions"] = 1
+            cloud_research.prepare_job(legacy)
+            research_sessions._save(project.path, legacy)
+            db = cloud_research._connect()
+            db.execute(
+                "UPDATE jobs SET session_slot=0,project_relpath='' WHERE session_id=?",
+                (legacy["id"],),
+            )
+            db.close()
+            after_upgrade = derived_job("queued")
+            after_upgrade["max_concurrent_sessions"] = 1
+            try:
+                cloud_research.prepare_job(after_upgrade)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "maximum concurrent sessions" in str(exc).lower()
+            else:
+                raise AssertionError("an active pre-migration job did not consume a project slot")
+            db = cloud_research._connect()
+            assert (
+                db.execute(
+                    "SELECT 1 FROM jobs WHERE session_id=?", (after_upgrade["id"],)
+                ).fetchone()
+                is None
+            )
+            db.execute("DELETE FROM jobs WHERE session_id=?", (legacy["id"],))
+            db.close()
+            (Path(project.path) / "research-sessions" / f"{legacy['id']}.json").unlink()
+
             slot_one = derived_job("queued")
             slot_one["max_concurrent_sessions"] = 1
             cloud_research.prepare_job(slot_one)

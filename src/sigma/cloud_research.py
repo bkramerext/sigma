@@ -268,6 +268,42 @@ def job_status(session_id: str) -> str | None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
+def _legacy_session_status(project_path: str, project_id: str, session_id: str) -> str | None:
+    """Distinguish pre-migration session jobs from standalone inference rows."""
+    from sigma import research_sessions
+    from sigma.projects import ProjectError
+
+    project = Path(project_path)
+    member = f"research-sessions/{session_id}.json"
+    try:
+        if project.suffix == ".json":
+            from sigma.project_bundle import read_bundle
+
+            if member not in read_bundle(project_path)["files"]:
+                return None
+        else:
+            directory = project / "research-sessions"
+            target = directory / f"{session_id}.json"
+            if not target.exists() and not target.is_symlink():
+                return None
+            if directory.is_symlink() or target.is_symlink() or not target.is_file():
+                raise CloudResearchUnavailable(
+                    "An existing hosted session record cannot be inspected safely."
+                )
+        saved = research_sessions._read(project_path, session_id)
+    except CloudResearchUnavailable:
+        raise
+    except (OSError, ValueError, ProjectError) as exc:
+        raise CloudResearchUnavailable(
+            "An existing hosted session record cannot be inspected safely."
+        ) from exc
+    if saved.get("id") != session_id or saved.get("project_id") != project_id:
+        raise CloudResearchUnavailable(
+            "An existing hosted session record does not match its ledger row."
+        )
+    return saved.get("status")
+
+
 def prepare_job(record: dict[str, Any]) -> None:
     """Atomically reserve a bounded queue slot for a persisted session ID."""
     owner = _workspace_id()
@@ -312,6 +348,34 @@ def prepare_job(record: dict[str, Any]) -> None:
     try:
         with _transaction() as db:
             if session_slot:
+                legacy_rows = db.execute(
+                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? AND (project_relpath=? OR project_relpath='') AND session_slot=0 AND status IN ('queued','running','stopping') AND session_id<>?",
+                    (owner, record["project_id"], project_relpath, record["id"]),
+                ).fetchall()
+                for legacy in legacy_rows:
+                    saved_status = _legacy_session_status(
+                        record["project_path"], record["project_id"], legacy["session_id"]
+                    )
+                    if saved_status is None:
+                        # Standalone inference uses the same ledger but has no
+                        # research-session record and consumes no project slot.
+                        continue
+                    if saved_status in {"stopped", "failed", "ended", "completed"}:
+                        db.execute(
+                            "UPDATE jobs SET status='terminal',session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
+                            (project_relpath, now, legacy["session_id"], owner),
+                        )
+                    elif saved_status in {"paused", "interrupted"}:
+                        db.execute(
+                            "UPDATE jobs SET status=?,session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
+                            (saved_status, project_relpath, now, legacy["session_id"], owner),
+                        )
+                    else:
+                        # Unknown or active states fail closed as occupied slots.
+                        db.execute(
+                            "UPDATE jobs SET session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
+                            (project_relpath, now, legacy["session_id"], owner),
+                        )
                 active_for_project = db.execute(
                     "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>?",
                     (owner, record["project_id"], record["id"]),

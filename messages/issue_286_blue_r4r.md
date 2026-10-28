@@ -57,3 +57,15 @@ temporary copy of a shipped sample; the actual project export is preserved at
 Cloud provider worker concurrency and queue limits remain independently
 administrator controlled. The project setting controls admitted research
 sessions for the project and does not change provider request or billing limits.
+
+## PR #287 review correction
+
+The review identified that pre-upgrade hosted `jobs` rows receive
+`session_slot=0`. Admission now checks matching untagged rows against their
+durable project session record and project ID inside the reservation transaction,
+including rows with an empty legacy project path. A row without a saved session
+record is a standalone inference reservation and is not counted. Corrupt or
+mismatched records fail closed. `tests/cloud_research.py` covers an active
+pre-migration row and confirms the second session is rejected. The focused cloud
+research/API/sponsored API tests and the full `./sigma test` passed after the
+correction.
