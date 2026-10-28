@@ -1,59 +1,53 @@
 # Issue #289 — Green R4R handoff
 
 Branch: `green/issue-289-configurable-limits`
-Base: `main` at `b305cbf` (will sync immediately before publication)
-Head: `4a840d2`
-PR: will be linked after creation
+Base: `main` at `b305cbf371425f9c0e5913ec179eda1f8ec19a99`
+Implementation commit: `bc8196ecf7259b83631793832df6a50d91b1148e`
+PR: https://github.com/bkramerext/sigma/pull/291
 
 ## Implemented
 
 - Removed the per-session six-call and `$0.25` replacements from sponsored
   research admission. Saved Project Settings limits now govern the session;
-  account allowance, global ceiling, cost reservation, and 15-minute sponsored
-  duration cap still apply. An unset session cost limit fails with a clear,
-  actionable explanation.
-- Added deterministic budget coverage above the former `$0.25` and six-call
-  thresholds, for a configured low cap, and for account/global budget denials.
-- Clarified Project Settings and session-start copy to report configured limits
-  without asserting old fixed limits.
-- In the supported local ChatGPT flow, allow SIGMA time to confirm the OAuth
-  callback after the popup closes, show a connected pill/account label when
-  available, and provide an explicit return to sponsorship for eligible
-  accounts. A selected personal connection that is disconnected or requires
-  reauthorization no longer silently changes the funding source. Sponsored
-  allowance records remain intact while personal mode is selected.
-- Kept hosted personal ChatGPT authorization disabled. The issue comment and
-  current auth middleware identify the hosted authorization boundary; no OAuth
-  bypass or hosted personal-auth implementation was added.
-- Added a deterministic browser regression for access-unverified Model and
-  Thinking cycling, higher-cost model confirmation colors, and saved Project
-  Settings limits across reload.
+  account allowance, global ceiling, cost reservation, and the 15-minute
+  hosted/sponsored runtime cap still apply. An unset sponsored session cost
+  limit returns an actionable settings message.
+- Hosted and local Project Settings expose the required estimated-cost limit
+  for sponsored research. Configured duration persists as entered while the
+  runtime deadline uses the applicable cap.
+- Restored the local sponsored account's default global spending ceiling to
+  `$0.25`; an explicit `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` still overrides it.
+- In the supported local ChatGPT flow, explicitly disconnect before returning
+  to sponsorship. Failed sign-in or disconnect does not silently change the
+  funding source. Sponsored allowance records remain intact while personal
+  inference is selected. Hosted personal authorization remains disabled; no
+  hosted OAuth bypass was added.
+- Model catalog 401/403 errors disable model selection and show the auth state;
+  temporary provider failures preserve editable preferences as unverified.
+- Session termination diagnostics distinguish session cost/token caps from
+  hard account/global ledger refusals, with cycle/call counts and clear notice
+  when a Skeptic call was never dispatched.
+- Added deterministic regression coverage reproducing the former 1/6-call
+  budget failure, hard-ledger refusal, token diagnostics, hosted sponsored cost
+  setup, and local account transitions/model availability.
 
 ## Verification actually run
 
-- `./sigma test` — PASS (all steps, including cloud auth, sponsored research
-  ledger/API, Ruff, formatting, Pyright, frontend typecheck, and production
-  build).
-- Real Chrome:
-  `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5174 SIGMA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' uv run --with playwright --locked --no-sync python browser_checks/local_sponsored_limits.py`
-  — PASS. The provider is a deterministic local fixture. It verifies 403 model
-  availability fallback, Model/Thinking cycling, Confirm/Cancel light-copper
-  color, and saving/reloading a 12-call project limit.
-- `npm run typecheck` — PASS after the Model/Thinking fallback changes.
-- `git diff --check` — PASS before final documentation/handoff edits; rerun
-  before commit.
+- `./sigma test` — PASS, all steps, including backend integration suites, Ruff,
+  Ruff format check, Pyright, frontend typecheck, and production build.
+- Real Chrome browser checks — PASS:
+  - `browser_checks/hosted_sponsored_connection.py`
+  - `browser_checks/local_sponsored_limits.py` (hosted settings cost validation,
+    persistence/reload, and local sponsored project limits)
+  - `browser_checks/model_availability.py` (401/403 disabled; 503 editable and
+    unverified)
+- `git diff --check` — PASS before commit.
 
-## Limits and dependencies
+Browser checks used deterministic local fixtures. No live or paid provider
+inference and no hosted deployment authorization were exercised.
 
-- No live or paid provider inference was performed.
-- Local account switching was not validated against real ChatGPT OAuth in this
-  pass; its backend lifecycle and non-fallback behavior are covered by
-  deterministic tests. The browser acceptance uses fixture auth/provider data.
-- Hosted sponsored inference is covered by deterministic API integration tests,
-  not a deployed hosted service. Do not treat this PR as hosted personal
-  ChatGPT authorization: hosted personal OAuth remains disabled and requires
-  the existing OpenAI hosted-integration authorization path.
-- No known code dependency on another worker. No direct worker coordination
-  occurred.
+## Limits and review status
 
-Do not self-merge. R4R means ready for independent review only.
+- Hosted personal ChatGPT authorization remains disabled pending the existing
+  OpenAI hosted-integration authorization path. This PR does not circumvent it.
+- No self-merge. This branch is ready for review (R4R).
