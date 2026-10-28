@@ -1899,6 +1899,19 @@ class CloudAuthTests(TestCase):
         overview = admin.get("/api/cloud-auth/admin/grants")
         self.assertEqual(overview.status_code, 200, overview.text)
         records = overview.json()
+        administrator = next(
+            item for item in records["sessions"] if item["email"] == "admin@example.org"
+        )
+        self.assertIsNone(administrator["allowance_usd"])
+        self.assertIsNone(administrator["spending"]["remaining_usd"])
+        self.assertEqual(
+            admin.post(
+                "/api/cloud-auth/invitation-request",
+                json={"request_type": "reload"},
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            403,
+        )
         member = next(item for item in records["sessions"] if item["email"] == "member@example.org")
         self.assertEqual(member["allowance_usd"], 0.5)
         self.assertIn("estimated_usage_usd", member["spending"])
