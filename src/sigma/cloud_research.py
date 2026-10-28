@@ -118,8 +118,7 @@ def _global_ceiling_failure_message() -> str:
     actual API charges or provider availability. Explicit ceilings are honored.
     """
     if (
-        not cloud_workspaces.enabled()
-        and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+        not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
         and _global_spend_period() == "calendar_month"
     ):
         return (
@@ -237,8 +236,7 @@ def _global_spend_period() -> str:
     from sigma import cloud_auth
 
     if (
-        not cloud_workspaces.enabled()
-        and cloud_auth.local_sponsored_principal() is not None
+        cloud_auth.local_sponsored_principal() is not None
         and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
     ):
         return "calendar_month"
