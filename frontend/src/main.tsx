@@ -115,7 +115,7 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
     return 'Est. cost unavailable';
   }
   // Avoid reporting nonzero usage as $0.00 after rounding.
-  return cost > 0 && cost < 0.01 ? 'Est. cost <$0.01' : `Est. cost ${cost.toFixed(2)}`;
+  return cost > 0 && cost < 0.01 ? 'Est. cost <$0.01' : `Est. cost $${cost.toFixed(2)}`;
 }
 
 function liveResearchSummary(session: ResearchSession): string | null {
