@@ -123,8 +123,8 @@ def _effective_user_spend_ceiling_decimal() -> Decimal:
     workspace = _ledger_workspace()
     # Admins have no per-account sponsorship allowance. The operator's
     # global ceiling still bounds every provider call, including admin calls.
-    if workspace is not None and workspace.email:
-        cfg = cloud_auth.config()
+    cfg = cloud_auth.config()
+    if cfg.enabled and not cfg.error and workspace is not None and workspace.email:
         with cloud_auth._db(cfg) as db:
             state = db.execute(
                 "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
