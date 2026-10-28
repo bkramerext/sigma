@@ -144,7 +144,9 @@ def settle_rejected(ledger: dict[str, Any], *, call_id: str) -> None:
     item = next((entry for entry in ledger["calls"] if entry["call_id"] == call_id), None)
     if item is None or item["status"] != "reserved":
         raise BudgetExceeded("Rejected research call has no unsettled reservation")
-    item.update({"status": "rejected", "input_tokens": 0, "output_tokens": 0, "cost_bound_usd": 0.0})
+    item.update(
+        {"status": "rejected", "input_tokens": 0, "output_tokens": 0, "cost_bound_usd": 0.0}
+    )
 
 
 def _cost_bound(ledger: dict[str, Any], input_tokens: int, output_tokens: int) -> float:

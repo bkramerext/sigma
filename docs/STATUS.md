@@ -18,7 +18,10 @@ after the prompt change. The full `./sigma test` ran through the Python and
 frontend suites but failed at an outdated hosted-personal fixture expectation,
 two Ruff import-order findings, and three Ruff formatting findings. The
 fixture now explicitly selects personal mode before testing it, and those
-Ruff findings have been corrected; full verification is pending rerun.
+Ruff findings have been corrected. A second full run passed the hosted-personal
+scenario and all Python scenarios, Ruff check, Pyright, and frontend typecheck;
+it found one remaining formatting issue in `src/sigma/research_budget.py`, now
+corrected. Final verification remains pending.
 
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 
