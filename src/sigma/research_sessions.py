@@ -9243,8 +9243,6 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
                 # The worker holds the exclusive project worker lock. No other
                 # process can legitimately own a running slot for this session.
                 # A stale slot must not strand the UI in "queued" until timeout.
-                if ledger_status in {"running", "stopping"}:
-                    cloud_research.recover_job(session_id)
                 async with _session_state_lock(session_id):
                     record = _read(path, session_id)
                     if record["status"] != "queued":
@@ -9263,6 +9261,11 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
                             branch["reason"] = record["message"]
                     _event(record, "interrupted", record["message"])
                     _save(path, record)
+                # Finish durable crash recovery after the saved session has
+                # been paused. Otherwise sync_job would overwrite the
+                # interrupted ledger status with a generic paused state.
+                if ledger_status in {"running", "stopping"}:
+                    cloud_research.recover_job(session_id)
                 return False
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
