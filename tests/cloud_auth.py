@@ -1586,7 +1586,22 @@ class CloudAuthTests(TestCase):
             )
             self.assertEqual(initially_denied.headers["location"], "/?access=denied")
             self.assertIn("sigma_denied", initially_denied.cookies)
+            self.client.cookies.set("sigma_denied", initially_denied.cookies["sigma_denied"])
             os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
+            # A stale denied page must offer Google sign-in again, never an
+            # invitation, once the account is authorized.
+            recovered = self.client.get("/api/cloud-auth/denied")
+            self.assertEqual(
+                recovered.json(), {"identity_available": False, "retry_signin": True}
+            )
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/invitation-request",
+                    json={},
+                    headers={"Origin": "http://127.0.0.1:5173"},
+                ).status_code,
+                409,
+            )
             # Retain the previous denial cookie just as the browser does.
             allowed = self.finish(
                 email="zetacontinuation@gmail.com", subject="configured-google-subject"
