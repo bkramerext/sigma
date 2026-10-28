@@ -115,9 +115,10 @@ def _global_ceiling_failure_message() -> str:
     The local default is an *internal API-rate equivalent*, not evidence of
     actual API charges or provider availability. Never silently raise it.
     """
-    if not cloud_workspaces.enabled() and not os.environ.get(
-        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", ""
-    ).strip():
+    if (
+        not cloud_workspaces.enabled()
+        and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+    ):
         return (
             "The global inference-spend ceiling has been reached: local sponsored "
             "research defaults to $0.25 API-rate equivalent across all sessions. "
