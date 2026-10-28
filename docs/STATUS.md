@@ -7149,4 +7149,15 @@ The next diagnostic records only aggregate selected bytes, omitted count, and
 maximum UTF-8/JSON byte sizes for obligation text, scope assumptions, rationale,
 and provenance. It emits no project text, IDs, email, or credentials. The cap
 remains fail-closed until those measurements identify a safe compaction or budget
-change. No further sponsored Play retry is requested yet.
+change. The user-visible symptoms and distinct error layers are detailed in
+`docs/SPONSORED_PLAY_INVESTIGATION.md`; fixture tests do not reproduce the user's
+saved obligation payload or prove real sponsor inference.
+
+Guest header cleanup now hides the unusable ChatGPT connection pill for
+unauthenticated cloud guests on Home and project pages. Real Chrome guest/sample
+and hosted sponsored-connection checks passed, including six visible
+project-header actions. Full `./sigma test` passed on the current changes (284
+Python files formatted, Pyright clean, frontend typecheck and production build
+passed). This UI change does not fix or validate sponsored Play. The next
+deliberate sponsored Play attempt is for safe payload measurement; if admission
+passes, it may dispatch a real sponsor inference and consume allowance.

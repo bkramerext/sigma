@@ -519,6 +519,7 @@ def exercise(origin: str) -> None:
         invite = page.locator(".home-topline .home-header-actions .project-invite-me")
         expect(about).to_be_visible()
         expect(invite).to_be_visible()
+        expect(page.locator(".home-auth-pills .api-connection")).to_have_count(0)
         about_box = about.bounding_box()
         invite_box = invite.bounding_box()
         assert about_box and invite_box

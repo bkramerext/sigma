@@ -170,12 +170,14 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
         expect(welcome).to_be_visible()
-        expect(welcome).to_contain_text("Sign in with Google to request an invitation")
-        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
-            "href", "/api/cloud-auth/login"
+        expect(welcome).to_contain_text("Explore as a guest without running or saving projects")
+        expect(welcome).to_contain_text("request an invitation to become a member")
+        expect(welcome).to_contain_text(
+            "decides whether to include sponsorship when granting your invitation"
         )
         expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
-        welcome.get_by_role("button", name="Continue as guest").click()
+        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
+        welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
         page.route(
             "**/api/test-long-error",
@@ -209,7 +211,7 @@ def exercise(ui_url: str, root: Path) -> None:
         page.get_by_role("tab", name="Samples").click()
         sign_in = page.get_by_role("link", name="Sign in with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
-        expect(page.locator(".api-connection > summary")).to_contain_text("Connect to ChatGPT")
+        expect(page.locator(".home-auth-pills .api-connection")).to_have_count(0)
         expect(page.get_by_role("dialog", name="Account and model settings")).to_have_count(0)
 
         sample_group = page.locator("details.sample-type-group").filter(
@@ -233,6 +235,12 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Did Jesus Use Cannabis? v1")).to_be_visible(
             timeout=15000
         )
+        expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
+        expect(
+            page.locator(
+                "header .header-controls button:visible, header .header-controls a:visible"
+            )
+        ).to_have_count(6)
         papers_before_dialog = len(paper_requests)
         page.get_by_role("button", name="LaTeX research paper").click()
         tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
