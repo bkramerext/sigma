@@ -26,6 +26,7 @@ _PROCESS_EPOCH = uuid4().hex
 USD_UNITS = 1_000_000_000
 MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("1000.00")
+LOCAL_PILOT_MONTHLY_SPEND_USD = Decimal("50.00")
 MAX_PROJECT_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
 
@@ -100,9 +101,9 @@ def _spend_ceiling_decimal() -> Decimal:
     if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
     ):
-        # Preserve the established local aggregate guard unless an operator
-        # deliberately raises it. The project session cap is independent.
-        return Decimal("0.25")
+        # A small invited pilot should not be stopped by a $0.25 lifetime
+        # API-rate-equivalent budget. The local default is bounded per month.
+        return LOCAL_PILOT_MONTHLY_SPEND_USD
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,
@@ -113,8 +114,8 @@ def _spend_ceiling_decimal() -> Decimal:
 def _global_ceiling_failure_message() -> str:
     """Give local sponsored operators the missing configured-cap diagnosis.
 
-    The local default is an *internal API-rate equivalent*, not evidence of
-    actual API charges or provider availability. Never silently raise it.
+    The local default is an internal API-rate equivalent, not evidence of
+    actual API charges or provider availability. Explicit ceilings are honored.
     """
     if (
         not cloud_workspaces.enabled()
@@ -122,10 +123,9 @@ def _global_ceiling_failure_message() -> str:
     ):
         return (
             "The global inference-spend ceiling has been reached: local sponsored "
-            "research defaults to $0.25 cumulative API-rate equivalent across sessions. "
-            "Inspect outstanding ledger obligations with scripts/inspect_cloud_spend.py. "
-            "Only an explicitly configured SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD changes "
-            "this ceiling after restarting SIGMA; saved accounting is preserved."
+            "research exhausted its $50 monthly shared API-rate-equivalent budget. "
+            "Saved research is available; unused provider reservations remain held "
+            "across month boundaries. The budget renews next UTC month."
         )
     return "The global inference-spend ceiling has been reached; saved research remains available."
 
@@ -224,6 +224,52 @@ def _ceiling_units(value: Decimal) -> int:
 def _call_amount_units(db: sqlite3.Connection, where: str, parameters: tuple[Any, ...] = ()) -> int:
     rows = db.execute(f"SELECT amount_usd FROM calls {where}", parameters).fetchall()
     return sum(_usd_units(row["amount_usd"]) for row in rows)
+
+
+def _global_spend_period() -> str:
+    """Renew only the local pilot or an explicitly opted-in hosted budget."""
+    configured = os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_WINDOW", "").strip().lower()
+    if configured in {"cumulative", "calendar_month"}:
+        return configured
+    if configured:
+        raise CloudResearchUnavailable("Global inference spending window is invalid.")
+    from sigma import cloud_auth
+
+    if (
+        not cloud_workspaces.enabled()
+        and cloud_auth.local_sponsored_principal() is not None
+        and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+    ):
+        return "calendar_month"
+    return "cumulative"
+
+
+def _global_window_start() -> str | None:
+    if _global_spend_period() == "cumulative":
+        return None
+    now = datetime.now(UTC)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def _next_global_reset_at() -> str | None:
+    if _global_spend_period() == "cumulative":
+        return None
+    now = datetime.now(UTC)
+    year, month = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
+    return datetime(year, month, 1, tzinfo=UTC).isoformat()
+
+
+def _global_call_amount_units(db: sqlite3.Connection) -> int:
+    window_start = _global_window_start()
+    if window_start is None:
+        return _call_amount_units(db, "")
+    # Unresolved reservations and unknown dispatches remain obligations
+    # across month boundaries; only settled older usage leaves the window.
+    return _call_amount_units(
+        db,
+        "WHERE created_at>=? OR status IN ('reserved','unknown')",
+        (window_start,),
+    )
 
 
 def _evaluation_queue_limits() -> tuple[int, int, int, int]:
@@ -593,7 +639,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     # Resuming a saved session must not silently queue work
                     # when its funding is already exhausted. Keep the saved
                     # terminal/interrupted state intact for playback.
-                    if _call_amount_units(db, "") >= global_ceiling_units:
+                    if _global_call_amount_units(db) >= global_ceiling_units:
                         raise CloudResearchUnavailable(_global_ceiling_failure_message())
                     if _user_call_amount_units(db, owner) >= user_ceiling_units:
                         raise CloudResearchUnavailable(
@@ -623,7 +669,7 @@ def prepare_job(record: dict[str, Any]) -> None:
             # Reject the request *before* creating a saved zero-call session.
             # A nonzero remainder may still be too small for this model's
             # actual first-call reservation; reserve_call remains authoritative.
-            if _call_amount_units(db, "") >= global_ceiling_units:
+            if _global_call_amount_units(db) >= global_ceiling_units:
                 raise CloudResearchUnavailable(_global_ceiling_failure_message())
             if _user_call_amount_units(db, owner) >= user_ceiling_units:
                 raise CloudResearchUnavailable(
@@ -1117,7 +1163,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 raise CloudResearchUnavailable(
                     "This provider attempt was already reserved and cannot be replayed."
                 )
-            used_units = _call_amount_units(db, "")
+            used_units = _global_call_amount_units(db)
             if used_units + amount_units > global_ceiling_units:
                 remaining_units = max(0, global_ceiling_units - used_units)
                 raise CloudResearchUnavailable(
@@ -1279,11 +1325,13 @@ def snapshot() -> dict[str, Any]:
             # only, never another account's usage or identity, so the UI
             # cannot suggest that research is fundable when it is not.
             global_remaining_units = max(
-                0, _ceiling_units(_spend_ceiling_decimal()) - _call_amount_units(db, "")
+                0, _ceiling_units(_spend_ceiling_decimal()) - _global_call_amount_units(db)
             )
             return {
                 "jobs": {row["status"]: row["count"] for row in own},
                 "global_remaining_usd": to_usd(global_remaining_units),
+                "global_spend_period": _global_spend_period(),
+                "global_reset_at": _next_global_reset_at(),
                 "allowance_usd": float(allowance),
                 "estimated_usage_usd": to_usd(estimated_units),
                 "held_usd": to_usd(held_units),
