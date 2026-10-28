@@ -1474,74 +1474,80 @@ def main() -> None:
                 db.close()
                 assert status == "interrupted" and attempt_status == "unknown"
 
-                # Crash after cloud claim but before the queued session is
-                # published as running: the ledger is "running", its saved
-                # record is "queued", and no worker owns the advisory lock.
-                # Reading it must preserve playback and release the stale slot.
-                stale_project = initialize_project(
-                    a.path / "queued-after-claim.sigma", "Stale queue", "Recover a queue"
-                )
-                stale = job(a.workspace_id)
-                stale.update(
-                    project_id=stale_project.project.id,
-                    project_path=stale_project.path,
-                    session_number=1,
-                    status="queued",
-                    created_at="2026-01-01T00:00:00+00:00",
-                    updated_at="2026-01-01T00:00:00+00:00",
-                    current_action="Queued",
-                    message="Research is queued.",
-                    events=[],
-                    steps=[],
-                    strategy_runs=[{"status": "queued", "strategy_id": "strategy-stale"}],
-                )
-                cloud_research.prepare_job(stale)
-                assert cloud_research.claim_job(stale["id"])
-                assert not cloud_research.claim_job(stale["id"])
-                research_sessions._save(stale_project.path, stale)
-                recovered_queue = research_sessions._recover(stale)
-                assert recovered_queue["status"] == "paused"
-                assert recovered_queue["strategy_runs"][0]["status"] == "paused"
-                saved_queue = research_sessions._read(stale_project.path, stale["id"])
-                assert saved_queue["status"] == "paused"
-                assert saved_queue["steps"] == []
-                assert saved_queue["events"][-1]["kind"] == "interrupted"
-                assert cloud_research.job_status(stale["id"]) == "interrupted"
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    # Crash after cloud claim but before the queued session is
+                    # published as running: the ledger is "running", its saved
+                    # record is "queued", and no worker owns the advisory lock.
+                    # Reading it must preserve playback and release the stale slot.
+                    stale_project = initialize_project(
+                        a.path / "queued-after-claim.sigma", "Stale queue", "Recover a queue"
+                    )
+                    stale = job(a.workspace_id)
+                    stale.update(
+                        project_id=stale_project.project.id,
+                        project_path=stale_project.path,
+                        session_number=1,
+                        status="queued",
+                        created_at="2026-01-01T00:00:00+00:00",
+                        updated_at="2026-01-01T00:00:00+00:00",
+                        current_action="Queued",
+                        message="Research is queued.",
+                        events=[],
+                        steps=[],
+                        strategy_runs=[{"status": "queued", "strategy_id": "strategy-stale"}],
+                    )
+                    cloud_research.prepare_job(stale)
+                    assert cloud_research.claim_job(stale["id"])
+                    assert not cloud_research.claim_job(stale["id"])
+                    research_sessions._save(stale_project.path, stale)
+                    recovered_queue = research_sessions._recover(stale)
+                    assert recovered_queue["status"] == "paused"
+                    assert recovered_queue["strategy_runs"][0]["status"] == "paused"
+                    saved_queue = research_sessions._read(stale_project.path, stale["id"])
+                    assert saved_queue["status"] == "paused"
+                    assert saved_queue["steps"] == []
+                    assert saved_queue["events"][-1]["kind"] == "interrupted"
+                    assert cloud_research.job_status(stale["id"]) == "interrupted"
 
-                # A reconnect can spawn a worker before anyone opens the
-                # saved session. It must not repeatedly wait on a stale
-                # running ledger slot, or execute a duplicate provider call.
-                stale_worker_project = initialize_project(
-                    a.path / "queued-worker.sigma", "Stale worker", "Recover a worker"
-                )
-                stale_worker = job(a.workspace_id)
-                stale_worker.update(
-                    project_id=stale_worker_project.project.id,
-                    project_path=stale_worker_project.path,
-                    session_number=1,
-                    status="queued",
-                    created_at="2026-01-01T00:00:00+00:00",
-                    updated_at="2026-01-01T00:00:00+00:00",
-                    current_action="Queued",
-                    message="Research is queued.",
-                    events=[],
-                    steps=[],
-                    strategy_runs=[{"status": "queued", "strategy_id": "strategy-worker"}],
-                )
-                cloud_research.prepare_job(stale_worker)
-                assert cloud_research.claim_job(stale_worker["id"])
-                research_sessions._save(stale_worker_project.path, stale_worker)
-                assert asyncio.run(
-                    research_sessions._claim_cloud_job(stale_worker["id"], stale_worker_project.path)
-                ) is False
-                worker_snapshot = research_sessions._read(
-                    stale_worker_project.path, stale_worker["id"]
-                )
-                assert worker_snapshot["status"] == "paused"
-                assert worker_snapshot["strategy_runs"][0]["status"] == "paused"
-                assert worker_snapshot["steps"] == []
-                assert worker_snapshot["events"][-1]["kind"] == "interrupted"
-                assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
+                    # A reconnect can spawn a worker before anyone opens the
+                    # saved session. It must not repeatedly wait on a stale
+                    # running ledger slot, or execute a duplicate provider call.
+                    stale_worker_project = initialize_project(
+                        a.path / "queued-worker.sigma", "Stale worker", "Recover a worker"
+                    )
+                    stale_worker = job(a.workspace_id)
+                    stale_worker.update(
+                        project_id=stale_worker_project.project.id,
+                        project_path=stale_worker_project.path,
+                        session_number=1,
+                        status="queued",
+                        created_at="2026-01-01T00:00:00+00:00",
+                        updated_at="2026-01-01T00:00:00+00:00",
+                        current_action="Queued",
+                        message="Research is queued.",
+                        events=[],
+                        steps=[],
+                        strategy_runs=[{"status": "queued", "strategy_id": "strategy-worker"}],
+                    )
+                    cloud_research.prepare_job(stale_worker)
+                    assert cloud_research.claim_job(stale_worker["id"])
+                    research_sessions._save(stale_worker_project.path, stale_worker)
+                    assert (
+                        asyncio.run(
+                            research_sessions._claim_cloud_job(
+                                stale_worker["id"], stale_worker_project.path
+                            )
+                        )
+                        is False
+                    )
+                    worker_snapshot = research_sessions._read(
+                        stale_worker_project.path, stale_worker["id"]
+                    )
+                    assert worker_snapshot["status"] == "paused"
+                    assert worker_snapshot["strategy_runs"][0]["status"] == "paused"
+                    assert worker_snapshot["steps"] == []
+                    assert worker_snapshot["events"][-1]["kind"] == "interrupted"
+                    assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
