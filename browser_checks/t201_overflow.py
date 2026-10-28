@@ -38,9 +38,13 @@ with sync_playwright() as playwright:
     # The user-facing overflow error intentionally omits internal evidence hashes
     # and individual obligation text. Verify actionable guidance instead; the
     # saved artifact and absence of provider calls are asserted below.
-    expect(alert).to_contain_text("unresolved prior-session obligations exceed the safe context bound")
+    expect(alert).to_contain_text(
+        "unresolved prior-session obligations exceed the safe context bound"
+    )
     expect(alert).to_contain_text("Saved research is unchanged")
-    expect(alert).to_contain_text("start a new, narrower strategy informed by its saved findings")
+    expect(alert).to_contain_text(
+        "start a new, narrower strategy informed by its saved findings"
+    )
     assert info["omitted"] not in alert.inner_text()
     assert info["omitted_text"] not in alert.inner_text()
     expect(page.get_by_role("button", name="Start a new research session")).to_be_visible()
