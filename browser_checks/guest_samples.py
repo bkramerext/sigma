@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import tempfile
@@ -176,6 +177,21 @@ def exercise(ui_url: str, root: Path) -> None:
             "decides whether to include sponsorship when granting your invitation"
         )
         expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
+        assert welcome.evaluate("el => getComputedStyle(el).transform") == (
+            "matrix(1.25, 0, 0, 1.25, 0, 0)"
+        )
+        assert (
+            welcome.locator(".invitation-welcome-intro").evaluate(
+                "el => getComputedStyle(el).marginBottom"
+            )
+            == "16px"
+        )
+        assert (
+            welcome.locator("#invitation-welcome-phrase").evaluate(
+                "el => getComputedStyle(el).fontStyle"
+            )
+            == "italic"
+        )
         expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
         welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
@@ -232,9 +248,19 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
 
         sample_group.locator("button.sample-open").evaluate("button => button.click()")
-        expect(page.get_by_role("heading", name="Did Jesus Use Cannabis? v1")).to_be_visible(
-            timeout=15000
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible(timeout=15000)
+        page.get_by_role("link", name="Go back to home page").click()
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        sample_group = page.locator("details.sample-type-group").filter(
+            has_text="Did Jesus Use Cannabis?"
         )
+        expect(sample_group).to_have_attribute("open", "")
+        sample_group.locator("button.sample-open").click()
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
         expect(
             page.locator(
@@ -253,9 +279,7 @@ def exercise(ui_url: str, root: Path) -> None:
         dispatches_before_play = len(research_dispatch_requests)
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
-        expect(play_dialog).to_contain_text(
-            "Sign in to run a research session. You can explore sample projects as a guest."
-        )
+        expect(play_dialog).to_contain_text("Sign in to run a research session.")
         expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
         expect(play_dialog.get_by_role("button", name="Cancel")).to_be_visible()
         actions = play_dialog.locator(".settings-actions")

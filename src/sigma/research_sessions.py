@@ -64,7 +64,7 @@ MAX_CONTEXT_OBLIGATIONS = 128
 MAX_CONTEXT_OMISSION_POINTERS = 32
 MAX_CONTEXT_MANIFEST_BYTES = 12_000
 MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
-MAX_PRIOR_OBLIGATION_CONTEXT_BYTES = 32_000
+MAX_PRIOR_OBLIGATION_CONTEXT_BYTES = 64_000
 MAX_OBLIGATION_SOURCE_ARTIFACTS = 32
 MAX_RESEARCH_RESPONSE_BYTES = 1_000_000
 MAX_SESSION_INTERVENTIONS = 24
@@ -693,7 +693,7 @@ def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
         "research_rounds": (1, 10),
         "model_calls": (2, 20),
         "session_duration_minutes": (1, 120),
-        "output_tokens_per_call": (256, 16384),
+        "output_tokens_per_call": (256, 20000),
     }
     for key, (minimum, maximum) in previous_bounds.items():
         value = raw.get(key)
@@ -735,9 +735,9 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     result = dict(raw)
     bounds = {
         "research_rounds": (1, 5),
-        "model_calls": (2, 30),
+        "model_calls": (2, 120),
         "session_duration_minutes": (1, MAX_SESSION_DURATION_MINUTES),
-        "output_tokens_per_call": (256, 16384),
+        "output_tokens_per_call": (256, 20000),
     }
     for key, (minimum, maximum) in bounds.items():
         value = result.get(key)

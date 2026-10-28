@@ -157,6 +157,18 @@ type CurrentQuestion = { id: string; text: string; status: string; actionable: b
 type CurrentUnderstanding = { version: number; project_id: string; session_count: number; project_status: string; scope_note: string; findings: CurrentFinding[]; current_finding_ids: string[]; obligations: CurrentQuestion[]; changes: { kind: string; text: string; source: EvidencePointer; earlier: EvidencePointer | null; caution: string }[]; next_investigations: { obligation_id: string; question: string; source: EvidencePointer; qualification: string }[]; failures: { session_id: string; session_number: number; status: string; note: string }[]; limitations: string[] };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null; maximum_input_tokens_per_session?: number | null };
 type DurationUnit = 'minutes' | 'hours' | 'days';
+type ProjectSettingsTab = 'main' | 'limits' | 'preferences';
+function savedProjectSettingsTab(): ProjectSettingsTab {
+  try {
+    const tab = window.localStorage.getItem('sigma.projectSettingsTab');
+    if (tab === 'limits' || tab === 'preferences') return tab;
+  } catch { /* Use the default tab when browser storage is unavailable. */ }
+  return 'main';
+}
+function savedHomeGroupOpen(kind: 'sample' | 'recent', key: string): boolean {
+  try { return window.localStorage.getItem(`sigma.home.${kind}Group:${key}`) === 'true'; }
+  catch { return false; }
+}
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_value: string; session_duration_unit: DurationUnit; output_tokens_per_call: string; maximum_estimated_cost_usd: string; maximum_input_tokens_per_session: string };
 function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchSession): string {
   return ids?.map(id => `Artifact ${session.artifacts.find(artifact => artifact.id === id)?.sequence ?? '?'}`).join(', ') || 'No artifact references';
@@ -314,7 +326,7 @@ function researchArtifactMarkdown(artifact: ResearchArtifact): string {
 const MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60;
 const durationUnitMinutes: Record<DurationUnit, number> = { minutes: 1, hours: 60, days: 1440 };
 const limitBounds = {
-  research_rounds: [1, 5], model_calls: [2, 30], output_tokens_per_call: [256, 16384],
+  research_rounds: [1, 5], model_calls: [2, 120], output_tokens_per_call: [256, 20000],
 } as const;
 function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
   const unit: DurationUnit = value.session_duration_minutes >= 1440 && value.session_duration_minutes % 1440 === 0 ? 'days' : value.session_duration_minutes >= 60 && value.session_duration_minutes % 60 === 0 ? 'hours' : 'minutes';
@@ -2515,7 +2527,11 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [previewBusy, setPreviewBusy] = useState(!initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'main' | 'limits' | 'preferences'>('main');
+  const [activeTab, setActiveTab] = useState<ProjectSettingsTab>(savedProjectSettingsTab);
+  function changeSettingsTab(tab: ProjectSettingsTab) {
+    setActiveTab(tab);
+    try { window.localStorage.setItem('sigma.projectSettingsTab', tab); } catch { /* Keep this dialog usable when storage is unavailable. */ }
+  }
   const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, model_calls: 30, session_duration_minutes: 60, output_tokens_per_call: 12000, maximum_estimated_cost_usd: null, maximum_input_tokens_per_session: null }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   const limitValidation = validateLimitDraft(limitDraft);
@@ -2591,10 +2607,10 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
-      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
-        <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Research</button>
-        <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => setActiveTab('limits')}>Limits</button>
-        <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => setActiveTab('preferences')}>Preferences</button>
+      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
+        <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
+        <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
+        <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => changeSettingsTab('preferences')}>Preferences</button>
       </div>}
       <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Choose this project’s research type and AI settings. Edit its title and description directly on the project page.' : 'Name a project and choose its research category.'}</p>
       <fieldset disabled={busy}>
@@ -2624,12 +2640,12 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>Research limits apply to future sessions. For local strategy generation, the model-call limit also sets the call budget. Existing sessions keep the limits captured when they started.</p>
       {cloud?.target === 'hosted' && <p className="settings-hint">Cloud research is capped at six calls, 15 minutes, and $0.25 estimated cost per session. Values above these limits are saved at the cloud cap.</p>}
-      {cloud?.target === 'local' && <p className="settings-hint">Local sponsored research uses this project’s saved call limit, up to 30 calls. Sponsored spending is still bounded by the account allowance and a $0.25 per-session cap; session duration is capped at 15 minutes.</p>}
+      {cloud?.target === 'local' && <p className="settings-hint">Local sponsored research uses this project’s saved call limit, up to 120 calls. Sponsored spending is still bounded by the account allowance and a $0.25 per-session cap; session duration is capped at 15 minutes.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
-        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2} max={30} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic; local strategy generation uses this as its call ceiling.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
+        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2 * (Number(limitDraft.research_rounds) || 1)} max={120} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, up to 120 calls. Minimum is twice the Skeptic iterations (currently {2 * (Number(limitDraft.research_rounds) || 1)}); each selected strategy needs an Investigator/Skeptic pair. Local strategy generation also uses this as its call ceiling.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
         <label htmlFor="research-duration-value">Maximum session duration</label><div className="research-duration-controls"><input id="research-duration-value" type="number" min={1} max={Math.floor(MAX_SESSION_DURATION_MINUTES / durationUnitMinutes[limitDraft.session_duration_unit])} step={1} value={limitDraft.session_duration_value} aria-invalid={!!limitValidation.errors.session_duration_value} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_value: event.target.value }))}/><select id="research-duration-unit" aria-label="Maximum session duration unit" value={limitDraft.session_duration_unit} onChange={event => setLimitDraft(value => ({ ...value, session_duration_unit: event.target.value as DurationUnit }))}><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 minute to 7 days. Time spent stopped counts.</p>{limitValidation.errors.session_duration_value && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_value}</p>}
-        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={16384} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 16,384 tokens. SIGMA sends this limit where supported and enforces it against reported output usage or a conservative response-size bound.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
+        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={20000} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 20,000 tokens. Higher limits allow longer answers but increase the worst-case spend reserve and may stop a sponsored call before dispatch if it cannot fit the session allowance.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
         <label htmlFor="research-input-tokens">Maximum input tokens per session</label><input id="research-input-tokens" type="number" min={4096} max={1000000} step={1} placeholder="Unlimited" value={limitDraft.maximum_input_tokens_per_session} aria-invalid={!!limitValidation.errors.maximum_input_tokens_per_session} aria-describedby="research-input-help research-input-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_input_tokens_per_session: event.target.value }))}/><p id="research-input-help" className="settings-hint">Optional cumulative cap. Before dispatch, SIGMA reserves the exact serialized request byte count plus an 8,192-token structural allowance as an upper bound; afterward, reported input usage must fit within that reservation. Unknown or in-flight calls retain their full reservation.</p>{limitValidation.errors.maximum_input_tokens_per_session && <p id="research-input-error" className="limit-error" role="alert">{limitValidation.errors.maximum_input_tokens_per_session}</p>}
         {!cloud?.enabled && <>
           <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label>
@@ -2724,9 +2740,11 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Import a project or begin a new project.</p>}
     {recentGroups.map(group => {
       const groupKey = group.type ?? 'other';
-      const hiddenRunningProject = !expandedGroups[groupKey] && group.projects.some(entry => entry.research_running);
-      return <details className="recent-type-group" key={groupKey} onToggle={event => {
+      const groupExpanded = expandedGroups[groupKey] ?? savedHomeGroupOpen('recent', groupKey);
+      const hiddenRunningProject = !groupExpanded && group.projects.some(entry => entry.research_running);
+      return <details className="recent-type-group" key={groupKey} open={groupExpanded} onToggle={event => {
         const isOpen = event.currentTarget.open;
+        try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
       <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
@@ -2784,7 +2802,7 @@ function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView)
   }, []);
   return <div className="empty home-empty home-samples">
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
-    {groups.map(group => <details className="sample-type-group" key={group.type}>
+    {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
       <ul>{group.samples.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
@@ -3087,7 +3105,7 @@ function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => 
   return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
     <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
     <div className="settings-body">
-      <p id="guest-research-message">Sign in to run a research session. You can explore sample projects as a guest.</p>
+      <p id="guest-research-message">Sign in to run a research session.</p>
       <div className="settings-actions session-remove-confirm-actions">
         <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in now</button>
         <button type="button" className="text-view-link" onClick={dismiss}>Cancel</button>
@@ -3115,7 +3133,7 @@ async function readAgenticStream(response: Response, onEvent: (event: AgenticEve
       if (terminal) throw new Error('The server sent progress after its terminal event. You can retry; nothing was saved.');
       sequence = event.sequence; runId = event.run_id;
       const activityKind = event.kind === 'explore' || event.kind === 'challenge' || event.kind === 'revise';
-      if (event.type === 'run.started' && (!Number.isInteger(event.max_calls) || (event.max_calls ?? 0) < 2 || (event.max_calls ?? 0) > 30)) throw new Error('The server sent an invalid run limit. You can retry; nothing was saved.');
+      if (event.type === 'run.started' && (!Number.isInteger(event.max_calls) || (event.max_calls ?? 0) < 2 || (event.max_calls ?? 0) > 120)) throw new Error('The server sent an invalid run limit. You can retry; nothing was saved.');
       if (event.type.startsWith('activity.') && (!activityKind || !Number.isInteger(event.attempt) || (event.attempt ?? 0) < 1 || (event.attempt ?? 0) > 15)) throw new Error('The server sent an invalid activity event. You can retry; nothing was saved.');
       if (event.type === 'activity.completed' && typeof event.summary !== 'string') throw new Error('The server sent an incomplete activity result. You can retry; nothing was saved.');
       if (event.type === 'activity.completed' && event.kind === 'challenge' && (!event.assessment || !Array.isArray(event.objections) || typeof event.missing_obligations !== 'string' || typeof event.mechanism_comparison !== 'string')) throw new Error('The server sent an incomplete reviewer summary. You can retry; nothing was saved.');

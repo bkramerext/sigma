@@ -7149,9 +7149,13 @@ The next diagnostic records only aggregate selected bytes, omitted count, and
 maximum UTF-8/JSON byte sizes for obligation text, scope assumptions, rationale,
 and provenance. It emits no project text, IDs, email, or credentials. The cap
 remains fail-closed until those measurements identify a safe compaction or budget
-change. The user-visible symptoms and distinct error layers are detailed in
-`docs/SPONSORED_PLAY_INVESTIGATION.md`; fixture tests do not reproduce the user's
-saved obligation payload or prove real sponsor inference.
+change. The latest local retry was read from the shared diagnostic log and is
+documented in `docs/SPONSORED_PLAY_INVESTIGATION.md`: 12 obligations omitted,
+31,118 selected JSON bytes, with max text/scope/rationale/provenance fields of
+156/414/0/416 bytes. This points to aggregate history volume, not a single
+oversized field. The request was rejected before provider dispatch. Fixture
+tests do not reproduce the user's saved obligation payload or prove real sponsor
+inference.
 
 Guest header cleanup now hides the unusable ChatGPT connection pill for
 unauthenticated cloud guests on Home and project pages. Real Chrome guest/sample
@@ -7161,3 +7165,21 @@ Python files formatted, Pyright clean, frontend typecheck and production build
 passed). This UI change does not fix or validate sponsored Play. The next
 deliberate sponsored Play attempt is for safe payload measurement; if admission
 passes, it may dispatch a real sponsor inference and consume allowance.
+
+### Sponsored Play follow-up and home-page persistence (2026-10-27)
+
+The 6:02 PM Play failure used a stale backend: PID 79836 began at 5:56:42 PM,
+while the 64 KB context-cap source edit was written at 6:04:31 PM. Thus this
+retry did not test the change. A read-only reconstruction of the saved ledger
+retained all 39 unresolved obligations in 44.7–58.6 KB role contexts, below the
+256 KB context ceiling. The separate conservative cost-reserve formula appears
+capable of being the next gate ($0.29–$0.35 estimated versus the $0.25 session
+cap for the current saved model/settings); this has not been observed live and
+is not being weakened. The user authorized one more Play trial, then escalation.
+The trial may dispatch a provider call and consume sponsored allowance.
+
+Home Catalog expansion for Samples and Recent category groups now persists in
+local storage across project navigation. Project Settings also restores the
+last selected tab. Settings and help text now allow 120 local calls and 20,000
+output tokens while retaining the 30-call default, 12,000-token default, hosted
+six-call cap, sponsored $0.25 cap, and 15-minute sponsored duration cap.

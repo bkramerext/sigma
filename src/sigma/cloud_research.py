@@ -28,7 +28,7 @@ MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("15.00")
 MAX_SESSION_SPEND_USD = 0.25
 MAX_SESSION_CALLS = 6
-MAX_LOCAL_SESSION_CALLS = 30
+MAX_LOCAL_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
 
 
@@ -366,7 +366,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                 "Hosted cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
             )
         raise CloudResearchUnavailable(
-            "Local sponsored research sessions are capped at 30 calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+            "Local sponsored research sessions are capped at 120 calls, 15 minutes, and $0.25. Update Project Settings → Limits."
         )
     workspace = _ledger_workspace()
     if workspace is None:

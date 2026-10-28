@@ -139,7 +139,7 @@ def main() -> None:
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(
                     settings.get_by_text(
-                        "Local sponsored research uses this project’s saved call limit, up to 30 calls."
+                        "Local sponsored research uses this project’s saved call limit, up to 120 calls."
                     )
                 ).to_be_visible()
                 calls = settings.get_by_label("Maximum agent calls", exact=True)

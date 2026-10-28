@@ -2795,11 +2795,11 @@ def test_limits_validation(path: Path):
     initialize_project(path, "Limits project", "A question")
     before = research_sessions.get_limits(str(path))
     invalid = [
-        {**before, "model_calls": 31},
+        {**before, "model_calls": 121},
         {**before, "research_rounds": 6, "model_calls": 30},
         {**before, "research_rounds": 3, "model_calls": 5},
         {**before, "session_duration_minutes": 7 * 24 * 60 + 1},
-        {**before, "output_tokens_per_call": 16385},
+        {**before, "output_tokens_per_call": 20001},
         {**before, "maximum_estimated_cost_usd": 0.001},
         {**before, "maximum_estimated_cost_usd": 100.01},
         {**before, "maximum_estimated_cost_usd": float("inf")},
@@ -2815,9 +2815,9 @@ def test_limits_validation(path: Path):
     valid_upper = {
         **before,
         "research_rounds": 5,
-        "model_calls": 30,
+        "model_calls": 120,
         "session_duration_minutes": 7 * 24 * 60,
-        "output_tokens_per_call": 16384,
+        "output_tokens_per_call": 20000,
         "maximum_estimated_cost_usd": 100,
     }
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
