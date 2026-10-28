@@ -1430,7 +1430,18 @@ def test_json_project_session_playback(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_hosted_deployment_forwards_global_spend_window() -> None:
+    compose = (Path(__file__).resolve().parents[1] / "deploy" / "compose.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW: ${SIGMA_CLOUD_GLOBAL_SPEND_WINDOW:-cumulative}"
+        in compose
+    ), "The hosted backend silently ignored the approved spending-window setting."
+
+
 def main() -> None:
+    test_hosted_deployment_forwards_global_spend_window()
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
         persistent_root = (
