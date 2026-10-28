@@ -1841,6 +1841,49 @@ class CloudAuthTests(TestCase):
             self.assertNotIn("validated-sponsor-access-token", response.text)
             self.assertNotIn("validated-sponsor-refresh-token", response.text)
 
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "nontrivialzeeros@gmail.com",
+                    "role": "member",
+                    "allowance_usd": 1,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23458)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            member_login = self.finish(
+                email="nontrivialzeeros@gmail.com",
+                subject="sponsor-identity-hidden-member",
+                client=member,
+            )
+            self.assertEqual(member_login.status_code, 303)
+            member.cookies.update(member_login.cookies)
+            self.assertEqual(
+                member.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            with patch.object(
+                openai_connection, "_check", AsyncMock(side_effect=validated_catalog)
+            ):
+                member_response = member.get("/api/ai/connection?refresh=true")
+                mode_response = member.post(
+                    "/api/ai/mode",
+                    json={"mode": "sponsored"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(member_response.status_code, 200, member_response.text)
+            self.assertEqual(member_response.json()["status"], "connected")
+            self.assertNotIn("account_label", member_response.json())
+            self.assertNotIn("zetacontinuation@gmail.com", member_response.text)
+            self.assertEqual(mode_response.status_code, 200, mode_response.text)
+            self.assertNotIn("zetacontinuation@gmail.com", mode_response.text)
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)

@@ -212,12 +212,23 @@ def exercise(origin: str) -> None:
         expect(tooltip).to_contain_text("ChatGPT Connected as zetacontinuation@gmail.com")
         expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
 
-        # A sponsored member sees the disconnected state and its recovery
-        # guidance, but neither pill action can initiate shared sponsor OAuth.
+        # The API fixture deliberately supplies the sponsor identity even for
+        # this member; neither the UI label nor tooltip may reveal it.
         current_user.update(email="nontrivialzeeros@gmail.com", role="member")
         selected_mode["value"] = "sponsored"
-        attempt_complete["value"] = False
+        attempt_complete["value"] = True
         selected_account_is_sponsor["value"] = False
+        page.reload(wait_until="domcontentloaded")
+        member_summary = page.locator(".api-connection > summary")
+        expect(member_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(member_summary).not_to_contain_text("zetacontinuation@gmail.com")
+        member_tooltip = page.locator("#sponsored-allowance-tooltip")
+        expect(member_tooltip).not_to_contain_text("zetacontinuation@gmail.com")
+        expect(member_tooltip).not_to_contain_text("ChatGPT Connected as")
+
+        # When the shared sponsor is disconnected, the member gets a recovery
+        # notice but neither sponsor nor personal OAuth starts from this pill.
+        attempt_complete["value"] = False
         page.reload(wait_until="domcontentloaded")
         member_summary = page.locator(".api-connection > summary")
         expect(member_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; unavailable")

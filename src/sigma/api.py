@@ -1252,6 +1252,20 @@ def update_project_view(body: UpdateProjectRequest):
     )
 
 
+def connection_view_state(state: dict[str, Any], request: Request) -> dict[str, Any]:
+    principal = getattr(request.state, "cloud_principal", None)
+    if isinstance(principal, cloud_auth.Principal) and principal.role != "admin":
+        try:
+            sponsored_selected = (
+                cloud_auth.model_access_for_subject(principal.subject) == "sponsored"
+            )
+        except (OSError, RuntimeError, sqlite3.Error):
+            sponsored_selected = True  # Fail closed for sponsor identity disclosure.
+        if sponsored_selected:
+            state = {key: value for key, value in state.items() if key != "account_label"}
+    return state
+
+
 @app.get("/api/ai/connection")
 async def connection_view(request: Request, refresh: bool = False):
     state = await connection(refresh)
@@ -1262,7 +1276,7 @@ async def connection_view(request: Request, refresh: bool = False):
             cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
         except (sqlite3.Error, OSError, RuntimeError) as exc:
             raise HTTPException(503, "Account connection state could not be saved.") from exc
-    return state
+    return connection_view_state(state, request)
 
 
 @app.get("/api/ai/models")
@@ -1437,7 +1451,7 @@ async def auth_mode(body: AuthModeRequest, request: Request):
             raise HTTPException(403, "This account cannot select sponsored access.") from exc
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(503, "Connection choice could not be saved.") from exc
-        return await connection(refresh=True)
+        return connection_view_state(await connection(refresh=True), request)
     if cfg.enabled and not cfg.local:
         if not isinstance(principal, cloud_auth.Principal):
             raise HTTPException(401, "Authentication required.")
@@ -1458,9 +1472,9 @@ async def auth_mode(body: AuthModeRequest, request: Request):
             raise HTTPException(403, "This account cannot select sponsored access.") from exc
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(503, "Connection choice could not be saved.") from exc
-        return await connection(refresh=True)
+        return connection_view_state(await connection(refresh=True), request)
     await chatgpt_auth.select(body.mode, body.account_id)
-    return await connection()
+    return connection_view_state(await connection(), request)
 
 
 @app.post("/api/ai/disconnect")

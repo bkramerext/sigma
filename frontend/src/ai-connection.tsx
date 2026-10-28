@@ -269,13 +269,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     && !!cloudFunding.sponsorshipEligible
     && sponsoredSelected
     && ai.info?.mode === 'chatgpt'
-    && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
+    && ['reauth_required', 'disconnected', 'unauthorized', 'forbidden', 'unavailable', 'unconfigured', 'plan_not_permitted'].includes(ai.info.status);
   const localSponsorNeedsReconnect = localSponsorDisconnected && !!cloudFunding?.sponsorshipUnlimited;
   const localMemberSponsorUnavailable = localSponsorDisconnected && !cloudFunding?.sponsorshipUnlimited;
   const localAdminSponsorNeedsReconnect = cloudFunding?.target === 'local'
     && !!cloudFunding.sponsorshipUnlimited
     && !!ai.info?.sponsor_account_selected
-    && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
+    && ['reauth_required', 'disconnected', 'unauthorized', 'forbidden', 'unavailable', 'unconfigured', 'plan_not_permitted'].includes(ai.info.status);
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
@@ -292,7 +292,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : localMemberSponsorUnavailable ? 'Sponsored ChatGPT unavailable'
-      : connected && ai.info?.mode === 'chatgpt' ? 'ChatGPT Connected'
+      : connected && cloudFunding?.sponsorshipUnlimited && ai.info?.mode === 'chatgpt' ? 'ChatGPT Connected'
       : hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = connected && !sponsoredPill
@@ -325,7 +325,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
             : cloudFunding.budget
               ? `Sponsored: $${cloudFunding.budget.remaining_usd.toFixed(2)} of $${cloudFunding.budget.allowance_usd.toFixed(2)} left.${globalFundingDetail}${providerWarning}`
               : 'Sponsored allowance unavailable.';
-  const sponsorTooltip = `${connected && ai.info?.mode === 'chatgpt' ? `ChatGPT Connected${ai.info.account_label ? ` as ${ai.info.account_label}` : ''}. ` : ''}${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : localMemberSponsorUnavailable ? 'SIGMA-sponsored ChatGPT is unavailable. A SIGMA administrator must reconnect the sponsor account. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected && !connected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
+  const sponsorTooltip = `${connected && cloudFunding?.sponsorshipUnlimited && ai.info?.mode === 'chatgpt' ? `ChatGPT Connected${ai.info.account_label ? ` as ${ai.info.account_label}` : ''}. ` : ''}${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : localMemberSponsorUnavailable ? 'SIGMA-sponsored ChatGPT is unavailable. A SIGMA administrator must reconnect the sponsor account. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected && !connected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : localMemberSponsorUnavailable ? '; unavailable' : ''}`;
   const allowanceText = !sponsoredSelected
     ? 'Personal'
