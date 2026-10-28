@@ -2022,7 +2022,10 @@ def main() -> None:
             root, allowance_ledger
         )
         test_local_limits_remain_unmodified(root)
-        test_local_global_spend_default_stays_at_legacy_safe_ceiling()
+        test_local_global_spend_default_supports_small_team_pilot()
+        monthly_ledger = root / "monthly-global-ledger"
+        monthly_ledger.mkdir(mode=0o700)
+        test_monthly_global_budget_retains_unknown_provider_holds(root, monthly_ledger)
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
