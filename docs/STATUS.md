@@ -5,6 +5,16 @@ client IP address and port. The backend
 uses the configured build commit when supplied, or the checkout HEAD for a
 local launch. A local restart is needed to see the new format.
 
+## Context-aware AI text conversion (2026-10-28)
+
+The shared AI Plain/Markdown conversion prompt now asks the model to decide
+slash notation from sentence context: `good/better` in prose remains wording,
+while `1/2 the people in this room` expresses a fraction. It explicitly keeps
+ordinary slash-separated words out of math delimiters and LaTeX fractions.
+The conversion still preserves the source and uses the existing structured
+response path. Offline request assertions cover both API-key and ChatGPT-plan
+payloads; live model quality remains unverified.
+
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 
 Added **Maximum concurrent sessions** to Project Settings → Limits. The
