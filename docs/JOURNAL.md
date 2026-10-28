@@ -322,9 +322,9 @@ But SIGMA was looking less like a development project and more like a product. T
 
 By Day 7, SIGMA had most of the pieces I wanted. The question was becoming whether another person could arrive, understand what was available, and actually use it.
 
-That mattered because I had been building SIGMA partly to show what I could do. I had asked a recruiter at OneBrief to hold off on my application while I finished something more substantial. I thought a working application would say more than a description of one. My original estimate had been four days, with the weekend as a cushion. By Tuesday, we were well past that.
+I wanted the first experience to feel complete rather than merely demonstrate that the underlying features existed. A working application needed to do something useful, and its limits needed to be clear.
 
-The extra time was beginning to bother me. But I also didn't want to invite someone into an application that only appeared to work.
+That meant taking extra care with the parts a new user would encounter first, even as I was eager to finish.
 
 ### Making an invitation mean something
 
@@ -376,6 +376,6 @@ Day 7 brought a change in perspective. Earlier in the week, I was asking whether
 
 That shifted attention toward invitations, allowances, clear account states, concurrency, and reliable releases. None of those features was the original reason for building SIGMA, but they were part of making the research engine usable.
 
-I was still uneasy about how long the project had taken. The temptation was to keep adding one more fix before showing it to anyone. We made one deliberate choice not to do that.
+There was still a temptation to keep adding one more fix before showing SIGMA to anyone. We made one deliberate choice not to do that.
 
 SIGMA was substantially closer to a demonstration I could put in someone's hands. The next test wasn't another merge. It was whether the deployed experience lived up to what we'd built.
