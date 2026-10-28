@@ -333,7 +333,7 @@ function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
   const duration = value.session_duration_minutes / durationUnitMinutes[unit];
   return { research_rounds: String(value.research_rounds), model_calls: String(value.model_calls), session_duration_value: String(duration), session_duration_unit: unit, output_tokens_per_call: String(value.output_tokens_per_call), maximum_estimated_cost_usd: value.maximum_estimated_cost_usd === null ? '' : String(value.maximum_estimated_cost_usd), maximum_input_tokens_per_session: value.maximum_input_tokens_per_session === null || value.maximum_input_tokens_per_session === undefined ? '' : String(value.maximum_input_tokens_per_session), max_concurrent_sessions: String(value.max_concurrent_sessions ?? '1') };
 }
-function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
+function validateLimitDraft(draft: ResearchLimitsDraft, requireSponsoredCost = false): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
   const errors: Partial<Record<keyof ResearchLimitsDraft, string>> = {};
   const value = {} as ResearchLimits;
   for (const key of Object.keys(limitBounds) as Array<keyof typeof limitBounds>) {
@@ -355,7 +355,8 @@ function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits
       errors.session_duration_value = 'Enter a duration from 1 minute to 7 days.';
     } else value.session_duration_minutes = durationMinutes;
   }
-  if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
+  if (draft.maximum_estimated_cost_usd === '' && requireSponsoredCost) errors.maximum_estimated_cost_usd = 'Set a maximum estimated session cost before saving limits for sponsored research.';
+  else if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
   else if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(draft.maximum_estimated_cost_usd)) {
     errors.maximum_estimated_cost_usd = 'Enter a USD amount from $0.01 to $100.00, or leave blank for unlimited.';
   } else {
@@ -922,8 +923,10 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
       const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
       const currentLimits = await limitResponse.json();
       if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
-      if (!validateLimitDraft(draftLimits(currentLimits)).value) {
-        throw new Error('Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
+      const validation = validateLimitDraft(draftLimits(currentLimits), !!requiresSponsoredCost);
+      if (!validation.value) {
+        throw new Error(validation.errors.maximum_estimated_cost_usd
+          ?? 'Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
       }
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       if (chosenIds.length > 12) {
@@ -1028,6 +1031,8 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   }
 
   const playLabel = 'Start a new research session';
+  const requiresSponsoredCost = cloud?.target === 'hosted'
+    || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
   const play = useCallback(() => {
     if (busy || readError) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
@@ -2356,12 +2361,15 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) throw new Error('Model availability requires an authorized session. Saved settings are unchanged.');
+        if (response.status === 401 || response.status === 403) {
+          if (!controller.signal.aborted) { setModels([]); setMessage('Model availability requires an authorized session. Saved settings are unchanged.'); }
+          return null;
+        }
         throw new Error(`Model availability check failed (HTTP ${response.status}). Retry after connectivity is restored. Saved settings are unchanged.`);
       }
       return response.json();
     }).then(data => {
-      if (!controller.signal.aborted) setModels(Array.isArray(data.models) ? data.models : []);
+      if (!controller.signal.aborted && data) setModels(Array.isArray(data.models) ? data.models : []);
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         setModels(reviewedModelPreferences);
@@ -2547,7 +2555,11 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, model_calls: 30, session_duration_minutes: 60, output_tokens_per_call: 12000, maximum_estimated_cost_usd: null, maximum_input_tokens_per_session: null, max_concurrent_sessions: '1' }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
-  const limitValidation = validateLimitDraft(limitDraft);
+  const limitValidation = validateLimitDraft(
+    limitDraft,
+    cloud?.target === 'hosted'
+      || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored'),
+  );
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
   useEffect(() => {
     if (!initial) return;
@@ -2660,12 +2672,12 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         <label htmlFor="research-duration-value">Maximum session duration</label><div className="research-duration-controls"><input id="research-duration-value" type="number" min={1} max={Math.floor(MAX_SESSION_DURATION_MINUTES / durationUnitMinutes[limitDraft.session_duration_unit])} step={1} value={limitDraft.session_duration_value} aria-invalid={!!limitValidation.errors.session_duration_value} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_value: event.target.value }))}/><select id="research-duration-unit" aria-label="Maximum session duration unit" value={limitDraft.session_duration_unit} onChange={event => setLimitDraft(value => ({ ...value, session_duration_unit: event.target.value as DurationUnit }))}><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 minute to 7 days. Time spent stopped counts.</p>{limitValidation.errors.session_duration_value && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_value}</p>}
         <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={20000} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 20,000 tokens. Higher limits allow longer answers but increase the worst-case spend reserve and may stop a sponsored call before dispatch if it cannot fit the session allowance.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
         <label htmlFor="research-input-tokens">Maximum input tokens per session</label><input id="research-input-tokens" type="number" min={4096} max={1000000} step={1} placeholder="Unlimited" value={limitDraft.maximum_input_tokens_per_session} aria-invalid={!!limitValidation.errors.maximum_input_tokens_per_session} aria-describedby="research-input-help research-input-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_input_tokens_per_session: event.target.value }))}/><p id="research-input-help" className="settings-hint">Optional cumulative cap. Before dispatch, SIGMA reserves the exact serialized request byte count plus an 8,192-token structural allowance as an upper bound; afterward, reported input usage must fit within that reservation. Unknown or in-flight calls retain their full reservation.</p>{limitValidation.errors.maximum_input_tokens_per_session && <p id="research-input-error" className="limit-error" role="alert">{limitValidation.errors.maximum_input_tokens_per_session}</p>}
-        {!cloud?.enabled && <>
+        <>
           <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label>
           <input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/>
-          <p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>
+          <p id="research-cost-help" className="settings-hint">Optional for personal use. Required for sponsored research. Set $0.01 to $100.00, or leave blank for unlimited when supported. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>
           {limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
-        </>}
+        </>
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}

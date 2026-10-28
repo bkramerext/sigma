@@ -99,7 +99,9 @@ def _spend_ceiling_decimal() -> Decimal:
     if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
     ):
-        return MAX_GLOBAL_SPEND_USD
+        # Preserve the established local aggregate guard unless an operator
+        # deliberately raises it. The project session cap is independent.
+        return Decimal("0.25")
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,

@@ -96,7 +96,7 @@ def main() -> None:
                         route.fulfill(status=204)
                     elif route.request.url.endswith("/api/ai/models"):
                         route.fulfill(
-                            status=403,
+                            status=503,
                             content_type="application/json",
                             body=json.dumps({"error": "Model access is not currently verifiable."}),
                         )
@@ -106,7 +106,7 @@ def main() -> None:
                             content_type="application/json",
                             body=json.dumps(
                                 {
-                                    "target": "local",
+                                    "target": "hosted",
                                     "enabled": True,
                                     "ready": True,
                                     "authenticated": True,
@@ -206,6 +206,16 @@ def main() -> None:
                 calls = settings.get_by_label("Maximum agent calls", exact=True)
                 expect(calls).to_have_value("30")
                 calls.fill("12")
+                cost = settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
+                expect(cost).to_be_visible()
+                expect(settings.get_by_text("Required for sponsored research.")).to_be_visible()
+                expect(cost).to_have_attribute("aria-invalid", "true")
+                expect(
+                    settings.get_by_text(
+                        "Set a maximum estimated session cost before saving limits for sponsored research."
+                    )
+                ).to_be_visible()
+                cost.fill("0.50")
                 settings.get_by_role("button", name="Save", exact=True).click()
                 expect(settings).to_be_hidden()
                 saved = page.evaluate(
@@ -216,11 +226,15 @@ def main() -> None:
                     }"""
                 )
                 assert saved["model_calls"] == 12, saved
+                assert saved["maximum_estimated_cost_usd"] == 0.5, saved
                 page.reload(wait_until="networkidle")
                 page.get_by_role("button", name="Project settings", exact=True).click()
                 settings = page.get_by_role("dialog", name="Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(settings.get_by_label("Maximum agent calls", exact=True)).to_have_value("12")
+                expect(
+                    settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
+                ).to_have_value("0.5")
                 assert not errors, errors
                 page.screenshot(path="/tmp/sigma-local-sponsored-limits.png", full_page=True)
             finally:

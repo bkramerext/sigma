@@ -55,14 +55,17 @@ with sync_playwright() as playwright:
         (
             401,
             "Model availability requires an authorized session. Saved settings are unchanged.",
+            False,
         ),
         (
             403,
             "Model availability requires an authorized session. Saved settings are unchanged.",
+            False,
         ),
         (
             503,
-            "Model availability check failed (HTTP 503). Retry after connectivity is restored. Saved settings are unchanged.",
+            "Model availability check failed (HTTP 503). Retry after connectivity is restored. Saved settings are unchanged. Preferences remain configurable; access is checked when connected.",
+            True,
         ),
     ]
 
@@ -76,16 +79,23 @@ with sync_playwright() as playwright:
 
         return handle
 
-    for status, expected_message in cases:
+    for status, expected_message, preferences_available in cases:
         page.route("**/api/ai/models", catalog_failure(status))
         page.reload()
         model = page.locator(".project-model-pill")
         thinking = page.locator(".project-thinking-pill")
         difficulty = page.locator(".project-difficulty-badge")
-        expect(model).to_be_disabled()
-        expect(thinking).to_be_disabled()
+        if preferences_available:
+            expect(model).to_be_enabled()
+            expect(thinking).to_be_enabled()
+            expect(page.locator(".project-controls-message")).to_contain_text(
+                "Preferences remain configurable; access is checked when connected."
+            )
+        else:
+            expect(model).to_be_disabled()
+            expect(thinking).to_be_disabled()
         expect(difficulty).to_be_enabled()
-        expect(model).to_contain_text("gpt-6.1-sol")
+        expect(model).to_contain_text("Sol" if preferences_available else "gpt-6.1-sol")
         expect(thinking).to_contain_text("High")
         expect(page.locator(".project-controls-message")).to_have_text(expected_message)
         for width in (1280, 390, 320):

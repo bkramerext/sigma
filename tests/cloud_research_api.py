@@ -170,7 +170,7 @@ def main() -> None:
                 assert limits.status_code == 200, limits.text
                 assert limits.json()["model_calls"] == 30
                 assert limits.json()["research_rounds"] == 5
-                assert limits.json()["session_duration_minutes"] == 15
+                assert limits.json()["session_duration_minutes"] == 60
                 assert limits.json()["maximum_estimated_cost_usd"] == 1.0
                 key = str(uuid4())
                 start_body = {
@@ -183,6 +183,7 @@ def main() -> None:
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert started.status_code == 200, started.text
+                assert started.json()["duration_limit_minutes"] == 15
                 session_id = started.json()["id"]
 
                 # A new request context sees the saved authoritative status;

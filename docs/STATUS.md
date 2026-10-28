@@ -7410,3 +7410,35 @@ fixed-header scrolling, editable text sizing, and action/pill hover styling.
 Generated project data was left in its original checkout. Frontend typecheck and
 the real-Chrome Home/Project check passed after the transfer; the full suite was
 not rerun.
+
+### Issue #289 adversarial PR review follow-up (2026-10-28)
+
+The review fixes hosted Project Settings so sponsored users can set the required
+estimated-cost limit, including on a new project. A sponsored start with no
+configured cost limit now returns an actionable settings message. Configured
+duration remains saved as entered; the 15-minute hosted/sponsored cap is applied
+to each session's runtime deadline only. The missing local global-spend setting
+continues to use the legacy `$0.25` ceiling instead of expanding to `$15`.
+
+Personal connection transitions now explicitly disconnect the local ChatGPT
+account before selecting sponsorship. A failed or incomplete personal sign-in
+does not change funding mode; existing sponsored allowance records remain
+untouched. Hosted personal authorization remains disabled. Temporary model
+catalog failures keep model/thinking preferences editable as unverified, while
+401/403 authorization failures keep those controls disabled.
+
+Session termination messages now distinguish configured session cost limits,
+bounded session token limits, and hard account/global token or cost ledger
+refusals. They include cycle and call counts and identify when a Skeptic call
+was not dispatched. Added a deterministic provider-backed 1/6-call regression
+for the original configured-cost-reserve failure, plus hard-ledger and token
+diagnostic coverage.
+
+Verification: the complete `./sigma test` passed after implementation, including
+all test suites, Ruff, formatting, Pyright, frontend typecheck, and production
+build. Real Chrome passed `browser_checks/hosted_sponsored_connection.py`,
+`browser_checks/local_sponsored_limits.py` (fresh hosted settings, required
+cost validation, save/reload), and `browser_checks/model_availability.py`
+(401/403 disabled; 503 configurable/unverified). The browser checks used
+deterministic fixtures. No live or paid provider inference and no hosted
+deployment authorization were exercised.

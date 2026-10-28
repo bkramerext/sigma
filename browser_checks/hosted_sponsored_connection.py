@@ -101,6 +101,7 @@ def exercise(origin: str) -> None:
         local_sponsored_mode = {"value": False}
         local_sponsor_reauth = {"value": False}
         personal_active_account = {"value": None}
+        personal_connection_status = {"value": "disconnected"}
         sponsorship_eligible = {"value": True}
         personal_signin_pending = {"value": False}
         sponsored_test_mode = {"value": False}
@@ -209,6 +210,8 @@ def exercise(origin: str) -> None:
             path = request.url.split("?", 1)[0]
             method = request.method
             body = request.post_data_json if request.post_data else {}
+            if path.endswith("/api/cloud-auth/mock/model-access"):
+                body = {"mode": request.url.split("mode=", 1)[-1].split("&", 1)[0]}
             if method == "POST":
                 posts.append((path, body))
             payload: object = {}
@@ -249,6 +252,9 @@ def exercise(origin: str) -> None:
                 mock_provider["value"] = "connected"
                 route.fulfill(status=204)
                 return
+            elif path.endswith("/api/cloud-auth/mock/model-access") and method == "POST":
+                selected["mode"] = body["mode"]
+                payload = {"mode": body["mode"], "simulated": True}
             elif path.endswith("/api/cloud-auth/mock/funding"):
                 payload = {
                     "mode": "sponsored",
@@ -291,7 +297,7 @@ def exercise(origin: str) -> None:
                         "active_account": personal_active_account["value"],
                         "status": "connected"
                         if selected["mode"] == "sponsored" or local_connect_succeeds["value"]
-                        else "disconnected",
+                        else personal_connection_status["value"],
                         "label": "OpenAI API connected",
                         "guidance": "",
                         "checked_at": "2026-10-27T00:00:00Z",
@@ -318,6 +324,11 @@ def exercise(origin: str) -> None:
                     "retryable": False,
                     "message": "ChatGPT sign-in did not complete.",
                 }
+            elif path.endswith("/api/ai/disconnect") and method == "POST":
+                local_connect_succeeds["value"] = False
+                personal_active_account["value"] = None
+                personal_connection_status["value"] = "disconnected"
+                payload = {"message": "Disconnected.", "remote_revocation_confirmed": True}
             elif path.endswith("/api/ai/mode") and method == "POST":
                 selected["mode"] = body.get("mode")
                 payload = {
@@ -802,6 +813,7 @@ def exercise(origin: str) -> None:
         assert posts[0][1] == {"request_type": "reload"}, posts
         local_sponsored_mode["value"] = True
         local_connect_succeeds["value"] = False
+        personal_connection_status["value"] = "disconnected"
         forced["value"] = False
         selected["mode"] = "personal"
         funding.update(remaining_usd=0.75)
@@ -809,31 +821,49 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary).to_have_attribute("aria-label", "Connect to ChatGPT")
-        with page.expect_request("**/api/ai/mode") as sponsor_choice:
+        with page.expect_request("**/api/ai/auth/begin") as personal_attempt:
             sponsored_summary.click()
-        assert sponsor_choice.value.method == "POST"
-        assert sponsor_choice.value.post_data_json == {"mode": "sponsored"}
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
-        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
-            "Click to switch to your own ChatGPT account."
-        )
+        assert personal_attempt.value.method == "POST"
+        assert not any(
+            path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
+        ), posts
+        expect(sponsored_summary).to_have_attribute("aria-label", "Connect to ChatGPT")
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_have_count(0)
         expect(page.get_by_text("Complete sign-in in the browser.")).to_have_count(0)
-        posts.clear()
-        with page.expect_request("**/api/ai/auth/begin"):
-            sponsored_summary.click()
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
-        assert not any(
-            path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts
-        ), posts
         local_connect_succeeds["value"] = True
         posts.clear()
         with page.expect_request("**/api/ai/auth/begin"):
             sponsored_summary.click()
-        expect(sponsored_summary).to_have_attribute("aria-label", "Disconnect from ChatGPT")
-        assert any(
-            path.endswith("/api/ai/mode") and body.get("mode") == "personal" for path, body in posts
+        expect(sponsored_summary).to_have_attribute("aria-label", "ChatGPT connected")
+        assert not any(
+            path.endswith("/api/ai/mode") and body.get("mode") == "sponsored"
+            for path, body in posts
         ), posts
+        posts.clear()
+        with page.expect_request("**/api/ai/disconnect") as disconnect_request:
+            sponsored_summary.click()
+        assert disconnect_request.value.method == "POST"
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        assert any(
+            path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
+        ), posts
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+
+        for personal_status in ("disconnected", "reauth_required", "unavailable"):
+            selected["mode"] = "personal"
+            local_connect_succeeds["value"] = False
+            personal_connection_status["value"] = personal_status
+            page.reload(wait_until="domcontentloaded")
+            regular_connect = page.locator(".api-connection > summary")
+            expect(regular_connect).to_have_attribute("aria-label", "Connect to ChatGPT")
+            posts.clear()
+            with page.expect_request("**/api/ai/auth/begin"):
+                regular_connect.click()
+            expect(regular_connect).to_have_attribute("aria-label", "Connect to ChatGPT")
+            assert not any(
+                path.endswith("/api/ai/mode") and body.get("mode") == "sponsored"
+                for path, body in posts
+            ), (personal_status, posts)
 
         # A regular member can have the designated sponsor registration active
         # in the local ChatGPT store. Connecting their own account must begin a
@@ -859,7 +889,7 @@ def exercise(origin: str) -> None:
         personal_signin_pending["value"] = False
         local_connect_succeeds["value"] = True
         expect(page.locator(".api-connection > summary")).to_have_attribute(
-            "aria-label", "Disconnect from ChatGPT"
+            "aria-label", "ChatGPT connected"
         )
         expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
         sponsorship_eligible["value"] = True
@@ -882,7 +912,7 @@ def exercise(origin: str) -> None:
         expect(page.locator(".connection-pill-message")).to_have_count(0)
 
         admin_mode["value"] = True
-        selected["mode"] = "personal"
+        selected["mode"] = "sponsored"
         sponsorship_eligible["value"] = True
         local_connect_succeeds["value"] = False
         personal_signin_pending["value"] = True
@@ -891,13 +921,10 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         posts.clear()
-        with page.expect_request("**/api/ai/mode") as admin_mode_choice:
-            page.locator(".api-connection > summary").click()
-        assert admin_mode_choice.value.post_data_json == {"mode": "sponsored"}
         admin_summary = page.locator(".api-connection > summary")
         expect(admin_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
         with page.expect_request("**/api/ai/sponsor-auth/begin"):
-            admin_summary.click()
+            page.get_by_role("button", name="Sponsored allowance details").click()
         assert any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
         assert not any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
         personal_signin_pending["value"] = False
@@ -955,7 +982,7 @@ def exercise(origin: str) -> None:
         sponsored_summary.click()
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
-            "background-color", "rgb(127, 140, 150)"
+            "background-color", "rgb(198, 160, 100)"
         )
         page.reload(wait_until="domcontentloaded")
         sponsored_summary = page.locator(".api-connection > summary")

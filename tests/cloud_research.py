@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -844,6 +845,33 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
     with patch.object(cloud_workspaces, "enabled", return_value=True):
         assert cloud_research.session_call_ceiling() == cloud_research.MAX_PROJECT_SESSION_CALLS
 
+    hosted_duration = {**sponsored_limits, "session_duration_minutes": 60}
+    with (
+        patch.object(cloud_workspaces, "enabled", return_value=True),
+        patch.object(cloud_research, "billing_enabled", return_value=True),
+    ):
+        assert research_sessions.save_limits(project.path, hosted_duration) == hosted_duration
+        assert research_sessions.get_limits(project.path) == hosted_duration
+        assert (
+            cloud_research.evaluation_session_limits(hosted_duration)["session_duration_minutes"]
+            == 15
+        )
+    with (
+        patch.object(cloud_workspaces, "enabled", return_value=False),
+        patch.object(cloud_research, "billing_enabled", return_value=True),
+    ):
+        assert research_sessions.get_limits(project.path)["session_duration_minutes"] == 60
+
+
+def test_local_global_spend_default_stays_at_legacy_safe_ceiling() -> None:
+    """Raising project session caps does not implicitly raise the local aggregate ceiling."""
+    with patch("sigma.cloud_auth.local_sponsored_principal", return_value=object()):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
+            assert cloud_research._spend_ceiling_decimal() == Decimal("0.25")
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00"}):
+            assert cloud_research._spend_ceiling_decimal() == Decimal("5.00")
+
 
 def main() -> None:
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
@@ -1371,6 +1399,7 @@ def main() -> None:
             root, allowance_ledger
         )
         test_local_limits_remain_unmodified(root)
+        test_local_global_spend_default_stays_at_legacy_safe_ceiling()
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
