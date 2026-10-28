@@ -5394,7 +5394,7 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
 
     async def handler(request):
         payload = json.loads(request.content)
-        context = json.loads(payload["input"])
+        context = json.loads(payload["input"][0]["content"])
         provider_calls.append(context["strategy"]["id"])
         if streamed:
             events = [
