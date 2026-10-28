@@ -1087,7 +1087,13 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 )
             used_units = _call_amount_units(db, "")
             if used_units + amount_units > global_ceiling_units:
-                raise CloudResearchUnavailable(_global_ceiling_failure_message())
+                remaining_units = max(0, global_ceiling_units - used_units)
+                raise CloudResearchUnavailable(
+                    f"{_global_ceiling_failure_message()} "
+                    f"Remaining global capacity: ${remaining_units / USD_UNITS:.4f}; "
+                    f"next call requires ${amount_units / USD_UNITS:.4f}. "
+                    "No provider call was made."
+                )
             user_used_units = _user_call_amount_units(db, owner)
             if user_used_units + amount_units > user_ceiling_units:
                 raise CloudResearchUnavailable(
