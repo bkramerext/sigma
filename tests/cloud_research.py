@@ -1121,6 +1121,114 @@ def test_json_project_orphan_recovery(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_json_project_session_playback(
+    root: Path, ledger_root: Path, limits_env: dict[str, str]
+) -> None:
+    """Hosted JSON projects execute and reopen saved role calls as real sessions."""
+    member = workspace(root / "json-playback", "f" * 32)
+    with (
+        patch.dict(
+            os.environ,
+            {
+                **limits_env,
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+            clear=False,
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            project = initialize_project(
+                member.path / "playback.json", "Portable playback", "Check a bound"
+            )
+            strategy = create_strategy(
+                project.path, "Investigation", "Derive the bound, then challenge it."
+            ).project.strategies[0]
+            limits = {
+                "research_rounds": 1,
+                "model_calls": 2,
+                "session_duration_minutes": 5,
+                "output_tokens_per_call": 256,
+                "maximum_estimated_cost_usd": 0.25,
+            }
+            research_sessions.save_limits(project.path, limits)
+            credential = {
+                "mode": "api_key",
+                "identity": "cloud_service_api_key:" + member.subject_hash,
+                "token": "fake-service-key",
+                "status": "connected",
+            }
+            configuration = {
+                "available": True,
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "high",
+            }
+            outputs = research_outputs()
+
+            async def provider(record, role, context, timeout_seconds=None, step_id=None):
+                del record, context, timeout_seconds
+                assert isinstance(step_id, str)
+                return (
+                    outputs[0] if role == "investigator" else outputs[1],
+                    {
+                        "input_tokens": 90,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 30,
+                    },
+                )
+
+            async def execute() -> dict[str, Any]:
+                with (
+                    patch.object(
+                        research_sessions,
+                        "auth_context",
+                        new=AsyncMock(return_value=credential),
+                    ),
+                    patch.object(
+                        research_sessions,
+                        "configuration",
+                        new=AsyncMock(return_value=configuration),
+                    ),
+                    patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                    patch.object(research_sessions, "_call", new=AsyncMock(side_effect=provider)) as calls,
+                ):
+                    started = await research_sessions.start_session(
+                        project.path,
+                        strategy.id,
+                        str(uuid4()),
+                        project.project.id,
+                        credential["identity"],
+                        limits,
+                    )
+                    for _ in range(500):
+                        current = research_sessions.get_session(project.path, started["id"])
+                        if current["status"] in {"ended", "failed", "paused"}:
+                            break
+                        await asyncio.sleep(0.01)
+                    else:
+                        raise AssertionError("JSON-backed session never finished")
+                    assert calls.await_count == 2, (current["status"], current["message"])
+                    return current
+
+            finished = asyncio.run(execute())
+            assert finished["status"] == "ended"
+            reopened = research_sessions.list_sessions(project.path)
+            assert len(reopened) == 1
+            played = reopened[0]
+            assert played["id"] == finished["id"]
+            assert played["status"] == "ended"
+            assert len(played["steps"]) == 2
+            assert len(played["artifacts"]) == 1
+            assert played["estimated_cost_usd"] == finished["estimated_cost_usd"]
+            assert any(event["kind"] == "call.completed" for event in played["events"])
+            from sigma.project_bundle import read_bundle
+
+            assert f"research-sessions/{played['id']}.json" in read_bundle(project.path)["files"]
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def main() -> None:
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
@@ -1740,6 +1848,9 @@ def main() -> None:
         json_ledger = root / "json-project-orphan-ledger"
         json_ledger.mkdir(mode=0o700)
         test_json_project_orphan_recovery(root, json_ledger, settings)
+        json_playback_ledger = root / "json-playback-ledger"
+        json_playback_ledger.mkdir(mode=0o700)
+        test_json_project_session_playback(root, json_playback_ledger, settings)
 
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
