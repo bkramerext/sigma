@@ -1012,7 +1012,7 @@ class CloudAuthTests(TestCase):
         self.assertTrue(status["account"]["workspace"]["available"])
         self.assertEqual(
             status["account"]["model_access"],
-            {"mode": "personal", "connection": "checking"},
+            {"mode": "sponsored", "connection": "checking"},
         )
         self.assertTrue(status["account"]["sponsorship"]["eligible"])
         self.assertEqual(status["admin_contact_email"], "admin@example.org")
@@ -1050,7 +1050,7 @@ class CloudAuthTests(TestCase):
                 1,
                 status["account"]["workspace"]["id"],
                 1,
-                "personal",
+                "sponsored",
                 "checking",
             ),
         )
@@ -2561,7 +2561,7 @@ class CloudAuthTests(TestCase):
             cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
         )
         initial = self.client.get("/api/cloud-auth/status").json()
-        self.assertEqual(initial["account"]["model_access"]["mode"], "personal")
+        self.assertEqual(initial["account"]["model_access"]["mode"], "sponsored")
         headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
         with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
             selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)

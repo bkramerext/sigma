@@ -91,6 +91,11 @@ class HostedPersonalIsolationTests(TestCase):
         self.assertNotIn("google-subject-A", str(directories))
         self.assertNotIn("a@example.test", str(directories))
 
+        # Explicit personal mode remains available and stable for an eligible
+        # account that deliberately switches away from hosted sponsorship.
+        cloud_auth.set_model_access(self.a.subject, "personal")
+        cloud_auth.set_model_access(self.b.subject, "personal")
+
         async def auth_for(principal):
             return await openai_connection.auth_context()
 
