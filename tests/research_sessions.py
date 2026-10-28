@@ -518,6 +518,7 @@ async def test_three_cycles_and_idempotency(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "build_commit", return_value="a" * 40),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -536,6 +537,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         )
         assert concurrent_duplicate["id"] == started["id"]
         assert started["session_number"] == concurrent_duplicate["session_number"] == 1
+        assert started["backend_build_commit"] == "a" * 40
         assert started["call_limit"] == 30
         assert started["cycle_limit"] == 3
         assert started["duration_limit_minutes"] == 60
@@ -546,6 +548,8 @@ async def test_three_cycles_and_idempotency(path: Path):
         )
         assert duplicate["id"] == started["id"]
 
+    assert finished["backend_build_commit"] == "a" * 40
+    assert all(step["backend_build_commit"] == "a" * 40 for step in finished["steps"])
     assert finished["status"] == "ended" and finished["calls_used"] == 6
     assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
     assert [
@@ -582,7 +586,10 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert exported["export_version"] == 2
     assert exported_session["strategy_text"] == strategy.approach
     assert exported_session["problem"] == view.project.problem
+    assert exported_session["backend_build_commit"] == "a" * 40
+    assert all(step["backend_build_commit"] == "a" * 40 for step in exported_session["steps"])
     metrics = exported_session["outcome"]["metrics"]
+    assert next(item["value"] for item in metrics["operational"] if item["label"] == "Backend build") == "a" * 40
     assert metrics == finished["outcome"]["metrics"]
     assert metrics["sources"]["session_id"] == finished["id"]
     assert metrics["sources"]["step_ids"] == sorted(step["id"] for step in finished["steps"])
