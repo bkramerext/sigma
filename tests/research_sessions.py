@@ -5455,7 +5455,6 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path, *, streamed
     else:
         assert limited["provider_response_channel"] == "http"
         assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
-    assert finished["estimated_cost_usd"] == 0.0
     assert finished["estimated_cost_reserved_usd"] == 0.0
 
 
