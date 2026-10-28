@@ -220,3 +220,37 @@ Google/OpenAI OAuth, token validation, provider connectivity, and hosted
 personal OAuth were not exercised. No real provider or paid calls were made.
 The seven live session-playback acceptance scenarios remain for the next
 round. No full CI wait, merge, or deployment occurred.
+
+## Follow-up — hosted OAuth authorization and repository local suite
+
+Current implementation commit SHA: `13b37641746fab0385d127c5170a24614f552711`.
+Hosted authorization now rejects the
+personal-only `/api/ai/auth/begin` route while retaining the administrator-only
+`/api/ai/sponsor-auth/begin` maintenance flow. This preserves the existing
+hosted restriction against proxying users' personal ChatGPT OAuth through the
+service. Unknown sponsor handoff IDs fail before an authorization URL is
+returned.
+
+`./sigma test` was run locally per repository instructions (no CI was run or
+awaited). The first full run failed on hosted auth expectations, a Ruff
+format/lint issue, a new OAuth test's possibly-unbound polling result, and
+unrelated cloud research/storage/deployment fixture assumptions. The hosted
+auth gate, test expectation/type warning, and Ruff issue were corrected. After
+those changes:
+
+- `uv run --locked --no-sync python tests/cloud_auth.py` — passed, 66 tests.
+- `uv run --locked --no-sync python tests/cloud_sponsor.py` — passed, 19 tests.
+- Global `ruff check` and `ruff format --check` — passed.
+- Global `pyright` — passed with 0 errors, warnings, or informations.
+- `npm run typecheck` — passed.
+- `uv run --with playwright python browser_checks/local_admin_sponsor_pill.py`
+  — passed in Chromium.
+
+The full local runner is not green: `tests/cloud_research.py` and its nested
+`tests/storage.py` run assume API-key provider mode while the repository
+default is ChatGPT. Under a diagnostic API-key override matching that
+assumption, cloud research advances to an existing JSON orphan-recovery
+fixture whose parent directory is absent. `tests/deployment_package.py`
+likewise asserts API-key behavior without setting provider mode. These
+unrelated fixtures were left outside this round. See the matching note in
+`docs/STATUS.md`.

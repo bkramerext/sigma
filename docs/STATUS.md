@@ -30,6 +30,18 @@ unverified. The seven live session-playback acceptance cases remain reserved
 for the next round. No paid calls, full CI wait, merge, or deployment occurred.
 See [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
 
+The repository-required local `./sigma test` command was also attempted. Its
+first pass found the hosted generic `/api/ai/auth/begin` gate still admitted
+admins, conflicting with its new personal-only meaning; the gate now reserves
+hosted OAuth to `/api/ai/sponsor-auth/begin`. All 66 `tests/cloud_auth.py`
+cases, global Ruff, and global Pyright pass after correction. The full local
+runner still has unrelated `tests/cloud_research.py` / `tests/storage.py`
+fixture failures: they assume API-key provider mode while the default provider
+is ChatGPT. Under a diagnostic API-key override matching that fixture's
+assumption, cloud research advances to a JSON orphan-recovery fixture that
+does not create its parent directory. `tests/deployment_package.py` also
+assumes API-key mode without setting it. No CI was run or awaited.
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the
