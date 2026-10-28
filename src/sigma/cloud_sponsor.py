@@ -39,11 +39,6 @@ def inference_provider() -> str:
 
 def expected_email() -> str:
     email = os.environ.get("SIGMA_CLOUD_SPONSOR_EMAIL", "").strip().casefold()
-    if not email:
-        from sigma import cloud_auth, cloud_workspaces
-
-        if cloud_auth.config().local and not cloud_workspaces.enabled():
-            return cloud_auth.INVITATION_RECIPIENT
     if "@" not in email:
         raise ProjectError("Configure the explicit SIGMA_CLOUD_SPONSOR_EMAIL first.")
     return email

@@ -256,7 +256,13 @@ async def auth_context() -> AuthContext:
     if cloud_auth.config().local:
         from sigma.cloud_sponsor import expected_email
 
-        sponsor_account_selected = account.get("email", "").casefold() == expected_email()
+        try:
+            designated_sponsor_email = expected_email()
+        except ProjectError:
+            designated_sponsor_email = None
+        sponsor_account_selected = bool(designated_sponsor_email) and (
+            account.get("email", "").casefold() == designated_sponsor_email
+        )
     else:
         sponsor_account_selected = False
     if sponsor_account_selected:
@@ -418,6 +424,7 @@ async def connection(
         **state,
         **prefs,
         "mode": mode,
+        "sponsor_account_selected": context.get("identity") == "local_personal_unconnected",
         "label": label,
         "guidance": guidance,
         "account_label": context.get("account_label"),

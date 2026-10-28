@@ -1312,9 +1312,16 @@ async def auth_begin(body: AuthBeginRequest, request: Request):
     if cfg.local and body.account_id is not None:
         from sigma.ai_store import sponsor_transaction
 
-        async with sponsor_transaction() as state:
-            account = state["accounts"].get(body.account_id) or {}
-            is_sponsor_account = account.get("email", "").casefold() == expected_email()
+        try:
+            designated_sponsor_email = expected_email()
+        except ProjectError:
+            designated_sponsor_email = None
+        if designated_sponsor_email:
+            async with sponsor_transaction() as state:
+                account = state["accounts"].get(body.account_id) or {}
+                is_sponsor_account = account.get("email", "").casefold() == designated_sponsor_email
+        else:
+            is_sponsor_account = False
         if is_sponsor_account:
             # The pill can submit its currently selected ChatGPT account
             # through auth/begin. A matching sponsor credential must use
@@ -1373,8 +1380,12 @@ async def sponsor_auth_begin(request: Request):
             or not account["sponsorship"]["eligible"]
         ):
             raise HTTPException(403, "Eligible sponsored access is required to renew sponsorship.")
-    from sigma.cloud_sponsor import sponsor_account_id
+    from sigma.cloud_sponsor import expected_email, sponsor_account_id
 
+    try:
+        expected_email()
+    except ProjectError as exc:
+        raise HTTPException(503, str(exc)) from exc
     try:
         account_id = await sponsor_account_id()
     except ProjectError:
@@ -1473,10 +1484,15 @@ async def auth_disconnect():
         from sigma.ai_store import sponsor_transaction
         from sigma.cloud_sponsor import expected_email
 
-        async with sponsor_transaction() as state:
-            active = state["accounts"].get(state.get("active")) or {}
-            if active.get("email", "").casefold() == expected_email():
-                raise HTTPException(403, "The sponsor account cannot be disconnected here.")
+        try:
+            designated_sponsor_email = expected_email()
+        except ProjectError:
+            designated_sponsor_email = None
+        if designated_sponsor_email:
+            async with sponsor_transaction() as state:
+                active = state["accounts"].get(state.get("active")) or {}
+                if active.get("email", "").casefold() == designated_sponsor_email:
+                    raise HTTPException(403, "The sponsor account cannot be disconnected here.")
     return await chatgpt_auth.disconnect()
 
 

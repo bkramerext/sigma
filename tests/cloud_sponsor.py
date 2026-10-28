@@ -74,9 +74,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def sponsor_context(self):
         return await openai_connection.sponsored_auth_context("a" * 64)
 
-    async def test_local_sponsor_defaults_to_the_designated_admin_identity(self):
-        from sigma import cloud_auth
-
+    async def test_local_sponsor_requires_explicit_designated_identity(self):
         with patch.dict(
             os.environ,
             {
@@ -86,7 +84,8 @@ class SponsorTests(IsolatedAsyncioTestCase):
             },
         ):
             os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
-            self.assertEqual(cloud_sponsor.expected_email(), cloud_auth.INVITATION_RECIPIENT)
+            with self.assertRaisesRegex(ProjectError, "Configure the explicit"):
+                cloud_sponsor.expected_email()
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
 
@@ -192,6 +191,35 @@ class SponsorTests(IsolatedAsyncioTestCase):
         result = await cloud_sponsor.sponsor_session()
         self.assertEqual(result["status"], "connected")
         self.assertEqual(result["account"]["email"], "sponsor@example.test")
+
+    async def test_personal_connection_identifies_selected_designated_sponsor(self):
+        from sigma import cloud_workspaces
+
+        with (
+            patch.object(cloud_workspaces, "enabled", return_value=False),
+            patch.object(
+                chatgpt_auth,
+                "preferences",
+                AsyncMock(
+                    return_value={
+                        "mode": "chatgpt",
+                        "active_account": "sponsor",
+                        "accounts": [],
+                        "welcome_pending": False,
+                    }
+                ),
+            ),
+        ):
+            result = await openai_connection.connection(
+                context={
+                    "identity": "local_personal_unconnected",
+                    "token": "",
+                    "mode": "chatgpt",
+                    "status": "disconnected",
+                    "account_label": None,
+                }
+            )
+        self.assertTrue(result["sponsor_account_selected"])
 
     async def test_hosted_sponsor_defaults_to_chatgpt_without_api_billing(self):
         with patch.dict(

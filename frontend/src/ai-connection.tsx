@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import './ai-connection.css';
 
-export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
+export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; sponsor_account_selected?: boolean; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
 type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; sponsor?: boolean; signal?: AbortSignal };
 type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<boolean> };
 const Context = createContext<AIState | null>(null);
@@ -270,6 +270,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     && sponsoredSelected
     && ai.info?.mode === 'chatgpt'
     && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
+  const localAdminSponsorNeedsReconnect = cloudFunding?.target === 'local'
+    && !!cloudFunding.sponsorshipUnlimited
+    && !!ai.info?.sponsor_account_selected
+    && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
@@ -338,8 +342,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         await cloudFunding?.selectConnection?.('sponsored');
         return;
       }
-      if (localSponsorNeedsReconnect) {
-        if (await ai.signIn({ sponsor: true })) await ai.refresh('manual');
+      if (localSponsorNeedsReconnect || localAdminSponsorNeedsReconnect) {
+        if (await ai.signIn({ sponsor: true })) {
+          if (localAdminSponsorNeedsReconnect && !sponsoredSelected) {
+            await cloudFunding?.selectConnection?.('sponsored');
+          }
+          await ai.refresh('manual');
+        }
         return;
       }
       if (cloudFunding?.authorized && cloudFunding.sponsorshipEligible) {

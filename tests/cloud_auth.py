@@ -1666,6 +1666,45 @@ class CloudAuthTests(TestCase):
             self.assertEqual(response.json()["id"], "sponsor-attempt")
             begin.assert_awaited_once_with(account_id="selected-sponsor", sponsor=True)
 
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "member@example.org",
+                    "role": "member",
+                    "allowance_usd": 1,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23457)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            member_login = self.finish(
+                email="member@example.org", subject="sponsor-change-denied-member", client=member
+            )
+            self.assertEqual(member_login.status_code, 303)
+            member.cookies.update(member_login.cookies)
+            denied = member.post(
+                "/api/ai/auth/begin",
+                json={"account_id": "selected-sponsor"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(denied.status_code, 403, denied.text)
+            self.assertIn(
+                "Administrator access required",
+                denied.json().get("error", denied.json().get("detail", "")),
+            )
+            begin.assert_awaited_once()
+
+            async def saved_sponsor_token():
+                async with ai_store.sponsor_transaction() as state:
+                    return state["accounts"]["selected-sponsor"]["access_token"]
+
+            self.assertEqual(asyncio.run(saved_sponsor_token()), "existing-sponsor-token")
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)
@@ -2546,6 +2585,7 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test",
                 "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
                 "SIGMA_MOCK_AUTH": "0",
             },
