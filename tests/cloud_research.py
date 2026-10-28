@@ -1972,6 +1972,56 @@ def main() -> None:
                     assert worker_snapshot["steps"] == []
                     assert worker_snapshot["events"][-1]["kind"] == "interrupted"
                     assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
+
+                    # A queued job that never claims capacity must terminate
+                    # with its strategy branches ended, not left "queued" in
+                    # the saved playback after the session deadline.
+                    expiry_project = initialize_project(
+                        a.path / "queue-expiry.sigma", "Queue expiry", "Check expiry"
+                    )
+                    expired = job(a.workspace_id)
+                    expired.update(
+                        project_id=expiry_project.project.id,
+                        project_path=expiry_project.path,
+                        session_number=1,
+                        status="queued",
+                        deadline_at="2026-01-01T00:00:00+00:00",
+                        created_at="2026-01-01T00:00:00+00:00",
+                        updated_at="2026-01-01T00:00:00+00:00",
+                        current_action="Queued",
+                        message="Research is queued.",
+                        events=[],
+                        steps=[],
+                        strategy_runs=[
+                            {
+                                "status": "queued",
+                                "strategy_id": "strategy-expired",
+                                "strategy_title": "Expired",
+                                "artifacts": [],
+                            }
+                        ],
+                    )
+                    cloud_research.prepare_job(expired)
+                    research_sessions._save(expiry_project.path, expired)
+                    with (
+                        patch.object(cloud_research, "claim_job", return_value=False),
+                        patch.object(research_sessions, "_outcome", return_value={"assessment": "pending"}),
+                        patch.object(research_sessions, "_strategy_assessments", return_value=[]),
+                        patch.object(research_sessions, "_portfolio_decision", return_value={}),
+                    ):
+                        assert (
+                            asyncio.run(
+                                research_sessions._claim_cloud_job(
+                                    expired["id"], expiry_project.path
+                                )
+                            )
+                            is False
+                        )
+                    played = research_sessions._read(expiry_project.path, expired["id"])
+                    assert played["status"] == "ended"
+                    assert played["strategy_runs"][0]["status"] == "ended"
+                    assert played["events"][-1]["kind"] == "queue.expired"
+                    assert cloud_research.job_status(expired["id"]) == "terminal"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
