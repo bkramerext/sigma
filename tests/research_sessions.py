@@ -6755,7 +6755,9 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
         "cached_input_tokens": None,
         "output_tokens": 2,
     }
-    assert research_sessions._estimate_cost(MODEL, missing_cached) is None
+    # Missing cached-token metadata is priced conservatively as all uncached,
+    # so known provider usage does not create an indefinite cost hold.
+    assert research_sessions._estimate_cost(MODEL, missing_cached) == 0.000034
 
     uncached_metadata = research_sessions._outcome_metrics(
         {
@@ -6784,7 +6786,7 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     assert uncached_ops["Tokens · input / output / cached / total"] == (
         "7 / 2 / — (0/1 calls include cached-token metadata) / 9"
     )
-    assert "unavailable" in uncached_ops["Estimated monetary cost"]
+    assert "$0.000034 estimated" in uncached_ops["Estimated monetary cost"]
 
     unlinked_execution = research_sessions._outcome_metrics(
         {
