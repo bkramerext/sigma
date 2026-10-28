@@ -211,25 +211,11 @@ def exercise(ui_url: str, root: Path) -> None:
         assert len(long_error_toast.inner_text()) < 250
         page.unroute("**/api/test-long-error")
         expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
-        home_google = page.get_by_role("link", name="Sign in with Google")
-        home_invite = page.get_by_role("button", name="Invite me!")
-        home_google_box = home_google.bounding_box()
-        home_invite_box = home_invite.bounding_box()
-        assert home_invite_box["y"] >= home_google_box["y"] + home_google_box["height"]
-        assert abs(home_invite_box["x"] - home_google_box["x"]) < 2
-        home_invite.click()
-        invitation_dialog = page.get_by_role("dialog", name="Request an invitation")
-        invitation_signin = invitation_dialog.get_by_role("link", name="Sign in with Google")
-        expect(invitation_signin).to_have_attribute("href", "/api/cloud-auth/login?invite=1")
-        assert (
-            invitation_signin.evaluate("element => getComputedStyle(element).textDecorationLine")
-            == "underline"
-        )
-        assert (
-            invitation_signin.evaluate("element => getComputedStyle(element).backgroundColor")
-            == "rgba(0, 0, 0, 0)"
-        )
-        invitation_dialog.get_by_role("button", name="Close").click()
+        # A signed-out guest has not completed Google verification, so the
+        # invitation action and its dialog must be absent.
+        expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
+        expect(page.get_by_role("dialog", name="Request an invitation")).to_have_count(0)
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Saved")).to_be_enabled()
