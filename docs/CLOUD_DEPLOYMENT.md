@@ -1355,7 +1355,8 @@ under the global ceiling for operator-directed testing and unresolved charges.
 The default allowance is configurable from `$0.01` through `$15.00`; an
 administrator can set a per-entry USD allowance in Access Management up to
 $15.00 per member. The operator can configure a global ceiling from $0.01 to
-$1000.00; $15.00 remains the unchanged example and deployment default. An exact email rule overrides its matching domain rule. Domain
+$1000.00; $15.00 remains the unchanged example and deployment default.
+An exact email rule overrides its matching domain rule. Domain
 allowances apply independently to each verified user's subject-backed
 workspace, never as a shared pool. The user's allowance is cumulative, does not
 reset automatically, and follows the stable verified subject across changed
@@ -1376,10 +1377,12 @@ Confirmed provider token counts are priced using SIGMA's reviewed model price
 table; the reported cost remains an estimate. If a call times out, is canceled,
 or its response is lost before its usage is saved, the full reservation remains
 held and the attempt is recorded as unknown. Such a call is never automatically
-retried. Hosted sponsored sessions respect the call and estimated-cost limits saved in
+retried. Hosted sponsored sessions respect the call and estimated-cost limits
+saved in
 Project Settings; the session cost cap may be Unlimited. They retain a 15-minute
 runtime cap and the independent user/global dollar and token reservations.
-A priced model and explicit token usage bounds are required. The ChatGPT connection dialog reports
+A priced model and explicit token usage bounds are required. The ChatGPT
+connection dialog reports
 the authenticated owner's read-only allowance, estimated usage, held
 reservations (including unknown charges), and remaining allowance. Exhaustion
 blocks new inference while saved projects and research remain readable.
@@ -1398,10 +1401,12 @@ Malformed or missing user or global spend configuration disables cloud
 research; configured default user allowance and individual entries are limited
 to `$15.00`, while the configurable global ceiling has a $1000.00 safety maximum.
 Neither ceiling resets automatically; increasing the global limit requires an
-explicit operator deployment configuration change, not a member allowance reload. Spend totals include completed estimates, live reservations, and
+explicit operator deployment configuration change, not a member allowance
+reload. Spend totals include completed estimates, live reservations, and
 unknown provider outcomes. An authorized user allowance reload starts a new
 per-user dollar and token window but retains the global history and unknown
-reservations in the global ceiling. A reservation is released only when the provider
+reservations in the global ceiling. A reservation is released only when the
+provider
 call is proven not to have been dispatched; age, restart, timeout, cancellation,
 and account revocation do not release uncertain charges. Accounting is shared
 across the user's projects and persists in the SQLite ledger. Queue slots,
