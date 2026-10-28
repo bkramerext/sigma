@@ -2905,7 +2905,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
             return {member: encoded}
 
         transform_members(path, update)
-        if cloud_research.billing_enabled():
+        if cloud_research.billing_enabled() and not record.get("simulated"):
             try:
                 cloud_research.sync_job(record)
             except cloud_research.CloudResearchUnavailable as exc:
