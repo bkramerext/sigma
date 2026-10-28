@@ -7917,6 +7917,10 @@ async def _portfolio_role_call(
                         "Provider call failed; saved research artifacts were retained."
                     )
                 branch["reason"] = failure_message
+                if isinstance(exc, ChatGPTProviderRejection):
+                    # Structured error descriptions are locally authored from
+                    # allowlisted codes, not arbitrary provider text.
+                    step["failure_message"] = failure_message
                 if step.get("failure_kind") == "provider_limited":
                     record["provider_usage_limited"] = True
                     if record.get("mode") == "chatgpt":
