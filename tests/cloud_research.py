@@ -1183,6 +1183,7 @@ def main() -> None:
                     "session_duration_minutes": 5,
                     "output_tokens_per_call": 256,
                     "maximum_estimated_cost_usd": 0.25,
+                    "maximum_input_tokens_per_session": 600_000,
                 }
                 research_sessions.save_limits(live_view.path, session_limits)
                 credential = {
@@ -1281,6 +1282,15 @@ def main() -> None:
                     integrated = asyncio.run(run_research())
                 assert integrated["status"] == "ended"
                 assert len(integrated["artifacts"]) == 1
+                # Hosted hard-budget and provider reservations describe the
+                # same attempts. Both must settle without leaving a second
+                # phantom token hold or rejecting the Skeptic call.
+                assert integrated["tokens_reserved"] == 0, integrated["tokens_reserved"]
+                assert len(integrated["hard_budget_ledger"]["calls"]) == 2
+                assert all(
+                    entry["status"] == "settled"
+                    for entry in integrated["hard_budget_ledger"]["calls"]
+                )
                 assert cloud_research.snapshot()["user_reserved_and_estimated_usd"] < 1.0
 
                 async def run_ambiguous_failure() -> None:
