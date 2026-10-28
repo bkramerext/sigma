@@ -1618,6 +1618,54 @@ class CloudAuthTests(TestCase):
             self.assertEqual(account["admin_contact_email"], "zetacontinuation@gmail.com")
             self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
 
+    def test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth(self):
+        from sigma import ai_store
+
+        local_origin = "http://127.0.0.1:5173"
+        sponsor_home = Path(self.temp.name) / "sponsor-auth"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "nontrivialzeeros@gmail.com",
+                "SIGMA_AUTH_HOME": str(sponsor_home),
+            },
+        ):
+            login = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-google-admin"
+            )
+            self.assertEqual(login.status_code, 303)
+            self.client.cookies.update(login.cookies)
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["user"]["role"], "admin")
+            self.assertEqual(status["user"]["email"], "zetacontinuation@gmail.com")
+
+            async def add_selected_sponsor():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"]["selected-sponsor"] = {
+                        "email": "nontrivialzeeros@gmail.com",
+                        "access_token": "existing-sponsor-token",
+                    }
+                    state["active"] = "selected-sponsor"
+
+            import asyncio
+
+            asyncio.run(add_selected_sponsor())
+            with patch(
+                "sigma.api.chatgpt_auth.begin",
+                new=AsyncMock(return_value={"id": "sponsor-attempt"}),
+            ) as begin:
+                response = self.client.post(
+                    "/api/ai/auth/begin",
+                    json={"account_id": "selected-sponsor"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["id"], "sponsor-attempt")
+            begin.assert_awaited_once_with(account_id="selected-sponsor", sponsor=True)
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)
