@@ -7706,3 +7706,22 @@ Ruff check/format, and `git diff --check` passed at implementation commit
 provider validation, and live allowance-store availability remain unverified.
 No paid calls, CI wait, merge, or deployment occurred. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
+
+## PR #297 sponsor identity privacy correction (2026-10-28)
+
+`/api/ai/connection` and successful `/api/ai/mode` responses now omit the
+designated sponsor account label for non-admin users while sponsored mode is
+selected. The existing admin response still provides the sponsor identity for
+connection confirmation. Models responses already omit account labels. The
+pill now says “ChatGPT Connected” and includes the identity in its hover
+tooltip only for administrators; sponsored members continue to see the
+Sponsored ChatGPT pill and their allowance/provider state. Their disconnected,
+unavailable, unauthorized, or reauthentication-required sponsor state cannot
+trigger sponsor or personal OAuth from the pill.
+
+Three focused cloud-auth tests, all 19 sponsor tests, typecheck, the Chromium
+admin/member pill regression, scoped Ruff check/format, and `git diff --check`
+passed at implementation commit
+`794ae30f27f82e83758c4002a214b86d1fd3c8c9`. The seven play-session cases
+remain explicitly deferred to the next round. See
+[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).

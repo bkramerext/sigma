@@ -130,3 +130,37 @@ The OAuth code exchange/token validation and catalog check use deterministic
 fixtures; real Google/OpenAI sign-in and provider connectivity remain
 unverified. No paid calls, CI wait, merge, or deployment occurred. Updated R4R
 is reported to the coordinator through the human.
+
+## Follow-up: sponsor identity privacy (current review blocker)
+
+Implementation commit: `794ae30f27f82e83758c4002a214b86d1fd3c8c9` on
+`coordinator/signin-session-playback-stabilization`.
+
+Non-admin users in sponsored mode no longer receive `account_label` from
+`/api/ai/connection` or `/api/ai/mode`. The response sanitizer fails closed if
+the current mode cannot be resolved. Admin responses retain the designated
+sponsor identity. The frontend limits “ChatGPT Connected” and the account-email
+tooltip to admins; sponsored members see “Sponsored ChatGPT,” their allowance,
+and provider state. Disconnected/unavailable/reconnect-required shared sponsor
+states do not launch either sponsor or personal OAuth from the member pill.
+Members retain the existing personal-selection route when they explicitly
+choose to switch.
+
+### Focused verification
+
+- Three focused `tests/cloud_auth.py` cases — passed, including admin identity
+  visibility and the `nontrivialzeeros@gmail.com` member receiving no sponsor
+  identity from either `/api/ai/connection` or `/api/ai/mode`.
+- `uv run --locked --no-sync python tests/cloud_sponsor.py` — passed, 19 tests.
+- `npm run typecheck --prefix frontend` — passed.
+- `uv run --with playwright --no-project python browser_checks/local_admin_sponsor_pill.py`
+  — passed in Chromium. It deliberately injects the sponsor email into the
+  member fixture and confirms it is absent from the visible pill, tooltip, and
+  accessible label; the disconnected member pill initiates no auth request.
+  The same run confirms the admin gets the Connected/email tooltip.
+- Scoped Ruff check/format and `git diff --check` — passed.
+
+The seven requested session-playback acceptance cases belong to the next
+round and were not implemented here. Live OAuth/provider behavior remains
+unverified; no paid call, CI wait, merge, or deployment occurred. R4R is
+reported to the coordinator through the human.
