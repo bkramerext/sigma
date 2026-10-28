@@ -7394,3 +7394,10 @@ copy and tooltip update.
 The Home catalog tab now reads “Saved,” and its tooltip describes saved
 projects. Existing recent-project storage and navigation behavior are unchanged.
 `git diff --check` passed; no browser or automated checks were run.
+
+## Local Saved tab sharing disclosure (2026-10-28)
+
+The Saved tab tooltip now clarifies that local mode uses one shared project
+list. Hosted guests retain the sign-in tooltip, and hosted signed-in accounts
+retain the regular saved-project tooltip. `git diff --check` passed; no browser
+or automated checks were run.
