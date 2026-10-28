@@ -120,6 +120,7 @@ def _global_ceiling_failure_message() -> str:
     if (
         not cloud_workspaces.enabled()
         and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+        and _global_spend_period() == "calendar_month"
     ):
         return (
             "The global inference-spend ceiling has been reached: local sponsored "
