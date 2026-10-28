@@ -341,10 +341,10 @@ def main(mode: str = "api_key") -> None:
                     "/api/projects/research-limits", json={"path": path, **settings}
                 )
                 assert limits.status_code == 200, limits.text
-                assert limits.json()["model_calls"] == 6
-                assert limits.json()["research_rounds"] == 3
+                assert limits.json()["model_calls"] == 30
+                assert limits.json()["research_rounds"] == 5
                 assert limits.json()["session_duration_minutes"] == 15
-                assert limits.json()["maximum_estimated_cost_usd"] == 0.25
+                assert limits.json()["maximum_estimated_cost_usd"] == 1.0
                 key = str(uuid4())
                 start_body = {
                     "path": path,
@@ -372,20 +372,15 @@ def main(mode: str = "api_key") -> None:
                 else:
                     raise AssertionError("HTTP-started cloud research did not reach a saved state")
                 assert saved["status"] == "ended", saved
-                assert len(saved["steps"]) == 6
-                assert len(provider_calls) == 6
+                assert len(saved["steps"]) == 10
+                assert len(provider_calls) == 10
                 assert provider_calls == [
-                    "research_investigator",
-                    "research_skeptic",
-                    "research_investigator",
-                    "research_skeptic",
-                    "research_investigator",
-                    "research_skeptic",
+                    role for _ in range(5) for role in ("research_investigator", "research_skeptic")
                 ]
                 duplicate = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert duplicate.status_code == 200, duplicate.text
                 assert duplicate.json()["id"] == session_id
-                assert len(provider_calls) == 6
+                assert len(provider_calls) == 10
 
                 # Verify the actual owner-facing export boundary after research,
                 # not only the session status endpoint. Then read it again from
@@ -596,7 +591,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                     raise AssertionError("fake-provider failure did not reach a terminal session")
                 assert failed_status.json()["status"] == "failed", failed_status.json()
                 assert failed_status.json()["steps"][0]["attempt_status"] == "unknown"
-                assert len(provider_calls) == 7
+                assert len(provider_calls) == 11
 
                 # Timeouts after transport dispatch are also unknown charges;
                 # the in-flight reservation is held without replay.
@@ -626,7 +621,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                     raise AssertionError("fake-provider timeout did not reach a terminal session")
                 assert timeout_status.json()["status"] == "failed"
                 assert timeout_status.json()["steps"][0]["attempt_status"] == "unknown"
-                assert len(provider_calls) == 8
+                assert len(provider_calls) == 12
                 unknown_budget = client.get("/api/cloud-research/budget").json()
                 assert unknown_budget["unknown_provider_attempts"] == 2
                 assert unknown_budget["reserved_and_estimated_usd"] > 0
@@ -668,7 +663,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                     raise AssertionError(
                         "exhausted sponsored session did not reach a terminal state"
                     )
-                assert len(provider_calls) == 8
+                assert len(provider_calls) == 12
                 assert exhausted_status.json()["steps"][0]["attempt_status"] == "not_dispatched"
 
     print(

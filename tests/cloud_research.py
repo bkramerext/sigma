@@ -761,13 +761,14 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         sponsored = cloud_research.evaluation_session_limits(
             {
                 "research_rounds": 1,
-                "model_calls": 1,
+                "model_calls": 30,
                 "session_duration_minutes": 30,
                 "maximum_estimated_cost_usd": user_cost_limit,
             }
         )
-        assert sponsored["maximum_estimated_cost_usd"] == cloud_research.MAX_SESSION_SPEND_USD
-        assert sponsored["model_calls"] == 2 and sponsored["research_rounds"] == 1
+        assert sponsored["maximum_estimated_cost_usd"] == user_cost_limit
+        assert sponsored["model_calls"] == 30 and sponsored["research_rounds"] == 1
+        assert sponsored["session_duration_minutes"] == cloud_research.MAX_SESSION_MINUTES
     project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
     limits = {
         **research_sessions.DEFAULT_LIMITS,
@@ -798,10 +799,10 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         saved = research_sessions.save_limits(project.path, sponsored_limits)
         assert saved == sponsored_limits
         assert research_sessions.get_limits(project.path) == sponsored_limits
-        assert cloud_research.session_call_ceiling() == cloud_research.MAX_LOCAL_SESSION_CALLS
+        assert cloud_research.session_call_ceiling() == cloud_research.MAX_PROJECT_SESSION_CALLS
 
     with patch.object(cloud_workspaces, "enabled", return_value=True):
-        assert cloud_research.session_call_ceiling() == cloud_research.MAX_SESSION_CALLS
+        assert cloud_research.session_call_ceiling() == cloud_research.MAX_PROJECT_SESSION_CALLS
 
 
 def main() -> None:

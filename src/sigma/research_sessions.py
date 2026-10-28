@@ -1214,6 +1214,7 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     status = record.get("status")
     if not artifacts:
         branch_findings = _strategy_findings(record, artifacts)
+        terminal_reason = str(record.get("terminal_reason") or "").strip()
         if status in {"queued", "running"}:
             assessment, label = "pending", "Pending"
             summary = "No Investigator/Skeptic cycle has produced a saved artifact yet."
@@ -1222,12 +1223,23 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             summary = "Execution failed before a research artifact was saved."
         else:
             assessment, label = "mixed", "Mixed · no saved result"
-            summary = "The session ended before a complete research cycle was saved."
+            summary = (
+                f"The session ended before a complete research cycle was saved. {terminal_reason}"
+                if terminal_reason
+                else "The session ended before a complete research cycle was saved."
+            )
         outcome = {
             "assessment": assessment,
             "label": label,
             "summary": summary,
-            "caveats": ["No complete research artifact is available."],
+            "caveats": [
+                "No complete research artifact is available.",
+                *(
+                    [terminal_reason]
+                    if status not in {"queued", "running", "failed"} and terminal_reason
+                    else []
+                ),
+            ],
             "basis_artifact_ids": [],
             "provisional": assessment == "pending",
             "solution_review": {
@@ -4245,13 +4257,15 @@ async def start_session(
                 )
             from sigma.openai_connection import cloud_credential
 
+            if cloud_research.billing_enabled() and limits["maximum_estimated_cost_usd"] is None:
+                raise ProjectError(
+                    "Configure a maximum estimated session cost in Project Settings → Limits before using sponsored research."
+                )
             if cloud_research.billing_enabled() and (
-                not cloud_credential(credential)
-                or limits["maximum_estimated_cost_usd"] is None
-                or config["model"] not in TOKEN_PRICES_PER_MILLION
+                not cloud_credential(credential) or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
                 raise ProjectError(
-                    "Cloud research requires the configured sponsor credential, a per-session cost limit, and a model with a reviewed price."
+                    "Sponsored research requires the configured sponsor credential and a model with a reviewed price."
                 )
             if limits.get("maximum_input_tokens_per_session") is not None and (
                 (credential["mode"] != "api_key" and not cloud_research.billing_enabled())
@@ -8179,6 +8193,37 @@ def _portfolio_failure_message(runs: list[dict[str, Any]]) -> str:
     return "; ".join(messages)
 
 
+def _portfolio_cost_limit_message(record: dict[str, Any], runs: list[dict[str, Any]]) -> str | None:
+    limited = [branch for branch in runs if branch.get("current_action") == "Cost limit"]
+    if not limited:
+        return None
+    cycle = int(record.get("cycle", 0))
+    cycle_limit = int(record.get("cycle_limit", 0))
+    calls_used = int(record.get("calls_used", 0))
+    call_limit = int(record.get("call_limit", 0))
+    reasons = []
+    for branch in limited:
+        reason = str(
+            branch.get("reason") or "A conservative cost reserve prevented another provider call."
+        ).strip()
+        branch_steps = [
+            step
+            for step in record.get("steps", [])
+            if step.get("strategy_id") == branch.get("strategy_id")
+            and step.get("cycle") == branch.get("cycle")
+        ]
+        skeptic_started = any(step.get("role") == "skeptic" for step in branch_steps)
+        partial = ""
+        if int(branch.get("calls_used", 0)) > 0 and not skeptic_started:
+            partial = " No Skeptic call was dispatched for this cycle."
+        reasons.append(f"{branch.get('strategy_title', 'Strategy')}: {reason}{partial}")
+    return (
+        f"Session stopped at cycle {cycle} of {cycle_limit}, after {calls_used}/{call_limit} calls "
+        f"because the configured session cost limit blocked a required reserve. "
+        + " ".join(reasons)
+    )
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     semaphore = asyncio.Semaphore(3)
@@ -8271,6 +8316,14 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     if incomplete_branches
                     else "All strategy branches finished or the shared call budget was exhausted."
                 )
+                cost_limit_message = _portfolio_cost_limit_message(record, runs)
+                if cost_limit_message:
+                    record["message"] = cost_limit_message
+                    record["terminal_reason"] = "; ".join(
+                        f"{branch.get('strategy_title', 'Strategy')}: {branch.get('reason')}"
+                        for branch in runs
+                        if branch.get("current_action") == "Cost limit"
+                    )
                 record["updated_at"] = _now()
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)

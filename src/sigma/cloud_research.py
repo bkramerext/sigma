@@ -26,9 +26,7 @@ _PROCESS_EPOCH = uuid4().hex
 USD_UNITS = 1_000_000_000
 MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("15.00")
-MAX_SESSION_SPEND_USD = 0.25
-MAX_SESSION_CALLS = 6
-MAX_LOCAL_SESSION_CALLS = 120
+MAX_PROJECT_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
 
 
@@ -101,7 +99,7 @@ def _spend_ceiling_decimal() -> Decimal:
     if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
     ):
-        return Decimal(str(MAX_SESSION_SPEND_USD))
+        return MAX_GLOBAL_SPEND_USD
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,
@@ -195,42 +193,26 @@ def _evaluation_queue_limits() -> tuple[int, int, int, int]:
 
 
 def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
-    """Apply administrator-controlled hosted inference caps to sponsored work."""
+    """Apply hosted runtime duration while preserving validated project budgets."""
     result = dict(limits)
-    # Even legacy project records with a one-call allowance need room for the
-    # minimum Investigator/Skeptic pair; cloud limits never exceed the cap.
-    calls = min(max(int(result["model_calls"]), 2), MAX_SESSION_CALLS)
-    result["model_calls"] = calls
-    result["research_rounds"] = min(max(int(result["research_rounds"]), 1), calls // 2)
     result["session_duration_minutes"] = min(
         int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
     )
-    # This is sponsored service usage, not user API-key billing. A project-level
-    # estimate must never lower or raise the administrator's hosted allowance.
-    result["maximum_estimated_cost_usd"] = MAX_SESSION_SPEND_USD
     return result
 
 
 def local_sponsored_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
-    """Bound local sponsored work without applying the hosted six-call cap."""
+    """Apply local sponsored runtime duration without rewriting project budgets."""
     result = dict(limits)
-    calls = min(max(int(result["model_calls"]), 2), MAX_LOCAL_SESSION_CALLS)
-    result["model_calls"] = calls
-    result["research_rounds"] = min(max(int(result["research_rounds"]), 1), calls // 2)
     result["session_duration_minutes"] = min(
         int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
     )
-    result["maximum_estimated_cost_usd"] = MAX_SESSION_SPEND_USD
     return result
 
 
 def session_call_ceiling() -> int:
-    """Keep the hosted evaluation cap local to hosted workspaces.
-
-    Local sponsored inference still uses the durable per-account spend ledger,
-    but its project call limit is governed by the saved project setting.
-    """
-    return MAX_SESSION_CALLS if cloud_workspaces.enabled() else MAX_LOCAL_SESSION_CALLS
+    """Return the maximum call limit accepted by Project Settings."""
+    return MAX_PROJECT_SESSION_CALLS
 
 
 def _database() -> Path:
@@ -445,10 +427,12 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable(
             "Cloud research requires the explicitly configured sponsor provider."
         )
-    if record.get("maximum_estimated_cost_usd") is None or record.get("cost_status") != "available":
+    if record.get("maximum_estimated_cost_usd") is None:
         raise CloudResearchUnavailable(
-            "Cloud research requires a per-session cost limit and a model with a reviewed price."
+            "Configure a maximum estimated session cost in Project Settings → Limits before using sponsored research."
         )
+    if record.get("cost_status") != "available":
+        raise CloudResearchUnavailable("Sponsored research requires a model with a reviewed price.")
     _spend_ceiling_decimal()
     # An explicit account allowance is sufficient. Require the configured
     # default only when resolving an account that has no specific allowance.
@@ -465,14 +449,14 @@ def prepare_job(record: dict[str, Any]) -> None:
         or not 1 <= duration_limit <= MAX_SESSION_MINUTES
         or type(maximum_cost) not in {int, float}
         or not isinstance(maximum_cost, (int, float))
-        or not 0.01 <= maximum_cost <= MAX_SESSION_SPEND_USD
+        or not 0.01 <= maximum_cost <= 100
     ):
         if cloud_workspaces.enabled():
             raise CloudResearchUnavailable(
-                "Hosted cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+                "Hosted sponsored research supports up to 120 calls and 15 minutes; update Project Settings → Limits."
             )
         raise CloudResearchUnavailable(
-            "Local sponsored research sessions are capped at 120 calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+            "Local sponsored research supports up to 120 calls and 15 minutes; update Project Settings → Limits."
         )
     workspace = _ledger_workspace()
     if workspace is None:

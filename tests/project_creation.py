@@ -202,16 +202,18 @@ def main() -> None:
                 assert legacy_download.status_code == 200
                 assert legacy_download.content == downloaded.content
                 imported_document = portable["files"]["project.json"]
-                imported_document["title"] = "API math imported"
+                imported_document["title"] = "API math imported v1"
                 portable["files"]["project.json"] = imported_document
                 imported = client.post("/api/projects/import", json={"bundle": portable})
                 assert imported.status_code == 201, imported.text
                 assert Path(imported.json()["path"]).suffix == ".json"
+                duplicate_import = client.post("/api/projects/import", json={"bundle": portable})
+                assert duplicate_import.status_code == 201, duplicate_import.text
+                assert duplicate_import.json()["project"]["title"] == "API math imported v2"
+                assert duplicate_import.json()["path"] != imported.json()["path"]
                 assert (
-                    client.post("/api/projects/import", json={"bundle": portable}).status_code
-                    == 400
+                    inspect_project(imported.json()["path"]).project.title == "API math imported v1"
                 )
-                assert inspect_project(imported.json()["path"]).project.title == "API math imported"
                 # Home discovery and Open Project must work for both original
                 # and imported single-file projects, not only legacy directories.
                 from sigma.projects import list_json_projects

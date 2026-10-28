@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import secrets
 import sqlite3
 from collections.abc import AsyncIterator
@@ -780,10 +781,16 @@ class ImportBundleRequest(BaseModel):
 @app.post("/api/projects/import", status_code=201)
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
-    from sigma.project_bundle import BundleError, bundle_project_document, import_bundle
+    from sigma.project_bundle import (
+        BundleError,
+        bundle_project_document,
+        import_bundle,
+        rename_bundle_project,
+    )
     from sigma.projects import (
         _project_name,
-        _require_available_title,
+        _occupied_titles,
+        _title_key,
         _title_registry_lock,
         projects_root,
     )
@@ -793,12 +800,37 @@ def import_project_bundle(body: ImportBundleRequest):
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
-        _, name = _project_name(title)
         root = projects_root()
-        destination = (root / name).with_suffix(".json")
         with _title_registry_lock(root):
-            _require_available_title(title, root)
-            imported = import_bundle(body.bundle, destination)
+            occupied_titles = _occupied_titles(root)
+            imported = None
+            version_match = re.search(r"(?i)\bv(\d+)$", title)
+            for number in range(1, 1001):
+                if number == 1:
+                    candidate = title
+                elif version_match:
+                    version_number = int(version_match.group(1)) + number - 1
+                    candidate = title[: version_match.start()] + f"v{version_number}"
+                else:
+                    suffix = " (imported)" if number == 2 else f" (imported {number - 1})"
+                    candidate = title[: 200 - len(suffix)].rstrip() + suffix
+                _, name = _project_name(candidate)
+                destination = (root / name).with_suffix(".json")
+                if (
+                    _title_key(candidate) in occupied_titles
+                    or os.path.lexists(destination)
+                    or os.path.lexists(root / name)
+                ):
+                    continue
+                payload = (
+                    body.bundle
+                    if candidate == title
+                    else rename_bundle_project(body.bundle, candidate)
+                )
+                imported = import_bundle(payload, destination)
+                break
+            if imported is None:
+                raise ProjectError("A unique name for the imported project is unavailable.")
         view = inspect_project(imported)
         from sigma.recents import record_access
 

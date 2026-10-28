@@ -68,7 +68,7 @@
 :is(.home-page, .workspace-page) .api-connection > summary .sponsored-allowance-trigger:hover,
 :is(.home-page, .workspace-page) .api-connection > summary .sponsored-allowance-trigger:focus-visible { background: transparent; box-shadow: none; color: inherit; }
 .api-connection > summary.has-sponsored-allowance { gap: 7px; }
-:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-trigger { margin-left: -5px; }
+:is(.home-page, .workspace-page) .api-connection > summary.has-sponsored-allowance .sponsored-allowance-trigger { margin-left: -12px; }
 .identity-pill-stack .reload-me-connection {
   box-sizing: border-box;
   display: inline-flex;

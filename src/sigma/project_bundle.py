@@ -121,6 +121,20 @@ def bundle_project_document(bundle: dict[str, Any]) -> dict[str, Any]:
     return document
 
 
+def rename_bundle_project(bundle: dict[str, Any], title: str) -> dict[str, Any]:
+    """Return a portable copy of a bundle with only its project title changed."""
+    members = _decode(bundle)
+    try:
+        document = json.loads(members["project.json"])
+        document["title"] = title
+        members["project.json"] = (
+            json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+        ).encode("utf-8")
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        raise BundleError("Project bundle has no valid project document") from exc
+    return portable_bundle(members)
+
+
 def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if not isinstance(bundle, dict) or set(bundle) != {"format", "version", "files"}:
         raise BundleError("Invalid project bundle")

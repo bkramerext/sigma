@@ -41,10 +41,10 @@ plan. To roll back local service-key routing, unset
 An account with only `$0.01` remaining may still be unable to start a call:
 the server reserves a conservative, model-specific amount before each provider
 request and never exceeds the member's allowance.
-In local sponsored mode, **Project Settings → Limits** keeps the saved project
-call allowance (up to 30 calls); the hosted six-call cap does not apply. Local
-sponsored sessions remain capped at 15 minutes and $0.25 per session, with the
-member's remaining account allowance enforced separately before each call.
+In sponsored mode, **Project Settings → Limits** controls the session call,
+round, and estimated-cost limits. Sponsored sessions remain capped at 15 minutes.
+The member's remaining account allowance and configured global spend ceiling
+are enforced separately before each call.
 Hosted deployments retain their own provider setting. The option does not
 enable the hosted forced-sponsored setting. Use `./sigma start` to return to
 normal local mode.

@@ -7470,3 +7470,35 @@ chevron.
 
 Narrowed the Difficulty and Thinking level controls in the edit dialog and
 shortened the Research tab introduction.
+
+The Project Settings dialog title now reads “Project Settings.” Research type
+and Model controls share a 240px width, the Research type icon-to-label gap and
+space above the control are smaller, and the Research introduction's bottom
+margin is reduced. Thinking level and Model captions are shorter. The project
+header Thinking pill is left-aligned, and the Model pill no longer repeats its
+label.
+
+## Issue #289 — Project configured sponsored limits (2026-10-28)
+
+Sponsored sessions now use the saved Project Settings call, round, and maximum
+estimated cost limits rather than overriding them with six calls or $0.25.
+Hosted and local sponsored sessions retain the service 15-minute cap and
+account/global allowance checks. Unknown provider attempts continue to retain
+their reservation. A cost-limited portfolio now reports the affected cycle,
+call count, branch reason, and undispatched next role while retaining its
+partial cycle in the outcome. Starting sponsored work without a configured
+maximum estimated cost returns an actionable Project Settings message.
+
+Import title collisions now preserve the exported project by assigning a new
+versioned title (for example, “v1” becomes “v2”); non-versioned collisions use
+an imported suffix. Existing imported bundle formats remain supported.
+
+Focused verification passed: `tests/cloud_research.py`,
+`tests/cloud_research_api.py`, `tests/cloud_research_sponsored_api.py`,
+`tests/research_sessions.py`, `tests/project_creation.py`, and
+`npm --prefix frontend run build`; Ruff formatting and `git diff --check` also
+passed. The full `./sigma test` was not run, as requested. No real-browser
+check was run. Hosted personal ChatGPT authorization remains disabled by the
+existing hosted integration, so hosted personal-account switching is blocked
+and unchanged; no authorization requirement was bypassed. No live or paid
+provider calls were made.
