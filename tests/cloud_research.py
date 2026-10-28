@@ -1288,6 +1288,20 @@ def main() -> None:
                     integrated = asyncio.run(run_research())
                 assert integrated["status"] == "ended"
                 assert len(integrated["artifacts"]) == 1
+                # Browser reload fetches a fresh projection from durable
+                # project storage, not the task's in-memory result.
+                reopened = research_sessions.list_sessions(live_view.path)
+                saved = next(entry for entry in reopened if entry["id"] == integrated["id"])
+                assert saved["status"] == "ended"
+                assert len(saved["artifacts"]) == 1
+                assert len(saved["steps"]) == 2
+                assert saved["calls_used"] == 2
+                assert [step["role"] for step in saved["steps"]] == [
+                    "investigator", "skeptic"
+                ]
+                assert any(event["kind"] == "call.completed" for event in saved["events"])
+                assert saved["outcome"]["metrics"]["operational"]
+                assert saved["estimated_cost_usd"] == integrated["estimated_cost_usd"]
                 # Hosted hard-budget and provider reservations describe the
                 # same attempts. Both must settle without leaving a second
                 # phantom token hold or rejecting the Skeptic call.
