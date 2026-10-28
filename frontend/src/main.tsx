@@ -2923,6 +2923,7 @@ type CloudResearchBudget = {
   held_usd: number;
   reserved_and_estimated_usd: number;
   remaining_usd: number;
+  global_remaining_usd?: number;
   unknown_provider_attempts: number;
 };
 
