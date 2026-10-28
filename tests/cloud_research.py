@@ -694,7 +694,9 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
         assert abs(global_reserved_spend() - 16.00) < 1e-6
         # Once the ceiling is reached, no further provider reservation is allowed.
         final_user = workspace(root, "f" * 32)
-        project = initialize_project(final_user.path / "pilot.sigma", "Last pilot", "Question")
+        project = initialize_project(
+            final_user.path / "pilot.sigma", "Last pilot", "Question"
+        )
         binding = cloud_workspaces._CURRENT.set(final_user)
         try:
             record = job(final_user.workspace_id)
