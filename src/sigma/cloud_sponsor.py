@@ -32,14 +32,8 @@ def _diagnose(issue: str | None) -> None:
 
 def inference_provider() -> str:
     """Return the provider bound to sponsored inference in this deployment."""
-    from sigma import cloud_auth, cloud_workspaces
-
-    if cloud_auth.config().local and not cloud_workspaces.enabled():
-        # Local sponsored access defaults to the designated ChatGPT session.
-        # A service API key is used only when the operator selects it explicitly.
-        return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
-    # Sponsorship is backed by the designated ChatGPT account unless the
-    # operator explicitly opts into separately billed API-key inference.
+    # Sponsored inference uses the designated ChatGPT account by default in
+    # both local and hosted modes. API billing requires explicit operator opt-in.
     return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
 
 
