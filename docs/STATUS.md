@@ -7325,3 +7325,9 @@ the signed-in email. Hosted Project Settings → Limits shows the current
 configured call count and distinguishes it from the hosted maximum of six calls.
 `git diff --check` passed. No automated or real-browser checks were run for this
 copy and tooltip update.
+
+## Home Saved tab label (2026-10-28)
+
+The Home catalog tab now reads “Saved,” and its tooltip describes saved
+projects. Existing recent-project storage and navigation behavior are unchanged.
+`git diff --check` passed; no browser or automated checks were run.
