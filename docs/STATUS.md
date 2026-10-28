@@ -7526,3 +7526,9 @@ Ruff check/format, and `git diff --check` passed before the optional-cap
 follow-up. Verification of that follow-up is deferred until after local testing.
 The real-browser check did not complete; it stopped at an assertion in the
 local connection-switching scenario.
+
+## Lean project action visibility (2026-10-28)
+
+The disabled Lean proof action is now visible in the project button bar for all
+research types, matching the consistently visible TeX and export actions. No
+tests were run; this change is committed for local browser verification.
