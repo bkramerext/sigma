@@ -3223,7 +3223,29 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             queue_status = cloud_research.job_status(record["id"])
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
-        if queue_status in {"queued", "running", "stopping"}:
+        if queue_status == "queued":
+            return record
+        if queue_status in {"running", "stopping"}:
+            # A queued record whose ledger already owns a running slot is
+            # inconsistent after an interrupted admission. Do not assume it
+            # is live: the worker lock below distinguishes a running process
+            # from a dead one and preserves the saved recovery evidence.
+            pass
+        else:
+            record["status"] = "paused"
+            record["updated_at"] = _now()
+            record["current_action"] = "Paused after queue recovery"
+            record["message"] = (
+                "The queued session reservation was no longer present after backend recovery. "
+                "No provider request was dispatched; resume when ready."
+            )
+            for branch in record.get("strategy_runs", []):
+                if branch.get("status") == "queued":
+                    branch["status"] = "paused"
+                    branch["current_action"] = record["current_action"]
+                    branch["reason"] = record["message"]
+            _event(record, "interrupted", record["message"])
+            _save(record["project_path"], record)
             return record
         record["status"] = "paused"
         record["updated_at"] = _now()
