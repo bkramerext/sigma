@@ -1505,6 +1505,76 @@ def main() -> None:
                 )
                 assert cloud_research.snapshot()["user_reserved_and_estimated_usd"] < 1.0
 
+                async def run_clipped_call() -> None:
+                    """A provider response clipped at its output limit still settles usage."""
+                    before = cloud_research.snapshot()
+                    clipped = research_sessions.IncompleteResearchResponse(
+                        "Provider response exceeded max output tokens.",
+                        partial_text="Saved partial investigation output.",
+                        usage={
+                            "input_tokens": 90,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 256,
+                        },
+                    )
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(
+                            research_sessions, "_call", new=AsyncMock(side_effect=clipped)
+                        ) as calls,
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            ended = research_sessions.get_session(live_view.path, started["id"])
+                            if ended["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("clipped cloud call did not save a terminal state")
+                        assert ended["status"] == "ended", ended["message"]
+                        assert calls.await_count == 1
+                        assert ended["steps"][0]["status"] == "incomplete"
+                        assert ended["steps"][0]["attempt_status"] == "usage_estimated"
+                        assert ended["tokens_reserved"] == 0
+                        assert ended["estimated_cost_usd"] > 0
+                        assert ended["steps"][0]["partial_output"] == clipped.partial_text
+                        persisted = research_sessions.list_sessions(live_view.path)
+                        assert any(
+                            item["id"] == started["id"]
+                            and item["steps"][0]["attempt_status"] == "usage_estimated"
+                            for item in persisted
+                        )
+                        with cloud_research._connect() as db:
+                            call = db.execute(
+                                "SELECT status,input_tokens,output_tokens FROM calls WHERE call_id=?",
+                                (ended["steps"][0]["id"],),
+                            ).fetchone()
+                            assert call["status"] == "usage_estimated"
+                            assert call["input_tokens"] == 90
+                            assert call["output_tokens"] == 256
+                        after = cloud_research.snapshot()
+                        assert after["held_usd"] == before["held_usd"], (before, after)
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_clipped_call())
+
                 async def run_ambiguous_failure() -> None:
                     key = str(uuid4())
                     with (
