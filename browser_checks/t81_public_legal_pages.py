@@ -54,8 +54,8 @@ def main() -> None:
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
             expect(dialog).to_be_visible()
-            expect(dialog.get_by_role("link", name="Privacy Policy", exact=True)).to_have_attribute(
-                "href", "/privacy"
+            expect(dialog.get_by_role("link", name="Privacy Notice", exact=True)).to_have_attribute(
+                "href", "/privacy?return_to=%2F&return_dialog=about"
             )
             expect(
                 dialog.get_by_role("link", name="Terms of Service", exact=True)
