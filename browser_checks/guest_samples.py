@@ -355,33 +355,39 @@ def exercise(ui_url: str, root: Path) -> None:
         sign_in_url = urlsplit(sign_in_request.value.url)
         assert sign_in_url.path == "/api/cloud-auth/login", sign_in_url
         return_to = parse_qs(sign_in_url.query).get("return_to", [None])[0]
-        assert return_to == f"/project?path={opened_projects[-1]['path']}", return_to
+        assert return_to == f"/project?path={opened_projects[-1]['path']}&resume_play=1", return_to
         assert page.evaluate("sessionStorage.getItem('sigma.playSignInReturn')") == "true"
         assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") == "true"
-        page.route(
-            "**/api/cloud-auth/status",
-            lambda route: route.fulfill(
+        session = {"authenticated": True}
+
+        def cloud_status(route):
+            route.fulfill(
                 status=200,
                 content_type="application/json",
                 body=json.dumps(
                     {
                         "enabled": True,
                         "ready": True,
-                        "authenticated": True,
-                        "user": {"email": "member@example.org", "role": "member"},
+                        "authenticated": session["authenticated"],
+                        "user": {"email": "member@example.org", "role": "member"}
+                        if session["authenticated"]
+                        else None,
                         "account": {
                             "identity": {"email": "member@example.org", "verified": True},
                             "access": {"status": "active", "role": "member"},
                             "workspace": {"available": True, "id": "fixture"},
                             "model_access": {"mode": "personal", "connection": "connected"},
                             "sponsorship": {"eligible": False, "forced": False},
-                        },
+                        }
+                        if session["authenticated"]
+                        else None,
                         "target": "local",
                         "admin_contact_email": None,
                     }
                 ),
-            ),
-        )
+            )
+
+        page.route("**/api/cloud-auth/status", cloud_status)
         page.route(
             "**/api/projects/proposals/config?**",
             lambda route: route.fulfill(
@@ -428,7 +434,12 @@ def exercise(ui_url: str, root: Path) -> None:
                 body=json.dumps({"path": opened_projects[-1]["path"]}),
             ),
         )
-        page.route("**/api/cloud-auth/logout", lambda route: route.fulfill(status=204))
+
+        def sign_out(route):
+            session["authenticated"] = False
+            route.fulfill(status=204)
+
+        page.route("**/api/cloud-auth/logout", sign_out)
         page.get_by_role("button", name="Sign out of Google").click()
         expect(page).to_have_url(re.compile(r"/project\?path="))
         expect(

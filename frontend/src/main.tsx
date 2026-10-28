@@ -3336,15 +3336,22 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [introHeight, setIntroHeight] = useState<number | null>(null);
   const resumedPlay = useRef(false);
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlPlayIntent = params.get('resume_play') === '1';
     if (
       resumedPlay.current
       || !view
       || !cloud?.authenticated
       || processControls.playDisabled
-      || window.sessionStorage.getItem('sigma.resumeGuestPlay') !== 'true'
+      || (!urlPlayIntent && window.sessionStorage.getItem('sigma.resumeGuestPlay') !== 'true')
     ) return;
     resumedPlay.current = true;
     window.sessionStorage.removeItem('sigma.resumeGuestPlay');
+    if (urlPlayIntent) {
+      params.delete('resume_play');
+      const query = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
     processControls.play();
   }, [cloud?.authenticated, processControls.play, processControls.playDisabled, view?.project.id]);
   useEffect(() => {
@@ -3827,7 +3834,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
-    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}` })}`
+    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
     : '/api/cloud-auth/login';
   useEffect(() => {
     if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') {
@@ -4445,7 +4452,7 @@ function CloudAuthGate() {
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = navigationEntry?.type !== 'reload'
-    && (!!status?.account?.sponsorship.eligible || !!status?.account?.invitation_welcome_pending)
+    && !!status?.account?.invitation_welcome_pending
     && !(playSignInReturn && window.location.pathname === '/project')
     && !welcomeDismissedForPage;
   const showGuestWelcome = !!status?.enabled && !status?.authenticated
@@ -4456,12 +4463,11 @@ function CloudAuthGate() {
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedIdentityAvailable={deniedIdentityAvailable} authenticated={status.authenticated} user={status.user}/>;
-  if (!status.authenticated && window.location.pathname === '/project') window.history.replaceState(null, '', '/');
   return <CloudIdentityContext.Provider value={context}>
     <AIProvider unavailable={!status.authenticated}><App/>
     {status.authenticated && showSponsorWelcome && <InvitationWelcomeDialog
       audience={status.account?.sponsorship.eligible ? 'sponsored' : 'invited'}
-      allowance={budgetEmail === status.user?.email ? budget?.allowance_usd ?? null : null}
+      allowance={budgetEmail === status.user?.email ? budget?.remaining_usd ?? null : null}
       allowanceUsed={budgetEmail === status.user?.email && budget ? budget.estimated_usage_usd + budget.held_usd : 0}
       allowanceLoading={budgetLoading && budgetEmail !== status.user?.email}
       onDismiss={async () => { setWelcomeDismissedForPage(true); await refresh(); }}
@@ -4500,9 +4506,16 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     finally { setBusy(false); }
   }
   const heading = audience === 'guest' ? 'Welcome to SIGMA!' : 'You have been invited!';
+  const allowanceMessage = allowance === null || allowance > 1
+    ? null
+    : audience === 'sponsored'
+      ? `You have $${allowance.toFixed(2)} remaining in your sponsored allowance.`
+      : allowanceUsed > 0
+        ? `We added $${allowance.toFixed(2)} to your account.`
+        : `We will start you off with a $${allowance.toFixed(2)} allowance.`;
   return <dialog id="invitation-welcome-dialog" ref={dialog} className="google-account-dialog invitation-welcome-dialog" aria-labelledby="invitation-welcome-heading" aria-describedby="invitation-welcome-phrase" onClick={event => { if (event.target === event.currentTarget) void dismiss(); }} onCancel={event => { event.preventDefault(); void dismiss(); }}>
     <h2 id="invitation-welcome-heading">{heading}</h2>
-    {allowance !== null && allowance <= 1 && <p className="invitation-welcome-allowance">{allowanceUsed > 0 ? `We added a $${allowance.toFixed(2)} allowance to your account.` : `We will start you off with a $${allowance.toFixed(2)} allowance.`}</p>}
+    {allowanceMessage && <p className="invitation-welcome-allowance">{allowanceMessage}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
     {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore as a guest without running or saving projects, or request an invitation to become a member. The administrator decides whether to include sponsorship when granting your invitation.</p>}
     {audience === 'sponsored' && <p className="invitation-welcome-intro">SIGMA tracks your sponsored allowance as you use ChatGPT. When you’re ready, you can connect your own ChatGPT account from the Sponsored ChatGPT pill.</p>}

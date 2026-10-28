@@ -1239,7 +1239,10 @@ def _safe_login_return_to(value: str) -> str | None:
     paths = query.get("path", [])
     if len(paths) != 1 or not paths[0] or len(paths[0]) > 2048:
         return None
-    return "/project?" + urlencode({"path": paths[0]})
+    resume_play = query.get("resume_play", [])
+    return "/project?" + urlencode(
+        {"path": paths[0], **({"resume_play": "1"} if resume_play == ["1"] else {})}
+    )
 
 
 @router.get("/login")
@@ -1461,9 +1464,10 @@ async def callback(
 
         guest_workspace = cloud_workspaces.guest_workspace(guest_token)
         if guest_workspace is not None:
-            requested_paths = parse_qs(
+            return_query = parse_qs(
                 urlsplit(return_to).query, keep_blank_values=True, max_num_fields=8
-            ).get("path", [])
+            )
+            requested_paths = return_query.get("path", [])
             try:
                 if len(requested_paths) == 1:
                     requested = Path(requested_paths[0]).expanduser().resolve()
@@ -1471,7 +1475,16 @@ async def callback(
                         copied_path = projects.copy_project_between_workspaces(
                             requested_paths[0], guest_workspace, authenticated_workspace
                         )
-                        return_to = "/project?" + urlencode({"path": copied_path})
+                        return_to = "/project?" + urlencode(
+                            {
+                                "path": copied_path,
+                                **(
+                                    {"resume_play": "1"}
+                                    if return_query.get("resume_play") == ["1"]
+                                    else {}
+                                ),
+                            }
+                        )
             except (projects.ProjectError, cloud_workspaces.WorkspaceUnavailable):
                 # Complete sign-in without exposing a guest path to the member
                 # workspace. The original guest copy remains intact until expiry.

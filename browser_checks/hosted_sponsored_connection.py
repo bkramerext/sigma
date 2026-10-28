@@ -29,15 +29,9 @@ def free_port() -> int:
 
 def dismiss_sponsor_welcome(page) -> None:
     welcome = page.locator("#invitation-welcome-dialog")
-    expect(welcome).to_be_visible()
-    try:
-        action = welcome.get_by_role("button", name="Let's get started")
-        if not action.count():
-            action = welcome.get_by_role("button", name="Let's get started")
-        action.click(timeout=2000)
-    except PlaywrightTimeoutError:
-        if welcome.count() and welcome.is_visible():
-            raise
+    if not welcome.count() or not welcome.is_visible():
+        return
+    welcome.get_by_role("button", name="Let's get started").click(timeout=2000)
     expect(welcome).to_have_count(0)
 
 
@@ -184,10 +178,10 @@ def exercise(origin: str) -> None:
         )
         invitation_failures = {"remaining": 0}
         funding = {
-            "allowance_usd": 0.75,
-            "estimated_usage_usd": 0,
+            "allowance_usd": 0.25,
+            "estimated_usage_usd": 0.21,
             "held_usd": 0,
-            "remaining_usd": 0.75,
+            "remaining_usd": 0.04,
         }
         posts: list[tuple[str, dict]] = []
         failures: list[str] = []
@@ -391,7 +385,7 @@ def exercise(origin: str) -> None:
         welcome = page.locator("#invitation-welcome-dialog")
         expect(welcome).to_be_visible()
         expect(welcome.get_by_role("heading", name="You have been invited!")).to_be_visible()
-        expect(welcome).to_contain_text("We will start you off with a $0.75 allowance.")
+        expect(welcome).to_contain_text("You have $0.04 remaining in your sponsored allowance.")
         expect(welcome.locator(".invitation-welcome-intro")).to_contain_text(
             "SIGMA tracks your sponsored allowance as you use ChatGPT"
         )
@@ -406,7 +400,7 @@ def exercise(origin: str) -> None:
         assert phrase_style == {
             "background": "rgba(0, 0, 0, 0)",
             "border": "0px",
-            "fontStyle": "normal",
+            "fontStyle": "italic",
             "padding": "0px",
         }, phrase_style
         welcome_box = welcome.bounding_box()
@@ -416,16 +410,13 @@ def exercise(origin: str) -> None:
         welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
         # Invitation actions belong only to signed-out visitors.
-        expect(page.locator(".home-topline .home-header-actions .project-invite-me")).to_have_count(
-            0
-        )
+        expect(
+            page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")
+        ).to_have_count(0)
         page.reload(wait_until="domcontentloaded")
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         page.goto(origin + "/?fresh-entry=1", wait_until="domcontentloaded")
         fresh_welcome = page.locator("#invitation-welcome-dialog")
-        expect(fresh_welcome).to_be_visible()
-        expect(fresh_welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
-        fresh_welcome.get_by_role("button", name="Let's get started").click()
         expect(fresh_welcome).to_have_count(0)
         page.goto(origin + "/not-found", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
@@ -516,14 +507,17 @@ def exercise(origin: str) -> None:
             expect(guest_welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
             guest_welcome.get_by_role("button", name="Let's get started").click()
         about = page.locator(".home-topline .home-about-button")
-        invite = page.locator(".home-topline .home-header-actions .project-invite-me")
+        invite = page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")
+        google = page.locator(".home-auth-pills a.project-google-signin")
         expect(about).to_be_visible()
         expect(invite).to_be_visible()
+        expect(google).to_be_visible()
         expect(page.locator(".home-auth-pills .api-connection")).to_have_count(0)
-        about_box = about.bounding_box()
+        google_box = google.bounding_box()
         invite_box = invite.bounding_box()
-        assert about_box and invite_box
-        assert invite_box["y"] >= about_box["y"] + about_box["height"], (about_box, invite_box)
+        assert google_box and invite_box
+        assert invite_box["y"] >= google_box["y"] + google_box["height"], (google_box, invite_box)
+        assert abs(invite_box["x"] - google_box["x"]) < 2, (google_box, invite_box)
         invite.click()
         invitation_dialog = page.locator("#google-invitation-dialog")
         expect(invitation_dialog).to_be_visible()
@@ -620,6 +614,7 @@ def exercise(origin: str) -> None:
         admin_mode["value"] = True
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
+        expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         expect(page.locator(".home-topline .home-about-button")).to_have_text("About SIGMA")
         admin_pill = page.get_by_role("link", name="Administrator settings")
         expect(admin_pill).to_have_text("Admin Settings")
@@ -810,6 +805,7 @@ def exercise(origin: str) -> None:
         selected["mode"] = "sponsored"
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
+        expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         page.get_by_role("link", name="Administrator settings").click()
         admin_dialog = page.get_by_role("dialog", name="Administrator Settings")
         with page.expect_request("**/api/ai/sponsor-auth/begin"):

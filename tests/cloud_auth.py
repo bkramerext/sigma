@@ -850,10 +850,12 @@ class CloudAuthTests(TestCase):
 
             completed = self.finish(
                 client=browser,
-                return_to=f"/project?path={guest_path}",
+                return_to=f"/project?path={guest_path}&resume_play=1",
             )
             self.assertEqual(completed.status_code, 303)
-            member_path = parse_qs(urlsplit(completed.headers["location"]).query)["path"][0]
+            return_query = parse_qs(urlsplit(completed.headers["location"]).query)
+            member_path = return_query["path"][0]
+            self.assertEqual(return_query["resume_play"], ["1"])
             self.assertNotEqual(member_path, guest_path)
             member_project = browser.post(
                 "/api/projects/open", json={"path": member_path}, headers={"Origin": ORIGIN}
@@ -952,10 +954,20 @@ class CloudAuthTests(TestCase):
             )
 
     def test_signin_returns_to_safe_project_continuation(self):
-        project_return = "/project?path=%2Ftmp%2Fguest-project"
+        project_return = "/project?path=%2Ftmp%2Fguest-project&resume_play=1"
         completed = self.finish(return_to=project_return)
         self.assertEqual(completed.status_code, 303)
         self.assertEqual(completed.headers["location"], project_return)
+
+        unsupported_intent, _ = self.start_flow(
+            return_to="/project?path=%2Ftmp%2Fguest-project&resume_play=2"
+        )
+        with cloud_auth._db(cloud_auth.config()) as db:
+            flow = db.execute(
+                "SELECT return_to FROM flows WHERE state_hash=?",
+                (cloud_auth._hash(unsupported_intent),),
+            ).fetchone()
+        self.assertEqual(flow["return_to"], "/project?path=%2Ftmp%2Fguest-project")
 
         state, _ = self.start_flow(return_to="https://evil.example/steal")
         with cloud_auth._db(cloud_auth.config()) as db:

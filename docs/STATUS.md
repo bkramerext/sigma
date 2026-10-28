@@ -1,3 +1,13 @@
+## Sponsored welcome shows current remaining balance (2026-10-27)
+
+The sponsored welcome dialog now uses the budget's `remaining_usd`, matching the
+Sponsored ChatGPT pill, instead of showing the account's original grant. For a
+small sponsored balance it says how much remains. Real-Chrome
+`browser_checks/hosted_sponsored_connection.py` verifies a $0.25 grant with
+$0.21 estimated usage displays $0.04 remaining. The browser acceptance and
+`./sigma test` passed. No provider calls or production configuration changes
+occurred.
+
 ## Guest Play continuation and project sign-out (2026-10-27)
 
 Google sign-in from the guest Play prompt now carries the project into the
@@ -12,6 +22,17 @@ project, invitation layout, and consistent Google action labels. Focused cloud
 auth/workspace and bundle tests passed; `./sigma test` passed for the final
 tree, including Pyright, frontend typecheck and production build. No live provider calls, production configuration changes, or deployment
 occurred.
+
+Follow-up hardening makes the resume request an allow-listed `resume_play=1`
+parameter on SIGMA's validated OAuth return path and carries it through the
+guest-to-member workspace copy. The frontend waits until the signed-in project
+can start a session, then opens its standard confirmation without auto-running.
+The auth gate no longer rewrites signed-out project URLs to Home, so project
+sign-out stays on the copied guest project. Welcome dialogs now depend only on
+the persisted one-time invitation welcome flag; existing eligible accounts,
+including administrators, do not see it again. Real-Chrome checks cover a
+non-sponsored member's Play return, project sign-out, and no repeated/admin
+welcome. `./sigma test` and both focused real-Chrome checks passed.
 
 ## Guest Play sign-in and invitation pill alignment (2026-10-27)
 
