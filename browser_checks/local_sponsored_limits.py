@@ -141,7 +141,17 @@ def main() -> None:
                 )
                 welcome = page.locator("#invitation-welcome-dialog")
                 if welcome.count() and welcome.is_visible():
-                    welcome.get_by_role("button", name="Let's get started").click()
+                    dismiss = welcome.get_by_role("button", name="Let's get started")
+                    assert (
+                        dismiss.evaluate("element => getComputedStyle(element).borderTopColor")
+                        == "rgb(223, 180, 118)"
+                    )
+                    dismiss.hover()
+                    assert (
+                        dismiss.evaluate("element => getComputedStyle(element).borderTopColor")
+                        == "rgb(255, 225, 173)"
+                    )
+                    dismiss.click()
                     expect(welcome).to_have_count(0)
                 connection_summary = page.locator(".api-connection summary")
                 expect(connection_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")

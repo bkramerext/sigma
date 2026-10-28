@@ -7398,3 +7398,7 @@ personal choice. Verification after this follow-up: all 60 `tests.cloud_auth`
 tests passed, frontend typecheck passed, and real Chrome verified the Sponsored
 ChatGPT pill is present before any pill interaction. The full `./sigma test`
 suite was not rerun after this follow-up.
+
+Welcome-dialog follow-up: the “Let’s get started” button now uses the app’s
+copper action border and matching hover border. Real-Chrome acceptance checked
+both computed border colors and passed.

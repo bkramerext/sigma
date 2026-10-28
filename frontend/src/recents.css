@@ -229,8 +229,8 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .invitation-welcome-dialog .invitation-welcome-allowance { margin: 0 0 14px; color: #f2d4aa; font: 500 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
 .invitation-welcome-dialog .invitation-welcome-intro { margin: 0 0 16px; color: #bcc5cc; font: inherit; }
 .invitation-welcome-dialog .invitation-welcome-phrase { margin: 0 0 14px; padding: 0; border: 0; background: transparent; color: #bcc5cc; font: inherit; font-style: italic; }
-.invitation-welcome-dialog .invitation-welcome-dismiss { display: block; min-height: 38px; margin: 22px auto 0; padding: 8px 15px; border: 1px solid #a96548; border-radius: 5px; background: linear-gradient(145deg, #533323, #251b18); box-shadow: inset 0 1px 0 #ffe0ab24; color: #f1d5bb; font: 500 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
-.invitation-welcome-dialog .invitation-welcome-dismiss:hover:not(:disabled) { border-color: #d89570; background: linear-gradient(145deg, #69442e, #31221d); color: #fff0dc; }
+.invitation-welcome-dialog .invitation-welcome-dismiss { display: block; min-height: 38px; margin: 22px auto 0; padding: 8px 15px; border: 1px solid #dfb476; border-radius: 5px; background: linear-gradient(145deg, #533323, #251b18); box-shadow: inset 0 1px 0 #ffe0ab24; color: #f1d5bb; font: 500 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.invitation-welcome-dialog .invitation-welcome-dismiss:hover:not(:disabled) { border-color: #ffe1ad; background: linear-gradient(145deg, #69442e, #31221d); color: #fff0dc; }
 .invitation-welcome-dialog .invitation-welcome-dismiss:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 .invitation-welcome-dialog .invitation-welcome-dismiss:disabled { opacity: .65; cursor: wait; }
 .google-invitation-dialog .google-invitation-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
