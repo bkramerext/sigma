@@ -2450,14 +2450,22 @@ def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
         prices is None
         or type(usage.get("input_tokens")) is not int
         or type(usage.get("output_tokens")) is not int
-        or type(usage.get("cached_input_tokens")) is not int
     ):
         return None
-    input_cost = (
-        cast(int, usage["input_tokens"]) - cast(int, usage["cached_input_tokens"])
-    ) * prices["input"]
-    cached_cost = cast(int, usage["cached_input_tokens"]) * prices["cached_input"]
-    output_cost = cast(int, usage["output_tokens"]) * prices["output"]
+    input_tokens = cast(int, usage["input_tokens"])
+    output_tokens = cast(int, usage["output_tokens"])
+    cached = usage.get("cached_input_tokens")
+    if cached is None:
+        # Some providers report aggregate input/output usage without a
+        # cached-input breakdown. Price all input at the full uncached
+        # rate (a conservative upper bound) rather than retaining an
+        # unknown-cost hold on an otherwise metered provider response.
+        cached = 0
+    if type(cached) is not int or cached < 0 or cached > input_tokens:
+        return None
+    input_cost = (input_tokens - cached) * prices["input"]
+    cached_cost = cached * prices["cached_input"]
+    output_cost = output_tokens * prices["output"]
     return round((input_cost + cached_cost + output_cost) / 1_000_000, 9)
 
 
