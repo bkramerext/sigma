@@ -30,6 +30,23 @@ MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 
 
+def test_backend_build_is_pinned_at_backend_start() -> None:
+    from sigma.build_info import build_commit
+    from sigma.server import _build_sha
+
+    build_commit.cache_clear()
+    try:
+        with patch.dict("os.environ", {"SIGMA_BUILD_COMMIT": "A" * 40}):
+            assert build_commit() == "a" * 40
+            assert _build_sha() == "a" * 7
+        # A changed environment/checkout must not relabel an already running
+        # backend's session and call evidence.
+        with patch.dict("os.environ", {"SIGMA_BUILD_COMMIT": "B" * 40}):
+            assert build_commit() == "a" * 40
+    finally:
+        build_commit.cache_clear()
+
+
 def provider_response(value):
     value = dict(value)
     if "claim" in value:
@@ -7709,6 +7726,7 @@ def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
 
 
 def main():
+    test_backend_build_is_pinned_at_backend_start()
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
