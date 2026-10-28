@@ -4409,8 +4409,9 @@ function CloudAuthGate() {
     const target = status?.target ?? 'hosted';
     const email = status?.user?.email ?? null;
     setBudget(null); setBudgetEmail(null); setBudgetError(null);
-    const canViewAllowance = !!status?.account?.sponsorship.eligible;
-    if (!status?.enabled || !status.authenticated || (target !== 'hosted' && !canViewAllowance)) {
+    const canViewAllowance = !!status?.account?.sponsorship.eligible
+      && status?.account?.model_access.mode === 'sponsored';
+    if (!status?.enabled || !status.authenticated || !canViewAllowance) {
       setBudget(null); setBudgetLoading(false); setBudgetError(null); return;
     }
     let active = true;
@@ -4439,7 +4440,7 @@ function CloudAuthGate() {
     window.addEventListener('focus', fetchBudget);
     window.addEventListener('sigma-sponsored-budget-refresh', fetchBudget);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', fetchBudget); window.removeEventListener('sigma-sponsored-budget-refresh', fetchBudget); };
-  }, [status?.enabled, status?.authenticated, status?.target, status?.user?.email, status?.mock_auth]);
+  }, [status?.enabled, status?.authenticated, status?.target, status?.user?.email, status?.mock_auth, status?.account?.sponsorship.eligible, status?.account?.model_access.mode]);
   const refreshSponsoredConnection = useCallback(async () => {
     if (!status?.enabled || !status.authenticated || status.target !== 'hosted') return;
     setProviderLoading(true);
