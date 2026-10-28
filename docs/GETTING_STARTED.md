@@ -13,6 +13,26 @@ On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.
 
 Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop SIGMA with **Ctrl+C**, or use `./sigma shutdown` from another terminal. Running `./sigma start` again replaces a verified local instance; unrelated services using the ports are left alone.
 
+For Google-authenticated personal-account testing, start without `--sponsored`.
+If an administrator is **not** the original bootstrap account already bound in
+SIGMA's access database, configure that administrator explicitly (for example
+in the checkout's private `.env`):
+
+```sh
+SIGMA_CLOUD_ADMIN_EMAILS=zetacontinuation@gmail.com
+```
+
+Then restart with `./sigma start` and sign in with that Google identity.
+The email is administrator-authorized without an invitation. Its verified
+Google subject is bound on first login, and different subjects cannot claim
+the same administrator address. `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` controls
+the notification/contact address and the *initial* bootstrap administrator
+only; changing it after a bootstrap identity has been bound does not confer
+administrator access. For multiple additional admins, use a comma-separated
+list in `SIGMA_CLOUD_ADMIN_EMAILS`. Removing an email from this setting
+revokes its configured-admin privilege (unless separately granted).
+
+
 To preview sponsored mode locally for the Google account you sign in with, run
 `./sigma start --sponsored`. For eligible accounts, the pill shows the
 remaining allowance from the local sponsored ledger and forces sponsored
