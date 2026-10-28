@@ -1449,7 +1449,8 @@ def main() -> None:
         # the race tests execution slots rather than token exhaustion.
         with (
             patch.dict(
-                os.environ, {**settings, "SIGMA_CLOUD_USER_TOKEN_BUDGET": "100000000"},
+                os.environ,
+                {**settings, "SIGMA_CLOUD_USER_TOKEN_BUDGET": "100000000"},
                 clear=False,
             ),
             patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
