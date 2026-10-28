@@ -7341,6 +7341,5 @@ or automated checks were run.
 
 ## Samples copy tooltip (2026-10-28)
 
-The Samples tab tooltip now explains that selecting a sample creates a project
-copy and leaves the original sample unchanged. `git diff --check` passed; no
-browser or automated checks were run.
+The Samples tab tooltip reads “Select a sample to create a project copy.”
+`git diff --check` passed; no browser or automated checks were run.
