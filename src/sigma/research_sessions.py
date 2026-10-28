@@ -2450,6 +2450,8 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
         }
         if exc.code is not None:
             fields["provider_error_code"] = exc.code
+        if exc.stream_event is not None:
+            fields["provider_stream_event"] = exc.stream_event
         return fields
     message = str(exc)
     match = re.search(r"HTTP\s+(\d{3})", message)
@@ -7923,6 +7925,12 @@ async def _portfolio_role_call(
                         )
                         record["message"] = (
                             "ChatGPT rejected this request because its plan or app usage limit was reached. "
+                            + (
+                                "This was not a SIGMA sponsored-dollar allowance denial. "
+                                if record.get("cloud_sponsored")
+                                else ""
+                            )
+                            + "ChatGPT does not identify whether the limit is plan-wide or app-specific. "
                             "No further strategy calls were dispatched. SIGMA released the rejected call's "
                             "spend reservation; no API-key fallback occurred."
                         )
@@ -8436,6 +8444,12 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     record["current_action"] = "Provider usage limit"
                     record["message"] = (
                         "ChatGPT rejected a request because its plan or app usage limit was reached. "
+                        + (
+                            "This was not a SIGMA sponsored-dollar allowance denial. "
+                            if record.get("cloud_sponsored")
+                            else ""
+                        )
+                        + "ChatGPT does not identify whether the limit is plan-wide or app-specific. "
                         if record.get("mode") == "chatgpt"
                         else "The model provider rejected a request at its rate or usage limit. "
                     ) + (
