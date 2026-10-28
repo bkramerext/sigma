@@ -7183,3 +7183,9 @@ local storage across project navigation. Project Settings also restores the
 last selected tab. Settings and help text now allow 120 local calls and 20,000
 output tokens while retaining the 30-call default, 12,000-token default, hosted
 six-call cap, sponsored $0.25 cap, and 15-minute sponsored duration cap.
+
+The sponsored-obligation regression now creates 39 unresolved obligations across
+three strategies with 32 source references apiece. It asserts the snapshot is
+larger than the previous 32 KB cap, keeps every obligation, and remains within
+64 KB. The focused research-session scenarios and the full `./sigma test` both
+passed after this regression was added.

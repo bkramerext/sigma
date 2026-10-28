@@ -2655,6 +2655,60 @@ async def test_prior_obligation_reference_compaction_keeps_text_and_traceability
     assert len(saved) == 1 and len(saved[0]["artifacts"]) == len(artifacts)
 
 
+async def test_aggregate_prior_obligation_snapshot_retains_all_under_64kb(path: Path):
+    view, first_strategy, _, _ = await setup(path)
+    strategies = [first_strategy]
+    for index in range(2):
+        strategies.append(
+            create_strategy(
+                path,
+                f"Saved approach {index + 2}",
+                "Check a saved result against its boundary cases.",
+            ).project.strategies[-1]
+        )
+
+    expected_texts = set()
+    for strategy_index, strategy in enumerate(strategies):
+        artifacts = []
+        for obligation_index in range(13):
+            text = (
+                f"Investigate saved boundary condition {strategy_index:02d}-{obligation_index:02d}: "
+                "preserve the original invariant and compare the reported cases."
+            )
+            expected_texts.add(text)
+            for _ in range(research_sessions.MAX_OBLIGATION_SOURCE_ARTIFACTS):
+                artifacts.append(
+                    {
+                        "id": str(uuid4()),
+                        "strategy_id": strategy.id,
+                        "claim_or_question": "Review the saved boundary case.",
+                        "open_obligations": [text],
+                    }
+                )
+        research_sessions._save(
+            str(path),
+            {
+                "id": str(uuid4()),
+                "project_path": view.path,
+                "project_id": view.project.id,
+                "strategy_id": strategy.id,
+                "status": "completed",
+                "created_at": research_sessions._now(),
+                "artifacts": artifacts,
+            },
+        )
+
+    frozen, omitted, _, omitted_by_strategy, _, _ = (
+        research_sessions._prior_session_obligations_index(
+            str(path), str(uuid4()), [strategy.id for strategy in strategies]
+        )
+    )
+    assert omitted == 0 and omitted_by_strategy == {}
+    assert {item["text"] for item in frozen} == expected_texts
+    frozen_bytes = research_sessions._json_bytes(frozen)
+    assert 32_000 < frozen_bytes <= research_sessions.MAX_PRIOR_OBLIGATION_CONTEXT_BYTES
+
+
 async def test_prior_obligation_overflow_blocks_before_creating_session(path: Path):
     view, strategy, credential, config = await setup(path)
     prior_id = str(uuid4())
@@ -7339,6 +7393,16 @@ def main():
             )
         )
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
+        asyncio.run(
+            test_prior_obligation_reference_compaction_keeps_text_and_traceability(
+                root / "prior-obligation-compaction.sigma"
+            )
+        )
+        asyncio.run(
+            test_aggregate_prior_obligation_snapshot_retains_all_under_64kb(
+                root / "prior-obligation-aggregate.sigma"
+            )
+        )
         asyncio.run(
             test_prior_obligation_overflow_blocks_before_creating_session(
                 root / "prior-obligation-overflow.sigma"

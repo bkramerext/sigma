@@ -126,7 +126,7 @@ Validation on `1fef972`:
 ## Next steps
 
 1. Verify the 64 KB change with regression coverage, full tests, and browser checks.
-2. Restart the backend and use the one remaining Play attempt authorized by the user. Read the safe diagnostics immediately afterward to distinguish admission, dispatch, and provider outcomes.
+2. Regression now covers 39 unresolved obligations across three strategies with 32 source references apiece: the snapshot exceeds 32 KB, retains all items, and fits 64 KB. Full `./sigma test` and real-Chrome guest/sample plus local sponsored-limit checks passed. Restart the backend and use the one remaining Play attempt authorized by the user. Read the safe diagnostics immediately afterward to distinguish admission, dispatch, and provider outcomes.
 3. If the trial reaches the measured reserve gate or fails at the provider, stop speculative changes and escalate with this journal. Keep membership checks, the 256 KB context ceiling, cost reservations, and allowance accounting intact.
 
 ## Trial log
