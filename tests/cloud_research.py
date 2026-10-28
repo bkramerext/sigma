@@ -599,6 +599,46 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_configured_session_and_account_budget_above_legacy_cap(
+    root: Path, ledger_root: Path
+) -> None:
+    """A project and real account ledger may both safely exceed the old $0.25 cap."""
+    owner = workspace(root, "a" * 32)
+    project = initialize_project(owner.path / "above-legacy-cap.sigma", "Larger budget", "Question")
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.50",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            record = job(owner.workspace_id)
+            record.update(
+                project_id=project.project.id,
+                project_path=project.path,
+                maximum_estimated_cost_usd=0.50,
+                call_limit=30,
+            )
+            cloud_research.prepare_job(record)
+            assert cloud_research.claim_job(record["id"])
+            cloud_research.reserve_call(record["id"], "above-legacy-cap", 0.30, 100)
+            summary = cloud_research.snapshot()
+            assert summary["allowance_usd"] == 0.50
+            assert summary["held_usd"] == 0.30
+            assert summary["remaining_usd"] == 0.20
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
     """A reload starts a new user allowance period but never erases global spend."""
     owner = workspace(root, "9" * 32)
@@ -1316,6 +1356,9 @@ def main() -> None:
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
         test_workspace_spend_budget(root, budget_ledger)
+        above_cap_ledger = root / "above-legacy-cap-ledger"
+        above_cap_ledger.mkdir(mode=0o700)
+        test_configured_session_and_account_budget_above_legacy_cap(root, above_cap_ledger)
         reload_ledger = root / "allowance-reload-ledger"
         reload_ledger.mkdir(mode=0o700)
         test_admin_allowance_reload_preserves_provider_spend(root, reload_ledger)

@@ -387,7 +387,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; confirmationSummary?: string; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -812,7 +812,8 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
 }
 
 function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void }) {
-  const mockResearch = useCloudIdentity()?.mock_auth === true;
+  const cloud = useCloudIdentity();
+  const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
@@ -1039,14 +1040,14 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
-      play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      play, stop, confirming: confirmStart, confirmationSummary: limits ? `${limits.model_calls} calls · ${limits.research_rounds} rounds · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, cloud?.target === 'hosted' || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored') ? 15 : limits.session_duration_minutes)} min` : undefined, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       playDisabled: busy || !!readError || confirmStart || (activeSession
         ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions]);
+  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions, limits, cloud?.target, cloud?.funding.selectedConnection]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -2286,6 +2287,12 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
 
 type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
+// Keep preference controls usable when account access cannot be checked.
+const reviewedModelPreferences: CatalogChoice[] = [
+  { id: 'gpt-6.1-sol', label: 'Sol · Balanced ($$)', description: 'Balance research capability and cost.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$$', availability: 'unverified' },
+  { id: 'gpt-6-luna', label: 'Luna · Economy ($)', description: 'Lower-cost exploration of focused questions.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$', availability: 'unverified' },
+  { id: 'gpt-6-astra', label: 'Astra · Advanced ($$$)', description: 'For the most demanding research reasoning; higher cost.', efforts: ['low', 'medium', 'high', 'xhigh'], relative_cost: '$$$', availability: 'unverified' },
+];
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
 
@@ -2344,7 +2351,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     const controller = new AbortController();
     setCatalogReady(false);
     if (cloud?.enabled && !cloud.authenticated) {
-      setModels([]); setMessage('Model availability is unavailable in Guest mode.'); setCatalogReady(true);
+      setModels(reviewedModelPreferences); setMessage('Model access is checked when connected.'); setCatalogReady(true);
       return () => controller.abort();
     }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
@@ -2356,19 +2363,22 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     }).then(data => {
       if (!controller.signal.aborted) setModels(Array.isArray(data.models) ? data.models : []);
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Model availability could not be verified. Saved settings are unchanged.');
+      if (!controller.signal.aborted) {
+        setModels(reviewedModelPreferences);
+        setMessage(error instanceof Error ? `${error.message} Preferences remain configurable; access is checked when connected.` : 'Model availability could not be verified. Preferences remain configurable; access is checked when connected.');
+      }
     }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
     return () => controller.abort();
   }, [ai.info?.mode, ai.info?.active_account, ai.info?.status, cloud?.enabled, cloud?.authenticated]);
 
   const current = models.find(model => model.id === view.project.ai_model);
   const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
-  const available = models.filter(model => model.availability === 'available').sort((a, b) => costOrder[b.relative_cost] - costOrder[a.relative_cost] || a.label.localeCompare(b.label));
-  const currentAvailableIndex = available.findIndex(model => model.id === view.project.ai_model);
-  const nextModel = available.length > 1
-    ? available[(currentAvailableIndex + 1 + available.length) % available.length]
-    : available.length === 1 && currentAvailableIndex < 0 ? available[0] : undefined;
-  const efforts = current?.availability === 'available' ? current.efforts : [];
+  const selectableModels = models.filter(model => model.availability !== 'unavailable').sort((a, b) => costOrder[b.relative_cost] - costOrder[a.relative_cost] || a.label.localeCompare(b.label));
+  const currentSelectableIndex = selectableModels.findIndex(model => model.id === view.project.ai_model);
+  const nextModel = selectableModels.length > 1
+    ? selectableModels[(currentSelectableIndex + 1 + selectableModels.length) % selectableModels.length]
+    : selectableModels.length === 1 && currentSelectableIndex < 0 ? selectableModels[0] : undefined;
+  const efforts = current && current.availability !== 'unavailable' ? current.efforts : [];
   const currentEffortIndex = efforts.indexOf(view.project.reasoning_effort);
   const nextEffort = efforts.length > 1
     ? efforts[(currentEffortIndex + 1 + efforts.length) % efforts.length]
@@ -2434,7 +2444,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   }
   return <div className="project-header-controls" aria-label="Project model, thinking, and difficulty controls">
     <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`} aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`} title={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} data-tooltip={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} disabled={disabled || busy || !!pendingModel} onClick={cycleDifficulty}>Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}</button>
-    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Click to cycle through available models.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Click to cycle through available models.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}><span>Model · </span>{modelLabel}</button>
+    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}><span>Model · </span>{modelLabel}</button>
     <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} data-tooltip={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} disabled={thinkingDisabled || !!pendingModel} onClick={() => nextEffort && void update({ ai_model: view.project.ai_model, reasoning_effort: nextEffort })}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
     <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
     {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
@@ -2642,8 +2652,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>Research limits apply to future sessions. For local strategy generation, the model-call limit also sets the call budget. Existing sessions keep the limits captured when they started.</p>
-      {cloud?.target === 'hosted' && <p className="settings-hint">Cloud research is capped at six calls, 15 minutes, and $0.25 estimated cost per session. Values above these limits are saved at the cloud cap.</p>}
-      {cloud?.target === 'local' && <p className="settings-hint">Local sponsored research uses this project’s saved call limit, up to 120 calls. Sponsored spending is still bounded by the account allowance and a $0.25 per-session cap; session duration is capped at 15 minutes.</p>}
+      {(cloud?.target === 'hosted' || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored')) && <p className="settings-hint">Sponsored sessions use these project limits, subject to your account allowance and the configured global spend ceiling. Session duration is capped at 15 minutes.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-concurrent-sessions">Maximum concurrent sessions</label><input id="research-concurrent-sessions" type="text" inputMode="numeric" value={limitDraft.max_concurrent_sessions} aria-invalid={!!limitValidation.errors.max_concurrent_sessions} aria-describedby="research-concurrent-sessions-help research-concurrent-sessions-error" onChange={event => setLimitDraft(value => ({ ...value, max_concurrent_sessions: event.target.value }))}/><p id="research-concurrent-sessions-help" className="settings-hint">Number of research sessions that may be queued or running in this project at once. Any positive whole number; default is 1. Stopped, completed, failed, and interrupted sessions do not use a slot.</p>{limitValidation.errors.max_concurrent_sessions && <p id="research-concurrent-sessions-error" className="limit-error" role="alert">{limitValidation.errors.max_concurrent_sessions}</p>}
         <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
@@ -2657,7 +2666,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
           <p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>
           {limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
         </>}
-        {cloud?.enabled && <p className="settings-hint"><strong>Sponsored inference budget:</strong> SIGMA administrators enforce a maximum estimated cost of $0.25 per session. This service budget is separate from user API-key spending settings.</p>}
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
@@ -3077,6 +3085,7 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, playButtonRef }: { controls: ProcessControls; disabled: boolean; guest?: boolean; onGuestPlay?: () => void; playButtonRef?: React.RefObject<HTMLButtonElement | null> }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
+        {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
         <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>

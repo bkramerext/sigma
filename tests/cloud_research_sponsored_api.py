@@ -382,6 +382,66 @@ def main(mode: str = "api_key") -> None:
                 assert duplicate.json()["id"] == session_id
                 assert len(provider_calls) == 10
 
+                limited_project = client.post(
+                    "/api/projects/create",
+                    json={"title": "Low session cost limit", "problem": "A recurrence bound"},
+                )
+                assert limited_project.status_code == 201, limited_project.text
+                limited_path = limited_project.json()["path"]
+                limited_id = limited_project.json()["project"]["id"]
+                limited_strategy = client.post(
+                    "/api/projects/strategies",
+                    json={
+                        "path": limited_path,
+                        "title": "One check",
+                        "approach": "Check the base case.",
+                    },
+                )
+                assert limited_strategy.status_code == 201, limited_strategy.text
+                limited_strategy_id = client.get(
+                    "/api/projects/strategies", params={"path": limited_path}
+                ).json()["strategies"][0]["id"]
+                limited_settings = {
+                    **settings,
+                    "research_rounds": 1,
+                    "model_calls": 2,
+                    "maximum_estimated_cost_usd": 0.01,
+                }
+                limited_limits = client.put(
+                    "/api/projects/research-limits",
+                    json={"path": limited_path, **limited_settings},
+                )
+                assert limited_limits.status_code == 200, limited_limits.text
+                assert limited_limits.json()["maximum_estimated_cost_usd"] == 0.01
+                limited_start = client.post(
+                    "/api/projects/research-sessions/start",
+                    json={
+                        "path": limited_path,
+                        "strategy_id": limited_strategy_id,
+                        "idempotency_key": str(uuid4()),
+                        "expected_project_id": limited_id,
+                        "expected_binding": binding,
+                        "expected_limits": limited_limits.json(),
+                    },
+                )
+                assert limited_start.status_code == 200, limited_start.text
+                limited_session_id = limited_start.json()["id"]
+                for _ in range(500):
+                    limited_status = client.get(
+                        f"/api/projects/research-sessions/{limited_session_id}",
+                        params={"path": limited_path},
+                    )
+                    assert limited_status.status_code == 200, limited_status.text
+                    limited_saved = limited_status.json()
+                    if limited_saved["status"] in {"ended", "failed", "paused"}:
+                        break
+                    time.sleep(0.01)
+                else:
+                    raise AssertionError("low-cost session did not reach a terminal state")
+                assert limited_saved["status"] == "ended", limited_saved
+                assert "configured session cost limit" in limited_saved["message"]
+                assert len(provider_calls) <= 11, provider_calls
+
                 # Verify the actual owner-facing export boundary after research,
                 # not only the session status endpoint. Then read it again from
                 # a fresh application process to cover hosted workspace restart.

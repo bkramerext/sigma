@@ -225,10 +225,10 @@
 .workspace-page .strategy-heading-actions .text-view-link {
   width: auto; min-width: 0; min-height: 0; padding: 2px 0; margin: 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
-  color: #e0c4a0; font: 600 13px Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #f1c58d; font: 400 13px Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
-.workspace-page .strategy-heading-actions .text-view-link:hover:not(:disabled) { color: #e0c4a0; background: transparent; border-color: transparent; box-shadow: none; }
+.workspace-page .strategy-heading-actions .text-view-link:hover:not(:disabled) { color: #ffe1ad; background: transparent; border-color: transparent; box-shadow: none; }
 .workspace-page .strategy-heading-actions .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .strategy-heading-actions .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 

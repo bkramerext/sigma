@@ -68,9 +68,10 @@ is bound to SIGMA's saved sponsor account, and an eligible member cannot access
 admin settings. The same log records
 `sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
 the operator can tell whether renewal completed. A member's Google sign-in
-alone does not renew the server's sponsor credential. A failed personal
-ChatGPT connection returns an eligible member to sponsored mode; only a
-successful personal connection selects personal mode.
+alone does not renew the server's sponsor credential. A failed or temporarily
+unavailable personal ChatGPT connection stays in personal mode and does not
+spend the sponsored allowance. Click **ChatGPT connected** to intentionally
+return to sponsorship after a successful personal connection.
 
 To test with mock identities and controls, use `./sigma start --mock-auth`.
 The mock member's $25 allowance is simulated. For its sponsored presentation,

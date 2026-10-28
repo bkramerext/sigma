@@ -107,7 +107,7 @@
 .connection-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: #7f8c96; }
 .connection-connected { background: #75b18c; }
 .connection-disconnected { background: #c6a064; }
-.project-chatgpt-signin .connection-disconnected { background: #7f8c96; }
+.workspace-page .project-chatgpt-signin .connection-dot.connection-disconnected { background: #8b949e; }
 
 /* Keep the paired Google and ChatGPT controls on the same pill geometry. */
 :is(.home-page, .workspace-page) .identity-pill-stack > .project-google-signin,

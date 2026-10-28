@@ -7361,3 +7361,30 @@ checks, and full `./sigma test` passed. No live provider call or production
 configuration change was made. The conservative reserve may still reject a call
 under the unchanged $0.25 session cap; that remains to be observed and handled
 without weakening spend accounting.
+
+### Issue #289 configurable sponsored limits and local ChatGPT switching (2026-10-28)
+
+Research-session admission now uses the saved Project Settings call limit and
+estimated-cost limit instead of replacing them with six calls and $0.25. User
+allowances, global spend ceilings, conservative reservations, and the 15-minute
+sponsored duration cap remain enforced. An unset session cost cap is explicit
+and actionable. The start confirmation shows the effective saved limits.
+
+The local personal ChatGPT return path now waits briefly for SIGMA to confirm
+the OAuth callback after a sign-in popup closes, shows a connected state and
+account label when available, and lets an eligible local user explicitly return
+to sponsorship. A disconnected/reauth-required personal selection no longer
+silently changes to sponsored inference. Sponsored allowance records are
+preserved while personal mode is selected. Hosted personal ChatGPT authorization
+remains disabled under the existing authorization boundary; no hosted OAuth
+workaround or live hosted deployment verification was performed.
+
+Verification: `./sigma test` passed all steps, including cloud-auth, configured
+research budget ledger/API and provider-failure scenarios, Ruff, Pyright,
+frontend typecheck, and production build. Real-Chrome
+`browser_checks/local_sponsored_limits.py` passed against the deterministic
+provider fixture, verifying that Model and Thinking remain cycleable when model
+availability returns 403, the higher-cost confirmation uses the light-copper
+action color, and a saved 12-call Project Settings limit survives reload. No
+live or paid provider call was made. This is deterministic local/hosted-path
+coverage, not a claim of live hosted deployment acceptance.

@@ -94,6 +94,12 @@ def main() -> None:
                 def forward(route) -> None:
                     if route.request.url.endswith("/api/cloud-auth/welcome"):
                         route.fulfill(status=204)
+                    elif route.request.url.endswith("/api/ai/models"):
+                        route.fulfill(
+                            status=403,
+                            content_type="application/json",
+                            body=json.dumps({"error": "Model access is not currently verifiable."}),
+                        )
                     elif route.request.url.endswith("/api/cloud-auth/status"):
                         route.fulfill(
                             status=200,
@@ -114,7 +120,15 @@ def main() -> None:
                             ),
                         )
                     else:
-                        response = route.fetch(url=route.request.url.replace(UI_ORIGIN, api_origin))
+                        headers = dict(route.request.headers)
+                        headers["origin"] = os.environ.get(
+                            "SIGMA_BROWSER_FORWARD_ORIGIN", "http://127.0.0.1:5173"
+                        )
+                        headers.pop("host", None)
+                        response = route.fetch(
+                            url=route.request.url.replace(UI_ORIGIN, api_origin),
+                            headers=headers,
+                        )
                         route.fulfill(response=response)
 
                 page.route(
@@ -129,6 +143,28 @@ def main() -> None:
                 if welcome.count() and welcome.is_visible():
                     welcome.get_by_role("button", name="Let's get started").click()
                     expect(welcome).to_have_count(0)
+                model = page.locator("button.project-model-pill")
+                expect(model).to_be_enabled()
+                original_model = model.inner_text()
+                model.click()
+                expect(model).not_to_have_text(original_model)
+                model.click()
+                confirmation = page.locator(".project-model-confirm-popover")
+                expect(confirmation).to_be_visible()
+                confirmation_actions = confirmation.locator(".project-model-confirm-actions button")
+                assert confirmation_actions.nth(0).evaluate(
+                    "element => getComputedStyle(element).color"
+                ) == "rgb(241, 197, 141)"
+                assert confirmation_actions.nth(1).evaluate(
+                    "element => getComputedStyle(element).color"
+                ) == "rgb(241, 197, 141)"
+                confirmation_actions.nth(1).click()
+                expect(confirmation).to_be_hidden()
+                thinking = page.locator("button.project-thinking-pill")
+                expect(thinking).to_be_enabled()
+                original_thinking = thinking.inner_text()
+                thinking.click()
+                expect(thinking).not_to_have_text(original_thinking)
                 if not page.get_by_role("button", name="Project settings", exact=True).count():
                     raise AssertionError(
                         f"Project page did not render. URL={page.url}; "
@@ -139,7 +175,7 @@ def main() -> None:
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(
                     settings.get_by_text(
-                        "Local sponsored research uses this project’s saved call limit, up to 120 calls."
+                        "Sponsored sessions use these project limits, subject to your account allowance and the configured global spend ceiling. Session duration is capped at 15 minutes."
                     )
                 ).to_be_visible()
                 calls = settings.get_by_label("Maximum agent calls", exact=True)
