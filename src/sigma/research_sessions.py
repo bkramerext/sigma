@@ -24,6 +24,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from sigma import cloud_research, cloud_workspaces
+from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
@@ -1963,17 +1964,33 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     )
 
     recorded_build = record.get("backend_build_commit")
-    displayed_build = (
-        recorded_build
-        if isinstance(recorded_build, str)
-        and re.fullmatch(r"[0-9a-fA-F]{7,40}", recorded_build)
-        else "Unknown (build not recorded)"
+    if not isinstance(recorded_build, str) or not re.fullmatch(
+        r"[0-9a-fA-F]{7,40}", recorded_build
+    ):
+        recorded_build = None
+    call_builds = sorted(
+        {
+            step["backend_build_commit"]
+            for step in unique_steps
+            if isinstance(step.get("backend_build_commit"), str)
+            and re.fullmatch(r"[0-9a-fA-F]{7,40}", step["backend_build_commit"])
+        }
     )
+    if recorded_build is None:
+        displayed_build = (
+            "Unknown (session build not recorded)"
+            if not call_builds
+            else "Session creation unknown · calls: " + ", ".join(call_builds)
+        )
+    elif not call_builds or call_builds == [recorded_build]:
+        displayed_build = recorded_build
+    else:
+        displayed_build = f"Created: {recorded_build} · calls: " + ", ".join(call_builds)
     operational = [
         {
             "label": "Backend build",
             "value": displayed_build,
-            "detail": "Captured when this session was created; older sessions cannot be retroactively attributed to the current checkout.",
+            "detail": "The backend commit is captured at creation and at each provider attempt. Older sessions are never retroactively assigned the current checkout version.",
         },
         {
             "label": "Participating agents",
@@ -4335,8 +4352,6 @@ async def start_session(
                 if limits.get("maximum_input_tokens_per_session") is not None and price is not None
                 else None
             )
-            from sigma.build_info import build_commit
-
             record = {
                 "schema_version": 1,
                 "backend_build_commit": build_commit(),
@@ -7683,6 +7698,7 @@ async def _portfolio_role_call(
                 _event(record, "call.started", record["message"], role)
             step = {
                 "id": step_id,
+                "backend_build_commit": build_commit(),
                 "attempt_id": step_id,
                 "attempt_status": "preparing" if cloud_research.billing_enabled() else None,
                 "cycle": cycle,
