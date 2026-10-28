@@ -1330,6 +1330,7 @@ def snapshot() -> dict[str, Any]:
             return {
                 "jobs": {row["status"]: row["count"] for row in own},
                 "global_remaining_usd": to_usd(global_remaining_units),
+                "global_ceiling_usd": float(_spend_ceiling_decimal()),
                 "global_spend_period": _global_spend_period(),
                 "global_reset_at": _next_global_reset_at(),
                 "allowance_usd": float(allowance),
