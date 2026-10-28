@@ -2,6 +2,8 @@
 
 Issue #289 / PR #291. This note is for the ChatGPT coordinator through the human. It records the local evidence available on 2026-10-28; it does not claim a provider-side root cause beyond the error class returned to SIGMA.
 
+Branch map: the diagnostic note and project artifact are attached to both PR #291 (`green/issue-289-configurable-limits`) and PR #290 (`green/project-export-and-home-polish`) so they are visible from either review. The final full-suite pass described in `docs/STATUS.md` was run on PR #290's branch at `03a37c5`; it is not a claim that PR #291 independently passed the same suite. The actual code under investigation should be reviewed in each PR's current diff before merge.
+
 ## Project artifact
 
 The complete importable [project export](artifacts/issue_289_xenopus_sessions_7_8_project.json) is committed with this note. It contains `project.json` and the saved records for Sessions 7 and 8, including strategy snapshots, events, budget reservations, and provider-input audit data. The project is `xenopus-tail-regeneration-5.sigma` (the tadpole question). The export uses SIGMA's `project_bundle.encode`, is readable portable bundle version 2, and excludes operational lock files. It contains the original research text and local project paths, so treat it as project data. The coordinator can inspect `files["research-sessions/084edf65-b9bb-45f4-9eec-8d55d0fc151c.json"]` for Session 8 and `files["research-sessions/6faba8dd-2aad-4cd1-9d4b-80bfef242140.json"]` for Session 7. The local allowance ledger and diagnostics log are outside the project export; their relevant facts are reproduced below.

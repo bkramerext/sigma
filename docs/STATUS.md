@@ -21,7 +21,10 @@ fixture now explicitly selects personal mode before testing it, and those
 Ruff findings have been corrected. A second full run passed the hosted-personal
 scenario and all Python scenarios, Ruff check, Pyright, and frontend typecheck;
 it found one remaining formatting issue in `src/sigma/research_budget.py`, now
-corrected. Final verification remains pending.
+corrected. A third full `./sigma test` passed every step, including all Python
+scenarios, Ruff check and formatting, Pyright, frontend typecheck, and the
+production build. No live AI conversion or paid provider call was made. No
+browser check was needed for the prompt-only conversion and access-log changes.
 
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 
