@@ -1486,7 +1486,7 @@ def main() -> None:
                 recovered_queue = research_sessions._recover(stale)
                 assert recovered_queue["status"] == "paused"
                 assert recovered_queue["strategy_runs"][0]["status"] == "paused"
-                assert research_sessions.get_session(stale_project.path, stale["id"])["status"] == "paused"
+                assert research_sessions._read(stale_project.path, stale["id"])["status"] == "paused"
                 assert cloud_research.job_status(stale["id"]) == "interrupted"
 
                 # A reconnect can spawn a worker before anyone opens the
@@ -1515,7 +1515,7 @@ def main() -> None:
                 assert asyncio.run(
                     research_sessions._claim_cloud_job(stale_worker["id"], stale_worker_project.path)
                 ) is False
-                worker_snapshot = research_sessions.get_session(
+                worker_snapshot = research_sessions._read(
                     stale_worker_project.path, stale_worker["id"]
                 )
                 assert worker_snapshot["status"] == "paused"
