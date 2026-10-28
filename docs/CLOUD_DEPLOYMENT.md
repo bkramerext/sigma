@@ -1377,13 +1377,11 @@ Confirmed provider token counts are priced using SIGMA's reviewed model price
 table; the reported cost remains an estimate. If a call times out, is canceled,
 or its response is lost before its usage is saved, the full reservation remains
 held and the attempt is recorded as unknown. Such a call is never automatically
-retried. Hosted sponsored sessions respect the call and estimated-cost limits
-saved in
+retried. Hosted sponsored sessions respect the call and estimated-cost limits saved in
 Project Settings; the session cost cap may be Unlimited. They retain a 15-minute
 runtime cap and the independent user/global dollar and token reservations.
 A priced model and explicit token usage bounds are required. The ChatGPT
-connection dialog reports
-the authenticated owner's read-only allowance, estimated usage, held
+connection dialog reports the authenticated owner's read-only allowance, estimated usage, held
 reservations (including unknown charges), and remaining allowance. Exhaustion
 blocks new inference while saved projects and research remain readable.
 
@@ -1405,9 +1403,8 @@ explicit operator deployment configuration change, not a member allowance
 reload. Spend totals include completed estimates, live reservations, and
 unknown provider outcomes. An authorized user allowance reload starts a new
 per-user dollar and token window but retains the global history and unknown
-reservations in the global ceiling. A reservation is released only when the
-provider
-call is proven not to have been dispatched; age, restart, timeout, cancellation,
+reservations in the global ceiling. A reservation is released only when the provider call is proven not to have
+been dispatched; age, restart, timeout, cancellation,
 and account revocation do not release uncertain charges. Accounting is shared
 across the user's projects and persists in the SQLite ledger. Queue slots,
 active slots, provider attempts, token reservations and spend reservations
