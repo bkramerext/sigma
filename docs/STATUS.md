@@ -7431,3 +7431,9 @@ viewport-positioned tooltip.
 Focused checks passed: project bundle, project creation/import API, project
 reports, and Ruff on the changed Python and browser-check files. The real
 browser recents check and full `./sigma test` suite were not run.
+
+The Recent Projects removal confirmation also flips above its trigger near the
+bottom of the viewport. The browser check asserts both the tooltip and
+confirmation stay within the viewport. The frontend TypeScript and production
+build passed; the browser check remains unrun because the local API server was
+unavailable.

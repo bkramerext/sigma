@@ -321,6 +321,16 @@ with sync_playwright() as playwright:
         "group", name="Confirm remove Nonconsecutive Subset Sums Modulo 3 v2"
     )
     expect(confirmation).to_be_visible()
+    confirmation_box = confirmation.bounding_box()
+    assert (
+        confirmation_box
+        and confirmation_box["y"] >= 0
+        and confirmation_box["y"] + confirmation_box["height"] <= viewport["height"]
+    )
+    assert (
+        confirmation_box["x"] >= 0
+        and confirmation_box["x"] + confirmation_box["width"] <= viewport["width"]
+    )
     row_after = row.bounding_box()
     assert row_before and row_after and abs(row_before["height"] - row_after["height"]) < 1
     confirmation.get_by_role("button", name="Cancel", exact=True).click()
