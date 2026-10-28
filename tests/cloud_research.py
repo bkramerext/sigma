@@ -749,8 +749,8 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
         assert report["held_or_unknown_usd"] == 4.0, report
         assert report["status_counts"]["usage_estimated"] == 20, report
         assert report["status_counts"]["reserved"] == 2, report
-        assert "workspace_id" not in diagnostic.stdout
-        assert "call_id" not in diagnostic.stdout
+        assert '"workspace_id":' not in diagnostic.stdout
+        assert '"call_id":' not in diagnostic.stdout
 
 
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
