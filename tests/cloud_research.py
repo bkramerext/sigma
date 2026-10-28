@@ -716,22 +716,21 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                         record["id"], f"at-global-{extra_number}", amount, 100
                     )
                     assert cloud_research.snapshot()["held_usd"] == amount
+                    # The reservation stays in the ledger, but should not
+                    # occupy a live concurrency slot after the test job ends.
+                    record["status"] = "ended"
+                    cloud_research.sync_job(record)
                 else:
                     assert abs(global_reserved_spend() - 20.00) < 1e-6
                     assert cloud_research.snapshot()["remaining_usd"] == 2.00
                     try:
-                        cloud_research.reserve_call(
-                            record["id"], "over-global", amount, 100
-                        )
+                        cloud_research.reserve_call(record["id"], "over-global", amount, 100)
                     except cloud_research.CloudResearchUnavailable as exc:
                         assert "global inference-spend ceiling" in str(exc), str(exc)
                     else:
-                        raise AssertionError(
-                            "An over-ceiling call by a funded user was admitted"
-                        )
+                        raise AssertionError("An over-ceiling call by a funded user was admitted")
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
-
 
 
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
