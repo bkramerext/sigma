@@ -24,8 +24,8 @@ from sigma.projects import ProjectError, inspect_project
 
 _PROCESS_EPOCH = uuid4().hex
 USD_UNITS = 1_000_000_000
-MAX_USER_SPEND_USD = Decimal("15.00")
-MAX_GLOBAL_SPEND_USD = Decimal("15.00")
+MAX_USER_SPEND_USD = Decimal("100.00")
+MAX_GLOBAL_SPEND_USD = Decimal("1000.00")
 MAX_PROJECT_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
 
@@ -105,7 +105,7 @@ def _spend_ceiling_decimal() -> Decimal:
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,
-        message="Cloud research is disabled until a valid global inference-spend ceiling of at most $15 is configured.",
+        message="Cloud research is disabled until a valid global inference-spend ceiling of at most $1000 is configured.",
     )
 
 
@@ -113,7 +113,7 @@ def _user_spend_ceiling_decimal() -> Decimal:
     return _money_ceiling(
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD",
         maximum=MAX_USER_SPEND_USD,
-        message="Cloud research is disabled until a valid default per-user inference allowance of at most $15 is configured.",
+        message="Cloud research is disabled until a valid default per-user inference allowance of at most $100 is configured.",
     )
 
 
@@ -151,7 +151,7 @@ def _effective_user_spend_ceiling_decimal() -> Decimal:
             value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
     except Exception as exc:
         raise CloudResearchUnavailable("Cloud access spending policy is unavailable.") from exc
-    if not value.is_finite() or not Decimal("0.01") <= value <= MAX_GLOBAL_SPEND_USD:
+    if not value.is_finite() or not Decimal("0.01") <= value <= MAX_USER_SPEND_USD:
         raise CloudResearchUnavailable("Cloud access spending policy is invalid.")
     return value
 
@@ -394,6 +394,24 @@ def _user_call_amount_units(
         where += " AND status=?"
         parameters.append(status)
     return _call_amount_units(db, where, tuple(parameters))
+
+
+def _user_call_tokens(db: sqlite3.Connection, workspace_id: str) -> int:
+    """Count observed and reserved tokens in the current user allowance window.
+
+    The full durable ledger is retained for the independent global spending
+    ceiling; an authorized allowance reload also restores the per-user token
+    allowance instead of silently exhausting it for the account's lifetime.
+    """
+    window = db.execute(
+        "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (workspace_id,)
+    ).fetchone()
+    query = "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?"
+    params: tuple[Any, ...] = (workspace_id,)
+    if window:
+        query += " AND created_at>=?"
+        params = (workspace_id, window["reset_at"])
+    return int(db.execute(query, params).fetchone()[0])
 
 
 def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str:
@@ -1018,10 +1036,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
-            user_tokens = db.execute(
-                "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?",
-                (owner,),
-            ).fetchone()[0]
+            user_tokens = _user_call_tokens(db, owner)
             if user_tokens + token_reservation > token_budget:
                 raise CloudResearchUnavailable(
                     "The per-user research token budget has been reached."
@@ -1162,10 +1177,7 @@ def snapshot() -> dict[str, Any]:
                 unknown_query += " AND created_at>=?"
                 unknown_parameters = (owner, window["reset_at"])
             unknown = db.execute(unknown_query, unknown_parameters).fetchone()[0]
-            tokens = db.execute(
-                "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?",
-                (owner,),
-            ).fetchone()[0]
+            tokens = _user_call_tokens(db, owner)
             to_usd = lambda units: round(units / USD_UNITS, 9)
             return {
                 "jobs": {row["status"]: row["count"] for row in own},
