@@ -4354,7 +4354,12 @@ async def start_session(
                 record["prior_session_obligation_omitted_by_strategy"],
                 record["prior_session_obligation_omitted_ids_by_strategy"],
                 _,
-            ) = _prior_session_obligations_index(view.path, record["id"], record["strategy_ids"])
+            ) = _prior_session_obligations_index(
+                view.path,
+                record["id"],
+                record["strategy_ids"],
+                diagnostics=cloud_research.billing_enabled(),
+            )
             omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
             if omitted_by_strategy:
                 blocked = []
@@ -8645,7 +8650,11 @@ def _prior_session_findings_index(
 
 
 def _prior_session_obligations_index(
-    project_path: Any, current_session_id: Any, strategy_ids: list[str]
+    project_path: Any,
+    current_session_id: Any,
+    strategy_ids: list[str],
+    *,
+    diagnostics: bool = False,
 ) -> tuple[
     list[dict[str, Any]],
     int,
@@ -8663,6 +8672,10 @@ def _prior_session_obligations_index(
     omitted_by_strategy: dict[str, int] = {}
     omitted_ids_by_strategy: dict[str, list[str]] = {}
     omitted_details: dict[str, list[dict[str, str]]] = {}
+    max_text_bytes = 0
+    max_scope_bytes = 0
+    max_rationale_bytes = 0
+    max_reference_bytes = 0
     sessions = [
         item
         for item in _all(project_path)
@@ -8709,6 +8722,30 @@ def _prior_session_obligations_index(
                 "basis_step_ids": obligation.get("basis_step_ids", []),
                 "rationale": obligation.get("rationale", ""),
             }
+            max_text_bytes = max(max_text_bytes, len(str(compact.get("text", "")).encode("utf-8")))
+            max_scope_bytes = max(
+                max_scope_bytes, _json_bytes(compact.get("scope_assumptions", []))
+            )
+            max_rationale_bytes = max(
+                max_rationale_bytes,
+                len(str(compact.get("rationale", "")).encode("utf-8")),
+            )
+            max_reference_bytes = max(
+                max_reference_bytes,
+                _json_bytes(
+                    {
+                        key: compact.get(key)
+                        for key in (
+                            "source_artifact_ids",
+                            "source_refs",
+                            "source_artifact_count",
+                            "source_step_ids",
+                            "basis_artifact_ids",
+                            "basis_step_ids",
+                        )
+                    }
+                ),
+            )
             if (
                 len([item for item in selected if item.get("strategy_id") == strategy_id])
                 >= MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY
@@ -8748,6 +8785,18 @@ def _prior_session_obligations_index(
                     )
                 continue
             selected.append(compact)
+    if diagnostics:
+        try:
+            from sigma.sponsor_diagnostics import record as write_diagnostic
+
+            write_diagnostic(
+                "sponsor_context",
+                f"o{omitted_count}_b{_json_bytes(selected)}_t{max_text_bytes}"
+                f"_a{max_scope_bytes}_r{max_rationale_bytes}_p{max_reference_bytes}",
+            )
+        except (OSError, RuntimeError, ValueError, ImportError):
+            # Diagnostic failure must not change admission behavior.
+            pass
     return (
         selected,
         omitted_count,

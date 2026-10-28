@@ -7134,3 +7134,19 @@ Chrome invitation/welcome check passed. `./sigma test` passed all scenarios,
 Ruff, formatting, Pyright, frontend typecheck, and production build. A post-change
 sponsored Play attempt remains pending; no live or paid provider request was run
 during verification.
+
+### Follow-up: context compaction did not clear the user's admission error
+
+The user's post-change Play attempt still returned HTTP 400: 15 obligations for
+“Establish the known-mechanism frontier” and 14 for “Find a novel temporal
+coupling, not another marker” remained beyond the context bound. This disproves
+the assumption that repeated provenance pointers were the only oversized fields.
+The prior synthetic test covered repeated references but not the user's full
+assumption/rationale payload or aggregate selected-strategy shape; it was not
+sufficient acceptance evidence.
+
+The next diagnostic records only aggregate selected bytes, omitted count, and
+maximum UTF-8/JSON byte sizes for obligation text, scope assumptions, rationale,
+and provenance. It emits no project text, IDs, email, or credentials. The cap
+remains fail-closed until those measurements identify a safe compaction or budget
+change. No further sponsored Play retry is requested yet.

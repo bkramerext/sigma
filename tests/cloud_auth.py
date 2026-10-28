@@ -2227,7 +2227,13 @@ class CloudAuthTests(TestCase):
                         },
                     )
                     self.assertEqual(started.status_code, 200, started.text)
-                    diagnostics.assert_called_once_with("sponsor_play", "accepted")
+                    self.assertEqual(
+                        [item.args for item in diagnostics.call_args_list],
+                        [
+                            ("sponsor_context", "o0_b2_t0_a0_r0_p0"),
+                            ("sponsor_play", "accepted"),
+                        ],
+                    )
                     session_id = started.json()["id"]
                     saved = started.json()
                     for _ in range(500):

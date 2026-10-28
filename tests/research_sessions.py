@@ -2620,9 +2620,17 @@ async def test_prior_obligation_reference_compaction_keeps_text_and_traceability
         },
     )
 
-    frozen, omitted, _, omitted_by_strategy, _, _ = (
-        research_sessions._prior_session_obligations_index(str(path), str(uuid4()), [strategy.id])
-    )
+    with patch("sigma.sponsor_diagnostics.record") as diagnostic:
+        frozen, omitted, _, omitted_by_strategy, _, _ = (
+            research_sessions._prior_session_obligations_index(
+                str(path), str(uuid4()), [strategy.id], diagnostics=True
+            )
+        )
+    diagnostic.assert_called_once()
+    assert diagnostic.call_args.args[0] == "sponsor_context"
+    diagnostic_status = diagnostic.call_args.args[1]
+    assert diagnostic_status.startswith("o0_b")
+    assert len(diagnostic_status) <= 64 and diagnostic_status.replace("_", "").isalnum()
 
     assert omitted == 0
     assert omitted_by_strategy == {}
