@@ -1962,7 +1962,19 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         else f"{len(artifacts)} finding(s) · {python_storage_label} · session size —"
     )
 
+    recorded_build = record.get("backend_build_commit")
+    displayed_build = (
+        recorded_build
+        if isinstance(recorded_build, str)
+        and re.fullmatch(r"[0-9a-fA-F]{7,40}", recorded_build)
+        else "Unknown (build not recorded)"
+    )
     operational = [
+        {
+            "label": "Backend build",
+            "value": displayed_build,
+            "detail": "Captured when this session was created; older sessions cannot be retroactively attributed to the current checkout.",
+        },
         {
             "label": "Participating agents",
             "value": ", ".join(sorted(roles)) if roles else "— (no dispatched calls)",
@@ -4323,8 +4335,11 @@ async def start_session(
                 if limits.get("maximum_input_tokens_per_session") is not None and price is not None
                 else None
             )
+            from sigma.build_info import build_commit
+
             record = {
                 "schema_version": 1,
+                "backend_build_commit": build_commit(),
                 "id": str(uuid4()),
                 "session_number": 0,
                 "project_path": view.path,
