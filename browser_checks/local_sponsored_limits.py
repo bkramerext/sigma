@@ -135,14 +135,12 @@ def main() -> None:
                     "**/api/**",
                     lambda route: forward(route),
                 )
-                page.goto(
-                    f"{UI_ORIGIN}/project?{urlencode({'path': path})}",
-                    wait_until="networkidle",
-                )
+                page.goto(f"{UI_ORIGIN}/", wait_until="networkidle")
+                home_connection = page.locator(".home-page .api-connection summary")
+                expect(home_connection.get_by_role("status")).to_have_text("Sponsored ChatGPT")
                 welcome = page.locator("#invitation-welcome-dialog")
                 if welcome.count() and welcome.is_visible():
                     dismiss = welcome.get_by_role("button", name="Let's get started")
-                    expect(page.locator("#invitation-welcome-heading")).to_be_focused()
                     assert (
                         dismiss.evaluate("element => getComputedStyle(element).borderTopColor")
                         == "rgb(223, 180, 118)"
@@ -153,6 +151,14 @@ def main() -> None:
                         == "rgb(255, 225, 173)"
                     )
                     dismiss.click()
+                    expect(welcome).to_have_count(0)
+                page.goto(
+                    f"{UI_ORIGIN}/project?{urlencode({'path': path})}",
+                    wait_until="networkidle",
+                )
+                welcome = page.locator("#invitation-welcome-dialog")
+                if welcome.count() and welcome.is_visible():
+                    welcome.get_by_role("button", name="Let's get started").click()
                     expect(welcome).to_have_count(0)
                 connection_summary = page.locator(".api-connection summary")
                 expect(connection_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")

@@ -4524,10 +4524,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
   const [error, setError] = useState('');
   const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => {
-    if (dialog.current && !dialog.current.open) {
-      dialog.current.showModal();
-      dialog.current.querySelector<HTMLElement>('#invitation-welcome-heading')?.focus({ preventScroll: true });
-    }
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, []);
   async function dismiss() {
@@ -4551,7 +4548,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
         ? `We added $${allowance.toFixed(2)} to your account.`
         : `We will start you off with a $${allowance.toFixed(2)} allowance.`;
   return <dialog id="invitation-welcome-dialog" ref={dialog} className="google-account-dialog invitation-welcome-dialog" aria-labelledby="invitation-welcome-heading" aria-describedby="invitation-welcome-phrase" onClick={event => { if (event.target === event.currentTarget) void dismiss(); }} onCancel={event => { event.preventDefault(); void dismiss(); }}>
-    <h2 id="invitation-welcome-heading" tabIndex={-1}>{heading}</h2>
+    <h2 id="invitation-welcome-heading">{heading}</h2>
     {allowanceMessage && <p className="invitation-welcome-allowance">{allowanceMessage}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
     {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore as a guest without running or saving projects, or request an invitation to become a member. The administrator decides whether to include sponsorship when granting your invitation.</p>}
