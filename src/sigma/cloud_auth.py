@@ -1537,14 +1537,11 @@ async def callback(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
         bootstrap_email = _bootstrap_admin_email(db, cfg)
-        bootstrap_identity = (
-            email == bootstrap_email
-            or email in {
-                item.strip().casefold()
-                for item in os.environ.get("SIGMA_CLOUD_ADMIN_EMAILS", "").split(",")
-                if item.strip()
-            }
-        )
+        bootstrap_identity = email == bootstrap_email or email in {
+            item.strip().casefold()
+            for item in os.environ.get("SIGMA_CLOUD_ADMIN_EMAILS", "").split(",")
+            if item.strip()
+        }
         domain = email.rsplit("@", 1)[1]
         explicit_invite = db.execute(
             "SELECT 1 FROM grants WHERE active=1 AND ((kind='email' AND value=?) OR (kind='domain' AND value=?)) LIMIT 1",
