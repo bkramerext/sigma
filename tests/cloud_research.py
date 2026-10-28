@@ -581,7 +581,7 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
     with patch.object(cloud_workspaces, "storage_root", return_value=ledger_root):
         binding = cloud_workspaces._CURRENT.set(owner)
         try:
-            for invalid in (None, "0", "15.01", "inf", "not-money"):
+            for invalid in (None, "0", "1000.01", "inf", "not-money"):
                 overrides = (
                     {} if invalid is None else {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": invalid}
                 )
@@ -640,6 +640,76 @@ def test_configured_session_and_account_budget_above_legacy_cap(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path) -> None:
+    """Ten researchers can fund repeated sessions above $15 without disabling guardrails."""
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "20.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        assert cloud_research._spend_ceiling_decimal() == Decimal("20.00")
+        for user_number in range(10):
+            member = workspace(root, f"{user_number:032x}")
+            project = initialize_project(
+                member.path / "pilot.sigma", f"Pilot {user_number}", "Investigate a question"
+            )
+            binding = cloud_workspaces._CURRENT.set(member)
+            try:
+                for session_number in range(2):
+                    record = job(member.workspace_id)
+                    record.update(project_id=project.project.id, project_path=project.path)
+                    cloud_research.prepare_job(record)
+                    assert cloud_research.claim_job(record["id"])
+                    cloud_research.reserve_call(
+                        record["id"], f"call-{user_number}-{session_number}", 0.80, 100
+                    )
+                    cloud_research.settle_call(
+                        record["id"],
+                        f"call-{user_number}-{session_number}",
+                        input_tokens=40,
+                        output_tokens=60,
+                        estimated_cost_usd=0.80,
+                    )
+                    cloud_research.finish_job(record["id"])
+                summary = cloud_research.snapshot()
+                assert summary["estimated_usage_usd"] == 1.60, summary
+                assert summary["held_usd"] == 0, summary
+                assert summary["remaining_usd"] == 0.40, summary
+            finally:
+                cloud_workspaces._CURRENT.reset(binding)
+        assert global_reserved_spend() == 16.00
+        # Once the ceiling is reached, no further provider reservation is allowed.
+        final_user = workspace(root, "f" * 32)
+        project = initialize_project(
+            final_user.path / "pilot.sigma", "Last pilot", "Question"
+        )
+        binding = cloud_workspaces._CURRENT.set(final_user)
+        try:
+            record = job(final_user.workspace_id)
+            record.update(project_id=project.project.id, project_path=project.path)
+            cloud_research.prepare_job(record)
+            assert cloud_research.claim_job(record["id"])
+            cloud_research.reserve_call(record["id"], "remaining-global", 2.0, 100)
+            assert global_reserved_spend() == 18.0
+            try:
+                cloud_research.reserve_call(record["id"], "over-global", 2.01, 100)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "global inference-spend ceiling" in str(exc), str(exc)
+            else:
+                raise AssertionError("An over-ceiling provider call was admitted")
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
     """A reload starts a new user allowance period but never erases global spend."""
     owner = workspace(root, "9" * 32)
@@ -652,7 +722,7 @@ def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root
         "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
         "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
         "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
-        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "12",
     }
     with (
         patch.dict(os.environ, env, clear=False),
@@ -683,6 +753,7 @@ def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root
             assert summary["remaining_usd"] == 0.25, summary
             assert summary["estimated_usage_usd"] == 0, summary
             assert summary["reserved_and_estimated_usd"] == 0, summary
+            assert summary["user_reserved_or_observed_tokens"] == 0, summary
             assert global_reserved_spend() == 0.2
             db = cloud_research._connect()
             event = db.execute(
@@ -698,10 +769,12 @@ def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root
             assert cloud_research.claim_job(second["id"])
             cloud_research.reserve_call(second["id"], "after-reload", 0.25, 10)
             cloud_research.mark_call_unknown(second["id"], "after-reload")
+            assert cloud_research.snapshot()["user_reserved_or_observed_tokens"] == 10
             cloud_research.admin_reload_workspace_allowance(owner.workspace_id, "admin@example.org")
             reloaded = cloud_research.snapshot()
             assert reloaded["remaining_usd"] == 0.25, reloaded
             assert reloaded["held_usd"] == 0, reloaded
+            assert reloaded["user_reserved_or_observed_tokens"] == 0, reloaded
             admin_summary = cloud_research.admin_workspace_spending(owner.workspace_id, 0.25)
             assert admin_summary["reload_eligible"] is False, admin_summary
             assert global_reserved_spend() == 0.45
@@ -1396,6 +1469,9 @@ def main() -> None:
         reload_ledger = root / "allowance-reload-ledger"
         reload_ledger.mkdir(mode=0o700)
         test_admin_allowance_reload_preserves_provider_spend(root, reload_ledger)
+        pilot_ledger = root / "pilot-capacity-ledger"
+        pilot_ledger.mkdir(mode=0o700)
+        test_pilot_global_spend_accepts_multiple_users(root, pilot_ledger)
         explicit_allowance_ledger = root / "explicit-allowance-ledger"
         explicit_allowance_ledger.mkdir(mode=0o700)
         test_explicit_account_allowance_does_not_require_default(root, explicit_allowance_ledger)
