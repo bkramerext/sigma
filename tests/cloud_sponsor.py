@@ -110,18 +110,79 @@ class SponsorTests(IsolatedAsyncioTestCase):
                 "sponsor_account_id",
                 AsyncMock(side_effect=ProjectError("missing")),
             ),
-            patch.object(
-                chatgpt_auth, "begin", AsyncMock(return_value={"id": "attempt"})
-            ) as begin,
+            patch.object(chatgpt_auth, "begin", AsyncMock(return_value={"id": "attempt"})) as begin,
         ):
-            result = await api.auth_begin(api.AuthBeginRequest(), request)
+            # The Google administrator identity is deliberately different from
+            # the ChatGPT sponsor identity. Authorization is by verified role.
+            result = await api.sponsor_auth_begin(request)
             self.assertEqual(result["id"], "attempt")
             begin.assert_awaited_once_with(account_id=None, sponsor=True)
 
             principal.role = "member"
             with self.assertRaises(HTTPException) as rejected:
-                await api.auth_begin(api.AuthBeginRequest(), request)
+                await api.sponsor_auth_begin(request)
             self.assertEqual(rejected.exception.status_code, 403)
+
+    async def test_hosted_sponsor_oauth_callback_persists_connected_credentials(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        from sigma import cloud_auth, cloud_workspaces
+
+        with (
+            patch.object(cloud_workspaces, "enabled", return_value=True),
+            patch.object(
+                cloud_auth,
+                "config",
+                return_value=type(
+                    "Config",
+                    (),
+                    {"origin": "https://sigma.example.test", "local": False},
+                )(),
+            ),
+            patch.object(
+                chatgpt_auth,
+                "discovery",
+                AsyncMock(
+                    return_value={"authorization_endpoint": "https://auth.openai.com/authorize"}
+                ),
+            ),
+            patch.object(
+                chatgpt_auth,
+                "http",
+                AsyncMock(return_value=(200, {"access_token": "oauth-access"})),
+            ) as exchange,
+            patch.object(
+                chatgpt_auth,
+                "validate_tokens",
+                AsyncMock(return_value=self.account),
+            ) as validate,
+        ):
+            started = await chatgpt_auth.begin(sponsor=True)
+            authorization_url = chatgpt_auth.authorization_url(started["id"])
+            params = parse_qs(urlsplit(authorization_url).query)
+            attempt = chatgpt_auth._attempts[started["id"]]
+            self.assertEqual(
+                params["redirect_uri"],
+                [f"https://sigma.example.test/api/ai/auth/callback/{started['id']}"],
+            )
+
+            await chatgpt_auth.hosted_callback(
+                started["id"],
+                f"state={attempt.state}&code=fixture-code&client_id=oaiapp_fixture",
+            )
+
+        self.assertEqual(chatgpt_auth.attempt_status(started["id"])["status"], "connected")
+        exchange.assert_awaited_once()
+        validate.assert_awaited_once()
+        async with ai_store.sponsor_transaction() as persisted:
+            # Re-read through the store service after OAuth completion; the
+            # connection state must come from the saved sponsor record.
+            self.assertEqual(len(persisted["accounts"]), 1)
+            saved = next(iter(persisted["accounts"].values()))
+            self.assertEqual(saved["access_token"], "fixture-access")
+            self.assertEqual(saved["email"], "sponsor@example.test")
+        connected = await cloud_sponsor.sponsor_session()
+        self.assertEqual(connected["status"], "connected")
 
     async def test_hosted_sponsor_connection_reads_saved_credentials(self):
         async with ai_store.sponsor_transaction() as state:
