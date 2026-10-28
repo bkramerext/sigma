@@ -3910,7 +3910,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         .querySelector<HTMLAnchorElement>('.project-google-signin[href^="/api/cloud-auth/login"]')
         ?.click();
     };
-    const openInvitation = () => dialog.current?.showModal();
+    const openInvitation = () => { if (!cloud?.authenticated) dialog.current?.showModal(); };
     window.addEventListener('sigma-open-google-signin', open);
     window.addEventListener('sigma-open-invitation', openInvitation);
     const params = new URLSearchParams(window.location.search);
@@ -3924,7 +3924,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       window.removeEventListener('sigma-open-google-signin', open);
       window.removeEventListener('sigma-open-invitation', openInvitation);
     };
-  }, []);
+  }, [cloud?.authenticated]);
   useEffect(() => {
     if (!deniedIdentityAvailable || new URLSearchParams(window.location.search).get('invite') !== '1') return;
     let cancelled = false;
@@ -3991,7 +3991,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
-    <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
+    {!cloud?.authenticated && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
       <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
       {deniedIdentityAvailable
         ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
@@ -4003,7 +4003,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
-    </dialog>
+    </dialog>}
   </>;
 }
 
@@ -4366,7 +4366,13 @@ function CloudAuthGate() {
       if (current.enabled && !current.authenticated && new URLSearchParams(window.location.search).get('access') === 'denied') {
         const denied = await fetch('/api/cloud-auth/denied', { credentials: 'same-origin', cache: 'no-store' });
         if (denied.ok) {
-          const identity = await denied.json() as { identity_available?: boolean; invitation_status?: string | null };
+          const identity = await denied.json() as { identity_available?: boolean; invitation_status?: string | null; retry_signin?: boolean };
+          if (identity.retry_signin === true) {
+            // Authorization changed since this verified Google identity was
+            // denied. Return through Google's standard account chooser.
+            window.location.replace('/api/cloud-auth/login');
+            return;
+          }
           setDeniedIdentityAvailable(identity.identity_available === true);
           setDeniedInvitationStatus(identity.invitation_status ?? null);
         } else { setDeniedIdentityAvailable(false); setDeniedInvitationStatus(null); window.history.replaceState(null, '', '/'); }
