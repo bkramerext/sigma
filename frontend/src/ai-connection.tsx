@@ -290,14 +290,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const connectionTooltip = connected && !sponsoredPill
     ? `${ai.info?.account_label ? `ChatGPT connected as ${ai.info.account_label}. ` : 'ChatGPT is connected. '}Click to return to sponsorship.`
     : undefined;
+  const globalRemaining = cloudFunding?.budget?.global_remaining_usd;
   const globalFundingExhausted = sponsoredSelected
-    && typeof cloudFunding?.budget?.global_remaining_usd === 'number'
-    && cloudFunding.budget.global_remaining_usd <= 0;
-  const globalFundingDetail = cloudFunding?.budget?.global_remaining_usd === undefined
+    && typeof globalRemaining === 'number' && globalRemaining <= 0;
+  const globalFundingDetail = typeof globalRemaining !== 'number'
     ? ''
     : globalFundingExhausted
       ? ' Global inference spending ceiling reached; no sponsored provider calls can start.'
-      : ` Shared inference capacity: ${cloudFunding.budget.global_remaining_usd.toFixed(2)} remaining.`;
+      : ` Shared inference capacity: ${globalRemaining.toFixed(2)} remaining.`;
   const allowanceDescription = !cloudFunding?.authorized
     ? 'Sign in to view sponsorship.'
     : !sponsoredSelected
