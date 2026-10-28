@@ -5407,7 +5407,7 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path, *, streamed
                 },
             ]
             body = "".join(
-                f"event: {event['type']}\\ndata: {json.dumps(event)}\\n\\n" for event in events
+                f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
             )
             return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
         return httpx.Response(
@@ -7596,9 +7596,7 @@ def main():
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
         asyncio.run(
-            test_portfolio_stops_after_chatgpt_usage_limit(
-                root / "chatgpt-http-limit.sigma"
-            )
+            test_portfolio_stops_after_chatgpt_usage_limit(root / "chatgpt-http-limit.sigma")
         )
         asyncio.run(
             test_portfolio_stops_after_chatgpt_usage_limit(
