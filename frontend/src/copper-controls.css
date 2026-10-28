@@ -176,6 +176,18 @@
 .connection-details .connection-usage-actions button { margin: 0; }
 .connection-details .connection-usage-actions a { display: inline-block; }
 .connection-details :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+
+/* Keep every project-header pill on the same hover and keyboard-focus treatment. */
+.workspace-page .project-art-header .header-controls :is(.project-control-pill, .about-action, .project-google-signin, .project-chatgpt-signin > summary):is(:hover, :focus-visible) {
+  border-color: #c08a57;
+  background: #3a291c;
+  box-shadow: none;
+  color: #fff0dc;
+}
+.workspace-page .project-art-header .header-controls :is(.project-control-pill, .about-action, .project-google-signin, .project-chatgpt-signin > summary):focus-visible {
+  outline: 2px solid #e9bc82;
+  outline-offset: 2px;
+}
 .api-connection :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 @media (max-width: 700px) {
   .api-connection > summary { min-height: 28px; padding: 4px 9px; font-size: 10px; line-height: 1.2; align-items: flex-start; }

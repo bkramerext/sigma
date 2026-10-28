@@ -2150,16 +2150,16 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   </dialog></div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false, researchRunning = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || cloud.authenticated;
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}{researchRunning
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}{researchRunning
         ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}>{projectTitle}<span className="research-running-indicator" aria-hidden="true"/></button>
-        : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>}</div>
+        : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -2191,9 +2191,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, connectionDisabled = false, researchRunning = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; connectionDisabled?: boolean; researchRunning?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -2206,7 +2206,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -2444,7 +2444,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   }
   return <div className="project-header-controls" aria-label="Project model, thinking, and difficulty controls">
     <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`} aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`} title={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} data-tooltip={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} disabled={disabled || busy || !!pendingModel} onClick={cycleDifficulty}>Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}</button>
-    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}><span>Model · </span>{modelLabel}</button>
+    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Availability is checked when connected. Click to cycle through reviewed model options.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}>Model · {modelLabel}</button>
     <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} data-tooltip={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} disabled={thinkingDisabled || !!pendingModel} onClick={() => nextEffort && void update({ ai_model: view.project.ai_model, reasoning_effort: nextEffort })}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
     <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
     {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
@@ -3344,9 +3344,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const playButton = useRef<HTMLButtonElement>(null);
-  const introPane = useRef<HTMLDivElement>(null);
-  const resizeStart = useRef<{ pointer: number; y: number; height: number } | null>(null);
-  const [introHeight, setIntroHeight] = useState<number | null>(null);
   const resumedPlay = useRef(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -3379,11 +3376,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }
     return () => window.removeEventListener('sigma-open-about', openAbout);
   }, []);
-  useEffect(() => {
-    setIntroHeight(null);
-    const frame = requestAnimationFrame(() => { if (introPane.current) setIntroHeight(Math.round(introPane.current.getBoundingClientRect().height)); });
-    return () => cancelAnimationFrame(frame);
-  }, [view?.project.id, view?.project.title, view?.project.problem]);
   useEffect(() => {
     if (initialView) return;
     const controller = new AbortController();
@@ -3472,8 +3464,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <p>Close this project to choose another directory.</p>
   </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
   const project = view.project;
-  const introMaximum = Math.max(160, Math.min(Math.round(window.innerHeight * .75), 800));
-  const clampIntro = (height: number) => Math.max(120, Math.min(introMaximum, Math.round(height)));
   const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
   function forkFromFindings(session: ResearchSession) {
     if (!enterMode('new-strategy')) return;
@@ -3541,7 +3531,24 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
-  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView}>
+  const projectActionBar = <div className="project-primary-actions">
+    <div className="project-pane-actions">
+      <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
+        <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
+      </button>
+      {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
+        <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
+      </button>}
+      <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+        <SettingsGearIcon />
+      </button>
+    </div>
+    <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
+  </div>;
+  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} projectActions={projectActionBar}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
@@ -3549,33 +3556,15 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
             <DisclosureChevron expanded={projectExpanded}/>Project
           </button>
         </h2>
-        <div className="project-pane-actions">
-          <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
-            <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
-          </button>
-          {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
-            <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
-          </button>}
-          <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
-            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
-            <SettingsGearIcon />
-          </button>
-        </div>
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
+      <div className="project-overview-card">
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
-        <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
+        <div className="project-intro">
           <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} hideProjectActions hideProjectHeading hideEditAction markdownSlotId="project-markdown-slot" editSignal={textEditSignals.project ?? 0} combinedEditMode={activeMode === 'project-title'} onCombinedDraftChange={draft => updateCombinedTextDraft('project', draft)} modeDisabled={activeMode !== null && activeMode !== 'text-project' && activeMode !== 'project-title'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
         </div>
-        <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
-      onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
-      onPointerMove={event => { const start = resizeStart.current; if (start?.pointer === event.pointerId) setIntroHeight(clampIntro(start.height + event.clientY - start.y)); }}
-      onPointerUp={event => { if (resizeStart.current?.pointer === event.pointerId) resizeStart.current = null; }}
-      onPointerCancel={event => { if (resizeStart.current?.pointer === event.pointerId) resizeStart.current = null; }}
-      onKeyDown={event => { const current = introPane.current?.getBoundingClientRect().height ?? 120; if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); setIntroHeight(clampIntro(current + (event.key === 'ArrowDown' ? 24 : -24))); } else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); setIntroHeight(event.key === 'Home' ? 120 : introMaximum); } }}><span aria-hidden="true"/></div>
+      </div>
       </div>
       </div>
     </section>
@@ -3586,7 +3575,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <div className="strategies-heading-right">
           <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
         </div>
       </header>
       {guestAiNotice && <p className="hint guest-ai-notice" role="status">{guestAiNotice}</p>}

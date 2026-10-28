@@ -7403,3 +7403,10 @@ rerun after this follow-up.
 Welcome-dialog button border styling follows the app’s copper action border and
 matching hover border. Real-Chrome acceptance checked both computed border
 colors and passed.
+
+The remaining tracked local UI edits from `green/project-export-and-home-polish`
+have been consolidated onto this #289 branch: project title/action-bar layout,
+fixed-header scrolling, editable text sizing, and action/pill hover styling.
+Generated project data was left in its original checkout. Frontend typecheck and
+the real-Chrome Home/Project check passed after the transfer; the full suite was
+not rerun.
