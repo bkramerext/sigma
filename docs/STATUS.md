@@ -7532,3 +7532,20 @@ local connection-switching scenario.
 The disabled Lean proof action is now visible in the project button bar for all
 research types, matching the consistently visible TeX and export actions. No
 tests were run; this change is committed for local browser verification.
+
+## Sponsored unlimited-cost session reservation (2026-10-28)
+
+Diagnosed the tadpole session ending with 0/30 calls. Its five sponsored
+strategy branches were all rejected before provider dispatch because the
+optional project cost cap was unset and no per-call estimate was passed to the
+global sponsored allowance ledger. Sponsored calls now reserve their reviewed
+model estimate against SIGMA's global allowance even when no project cap is
+configured. Reservation failures are surfaced with their actual reason instead
+of the generic shared-call-budget message.
+
+`tests/research_sessions.py` and scoped Ruff check/format passed. `./sigma test`
+was run and stopped with unrelated failures in `tests/cloud_personal.py` (the
+fixture expected an unavailable personal account) and a pre-existing import
+ordering issue in `src/sigma/api.py`; Pyright and frontend typecheck passed, and
+the frontend build was skipped after those failures. No provider calls were
+made.
