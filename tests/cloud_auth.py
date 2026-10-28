@@ -1567,6 +1567,44 @@ class CloudAuthTests(TestCase):
         )
         self.assertEqual(mismatched.headers["location"], "/?access=denied")
 
+    def test_local_google_chosen_configured_admin_is_signed_in_without_invitation(self):
+        # Reproduce a local development instance whose first bootstrap admin was
+        # previously bound to a different Google account. Selecting the now
+        # configured admin in Google's standard chooser must grant access.
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            },
+        ):
+            first = self.finish(email="admin@example.org", subject="initial-google-subject")
+            self.assertIn("sigma_session", first.cookies)
+            self.client.cookies.clear()
+            initially_denied = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-google-subject"
+            )
+            self.assertEqual(initially_denied.headers["location"], "/?access=denied")
+            self.assertIn("sigma_denied", initially_denied.cookies)
+            os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
+            # Retain the previous denial cookie just as the browser does.
+            allowed = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-google-subject"
+            )
+            self.assertEqual(allowed.status_code, 303)
+            self.assertEqual(allowed.headers["location"], "/")
+            self.assertIn("sigma_session", allowed.cookies)
+            self.assertIn('sigma_denied="";', allowed.headers["set-cookie"])
+            self.client.cookies.set("sigma_session", allowed.cookies["sigma_session"])
+            account = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(account["authenticated"])
+            self.assertEqual(
+                account["user"], {"email": "zetacontinuation@gmail.com", "role": "admin"}
+            )
+            self.assertFalse(account["account"]["invitation_welcome_pending"])
+            self.assertEqual(account["admin_contact_email"], "zetacontinuation@gmail.com")
+            self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)
