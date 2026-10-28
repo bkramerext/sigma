@@ -849,6 +849,7 @@ async def middleware(request: Request, call_next):
             or (principal.role == "admin" and request.method == "GET" and (path.startswith("/api/ai/auth/open/") or path.startswith("/api/ai/auth/attempt/"))
             or (principal.role == "admin" and request.method == "POST" and path.startswith("/api/ai/auth/cancel/"))
         )
+    )
     ):
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
