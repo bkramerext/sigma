@@ -142,6 +142,7 @@ def main() -> None:
                 welcome = page.locator("#invitation-welcome-dialog")
                 if welcome.count() and welcome.is_visible():
                     dismiss = welcome.get_by_role("button", name="Let's get started")
+                    expect(page.locator("#invitation-welcome-heading")).to_be_focused()
                     assert (
                         dismiss.evaluate("element => getComputedStyle(element).borderTopColor")
                         == "rgb(223, 180, 118)"

@@ -7402,3 +7402,8 @@ suite was not rerun after this follow-up.
 Welcome-dialog follow-up: the “Let’s get started” button now uses the app’s
 copper action border and matching hover border. Real-Chrome acceptance checked
 both computed border colors and passed.
+
+The initial focus is now placed on the welcome heading instead of the first
+button, preventing the browser focus ring from appearing as a mismatched second
+border on first visit. Keyboard tab focus remains visible. Frontend typecheck and
+the real-Chrome check both passed.
