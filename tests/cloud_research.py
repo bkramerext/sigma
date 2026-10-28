@@ -1830,6 +1830,8 @@ def main() -> None:
                         assert failed["steps"][0]["failure_kind"] == "response_invalid"
                         assert failed["steps"][0]["attempt_status"] == "usage_estimated"
                         assert failed["steps"][0]["token_usage_status"] == "reported"
+                        assert failed["token_usage_status"] == "complete"
+                        assert failed["tokens_used"] == 120
                         assert failed["tokens_reserved"] == 0
                         assert "output" not in failed["steps"][0]
                         with cloud_research._connect() as db:
