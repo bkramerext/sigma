@@ -7871,6 +7871,31 @@ async def _portfolio_role_call(
                     )
                     if isinstance(step.get("provider_input_audit"), dict):
                         step["provider_input_audit"]["status"] = "provider_response_incomplete"
+                    estimate = (
+                        _estimate_cost(record["model"], exc.usage)
+                        if isinstance(exc.usage, dict)
+                        else None
+                    )
+                    if cloud_research.billing_enabled():
+                        # A clipped response still reached the provider and
+                        # can report actual usage. Settle the durable call
+                        # instead of retaining a phantom unknown-cost hold.
+                        input_tokens = exc.usage.get("input_tokens") if exc.usage else None
+                        output_tokens = exc.usage.get("output_tokens") if exc.usage else None
+                        cloud_research.settle_call(
+                            session_id,
+                            step_id,
+                            input_tokens=input_tokens if type(input_tokens) is int else None,
+                            output_tokens=output_tokens if type(output_tokens) is int else None,
+                            estimated_cost_usd=estimate,
+                        )
+                        if type(input_tokens) is int and type(output_tokens) is int:
+                            record["tokens_reserved"] = max(
+                                0, int(record.get("tokens_reserved", 0)) - token_reserve
+                            )
+                        step["attempt_status"] = (
+                            "usage_estimated" if estimate is not None else "unknown"
+                        )
                     budget_error = _settle_request_budget(record, step, exc.usage)
                     if budget_error:
                         step["hard_budget_error"] = budget_error
@@ -7880,11 +7905,6 @@ async def _portfolio_role_call(
                             float(record.get("estimated_cost_reserved_usd", 0.0))
                             - float(step["cost_reserve"]),
                         )
-                    estimate = (
-                        _estimate_cost(record["model"], exc.usage)
-                        if isinstance(exc.usage, dict)
-                        else None
-                    )
                     if estimate is None:
                         record["cost_status"] = "unavailable"
                         record["estimated_cost_usd"] = None
