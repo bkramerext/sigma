@@ -310,6 +310,28 @@ def main(mode: str = "api_key") -> None:
                 assert "fake-plan-credential" not in readiness.text
                 assert "admin@example.test" not in readiness.text
                 assert readiness.headers["cache-control"] == "no-store"
+                # The diagnostic must remain readable when production's
+                # deployment provider or spending cap is broken; neither
+                # failure may leak provider exceptions or credentials.
+                from sigma.projects import ProjectError
+
+                with patch(
+                    "sigma.api.sponsored_auth_context",
+                    new=AsyncMock(side_effect=ProjectError("private auth failure")),
+                ):
+                    no_provider = client.get("/api/cloud-research/readiness")
+                assert no_provider.status_code == 200
+                assert "sponsored_provider_credential_missing" in no_provider.json()["blockers"]
+                assert "private auth failure" not in no_provider.text
+                with patch(
+                    "sigma.api.cloud_research.snapshot",
+                    side_effect=cloud_research.CloudResearchUnavailable("private ledger failure"),
+                ):
+                    no_budget = client.get("/api/cloud-research/readiness")
+                assert no_budget.status_code == 200
+                assert no_budget.json()["global_remaining_usd"] is None
+                assert "shared_spending_policy_unavailable" in no_budget.json()["blockers"]
+                assert "private ledger failure" not in no_budget.text
                 client.headers.pop("X-Test-Role")
                 client.headers.update(
                     {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
