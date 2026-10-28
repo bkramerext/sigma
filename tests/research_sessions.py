@@ -5454,7 +5454,10 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         "ChatGPT rejected a request because its plan or app usage limit was reached"
         in finished["message"]
     )
-    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
+    assert branches[first.id]["status"] == "failed"
+    assert branches[second.id]["status"] == "ended"
+    assert "Not started because ChatGPT rejected a request" in branches[second.id]["reason"]
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
