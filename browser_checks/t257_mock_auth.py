@@ -416,7 +416,7 @@ def exercise_browser(origin: str) -> None:
         # invitation action, never a neighboring Google sign-in action.
         expect(page.locator(".project-google-signin")).to_have_text("Invite me!")
         expect(page.get_by_role("link", name="Sign in with Google")).to_have_count(0)
-        expect(denied_dialog.get_by_role("link", name="Use another account")).to_have_count(0)
+        expect(denied_dialog.get_by_role("link", name="Use another Google account")).to_be_visible()
         denied_identity = page.evaluate(
             "async () => await (await fetch('/api/cloud-auth/status')).json()"
         )
