@@ -732,6 +732,26 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
 
+        # Read-only diagnostic reconciles with admission while concealing IDs.
+        diagnostic = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().parents[1] / "scripts" / "inspect_cloud_spend.py"),
+                "--ledger",
+                str(ledger_root / "cloud-research.sqlite3"),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        report = json.loads(diagnostic.stdout)
+        assert report["global_obligations_usd"] == 20.0, report
+        assert report["held_or_unknown_usd"] == 4.0, report
+        assert report["status_counts"]["usage_estimated"] == 20, report
+        assert report["status_counts"]["reserved"] == 2, report
+        assert "workspace_id" not in diagnostic.stdout
+        assert "call_id" not in diagnostic.stdout
+
 
 def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
     """A reload starts a new user allowance period but never erases global spend."""
@@ -987,6 +1007,10 @@ def test_local_global_spend_default_stays_at_legacy_safe_ceiling() -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
             assert cloud_research._spend_ceiling_decimal() == Decimal("0.25")
+            assert "$0.25" in cloud_research._global_ceiling_failure_message()
+            assert "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD" in (
+                cloud_research._global_ceiling_failure_message()
+            )
         with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00"}):
             assert cloud_research._spend_ceiling_decimal() == Decimal("5.00")
 
