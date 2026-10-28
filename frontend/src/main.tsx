@@ -2643,7 +2643,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>Research limits apply to future sessions. For local strategy generation, the model-call limit also sets the call budget. Existing sessions keep the limits captured when they started.</p>
-      {cloud?.target === 'hosted' && <p className="settings-hint">Cloud research is capped at six calls, 15 minutes, and $0.25 estimated cost per session. Values above these limits are saved at the cloud cap.</p>}
+      {cloud?.target === 'hosted' && <p className="settings-hint">This project’s call limit is configurable (currently {limitDraft.model_calls} calls). Hosted research allows at most six calls, 15 minutes, and $0.25 estimated cost per session. Values above these caps are saved at the cloud cap.</p>}
       {cloud?.target === 'local' && <p className="settings-hint">Local sponsored research uses this project’s saved call limit, up to 120 calls. Sponsored spending is still bounded by the account allowance and a $0.25 per-session cap; session duration is capped at 15 minutes.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-concurrent-sessions">Maximum concurrent sessions</label><input id="research-concurrent-sessions" type="text" inputMode="numeric" value={limitDraft.max_concurrent_sessions} aria-invalid={!!limitValidation.errors.max_concurrent_sessions} aria-describedby="research-concurrent-sessions-help research-concurrent-sessions-error" onChange={event => setLimitDraft(value => ({ ...value, max_concurrent_sessions: event.target.value }))}/><p id="research-concurrent-sessions-help" className="settings-hint">Number of research sessions that may be queued or running in this project at once. Any positive whole number; default is 1. Stopped, completed, failed, and interrupted sessions do not use a slot.</p>{limitValidation.errors.max_concurrent_sessions && <p id="research-concurrent-sessions-error" className="limit-error" role="alert">{limitValidation.errors.max_concurrent_sessions}</p>}
@@ -3833,6 +3833,9 @@ function MockAuthSelector() {
 
 function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boolean }) {
   const cloud = useCloudIdentity();
+  const signedInAccountTooltip = cloud?.user?.email
+    ? `Signed in as ${cloud.user.email}`
+    : 'Signed in with Google';
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
@@ -3932,7 +3935,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }
   return <>
     {cloud?.enabled && cloud.authenticated
-      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip-disabled><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
+      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
         <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}

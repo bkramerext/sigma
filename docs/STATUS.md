@@ -7380,3 +7380,11 @@ Focused checks passed: `tests/project_bundle.py`,
 `./sigma test` run was stopped at the user's request while in
 `tests/research_sessions.py`; it is incomplete. No real-browser check was run for
 the export dialog change. Existing untracked project exports were left untouched.
+
+## Identity tooltip and configurable hosted call limit copy (2026-10-28)
+
+The authenticated Google sign-out pill now exposes a hover/focus tooltip with
+the signed-in email. Hosted Project Settings → Limits shows the current
+configured call count and distinguishes it from the hosted maximum of six calls.
+`git diff --check` passed. No automated or real-browser checks were run for this
+copy and tooltip update.
