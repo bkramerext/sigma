@@ -3785,7 +3785,7 @@ function App() {
 type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedIdentityAvailable: boolean; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -3903,6 +3903,12 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
+  // The denied-identity cookie proves Google verified an account, but SIGMA
+  // did not authorize it. Signed-out guests and already-invited accounts
+  // must never see an invitation action.
+  const canRequestInvitation = !!cloud?.enabled && !cloud.authenticated
+    && deniedIdentityAvailable && cloud.deniedInvitationStatus === null
+    && !invitationRecorded;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
     ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
@@ -3914,15 +3920,16 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }, [cloud?.deniedInvitationStatus]);
   useEffect(() => {
     const inviteIntent = new URLSearchParams(window.location.search).get('invite') === '1';
-    if (deniedIdentityAvailable && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
-  }, [deniedIdentityAvailable]);
+    if (canRequestInvitation && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
+    if (!canRequestInvitation && dialog.current?.open) dialog.current.close();
+  }, [canRequestInvitation]);
   useEffect(() => {
     const open = () => {
       document
         .querySelector<HTMLAnchorElement>('.project-google-signin[href^="/api/cloud-auth/login"]')
         ?.click();
     };
-    const openInvitation = () => dialog.current?.showModal();
+    const openInvitation = () => { if (canRequestInvitation) dialog.current?.showModal(); };
     window.addEventListener('sigma-open-google-signin', open);
     window.addEventListener('sigma-open-invitation', openInvitation);
     const params = new URLSearchParams(window.location.search);
@@ -3936,7 +3943,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       window.removeEventListener('sigma-open-google-signin', open);
       window.removeEventListener('sigma-open-invitation', openInvitation);
     };
-  }, []);
+  }, [canRequestInvitation]);
   useEffect(() => {
     if (!deniedIdentityAvailable || new URLSearchParams(window.location.search).get('invite') !== '1') return;
     let cancelled = false;
@@ -4000,10 +4007,10 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     {cloud?.enabled && cloud.authenticated
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
-        <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
-        {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
+        {!canRequestInvitation && <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>}
+        {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
-    <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
+    {!cloud?.authenticated && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
       <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
       {deniedIdentityAvailable
         ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
@@ -4014,8 +4021,9 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
           : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); dialog.current?.close(); }}/>
         : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
+      {deniedIdentityAvailable && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
-    </dialog>
+    </dialog>}
   </>;
 }
 
@@ -4023,17 +4031,15 @@ function HomeInvitationAction() {
   const cloud = useCloudIdentity();
   const [recorded, setRecorded] = useState(false);
   useEffect(() => {
-    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') setRecorded(true);
-  }, [cloud?.deniedInvitationStatus]);
-  useEffect(() => {
-    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') setRecorded(true);
+    if (cloud?.deniedInvitationStatus !== null && cloud?.deniedInvitationStatus !== undefined) setRecorded(true);
   }, [cloud?.deniedInvitationStatus]);
   useEffect(() => {
     const onRecorded = () => setRecorded(true);
     window.addEventListener('sigma-invitation-recorded', onRecorded);
     return () => window.removeEventListener('sigma-invitation-recorded', onRecorded);
   }, []);
-  if (!cloud?.enabled || cloud.authenticated || recorded) return null;
+  if (!cloud?.enabled || cloud.authenticated || !cloud.deniedIdentityAvailable
+    || cloud.deniedInvitationStatus !== null || recorded) return null;
   return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}>Invite me!</button>;
 }
 
@@ -4041,7 +4047,7 @@ function ReloadMeAction({ connectionPill = false }: { connectionPill?: boolean }
   const cloud = useCloudIdentity();
   const [state, setState] = useState<'idle' | 'sending' | 'requested' | 'error'>('idle');
   const budget = cloud?.funding.budget;
-  if (!cloud?.authenticated || !cloud.funding.sponsorshipEligible || !budget || budget.remaining_usd > 0) return null;
+  if (!cloud?.authenticated || cloud.user?.role === 'admin' || !cloud.funding.sponsorshipEligible || !budget || budget.remaining_usd > 0) return null;
   async function requestReload() {
     setState('sending');
     try {
@@ -4200,10 +4206,14 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   const ordered = [...uniqueGrants.values()].filter(grant => grant.active === 1).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
   const changed = ordered.filter(grant => {
     const key = `${grant.kind}:${grant.value}`; const draft = drafts[key];
-    return grant.active === 1 && draft && (draft.role !== grant.role || draft.allowance.trim() !== allowanceInput(grant.allowance_usd));
+    return grant.active === 1 && draft && (draft.role !== grant.role
+      || (draft.role !== 'admin' && draft.allowance.trim() !== allowanceInput(grant.allowance_usd)));
   });
   const validation = (value: string) => value.trim() === '' || /^\d+(?:\.\d{1,2})?$/.test(value.trim()) && Number(value) >= 0.01 && Number(value) <= 15;
-  const draftsValid = changed.every(grant => validation(drafts[`${grant.kind}:${grant.value}`]?.allowance ?? ''));
+  const draftsValid = changed.every(grant => {
+    const draft = drafts[`${grant.kind}:${grant.value}`];
+    return draft?.role === 'admin' || validation(draft?.allowance ?? '');
+  });
   const hasDrafts = changed.length > 0;
   function requestClose() {
     if (hasDrafts && !window.confirm('Discard only the unsaved role or allowance edits? Completed Add, Remove, and Save actions remain in effect.')) return;
@@ -4211,9 +4221,9 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   }
   async function addEntry() {
     const value = newValue.trim();
-    if (!value || !validation(newAllowance) || value.includes('@') !== (newKind === 'email')) return;
+    if (!value || (newRole !== 'admin' && !validation(newAllowance)) || value.includes('@') !== (newKind === 'email')) return;
     try {
-      await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newAllowance.trim() ? Number(newAllowance) : null });
+      await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newKind === 'email' && newRole === 'admin' ? null : newAllowance.trim() ? Number(newAllowance) : null });
       setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('');
       requestAnimationFrame(() => addButton.current?.focus());
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
@@ -4226,7 +4236,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     if (!hasDrafts || !draftsValid) return;
     const updates = changed.map(grant => {
       const draft = drafts[`${grant.kind}:${grant.value}`];
-      return { kind: grant.kind as 'email' | 'domain', value: grant.value, role: draft.role as 'member' | 'admin', allowance_usd: draft.allowance.trim() ? Number(draft.allowance) : null };
+      return { kind: grant.kind as 'email' | 'domain', value: grant.value, role: draft.role as 'member' | 'admin', allowance_usd: draft.role === 'admin' ? null : draft.allowance.trim() ? Number(draft.allowance) : null };
     });
     try { await onSave(updates); setMessage(`Saved ${updates.length} authorization ${updates.length === 1 ? 'update' : 'updates'}.`); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Updates could not be saved.'); }
@@ -4296,7 +4306,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
           return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
             <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Removed'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
-            <td className="admin-allowance-cell"><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></td>
+            <td className="admin-allowance-cell">{draft.role === 'admin' ? <span>Unlimited</span> : <><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></>}</td>
             <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
           </tr>;
         })}
@@ -4308,13 +4318,13 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     </section>
     <section id="account-usage-panel" role="tabpanel" tabIndex={0} aria-labelledby="account-usage-tab" className="admin-usage-panel" hidden={activeTab !== 'usage'}>
       <h3>Account usage</h3>
-      {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
+      {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{session.role === 'admin' ? 'Unlimited' : currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{session.role === 'admin' ? 'Unlimited' : currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
     </section>
     {addOpen && createPortal(<div ref={newEntryPanel} className="admin-new-entry-panel" role="group" aria-label="Add authorized user" style={newEntryPosition ? { left: newEntryPosition.left, top: newEntryPosition.top, maxHeight: newEntryPosition.maxHeight } : { left: -10000, top: -10000 }}>
-      <div className="admin-new-entry-heading"><h3>New Email or Domain</h3><div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><button type="button" className="admin-text-action" disabled={busy} onClick={cancelAdd}>Cancel</button></div></div>
+      <div className="admin-new-entry-heading"><h3>New Email or Domain</h3><div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || (newRole !== 'admin' && !validation(newAllowance)) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><button type="button" className="admin-text-action" disabled={busy} onClick={cancelAdd}>Cancel</button></div></div>
       <div className="admin-new-entry-classification"><label>Entry type<select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label>{newKind === 'email' && <label>Role<select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select></label>}</div>
       <label>{newKind === 'email' ? 'Email address' : 'Domain'}<input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></label>
-      <label>ChatGPT allowance<span className="admin-allowance-input"><span aria-hidden="true">$</span><input aria-label="New ChatGPT allowance" type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></span><small>Blank uses the configured default</small></label>
+      {newKind === 'email' && newRole === 'admin' ? <p>Administrator sponsorship: Unlimited</p> : <label>ChatGPT allowance<span className="admin-allowance-input"><span aria-hidden="true">$</span><input aria-label="New ChatGPT allowance" type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></span><small>Blank uses the configured default</small></label>}
     </div>, dialog.current ?? document.body)}
     {confirmRemoveKey && createPortal(<div ref={removeConfirmation} className="admin-remove-confirm" role="group" aria-label={`Confirm remove access for ${confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}`} style={removeConfirmationPosition ? { left: removeConfirmationPosition.left, top: removeConfirmationPosition.top } : { left: -10000, top: -10000 }}>
       <p>Remove access for {confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}? Recorded usage will be retained.</p>
@@ -4378,7 +4388,13 @@ function CloudAuthGate() {
       if (current.enabled && !current.authenticated && new URLSearchParams(window.location.search).get('access') === 'denied') {
         const denied = await fetch('/api/cloud-auth/denied', { credentials: 'same-origin', cache: 'no-store' });
         if (denied.ok) {
-          const identity = await denied.json() as { identity_available?: boolean; invitation_status?: string | null };
+          const identity = await denied.json() as { identity_available?: boolean; invitation_status?: string | null; retry_signin?: boolean };
+          if (identity.retry_signin === true) {
+            // Authorization changed since this verified Google identity was
+            // denied. Return through Google's standard account chooser.
+            window.location.replace('/api/cloud-auth/login');
+            return;
+          }
           setDeniedIdentityAvailable(identity.identity_available === true);
           setDeniedInvitationStatus(identity.invitation_status ?? null);
         } else { setDeniedIdentityAvailable(false); setDeniedInvitationStatus(null); window.history.replaceState(null, '', '/'); }
@@ -4421,8 +4437,9 @@ function CloudAuthGate() {
     const target = status?.target ?? 'hosted';
     const email = status?.user?.email ?? null;
     setBudget(null); setBudgetEmail(null); setBudgetError(null);
-    const canViewAllowance = !!status?.account?.sponsorship.eligible;
-    if (!status?.enabled || !status.authenticated || (target !== 'hosted' && !canViewAllowance)) {
+    const canViewAllowance = !!status?.account?.sponsorship.eligible
+      && status?.account?.model_access.mode === 'sponsored';
+    if (!status?.enabled || !status.authenticated || !canViewAllowance) {
       setBudget(null); setBudgetLoading(false); setBudgetError(null); return;
     }
     let active = true;
@@ -4451,7 +4468,7 @@ function CloudAuthGate() {
     window.addEventListener('focus', fetchBudget);
     window.addEventListener('sigma-sponsored-budget-refresh', fetchBudget);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', fetchBudget); window.removeEventListener('sigma-sponsored-budget-refresh', fetchBudget); };
-  }, [status?.enabled, status?.authenticated, status?.target, status?.user?.email, status?.mock_auth]);
+  }, [status?.enabled, status?.authenticated, status?.target, status?.user?.email, status?.mock_auth, status?.account?.sponsorship.eligible, status?.account?.model_access.mode]);
   const refreshSponsoredConnection = useCallback(async () => {
     if (!status?.enabled || !status.authenticated || status.target !== 'hosted') return;
     setProviderLoading(true);
@@ -4539,7 +4556,7 @@ function CloudAuthGate() {
     if (!response.ok) throw await cloudFailure(response, 'The simulated provider connection could not be changed.');
     setProviderStatus({ status: next, guidance: 'Simulated local provider status.' });
   }, [providerStatus?.status]);
-  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
+  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = navigationEntry?.type !== 'reload'

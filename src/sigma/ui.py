@@ -131,6 +131,10 @@ def run_ui(
                 file=sys.stderr,
             )
             return 2
+        # Make it obvious which administrator identity reached the server.
+        # Shell exports and checkout .env can differ across terminal sessions.
+        if admin_email:
+            print(f"Configured Google administrator: {admin_email.casefold()}", flush=True)
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:

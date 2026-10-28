@@ -1525,7 +1525,7 @@ class CloudAuthTests(TestCase):
             403,
         )
 
-    def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
+    def test_changing_contact_preserves_bound_admin_and_authorizes_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)
         os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
@@ -1550,8 +1550,73 @@ class CloudAuthTests(TestCase):
         denied = self.finish(
             email="zetacontinuation@gmail.com", subject="new-contact-subject", client=denied_client
         )
-        self.assertEqual(denied.headers["location"], "/?access=denied")
-        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        self.assertNotEqual(denied.headers["location"], "/?access=denied")
+        self.assertIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        denied_client.cookies.set(
+            cloud_auth.SESSION_COOKIE, denied.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        status = denied_client.get("/api/cloud-auth/status").json()
+        self.assertEqual(status["user"]["role"], "admin")
+        self.assertFalse(status["account"]["invitation_welcome_pending"])
+        # The contact email remains pinned to its verified Google subject.
+        other_context = TestClient(app)
+        other = other_context.__enter__()
+        self.addCleanup(other_context.__exit__, None, None, None)
+        mismatched = self.finish(
+            email="zetacontinuation@gmail.com", subject="different-google-subject", client=other
+        )
+        self.assertEqual(mismatched.headers["location"], "/?access=denied")
+
+    def test_local_google_chosen_configured_admin_is_signed_in_without_invitation(self):
+        # Reproduce a local development instance whose first bootstrap admin was
+        # previously bound to a different Google account. Selecting the now
+        # configured admin in Google's standard chooser must grant access.
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+            },
+        ):
+            first = self.finish(email="admin@example.org", subject="initial-google-subject")
+            self.assertIn("sigma_session", first.cookies)
+            self.client.cookies.clear()
+            initially_denied = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-google-subject"
+            )
+            self.assertEqual(initially_denied.headers["location"], "/?access=denied")
+            self.assertIn("sigma_denied", initially_denied.cookies)
+            self.client.cookies.set("sigma_denied", initially_denied.cookies["sigma_denied"])
+            os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
+            # A stale denied page must offer Google sign-in again, never an
+            # invitation, once the account is authorized.
+            recovered = self.client.get("/api/cloud-auth/denied")
+            self.assertEqual(recovered.json(), {"identity_available": False, "retry_signin": True})
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/invitation-request",
+                    json={},
+                    headers={"Origin": "http://127.0.0.1:5173"},
+                ).status_code,
+                409,
+            )
+            # Retain the previous denial cookie just as the browser does.
+            allowed = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-google-subject"
+            )
+            self.assertEqual(allowed.status_code, 303)
+            self.assertEqual(allowed.headers["location"], "/")
+            self.assertIn("sigma_session", allowed.cookies)
+            self.assertIn('sigma_denied="";', allowed.headers["set-cookie"])
+            self.client.cookies.set("sigma_session", allowed.cookies["sigma_session"])
+            account = self.client.get("/api/cloud-auth/status").json()
+            self.assertTrue(account["authenticated"])
+            self.assertEqual(
+                account["user"], {"email": "zetacontinuation@gmail.com", "role": "admin"}
+            )
+            self.assertFalse(account["account"]["invitation_welcome_pending"])
+            self.assertEqual(account["admin_contact_email"], "zetacontinuation@gmail.com")
+            self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
@@ -1832,6 +1897,19 @@ class CloudAuthTests(TestCase):
         overview = admin.get("/api/cloud-auth/admin/grants")
         self.assertEqual(overview.status_code, 200, overview.text)
         records = overview.json()
+        administrator = next(
+            item for item in records["sessions"] if item["email"] == "admin@example.org"
+        )
+        self.assertIsNone(administrator["allowance_usd"])
+        self.assertIsNone(administrator["spending"]["remaining_usd"])
+        self.assertEqual(
+            admin.post(
+                "/api/cloud-auth/invitation-request",
+                json={"request_type": "reload"},
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            403,
+        )
         member = next(item for item in records["sessions"] if item["email"] == "member@example.org")
         self.assertEqual(member["allowance_usd"], 0.5)
         self.assertIn("estimated_usage_usd", member["spending"])

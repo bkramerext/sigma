@@ -264,6 +264,10 @@ def _initialize(path: Path) -> None:
                 email TEXT PRIMARY KEY,
                 subject TEXT NOT NULL UNIQUE
             );
+            CREATE TABLE IF NOT EXISTS contact_admin_subject (
+                email TEXT PRIMARY KEY,
+                subject TEXT NOT NULL UNIQUE
+            );
             CREATE TABLE IF NOT EXISTS sessions (
                 token_hash TEXT PRIMARY KEY,
                 subject TEXT NOT NULL,
@@ -397,6 +401,8 @@ def _authorization(cfg: Config, subject: str, email: str) -> str | None:
 def _authorization_in_db(
     db: sqlite3.Connection, cfg: Config, subject: str, email: str
 ) -> str | None:
+    # Evaluate the original, subject-bound bootstrap identity first. Changing
+    # the administrator contact must not revoke an established administrator.
     bootstrap_email = _bootstrap_admin_email(db, cfg)
     bound = db.execute(
         "SELECT subject FROM bootstrap_subject WHERE email=?", (bootstrap_email,)
@@ -408,6 +414,22 @@ def _authorization_in_db(
             return None
     elif bootstrap_email and email == bootstrap_email:
         db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
+        return "admin"
+    # A subsequently configured contact is also an administrator. Pin the
+    # verified subject so a different Google identity cannot claim that email.
+    if cfg.admin_contact_email and email == cfg.admin_contact_email:
+        contact = db.execute(
+            "SELECT subject FROM contact_admin_subject WHERE email=?", (email,)
+        ).fetchone()
+        if contact is not None:
+            return "admin" if contact["subject"] == subject else None
+        try:
+            db.execute(
+                "INSERT INTO contact_admin_subject(email,subject) VALUES(?,?)",
+                (email, subject),
+            )
+        except sqlite3.IntegrityError:
+            return None
         return "admin"
     explicit = db.execute(
         "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
@@ -428,10 +450,9 @@ def _sponsorship_eligibility_in_db(
         return 0
     if not cfg.local:
         return 1
-    # The configured local bootstrap administrator is already explicitly
-    # authorized by the administrator configuration. Treat that identity as
-    # a member for sponsorship eligibility while retaining its admin role.
-    if role == "admin" and email == _bootstrap_admin_email(db, cfg):
+    # Administrator sponsorship follows the verified administrator role,
+    # regardless of which grant or bootstrap identity conferred that role.
+    if role == "admin":
         return 1
     if _mock_enabled(cfg) and subject.startswith("mock:"):
         return 1
@@ -529,7 +550,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 and row["sponsorship_eligible"]
             ),
         },
-        "invitation_welcome_pending": bool(row["invitation_welcome_pending"]),
+        "invitation_welcome_pending": (
+            bool(row["invitation_welcome_pending"]) and row["role"] != "admin"
+        ),
     }
 
 
@@ -1511,14 +1534,17 @@ async def callback(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
         bootstrap_email = _bootstrap_admin_email(db, cfg)
-        bootstrap_identity = email == bootstrap_email
+        bootstrap_identity = email == bootstrap_email or email == cfg.admin_contact_email
         domain = email.rsplit("@", 1)[1]
         explicit_invite = db.execute(
             "SELECT 1 FROM grants WHERE active=1 AND ((kind='email' AND value=?) OR (kind='domain' AND value=?)) LIMIT 1",
             (email, domain),
         ).fetchone()
         newly_invited = (
-            existing_account is None and not bootstrap_identity and explicit_invite is not None
+            existing_account is None
+            and role != "admin"
+            and not bootstrap_identity
+            and explicit_invite is not None
         )
         db.execute(
             "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
@@ -1538,7 +1564,12 @@ async def callback(
             if not cfg.local and sponsored_access_enabled() and force_sponsored_mode_enabled()
             else "personal",
         )
-        if newly_invited:
+        if role == "admin":
+            db.execute(
+                "UPDATE user_state SET invitation_welcome_pending=0 WHERE subject=?",
+                (subject,),
+            )
+        elif newly_invited:
             db.execute(
                 "UPDATE user_state SET invitation_welcome_pending=1 WHERE subject=?",
                 (subject,),
@@ -1590,16 +1621,27 @@ def denied_identity(request: Request):
         raise HTTPException(404, "No denied sign-in is available.")
     with _db(cfg) as db:
         row = db.execute(
-            "SELECT subject,expires_at FROM denied_access WHERE token_hash=?",
+            "SELECT subject,email,expires_at FROM denied_access WHERE token_hash=?",
             (_hash(denied_cookie),),
         ).fetchone()
         if not row or row["expires_at"] <= _now():
             if row:
                 db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
             raise HTTPException(404, "No denied sign-in is available.")
+        # A previously denied Google subject may become authorized after the
+        # administrator email or grants change. Do not keep offering an
+        # invitation when this verified identity is now eligible to sign in.
+        authorized = (
+            _authorization_in_db(db, cfg, row["subject"], row["email"]) if row["subject"] else None
+        )
         invitation = db.execute(
             "SELECT status FROM invitation_requests WHERE subject=?", (row["subject"],)
         ).fetchone()
+    if authorized is not None:
+        response = JSONResponse({"identity_available": False, "retry_signin": True})
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
     response = JSONResponse(
         {
             "identity_available": True,
@@ -1680,6 +1722,10 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         principal = resolve_session(raw_session)
         if principal is None:
             raise HTTPException(401, "Sign in with Google before requesting a reload.")
+        if principal.role == "admin":
+            raise HTTPException(
+                403, "Administrators have no individual sponsorship allowance to reload."
+            )
         with _db(cfg) as db:
             eligible = db.execute(
                 "SELECT 1 FROM user_state WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
@@ -1699,6 +1745,10 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
             ).fetchone()
         if not identity or identity["expires_at"] <= _now():
             raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
+        # A previously denied identity must not submit an invitation after it
+        # gains authorization through the configured contact or a grant.
+        if identity["subject"] and _authorization(cfg, identity["subject"], identity["email"]):
+            raise HTTPException(409, "This Google account is already authorized. Sign in again.")
     now = _now()
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
@@ -2096,7 +2146,7 @@ def list_grants():
         for subject, email in identities.items():
             role = _authorization_in_db(db, cfg, subject, email)
             current = active.get(subject)
-            allowance = _allowance_in_db(db, email, default) if role else None
+            allowance = _allowance_in_db(db, email, default) if role and role != "admin" else None
             users.append(
                 {
                     "email": email,
@@ -2122,7 +2172,9 @@ def list_grants():
     users.sort(key=lambda account: str(account["email"]))
     for grant in grants:
         grant["effective_allowance_usd"] = (
-            grant["allowance_usd"]
+            None
+            if grant["role"] == "admin"
+            else grant["allowance_usd"]
             if grant["allowance_usd"] is not None
             else _configured_default_allowance()
         )
