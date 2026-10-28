@@ -251,7 +251,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
+export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; global_remaining_usd?: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const providerActive = useProviderActivity();
@@ -290,6 +290,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const connectionTooltip = connected && !sponsoredPill
     ? `${ai.info?.account_label ? `ChatGPT connected as ${ai.info.account_label}. ` : 'ChatGPT is connected. '}Click to return to sponsorship.`
     : undefined;
+  const globalFundingExhausted = sponsoredSelected
+    && typeof cloudFunding?.budget?.global_remaining_usd === 'number'
+    && cloudFunding.budget.global_remaining_usd <= 0;
+  const globalFundingDetail = cloudFunding?.budget?.global_remaining_usd === undefined
+    ? ''
+    : globalFundingExhausted
+      ? ' Global inference spending ceiling reached; no sponsored provider calls can start.'
+      : ` Shared inference capacity: ${cloudFunding.budget.global_remaining_usd.toFixed(2)} remaining.`;
   const allowanceDescription = !cloudFunding?.authorized
     ? 'Sign in to view sponsorship.'
     : !sponsoredSelected
@@ -297,16 +305,18 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     : cloudFunding.error
       ? 'Sponsored allowance unavailable; research may be blocked.'
     : adminSponsored
-      ? 'Admin sponsorship: Unlimited individual allowance. Global spending limit applies.'
+      ? `Admin sponsorship: unlimited individual allowance; global spending limit applies.${globalFundingDetail}`
     : cloudFunding.loading
       ? 'Loading sponsored allowance…'
       : cloudFunding.budget
-        ? `Sponsored allowance: ${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of ${cloudFunding.budget.allowance_usd.toFixed(2)}.`
+        ? `Sponsored allowance: ${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of ${cloudFunding.budget.allowance_usd.toFixed(2)}.${globalFundingDetail}`
         : 'Sponsored allowance unavailable.';
   const sponsorTooltip = `${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : ''}`;
   const allowanceText = !sponsoredSelected
     ? 'Personal'
+    : globalFundingExhausted
+      ? 'Global limit'
     : cloudFunding?.error
       ? 'Allowance unavailable'
     : adminSponsored
