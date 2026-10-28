@@ -7645,7 +7645,7 @@ async def _portfolio_role_call(
             if cloud_research.billing_enabled() and (
                 int(record.get("tokens_used") or 0)
                 + int(record.get("tokens_reserved", 0))
-                + token_reserve
+                + (0 if isinstance(hard_ledger, dict) else token_reserve)
                 > int(record.get("total_token_limit", 0))
             ):
                 branch["status"] = "ended"
@@ -7805,7 +7805,11 @@ async def _portfolio_role_call(
                     _refresh_token_accounting(record)
                     _save(path, record)
                     return False
-                record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
+                # Hard-budget admission already added this reservation above.
+                # Counting it again leaks session tokens on every completed
+                # call and eventually prevents otherwise affordable research.
+                if not isinstance(hard_ledger, dict):
+                    record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
                 step["attempt_status"] = "reserved"
                 _event(record, "call.started", record["message"], role)
                 _save(path, record)
