@@ -292,6 +292,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     : undefined;
   const allowanceDescription = !cloudFunding?.authorized
     ? 'Sign in to view sponsorship.'
+    : !sponsoredSelected
+      ? 'Personal ChatGPT selected. Sponsored allowance is not being used.'
+    : cloudFunding.error
+      ? 'Sponsored allowance unavailable; research may be blocked.'
     : adminSponsored
       ? 'Admin sponsorship: Unlimited individual allowance. Global spending limit applies.'
     : cloudFunding.loading
@@ -303,8 +307,12 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           : sponsoredSelected ? 'Sponsored allowance unavailable.' : 'Sponsorship not selected.';
   const sponsorTooltip = `${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : ''}`;
-  const allowanceText = adminSponsored
-    ? 'Unlimited'
+  const allowanceText = !sponsoredSelected
+    ? 'Personal'
+    : cloudFunding?.error
+      ? 'Allowance unavailable'
+    : adminSponsored
+      ? 'Unlimited'
     : cloudFunding?.budget
       ? `${cloudFunding.budget.remaining_usd.toFixed(2)}`
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
