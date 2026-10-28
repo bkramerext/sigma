@@ -138,33 +138,42 @@ def _user_spend_ceiling_decimal() -> Decimal:
     )
 
 
+def _admin_has_unlimited_spend() -> bool:
+    """An active, verified administrator has no individual sponsored-dollar cap."""
+    from sigma import cloud_auth
+
+    workspace = _ledger_workspace()
+    cfg = cloud_auth.config()
+    if not cfg.enabled or cfg.error or workspace is None or not workspace.email:
+        return False
+    with cloud_auth._db(cfg) as db:
+        state = (
+            db.execute(
+                "SELECT role,access_active,email FROM user_state WHERE subject=?",
+                (workspace.verified_subject,),
+            ).fetchone()
+            if workspace.verified_subject
+            else db.execute(
+                "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
+                (workspace.workspace_id,),
+            ).fetchone()
+        )
+    return bool(
+        state is not None
+        and state["role"] == "admin"
+        and state["access_active"]
+        and state["email"] == workspace.email
+    )
+
+
 def _effective_user_spend_ceiling_decimal() -> Decimal:
     from sigma import cloud_auth
 
     workspace = _ledger_workspace()
-    # Admins have no per-account sponsorship allowance. The operator's
-    # global ceiling still bounds every provider call, including admin calls.
-    cfg = cloud_auth.config()
-    if cfg.enabled and not cfg.error and workspace is not None and workspace.email:
-        with cloud_auth._db(cfg) as db:
-            state = (
-                db.execute(
-                    "SELECT role,access_active,email FROM user_state WHERE subject=?",
-                    (workspace.verified_subject,),
-                ).fetchone()
-                if workspace.verified_subject
-                else db.execute(
-                    "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
-                    (workspace.workspace_id,),
-                ).fetchone()
-            )
-        if (
-            state is not None
-            and state["role"] == "admin"
-            and state["access_active"]
-            and state["email"] == workspace.email
-        ):
-            return _spend_ceiling_decimal()
+    # This displayed nominal ceiling is not a cumulative admin allowance:
+    # admission remains governed solely by the global spending ceiling.
+    if _admin_has_unlimited_spend():
+        return _spend_ceiling_decimal()
     try:
         default = _user_spend_ceiling_decimal()
     except CloudResearchUnavailable:
@@ -544,6 +553,7 @@ def prepare_job(record: dict[str, Any]) -> None:
     # An explicit account allowance is sufficient. Require the configured
     # default only when resolving an account that has no specific allowance.
     user_ceiling_units = _ceiling_units(_effective_user_spend_ceiling_decimal())
+    unlimited_admin = _admin_has_unlimited_spend()
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
     _, _, per_user_queue, global_queue = _evaluation_queue_limits()
     call_limit = record.get("call_limit")
@@ -640,7 +650,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     # terminal/interrupted state intact for playback.
                     if _global_call_amount_units(db) >= global_ceiling_units:
                         raise CloudResearchUnavailable(_global_ceiling_failure_message())
-                    if _user_call_amount_units(db, owner) >= user_ceiling_units:
+                    if not unlimited_admin and _user_call_amount_units(db, owner) >= user_ceiling_units:
                         raise CloudResearchUnavailable(
                             "Your cumulative cloud research allowance has been reached; saved research remains available."
                         )
@@ -670,7 +680,7 @@ def prepare_job(record: dict[str, Any]) -> None:
             # actual first-call reservation; reserve_call remains authoritative.
             if _global_call_amount_units(db) >= global_ceiling_units:
                 raise CloudResearchUnavailable(_global_ceiling_failure_message())
-            if _user_call_amount_units(db, owner) >= user_ceiling_units:
+            if not unlimited_admin and _user_call_amount_units(db, owner) >= user_ceiling_units:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
@@ -1131,6 +1141,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
     user_ceiling = _effective_user_spend_ceiling_decimal()
     global_ceiling_units = _ceiling_units(global_ceiling)
     user_ceiling_units = _ceiling_units(user_ceiling)
+    unlimited_admin = _admin_has_unlimited_spend()
     amount_units = _usd_units(amount_usd)
     reserved_amount = amount_units / USD_UNITS
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
@@ -1172,7 +1183,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                     "No provider call was made."
                 )
             user_used_units = _user_call_amount_units(db, owner)
-            if user_used_units + amount_units > user_ceiling_units:
+            if not unlimited_admin and user_used_units + amount_units > user_ceiling_units:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
@@ -1297,6 +1308,7 @@ def snapshot() -> dict[str, Any]:
     owner = _workspace_id()
     allowance = _effective_user_spend_ceiling_decimal()
     allowance_units = _ceiling_units(allowance)
+    unlimited_admin = _admin_has_unlimited_spend()
     try:
         with _connect() as db:
             own = db.execute(
@@ -1336,7 +1348,11 @@ def snapshot() -> dict[str, Any]:
                 "estimated_usage_usd": to_usd(estimated_units),
                 "held_usd": to_usd(held_units),
                 "reserved_and_estimated_usd": to_usd(total_units),
-                "remaining_usd": to_usd(max(0, allowance_units - total_units)),
+                "remaining_usd": to_usd(
+                    global_remaining_units
+                    if unlimited_admin
+                    else max(0, allowance_units - total_units)
+                ),
                 # Kept for existing audit consumers; new clients use the explicit name.
                 "user_reserved_and_estimated_usd": to_usd(total_units),
                 "user_reserved_or_observed_tokens": int(tokens),
