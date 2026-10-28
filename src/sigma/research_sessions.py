@@ -7996,6 +7996,13 @@ async def _portfolio_role_call(
                         )
                     elif step.get("failure_kind") == "provider_limited":
                         cloud_research.mark_call_provider_rejected(session_id, step_id)
+                        # The rejected provider request cannot consume tokens.
+                        # Releasing only the durable ledger but not the
+                        # session-local reservation strands its token budget
+                        # and prevents valid later calls/resumes.
+                        record["tokens_reserved"] = max(
+                            0, int(record.get("tokens_reserved", 0)) - token_reserve
+                        )
                         step["attempt_status"] = "provider_rejected"
                     else:
                         cloud_research.mark_call_unknown(session_id, step_id)
