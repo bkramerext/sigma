@@ -10,7 +10,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import httpx
@@ -263,6 +263,9 @@ def main(mode: str = "api_key") -> None:
                 assert sponsor_status.json()["mode"] == "sponsored"
                 assert sponsor_status.json()["status"] == "connected"
                 assert "authorization" not in sponsor_status.json()
+                # Readiness discloses aggregate funding only to verified admins,
+                # and must never trigger an inference call or expose credentials.
+                assert client.get("/api/cloud-research/readiness").status_code == 403
                 # Administrators receive the same per-identity sponsored
                 # allowance; role grants administration authority, not an
                 # inference-budget exemption.
@@ -285,6 +288,28 @@ def main(mode: str = "api_key") -> None:
                 assert admin_budget.json()["remaining_usd"] == float(
                     cloud_research._spend_ceiling_decimal()
                 )
+                with patch(
+                    "sigma.api.connection",
+                    new=AsyncMock(return_value={"status": "connected"}),
+                ) as catalog_check:
+                    readiness = client.get("/api/cloud-research/readiness")
+                assert readiness.status_code == 200, readiness.text
+                data = readiness.json()
+                assert catalog_check.await_count == 1
+                assert data["provider"] == mode
+                assert data["provider_status"] == "connected"
+                assert data["global_remaining_usd"] == float(
+                    cloud_research._spend_ceiling_decimal()
+                )
+                assert data["live_inference_verified"] is False
+                assert data["preflight_ready"] is (mode == "api_key")
+                assert (
+                    "customer_api_key_provider_not_selected" in data["blockers"]
+                ) is (mode == "chatgpt")
+                assert "fake-server-credential" not in readiness.text
+                assert "fake-plan-credential" not in readiness.text
+                assert "admin@example.test" not in readiness.text
+                assert readiness.headers["cache-control"] == "no-store"
                 client.headers.pop("X-Test-Role")
                 client.headers.update(
                     {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
