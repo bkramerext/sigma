@@ -22,37 +22,38 @@ ChatGPT session. For local use, SIGMA reads that account from the private
 `SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
 spend is reserved against the signed-in member's configured allowance before
 provider dispatch. Local sponsored inference selects ChatGPT when
-`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. Local sponsored research also
-defaults to a **$0.25 lifetime global reservation ceiling** across sessions,
-independent of the displayed member allowance and Project Settings; old saved
-usage and uncertain provider calls remain counted. To inspect that ledger
-without changing or exposing account identities, run:
+`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. Local sponsored research has a bounded **$50-per-UTC-calendar-month shared
+API-rate-equivalent ceiling** when no explicit global ceiling is configured.
+Past months' settled usage no longer consumes the new month's allowance;
+unresolved reserved and unknown provider calls remain held until reconciled.
+This is separate from each member's individual allowance, which remains subject
+to its own configured accounting or an administrator-approved reload.
+
+To inspect durable spending obligations without exposing account identities:
 
 ```sh
 uv run --locked --no-sync python scripts/inspect_cloud_spend.py
 ```
 
-This reports aggregate estimated, reserved, and unknown amounts. A successful
-ChatGPT plan connection can still reject inference at its separate OpenAI
-plan/app usage limit. Changing SIGMA's ceiling cannot override that provider
-restriction. To authorize a different local global ceiling, set
-`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` explicitly before starting SIGMA.
-The operator must approve this change; a reload of a member allowance does
-not replenish global capacity. For an **explicitly approved $5 local pilot
-ceiling**, stop the local backend and launch the sponsored instance with the
-setting in the actual backend process environment:
+The diagnostic shows the full historical ledger; it does not establish which
+configuration the running backend actually uses. A connected ChatGPT account
+may separately reach a provider plan/app usage limit; changing the SIGMA
+ceiling cannot bypass it.
+
+An operator-set `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` overrides the local
+default and is **cumulative unless `SIGMA_CLOUD_GLOBAL_SPEND_WINDOW=calendar_month`
+is explicitly selected**. For example, after approving a $5 *cumulative*
+local ceiling:
 
 ```sh
 SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=5.00 ./sigma start --sponsored
 ```
 
-This retains the existing ledger (including unknown attempts), does not
-change the default for other installations, and does not choose or switch
-providers. The ceiling is an aggregate **lifetime** SIGMA estimate, not a
-per-session allowance or a promise that the provider will accept calls.
-`scripts/inspect_cloud_spend.py` displays the ceiling from its own shell;
-an unset value there does not prove the backend ignored the launch setting.
-Future session Metrics show the backend build used for the attempted work.
+The ledger is never reset by changing these settings. A production-hosted
+deployment also defaults to cumulative global spend accounting unless the
+operator explicitly configures a different window. Changes to actual API
+billing exposure still require the operator's approval; a SIGMA allowance
+does not provide provider-side payment authorization.
 
 If the operator provisions a dedicated
 SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
