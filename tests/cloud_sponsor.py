@@ -92,15 +92,17 @@ class SponsorTests(IsolatedAsyncioTestCase):
 
     async def test_hosted_admin_connection_is_role_based(self):
         from types import SimpleNamespace
+        from typing import cast
 
         from fastapi import HTTPException
+        from starlette.requests import Request
 
         from sigma import api, cloud_auth
 
         principal = SimpleNamespace(
             role="admin", email="admin@example.test", subject="admin-subject"
         )
-        request = SimpleNamespace(state=SimpleNamespace(cloud_principal=principal))
+        request = cast(Request, SimpleNamespace(state=SimpleNamespace(cloud_principal=principal)))
         cfg = SimpleNamespace(enabled=True, local=False)
         with (
             patch.object(cloud_auth, "config", return_value=cfg),

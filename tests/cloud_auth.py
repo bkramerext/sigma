@@ -1110,7 +1110,9 @@ class CloudAuthTests(TestCase):
             ).status_code,
             422,
         )
-        self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 403)
+        # The admin-only sponsor handoff route accepts this URL shape, but an
+        # unknown identifier cannot resolve to an OAuth authorization URL.
+        self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 400)
         self.assertEqual(TestClient(app).get("/api/ai/models").status_code, 401)
 
     def test_session_persists_across_client_restart_and_logout_revokes_it(self):
@@ -2011,6 +2013,7 @@ class CloudAuthTests(TestCase):
                 self.assertIn(b"HTTP/1.1 200 OK", callback_response)
                 exchange.assert_awaited_once()
                 validate.assert_awaited_once()
+            oauth_status = restarted.get(f"/api/ai/auth/attempt/{attempt_id}")
             for _ in range(100):
                 oauth_status = restarted.get(f"/api/ai/auth/attempt/{attempt_id}")
                 if oauth_status.json()["status"] != "connecting":
