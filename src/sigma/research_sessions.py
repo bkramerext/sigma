@@ -7953,16 +7953,10 @@ async def _portfolio_role_call(
                     step["failure_kind"] = "response_invalid"
                     if response_usage is not None:
                         step["token_usage"] = response_usage
-                input_tokens = (
-                    response_usage.get("input_tokens") if response_usage else None
-                )
-                output_tokens = (
-                    response_usage.get("output_tokens") if response_usage else None
-                )
+                input_tokens = response_usage.get("input_tokens") if response_usage else None
+                output_tokens = response_usage.get("output_tokens") if response_usage else None
                 reported_usage = (
-                    response_received
-                    and type(input_tokens) is int
-                    and type(output_tokens) is int
+                    response_received and type(input_tokens) is int and type(output_tokens) is int
                 )
                 response_cost = (
                     _estimate_cost(record["model"], response_usage)
@@ -8020,7 +8014,6 @@ async def _portfolio_role_call(
                     {
                         "status": "failed",
                         "finished_at": _now(),
-                        "token_usage_status": "unavailable",
                     }
                 )
                 if timeout_failure:
