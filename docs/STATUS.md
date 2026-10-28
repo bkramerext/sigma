@@ -7406,3 +7406,9 @@ or automated checks were run.
 
 The Samples tab tooltip reads “Selecting a sample copies into a new project.”
 `git diff --check` passed; no browser or automated checks were run.
+
+## About dialog spacing (2026-10-28)
+
+Removed the “Strategies set direction…” sentence from the About dialog. The
+space between the intro and disclosures is now just the intro's 8px bottom gap.
+`git diff --check` passed; no browser or automated checks were run.
