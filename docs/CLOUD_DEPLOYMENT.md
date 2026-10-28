@@ -1353,8 +1353,9 @@ verified Google subject and `$15.00` globally. The five initial invited
 accounts (including the administrator) start with `$2.00` each, leaving `$5.00`
 under the global ceiling for operator-directed testing and unresolved charges.
 The default allowance is configurable from `$0.01` through `$15.00`; an
-administrator can set a per-entry USD allowance in Access Management up to the
-global ceiling. An exact email rule overrides its matching domain rule. Domain
+administrator can set a per-entry USD allowance in Access Management up to
+$15.00 per member. The operator can configure a global ceiling from $0.01 to
+$1000.00; $15.00 remains the unchanged example and deployment default. An exact email rule overrides its matching domain rule. Domain
 allowances apply independently to each verified user's subject-backed
 workspace, never as a shared pool. The user's allowance is cumulative, does not
 reset automatically, and follows the stable verified subject across changed
@@ -1375,9 +1376,10 @@ Confirmed provider token counts are priced using SIGMA's reviewed model price
 table; the reported cost remains an estimate. If a call times out, is canceled,
 or its response is lost before its usage is saved, the full reservation remains
 held and the attempt is recorded as unknown. Such a call is never automatically
-retried. Cloud sessions are capped at `$0.25` estimated cost, six model calls,
-and 15 minutes regardless of larger saved project limits. A priced model and
-explicit token usage bounds are required. The ChatGPT connection dialog reports
+retried. Hosted sponsored sessions respect the call and estimated-cost limits saved in
+Project Settings; the session cost cap may be Unlimited. They retain a 15-minute
+runtime cap and the independent user/global dollar and token reservations.
+A priced model and explicit token usage bounds are required. The ChatGPT connection dialog reports
 the authenticated owner's read-only allowance, estimated usage, held
 reservations (including unknown charges), and remaining allowance. Exhaustion
 blocks new inference while saved projects and research remain readable.
@@ -1390,12 +1392,16 @@ The service ledger also enforces these environment-configurable limits:
 | `SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT` | `2` | Running sessions across the service |
 | `SIGMA_CLOUD_USER_MAX_QUEUED` | `2` | Queued sessions per workspace |
 | `SIGMA_CLOUD_GLOBAL_MAX_QUEUED` | `16` | Queued sessions across the service |
-| `SIGMA_CLOUD_USER_TOKEN_BUDGET` | `2000000` | Reserved or observed model tokens per workspace |
+| `SIGMA_CLOUD_USER_TOKEN_BUDGET` | `2000000` | Reserved or observed model tokens in the workspace's current allowance window |
 
 Malformed or missing user or global spend configuration disables cloud
 research; configured default user allowance and individual entries are limited
-to `$15.00`, as is the global ceiling. Spend totals include completed estimates, live reservations, and
-unknown provider outcomes. A reservation is released only when the provider
+to `$15.00`, while the configurable global ceiling has a $1000.00 safety maximum.
+Neither ceiling resets automatically; increasing the global limit requires an
+explicit operator deployment configuration change, not a member allowance reload. Spend totals include completed estimates, live reservations, and
+unknown provider outcomes. An authorized user allowance reload starts a new
+per-user dollar and token window but retains the global history and unknown
+reservations in the global ceiling. A reservation is released only when the provider
 call is proven not to have been dispatched; age, restart, timeout, cancellation,
 and account revocation do not release uncertain charges. Accounting is shared
 across the user's projects and persists in the SQLite ledger. Queue slots,
