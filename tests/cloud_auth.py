@@ -1591,9 +1591,7 @@ class CloudAuthTests(TestCase):
             # A stale denied page must offer Google sign-in again, never an
             # invitation, once the account is authorized.
             recovered = self.client.get("/api/cloud-auth/denied")
-            self.assertEqual(
-                recovered.json(), {"identity_available": False, "retry_signin": True}
-            )
+            self.assertEqual(recovered.json(), {"identity_available": False, "retry_signin": True})
             self.assertEqual(
                 self.client.post(
                     "/api/cloud-auth/invitation-request",
