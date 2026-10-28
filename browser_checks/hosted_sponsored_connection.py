@@ -33,7 +33,7 @@ def dismiss_sponsor_welcome(page) -> None:
     try:
         action = welcome.get_by_role("button", name="Let's get started")
         if not action.count():
-            action = welcome.get_by_role("button", name="Continue as guest")
+            action = welcome.get_by_role("button", name="Let's get started")
         action.click(timeout=2000)
     except PlaywrightTimeoutError:
         if welcome.count() and welcome.is_visible():
@@ -513,7 +513,8 @@ def exercise(origin: str) -> None:
             expect(guest_welcome.locator(".invitation-welcome-intro")).to_contain_text(
                 "decides whether to include sponsorship when granting your invitation"
             )
-            guest_welcome.get_by_role("button", name="Continue as guest").click()
+            expect(guest_welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
+            guest_welcome.get_by_role("button", name="Let's get started").click()
         about = page.locator(".home-topline .home-about-button")
         invite = page.locator(".home-topline .home-header-actions .project-invite-me")
         expect(about).to_be_visible()

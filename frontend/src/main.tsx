@@ -4437,8 +4437,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     {audience === 'invited' && <p className="invitation-welcome-intro">Welcome to SIGMA.</p>}
     <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
     {error && <p role="alert">{error}</p>}
-    {audience === 'guest' && <a className="google-text-action invitation-welcome-dismiss" href="/api/cloud-auth/login">Sign in with Google</a>}
-    <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : audience === 'guest' ? 'Continue as guest' : "Let's get started"}</button>
+    <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : "Let's get started"}</button>
   </dialog>;
 }
 
