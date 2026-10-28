@@ -66,12 +66,15 @@ class ChatGPTProviderRejection(ProjectError):
         code: str | None,
         http_status: int,
         streamed: bool,
+        stream_event: str | None = None,
     ) -> None:
         super().__init__(message)
         self.state = state
         self.code = code if code in KNOWN_ERRORS else None
         self.http_status = http_status
         self.streamed = streamed
+        # Only local parser event types are stored, never untrusted provider text.
+        self.stream_event = stream_event if streamed and stream_event in {"error", "response.failed"} else None
 
 
 def failure(
@@ -81,6 +84,7 @@ def failure(
     guard: str | None = None,
     *,
     streamed: bool = False,
+    stream_event: str | None = None,
 ) -> None:
     error = raw.get("error") if isinstance(raw, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
@@ -139,16 +143,35 @@ def failure(
                 code=code if isinstance(code, str) else None,
                 http_status=status,
                 streamed=streamed,
+                stream_event=stream_event,
             )
         # A Responses stream is admitted at the outer HTTP status and can then
         # fail in-band; the provider error code is not a second HTTP response.
-        provider_status = f" (HTTP {status})" if not streamed and state == "limited" else ""
+        safe_code = code if isinstance(code, str) and code in KNOWN_ERRORS else None
+        if streamed:
+            provenance = (
+                f" Provider error code: {safe_code} ({stream_event or 'streamed response'}; "
+                f"HTTP transport {status})."
+                if safe_code
+                else f" Provider error within streamed response (HTTP transport {status})."
+            )
+        else:
+            provenance = f" (HTTP {status}"
+            if safe_code:
+                provenance += f"; provider code: {safe_code}"
+            provenance += ")."
+        if safe_code == "subscription_sharing_usage_limit_exceeded":
+            provenance += (
+                " This is separate from SIGMA's sponsored-dollar allowance. "
+                "The provider did not identify whether its limit is plan-wide or app-specific."
+            )
         raise ChatGPTProviderRejection(
-            f"{message}{provider_status} No strategy was saved.",
+            f"{message}{provenance} No strategy was saved.",
             state=state,
-            code=code if isinstance(code, str) else None,
+            code=safe_code,
             http_status=status,
             streamed=streamed,
+            stream_event=stream_event,
         )
     # Provider error bodies can contain request context or other sensitive
     # values. Surface only a small allowlist of machine fields; never echo the
@@ -265,6 +288,7 @@ async def completed(
                     "chatgpt",
                     guard,
                     streamed=True,
+                    stream_event="error",
                 )
             if kind == "response.created":
                 if response_id is not None or not isinstance(
@@ -279,7 +303,14 @@ async def completed(
                 if not isinstance(raw, dict) or raw.get("id") != response_id:
                     raise ValueError("plan_stream:response_id_mismatch")
                 if kind == "response.failed":
-                    failure(response.status_code, raw, "chatgpt", guard, streamed=True)
+                    failure(
+                        response.status_code,
+                        raw,
+                        "chatgpt",
+                        guard,
+                        streamed=True,
+                        stream_event="response.failed",
+                    )
                 if kind == "response.incomplete":
                     raise ProjectError(
                         "ChatGPT returned an incomplete response. Retry explicitly; no strategy was saved."
