@@ -1037,6 +1037,90 @@ def test_local_global_spend_default_stays_at_legacy_safe_ceiling() -> None:
             assert cloud_research._spend_ceiling_decimal() == Decimal("5.00")
 
 
+def test_json_project_orphan_recovery(
+    root: Path, ledger_root: Path, limits_env: dict[str, str]
+) -> None:
+    """JSON-backed projects must recover unpublished jobs without losing saved work."""
+    member = workspace(root / "json-queue-recovery", "e" * 32)
+    with (
+        patch.dict(
+            os.environ,
+            {
+                **limits_env,
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+                "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
+            },
+            clear=False,
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            project = initialize_project(
+                member.path / "portable.json", "Portable research", "Check persistence"
+            )
+
+            def bundle_job() -> dict[str, Any]:
+                record = job(member.workspace_id)
+                record.update(
+                    project_id=project.project.id,
+                    project_path=project.path,
+                    session_number=1,
+                    status="queued",
+                    max_concurrent_sessions=2,
+                    steps=[],
+                    events=[],
+                    strategy_runs=[],
+                )
+                return record
+
+            unpublished = bundle_job()
+            assert cloud_research._project_relpath(unpublished, member.path) == "portable.json"
+            cloud_research.prepare_job(unpublished)
+            from sigma.project_bundle import read_bundle
+
+            member_name = f"research-sessions/{unpublished['id']}.json"
+            assert member_name not in read_bundle(project.path)["files"]
+            with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                removed = cloud_research.reconcile_orphaned_jobs()
+            assert unpublished["id"] in removed
+            assert cloud_research.job_status(unpublished["id"]) is None
+
+            # Publishing a bundled session must keep its queued reservation.
+            saved = bundle_job()
+            cloud_research.prepare_job(saved)
+            research_sessions._save(project.path, saved)
+            assert f"research-sessions/{saved['id']}.json" in read_bundle(project.path)["files"]
+            with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                assert saved["id"] not in cloud_research.reconcile_orphaned_jobs()
+            assert cloud_research.job_status(saved["id"]) == "queued"
+
+            # A published-or-not call with uncertain provider dispatch always
+            # retains both its spend hold and ledger row.
+            uncertain = bundle_job()
+            cloud_research.prepare_job(uncertain)
+            assert cloud_research.claim_job(uncertain["id"])
+            call_id = str(uuid4())
+            cloud_research.reserve_call(uncertain["id"], call_id, 0.10, 10)
+            cloud_research.mark_call_unknown(uncertain["id"], call_id)
+            with cloud_research._transaction() as db:
+                db.execute(
+                    "UPDATE jobs SET status='queued' WHERE session_id=?",
+                    (uncertain["id"],),
+                )
+            with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                assert uncertain["id"] not in cloud_research.reconcile_orphaned_jobs()
+            assert cloud_research.job_status(uncertain["id"]) == "queued"
+            with cloud_research._connect() as db:
+                row = db.execute(
+                    "SELECT status,amount_usd FROM calls WHERE call_id=?", (call_id,)
+                ).fetchone()
+                assert row["status"] == "unknown" and row["amount_usd"] == 0.10
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def main() -> None:
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
@@ -1653,6 +1737,9 @@ def main() -> None:
         recovery_ledger = root / "orphan-recovery-ledger"
         recovery_ledger.mkdir(mode=0o700)
         test_orphaned_job_reconciliation(root, recovery_ledger, settings)
+        json_ledger = root / "json-project-orphan-ledger"
+        json_ledger.mkdir(mode=0o700)
+        test_json_project_orphan_recovery(root, json_ledger, settings)
 
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
