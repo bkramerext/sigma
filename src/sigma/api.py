@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import secrets
 import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
@@ -36,6 +37,7 @@ from sigma.projects import (
     _document,
     change_stage,
     close_project,
+    copy_project_between_workspaces,
     create_project,
     create_strategy,
     edit_strategy,
@@ -285,6 +287,36 @@ async def workspace_access_error(request: Request, exc: WorkspaceAccessError):
 
 class OpenRequest(BaseModel):
     path: str
+
+
+class GuestProjectCopyRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+
+
+@app.post("/api/projects/guest-copy", status_code=201)
+def copy_project_to_guest_workspace(body: GuestProjectCopyRequest):
+    """Copy the current project into a private, temporary guest workspace."""
+    source = cloud_workspaces.current()
+    cfg = cloud_auth.config()
+    if (source is None and not cfg.local) or (source is not None and source.guest):
+        raise HTTPException(401, "Sign in to copy this project to a guest workspace.")
+    guest_token = secrets.token_hex(32)
+    target = cloud_workspaces.guest_workspace(guest_token, create=True)
+    if target is None:
+        raise HTTPException(503, "A temporary guest workspace is unavailable.")
+    try:
+        copied_path = copy_project_between_workspaces(body.path, source, target)
+    except ProjectError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    response = JSONResponse({"path": copied_path}, status_code=201)
+    response.set_cookie(
+        cloud_auth._cookie_name(cloud_auth.GUEST_COOKIE, cfg),
+        guest_token,
+        **cloud_auth._cookie_options(
+            cfg, cloud_auth.GUEST_COOKIE, max_age=cloud_auth.SESSION_SECONDS
+        ),
+    )
+    return response
 
 
 class ResearchStartRequest(OpenRequest):

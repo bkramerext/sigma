@@ -833,6 +833,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/recent/forget",
             "/api/projects/samples/open",
             "/api/projects/research-sessions/mock",
+            "/api/projects/guest-copy",
         }
         project_write = path.startswith("/api/projects/") and request.method not in {
             "GET",
@@ -1442,13 +1443,39 @@ async def callback(
     # an authenticated session is issued. This creates an empty root and keeps
     # identity/provider concerns out of project path handling.
     workspace_id = None
+    authenticated_workspace = None
     if not cfg.local:
         from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
         try:
-            workspace_id = workspace_for_subject(subject).workspace_id
+            authenticated_workspace = workspace_for_subject(subject)
+            workspace_id = authenticated_workspace.workspace_id
         except WorkspaceUnavailable as exc:
             raise HTTPException(503, "Private workspace is unavailable.") from exc
+    return_to = flow["return_to"] or "/"
+    guest_token = request.cookies.get(_cookie_name(GUEST_COOKIE, cfg))
+    if return_to.startswith("/project?") and guest_token:
+        from urllib.parse import parse_qs, urlencode, urlsplit
+
+        from sigma import cloud_workspaces, projects
+
+        guest_workspace = cloud_workspaces.guest_workspace(guest_token)
+        if guest_workspace is not None:
+            requested_paths = parse_qs(
+                urlsplit(return_to).query, keep_blank_values=True, max_num_fields=8
+            ).get("path", [])
+            try:
+                if len(requested_paths) == 1:
+                    requested = Path(requested_paths[0]).expanduser().resolve()
+                    if requested.is_relative_to(guest_workspace.path):
+                        copied_path = projects.copy_project_between_workspaces(
+                            requested_paths[0], guest_workspace, authenticated_workspace
+                        )
+                        return_to = "/project?" + urlencode({"path": copied_path})
+            except (projects.ProjectError, cloud_workspaces.WorkspaceUnavailable):
+                # Complete sign-in without exposing a guest path to the member
+                # workspace. The original guest copy remains intact until expiry.
+                return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
         existing_account = db.execute(
@@ -1491,7 +1518,7 @@ async def callback(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
-    response = RedirectResponse(flow["return_to"] or "/", status_code=303)
+    response = RedirectResponse(return_to, status_code=303)
     response.set_cookie(
         _cookie_name(SESSION_COOKIE, cfg),
         raw,

@@ -829,6 +829,55 @@ class CloudAuthTests(TestCase):
         with TestClient(app, base_url="https://testserver") as another_guest:
             self.assertEqual(another_guest.get("/api/projects/recent").status_code, 401)
 
+    def test_guest_play_signin_and_project_signout_keep_the_project_page(self):
+        from sigma import cloud_workspaces
+
+        with TestClient(app, base_url="https://testserver") as browser:
+            catalog = browser.get("/api/projects/samples")
+            self.assertEqual(catalog.status_code, 200, catalog.text)
+            opened = browser.post(
+                "/api/projects/samples/open",
+                json={"sample_id": catalog.json()["projects"][0]["id"]},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(opened.status_code, 200, opened.text)
+            guest_path = opened.json()["path"]
+            guest_id = opened.json()["project"]["id"]
+            source_guest = cloud_workspaces.guest_workspace(
+                browser.cookies.get(cloud_auth.GUEST_COOKIE)
+            )
+            self.assertIsNotNone(source_guest)
+
+            completed = self.finish(
+                client=browser,
+                return_to=f"/project?path={guest_path}",
+            )
+            self.assertEqual(completed.status_code, 303)
+            member_path = parse_qs(urlsplit(completed.headers["location"]).query)["path"][0]
+            self.assertNotEqual(member_path, guest_path)
+            member_project = browser.post(
+                "/api/projects/open", json={"path": member_path}, headers={"Origin": ORIGIN}
+            )
+            self.assertEqual(member_project.status_code, 200, member_project.text)
+            self.assertEqual(member_project.json()["project"]["id"], guest_id)
+
+            copied = browser.post(
+                "/api/projects/guest-copy",
+                json={"path": member_path},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(copied.status_code, 201, copied.text)
+            guest_copy_path = copied.json()["path"]
+            self.assertNotEqual(guest_copy_path, member_path)
+            self.assertTrue(Path(member_path).exists(), "Signing out must retain the account copy")
+            signed_out = browser.post("/api/cloud-auth/logout", headers={"Origin": ORIGIN})
+            self.assertEqual(signed_out.status_code, 204)
+            guest_copy = browser.post(
+                "/api/projects/open", json={"path": guest_copy_path}, headers={"Origin": ORIGIN}
+            )
+            self.assertEqual(guest_copy.status_code, 200, guest_copy.text)
+            self.assertEqual(guest_copy.json()["project"]["id"], guest_id)
+
     def test_separate_guest_workspaces_can_open_same_sample_with_saved_sessions(self):
         from sigma import research_sessions
 

@@ -3334,6 +3334,19 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const introPane = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ pointer: number; y: number; height: number } | null>(null);
   const [introHeight, setIntroHeight] = useState<number | null>(null);
+  const resumedPlay = useRef(false);
+  useEffect(() => {
+    if (
+      resumedPlay.current
+      || !view
+      || !cloud?.authenticated
+      || processControls.playDisabled
+      || window.sessionStorage.getItem('sigma.resumeGuestPlay') !== 'true'
+    ) return;
+    resumedPlay.current = true;
+    window.sessionStorage.removeItem('sigma.resumeGuestPlay');
+    processControls.play();
+  }, [cloud?.authenticated, processControls.play, processControls.playDisabled, view?.project.id]);
   useEffect(() => {
     const openAbout = () => setAboutOpen(true);
     window.addEventListener('sigma-open-about', openAbout);
@@ -3617,6 +3630,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} onSignIn={() => {
       window.sessionStorage.setItem('sigma.playSignInReturn', 'true');
+      window.sessionStorage.setItem('sigma.resumeGuestPlay', 'true');
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
@@ -3876,11 +3890,30 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   async function signOut() {
     setError('');
     try {
+      let currentProjectPath = window.location.pathname === '/project'
+        ? new URLSearchParams(window.location.search).get('path')
+        : null;
+      let destination = '/';
+      if (currentProjectPath) {
+        const copied = await fetch('/api/projects/guest-copy', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: currentProjectPath }),
+        });
+        if (!copied.ok) throw await cloudFailure(copied, 'The project could not be kept open after sign-out.');
+        const result = await copied.json() as { path: string };
+        destination = projectUrl(result.path);
+        currentProjectPath = result.path;
+      }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
-      window.localStorage.removeItem('sigma.currentProject');
-      window.location.assign('/');
-    } catch (cause) { setError(errorMessage(cause)); }
+      if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
+      window.location.assign(destination);
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message);
+      reportRequestFailure(message);
+    }
   }
   return <>
     {cloud?.enabled && cloud.authenticated
@@ -4275,7 +4308,10 @@ function CloudAuthGate() {
     if (!playSignInReturn) return;
     if (status?.authenticated || window.location.pathname !== '/project') {
       window.sessionStorage.removeItem('sigma.playSignInReturn');
-      if (window.location.pathname !== '/project') setPlaySignInReturn(false);
+      if (window.location.pathname !== '/project') {
+        window.sessionStorage.removeItem('sigma.resumeGuestPlay');
+        setPlaySignInReturn(false);
+      }
     }
   }, [playSignInReturn, status?.authenticated]);
   const loadGrants = useCallback(async () => {

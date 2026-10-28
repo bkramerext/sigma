@@ -1,3 +1,18 @@
+## Guest Play continuation and project sign-out (2026-10-27)
+
+Google sign-in from the guest Play prompt now carries the project into the
+authorized account's private workspace with the project ID, research history,
+evidence, and artifacts preserved. Returning to that project resumes Play into
+the ordinary “Start new session #n” confirmation; it does not launch research
+automatically. Project-page sign-out makes a separate temporary guest copy and
+returns to that project instead of Home. Copies refuse to cross account access
+while a session is queued, running, or paused. Real-Chrome guest acceptance
+verifies the resumed confirmation, welcome suppression, sign-out staying on the
+project, invitation layout, and consistent Google action labels. Focused cloud
+auth/workspace and bundle tests passed; `./sigma test` passed for the final
+tree, including Pyright, frontend typecheck and production build. No live provider calls, production configuration changes, or deployment
+occurred.
+
 ## Guest Play sign-in and invitation pill alignment (2026-10-27)
 
 The Home and Project invitation actions now sit directly below and align with

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import socket
@@ -356,8 +357,83 @@ def exercise(ui_url: str, root: Path) -> None:
         return_to = parse_qs(sign_in_url.query).get("return_to", [None])[0]
         assert return_to == f"/project?path={opened_projects[-1]['path']}", return_to
         assert page.evaluate("sessionStorage.getItem('sigma.playSignInReturn')") == "true"
-        assert len(mutation_requests) == mutations_before_play, mutation_requests
-        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") == "true"
+        page.route(
+            "**/api/cloud-auth/status",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "enabled": True,
+                        "ready": True,
+                        "authenticated": True,
+                        "user": {"email": "member@example.org", "role": "member"},
+                        "account": {
+                            "identity": {"email": "member@example.org", "verified": True},
+                            "access": {"status": "active", "role": "member"},
+                            "workspace": {"available": True, "id": "fixture"},
+                            "model_access": {"mode": "personal", "connection": "connected"},
+                            "sponsorship": {"eligible": False, "forced": False},
+                        },
+                        "target": "local",
+                        "admin_contact_email": None,
+                    }
+                ),
+            ),
+        )
+        page.route(
+            "**/api/projects/proposals/config?**",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "available": True,
+                        "binding": "fixture-member",
+                        "model": "gpt-6.1-sol",
+                        "reasoning_effort": "high",
+                        "project_id": "fixture-project",
+                        "message": "Fixture connection is ready.",
+                    }
+                ),
+            ),
+        )
+
+        def generous_research_limits(route):
+            response = route.fetch()
+            limits = response.json()
+            limits["model_calls"] = 30
+            route.fulfill(response=response, json=limits)
+
+        page.route("**/api/projects/research-limits?**", generous_research_limits)
+        page.goto(f"{ui_url}{return_to}", wait_until="networkidle")
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible()
+        expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
+        expect(page.get_by_role("button", name="Start new session #1")).to_be_visible(timeout=15000)
+        assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
+        resumed_mutations = len(mutation_requests)
+        page.locator(".session-start-link").filter(has_text="Cancel").click()
+        assert len(mutation_requests) == resumed_mutations, mutation_requests
+        assert not any(
+            "/api/projects/research-sessions/start" in url for url in research_dispatch_requests
+        ), research_dispatch_requests
+        page.route(
+            "**/api/projects/guest-copy",
+            lambda route: route.fulfill(
+                status=201,
+                content_type="application/json",
+                body=json.dumps({"path": opened_projects[-1]["path"]}),
+            ),
+        )
+        page.route("**/api/cloud-auth/logout", lambda route: route.fulfill(status=204))
+        page.get_by_role("button", name="Sign out of Google").click()
+        expect(page).to_have_url(re.compile(r"/project\?path="))
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible()
         assert not failures, failures
         assert (
             not list((root / "saved-projects").glob("*.sigma"))
