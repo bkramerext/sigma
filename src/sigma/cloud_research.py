@@ -468,10 +468,11 @@ def prepare_job(record: dict[str, Any]) -> None:
         )
     if record.get("cost_status") != "available":
         raise CloudResearchUnavailable("Sponsored research requires a model with a reviewed price.")
-    _spend_ceiling_decimal()
+    global_ceiling_units = _ceiling_units(_spend_ceiling_decimal())
     # An explicit account allowance is sufficient. Require the configured
     # default only when resolving an account that has no specific allowance.
-    _effective_user_spend_ceiling_decimal()
+    user_ceiling_units = _ceiling_units(_effective_user_spend_ceiling_decimal())
+    token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
     _, _, per_user_queue, global_queue = _evaluation_queue_limits()
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")
@@ -578,6 +579,20 @@ def prepare_job(record: dict[str, Any]) -> None:
                         (now, project_relpath, _PROCESS_EPOCH, session_slot, record["id"]),
                     )
                 return
+            # A budget already exhausted before launch cannot fund any call.
+            # Reject the request *before* creating a saved zero-call session.
+            # A nonzero remainder may still be too small for this model's
+            # actual first-call reservation; reserve_call remains authoritative.
+            if _call_amount_units(db, "") >= global_ceiling_units:
+                raise CloudResearchUnavailable(_global_ceiling_failure_message())
+            if _user_call_amount_units(db, owner) >= user_ceiling_units:
+                raise CloudResearchUnavailable(
+                    "Your cumulative cloud research allowance has been reached; saved research remains available."
+                )
+            if _user_call_tokens(db, owner) >= token_budget:
+                raise CloudResearchUnavailable(
+                    "The per-user research token budget has been reached."
+                )
             user_queued = db.execute(
                 "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'", (owner,)
             ).fetchone()[0]
