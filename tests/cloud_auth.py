@@ -1525,7 +1525,7 @@ class CloudAuthTests(TestCase):
             403,
         )
 
-    def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
+    def test_changing_contact_preserves_bound_admin_and_authorizes_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)
         os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
@@ -1550,8 +1550,22 @@ class CloudAuthTests(TestCase):
         denied = self.finish(
             email="zetacontinuation@gmail.com", subject="new-contact-subject", client=denied_client
         )
-        self.assertEqual(denied.headers["location"], "/?access=denied")
-        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        self.assertNotEqual(denied.headers["location"], "/?access=denied")
+        self.assertIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        denied_client.cookies.set(
+            cloud_auth.SESSION_COOKIE, denied.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        status = denied_client.get("/api/cloud-auth/status").json()
+        self.assertEqual(status["user"]["role"], "admin")
+        self.assertFalse(status["account"]["invitation_welcome_pending"])
+        # The contact email remains pinned to its verified Google subject.
+        other_context = TestClient(app)
+        other = other_context.__enter__()
+        self.addCleanup(other_context.__exit__, None, None, None)
+        mismatched = self.finish(
+            email="zetacontinuation@gmail.com", subject="different-google-subject", client=other
+        )
+        self.assertEqual(mismatched.headers["location"], "/?access=denied")
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
