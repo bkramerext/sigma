@@ -1,9 +1,9 @@
 ## Backend access log build SHA (2026-10-28)
 
-Uvicorn access entries now append `build=<seven-character SHA>`. The backend
+Uvicorn access entries place the seven-character SHA immediately after the
+client IP address and port. The backend
 uses the configured build commit when supplied, or the checkout HEAD for a
-local launch. A local restart is needed to see the new format. Verification
-has not been run yet so the updated commit is available for local testing.
+local launch. A local restart is needed to see the new format.
 
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 

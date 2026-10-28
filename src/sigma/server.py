@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import subprocess
+from copy import copy
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,7 +19,11 @@ class _BuildAccessFormatter(logging.Formatter):
         self.sha = sha
 
     def format(self, record: logging.LogRecord) -> str:
-        return f"{self.original.format(record)} build={self.sha}"
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            labeled = copy(record)
+            labeled.args = (f"{record.args[0]} {self.sha}", *record.args[1:])
+            return self.original.format(labeled)
+        return self.original.format(record)
 
 
 def _build_sha() -> str:
