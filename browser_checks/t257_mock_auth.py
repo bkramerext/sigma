@@ -412,7 +412,10 @@ def exercise_browser(origin: str) -> None:
         inspect_account_view(page, 390, 844, "Denied", capture=False)
         expect(denied_dialog).to_contain_text("couldn’t find an active SIGMA invitation")
         expect(denied_dialog).not_to_contain_text("sign in with another account")
-        expect(page.locator(".project-google-signin")).to_have_text("Sign in with Google")
+        # A Google-verified but unauthorized identity sees exactly one
+        # invitation action, never a neighboring Google sign-in action.
+        expect(page.locator(".project-google-signin")).to_have_text("Invite me!")
+        expect(page.get_by_role("link", name="Sign in with Google")).to_have_count(0)
         expect(denied_dialog.get_by_role("link", name="Use another account")).to_have_count(0)
         denied_identity = page.evaluate(
             "async () => await (await fetch('/api/cloud-auth/status')).json()"
@@ -424,6 +427,8 @@ def exercise_browser(origin: str) -> None:
             denied_dialog.get_by_text("Invitation requested. We'll get back to you.")
         ).to_be_visible()
         denied_dialog.get_by_role("button", name="Close").click()
+        expect(page.locator(".project-invite-me")).to_have_count(0)
+        expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
         expect(page.get_by_role("button", name="New", exact=True)).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         recent_tab = page.get_by_role("tab", name="Recent")
