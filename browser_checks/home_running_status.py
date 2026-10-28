@@ -153,9 +153,7 @@ with sync_playwright() as playwright:
         fixture["cost_status"] = "available"
         fixture["estimated_cost_usd"] = 0.14372
         page.reload()
-        expect(page.locator(".session-progress-inline")).to_contain_text(
-            "Est. cost $0.14"
-        )
+        expect(page.locator(".session-progress-inline")).to_contain_text("Est. cost $0.14")
         fixture["mode"] = "chatgpt"
         assert running_status.locator("i").evaluate(
             "element => element === element.parentElement.lastElementChild"
