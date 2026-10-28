@@ -7456,3 +7456,12 @@ tightens the label-to-allowance gap. Frontend build passed.
 
 Request toast Dismiss actions use the same yellow text-action color as other
 actions in the app.
+
+## Project limits copy and field sizing (2026-10-28)
+
+Removed fixed hosted/local call, duration, and spending amounts from the
+Project Settings → Limits guidance. Shortened Maximum concurrent sessions help
+to one sentence. Limit inputs now share a compact width that fits eight-digit
+values. The local sponsored-limits browser assertion follows the revised copy.
+The duration unit selector is narrower and has added right padding for its
+chevron.

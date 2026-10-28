@@ -8,10 +8,11 @@
 .project-settings-dialog .settings-tabs [role="tab"][aria-selected="true"] { border-bottom-color: #d9a66c; color: #f0cca0; }
 .project-settings-dialog .settings-tabs [role="tab"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .project-settings-dialog .research-limits-panel { max-height: min(62dvh, 620px); overflow: auto; }
-.project-settings-dialog .research-limits-panel input[type="number"] { max-width: 220px; }
+.project-settings-dialog .research-limits-panel input:not([type="checkbox"]) { box-sizing: border-box; width: 12ch; max-width: 100%; }
+.project-settings-dialog .research-limits-panel .research-duration-controls input { flex: 0 0 12ch; width: 12ch; max-width: 100%; }
 .project-settings-dialog .research-duration-controls { display: flex; align-items: stretch; gap: 10px; max-width: 360px; }
 .project-settings-dialog .research-duration-controls input { flex: 1 1 auto; min-width: 0; max-width: none; }
-.project-settings-dialog .research-duration-controls select { flex: 0 0 132px; width: auto; }
+.project-settings-dialog .research-duration-controls select { flex: 0 0 100px; width: auto; padding-right: 28px; }
 .project-settings-dialog #project-settings-help { font-size: 13px; line-height: 1.6; color: #afbecd; margin: 0 0 22px; }
 .project-settings-dialog fieldset { margin: 0; }
 .project-settings-dialog label { display: block; color: #e2c49e; font-size: 12px; margin: 16px 0 8px; }
