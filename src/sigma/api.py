@@ -1299,6 +1299,8 @@ async def auth_begin(body: AuthBeginRequest, request: Request):
     if cfg.enabled and not cfg.local:
         if not isinstance(principal, cloud_auth.Principal):
             raise HTTPException(401, "Authentication required.")
+        if principal.role != "admin":
+            raise HTTPException(403, "Administrator access required.")
         if principal.role == "admin":
             from sigma.cloud_sponsor import sponsor_account_id
 
