@@ -221,7 +221,7 @@ def main(mode: str = "api_key") -> None:
                 "model_calls": 30,
                 "session_duration_minutes": 60,
                 "output_tokens_per_call": 256,
-                "maximum_estimated_cost_usd": 1.0,
+                "maximum_estimated_cost_usd": None,
             }
             with (
                 patch(
@@ -347,7 +347,7 @@ def main(mode: str = "api_key") -> None:
                 assert limits.json()["model_calls"] == 30
                 assert limits.json()["research_rounds"] == 5
                 assert limits.json()["session_duration_minutes"] == 60
-                assert limits.json()["maximum_estimated_cost_usd"] == 1.0
+                assert limits.json()["maximum_estimated_cost_usd"] is None
                 key = str(uuid4())
                 start_body = {
                     "path": path,

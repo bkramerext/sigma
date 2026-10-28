@@ -4296,10 +4296,6 @@ async def start_session(
                 )
             from sigma.openai_connection import cloud_credential
 
-            if cloud_research.billing_enabled() and limits["maximum_estimated_cost_usd"] is None:
-                raise ProjectError(
-                    "Configure a maximum estimated session cost in Project Settings → Limits before using sponsored research."
-                )
             if cloud_research.billing_enabled() and (
                 not cloud_credential(credential) or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
