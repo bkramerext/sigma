@@ -7107,3 +7107,28 @@ exclude request/response bodies, identities, and credentials. Read the log with
 remains **UNVERIFIED** until a sponsored run reaches this instrumented backend;
 no live or paid provider call was made during this investigation. Guest first
 entry now has a one-time, dismissible welcome alongside the sponsored welcome.
+
+
+## Local sponsored Play preflight diagnosis (2026-10-27)
+
+The shared private diagnostics log recorded `sponsor_play status=post_400_large`
+for the user's 17:11 local attempt. The response text identifies the exact cause:
+research admission stopped before dispatch because the strategy's prior-session
+unresolved-obligation snapshot exceeded its 32 KB bound. No sponsored provider
+call was made, so the ChatGPT sponsor session was not involved in this failure.
+
+The frozen snapshot now compacts repeated provenance pointers to the first and
+latest references only when that metadata is what exceeds the byte bound. It
+retains each obligation's full text, scope, identity, and durable source records,
+and reports the number of compacted references in the context manifest. If the
+obligations themselves still cannot fit, admission remains fail-closed with a
+short message and no saved research changes. The Play failure path no longer
+creates a duplicate toast. Guest intro copy now presents guest exploration,
+Google sign-in for saving, and invitation requests as separate choices.
+
+Regression coverage in `tests/research_sessions.py` passed, including 15 obligations
+with 32 source artifacts each and the retained over-count rejection. The hosted
+Chrome invitation/welcome check passed. `./sigma test` passed all scenarios,
+Ruff, formatting, Pyright, frontend typecheck, and production build. A post-change
+sponsored Play attempt remains pending; no live or paid provider request was run
+during verification.

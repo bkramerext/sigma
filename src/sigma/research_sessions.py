@@ -2157,6 +2157,8 @@ INVESTIGATOR_GUIDANCE = (
     "you have not received its original source, so do not claim to have inspected or verified it. "
     "Use only supplied_source_artifact_ids as evidence and plan inspection of the original. "
     "If text_complete is false or prior_session_obligations_omitted is nonzero, explicitly preserve that uncertainty. "
+    "When a prior obligation has *_omitted_count reference fields, its text remains complete; "
+    "the first and latest source pointers are supplied, and the full reference history remains saved. "
     "When other_strategy_evidence is supplied, treat "
     "it as unverified peer work; state whether it changes this strategy's reasoning and never "
     "silently present another branch's result as independently derived. When a peer_handoff is "
@@ -2173,7 +2175,9 @@ SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
     "the compact findings from prior sessions, including assumptions, limitations and computation "
     "status, and the deterministic selected extracts from current-session artifacts. The context "
-    "manifest explains selection and omissions; an extract is not the original source. Treat "
+    "manifest explains selection and omissions; an extract is not the original source. An obligation "
+    "with *_omitted_count reference fields retains its complete saved text; context supplies its "
+    "first and latest source pointers, and durable artifacts retain the full reference history. Treat "
     "prior-session notes as "
     "unverified unless their recorded evidence status says otherwise; cite their artifact IDs "
     "when relying on them and request the original artifact when a truncated note matters. The "
@@ -4349,7 +4353,7 @@ async def start_session(
                 record["prior_session_obligation_omitted_ids"],
                 record["prior_session_obligation_omitted_by_strategy"],
                 record["prior_session_obligation_omitted_ids_by_strategy"],
-                omitted_details_by_strategy,
+                _,
             ) = _prior_session_obligations_index(view.path, record["id"], record["strategy_ids"])
             omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
             if omitted_by_strategy:
@@ -4363,33 +4367,15 @@ async def start_session(
                         for item in selected_strategies
                         if item is not None and item.id == selected_strategy_id
                     )
-                    omitted_ids = record["prior_session_obligation_omitted_ids_by_strategy"].get(
-                        selected_strategy_id, []
-                    )
-                    shown_ids = (
-                        "; ".join(
-                            f"{item['id']} ({item['text']})"
-                            for item in omitted_details_by_strategy.get(selected_strategy_id, [])
-                        )
-                        or "bounded ID list unavailable"
-                    )
-                    pointer_note = (
-                        f" (showing {len(omitted_ids)} of {omitted_count})"
-                        if len(omitted_ids) < omitted_count
-                        else ""
-                    )
                     blocked.append(
-                        f"{selected_strategy.title}: {omitted_count} unresolved obligation(s) "
-                        f"exceed the frozen context bound; omitted obligation IDs{pointer_note}: {shown_ids}"
+                        f"{selected_strategy.title}: {omitted_count} unresolved prior-session "
+                        "obligations exceed the safe context bound"
                     )
                 raise ProjectError(
-                    "Research was not started and no provider call was made because prior-session "
-                    "obligations exceed the context bound. "
+                    "Research was not started; no provider call was made. "
                     + "; ".join(blocked)
-                    + ". Disable the affected strategy before starting another session. To pursue "
-                    "a narrower question, create a new strategy informed by the saved findings; "
-                    "earlier evidence remains in the saved session. Editing the original strategy "
-                    "does not remove its history. Earlier sessions and evidence remain available."
+                    + ". Saved research is unchanged. Disable the affected strategy or start a "
+                    "new, narrower strategy informed by its saved findings."
                 )
             record["session_number"] = _allocate_session_number(view.path, records)
             obligation_source_ids = {
@@ -5281,6 +5267,24 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    compacted_prior_obligation_references = [
+        {
+            "obligation_id": item.get("obligation_id"),
+            "omitted_reference_counts": {
+                key: value
+                for key, value in item.items()
+                if key.endswith("_omitted_count") and isinstance(value, int) and value > 0
+            },
+        }
+        for item in prior_session_obligations
+        if isinstance(item, dict)
+        and any(
+            key.endswith("_omitted_count") and isinstance(value, int) and value > 0
+            for key, value in item.items()
+        )
+    ]
+    if compacted_prior_obligation_references:
+        context["compacted_prior_obligation_references"] = compacted_prior_obligation_references
     if cycle == 1 and isinstance(record.get("initial_question_source"), dict):
         context["question_source"] = record["initial_question_source"]
     if role == "skeptic" and isinstance(investigator_step_id, str):
@@ -5329,6 +5333,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "count": relevant_omission_count,
         "obligation_ids": context["prior_session_obligation_omitted_ids"],
         "reason": "bounded strategy-scoped historical obligation snapshot; saved originals remain intact",
+    }
+    manifest["compacted_prior_obligation_references"] = {
+        "count": len(compacted_prior_obligation_references),
+        "obligations": compacted_prior_obligation_references,
+        "reason": "first and latest source pointers are frozen in context; complete references remain in saved source artifacts",
     }
     group = _manifest_source_group(
         "prior_operational_failure",
@@ -8717,6 +8726,15 @@ def _prior_session_obligations_index(
                     )
                 continue
             if _json_bytes([*selected, compact]) > MAX_PRIOR_OBLIGATION_CONTEXT_BYTES:
+                # Keep every obligation's full text and scope when repeated
+                # provenance pointers, rather than the obligations themselves,
+                # are what exceed the frozen context budget. The complete
+                # references remain in their durable source artifacts; this
+                # snapshot keeps the first and latest pointers and records how
+                # many intermediate pointers were compacted.
+                selected = [_compact_prior_obligation_references(item) for item in selected]
+                compact = _compact_prior_obligation_references(compact)
+            if _json_bytes([*selected, compact]) > MAX_PRIOR_OBLIGATION_CONTEXT_BYTES:
                 omitted_count += 1
                 omitted_ids.append(compact["obligation_id"])
                 omitted_by_strategy[strategy_id] = omitted_by_strategy.get(strategy_id, 0) + 1
@@ -8741,6 +8759,29 @@ def _prior_session_obligations_index(
         },
         omitted_details,
     )
+
+
+def _compact_prior_obligation_references(obligation: dict[str, Any]) -> dict[str, Any]:
+    """Bound repeated provenance while retaining obligation text and traceable endpoints."""
+    result = dict(obligation)
+    for field in (
+        "source_artifact_ids",
+        "source_refs",
+        "source_step_ids",
+        "basis_artifact_ids",
+        "basis_step_ids",
+    ):
+        values = result.get(field)
+        if not isinstance(values, list) or len(values) <= 2:
+            continue
+        result[field] = [values[0], values[-1]]
+        omitted_count = len(values) - 2
+        if field in {"source_artifact_ids", "source_refs"}:
+            source_count = result.get("source_artifact_count")
+            if isinstance(source_count, int):
+                omitted_count = max(omitted_count, source_count - 2)
+        result[f"{field}_omitted_count"] = omitted_count
+    return result
 
 
 def _prior_session_failures(

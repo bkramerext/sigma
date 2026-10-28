@@ -2589,6 +2589,64 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     assert research_sessions.get_limits(str(path)) == future
 
 
+async def test_prior_obligation_reference_compaction_keeps_text_and_traceability(path: Path):
+    view, strategy, _, _ = await setup(path)
+    obligation_texts = [
+        f"Resolve historical boundary case {index} without changing the invariant."
+        for index in range(15)
+    ]
+    artifacts = []
+    for obligation_text in obligation_texts:
+        for _ in range(research_sessions.MAX_OBLIGATION_SOURCE_ARTIFACTS):
+            artifacts.append(
+                {
+                    "id": str(uuid4()),
+                    "strategy_id": strategy.id,
+                    "claim_or_question": "Review the saved boundary case.",
+                    "open_obligations": [obligation_text],
+                }
+            )
+    prior_id = str(uuid4())
+    research_sessions._save(
+        str(path),
+        {
+            "id": prior_id,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy.id,
+            "status": "completed",
+            "created_at": research_sessions._now(),
+            "artifacts": artifacts,
+        },
+    )
+
+    frozen, omitted, _, omitted_by_strategy, _, _ = (
+        research_sessions._prior_session_obligations_index(str(path), str(uuid4()), [strategy.id])
+    )
+
+    assert omitted == 0
+    assert omitted_by_strategy == {}
+    assert {item["text"] for item in frozen} == set(obligation_texts)
+    assert len(frozen) == len(obligation_texts)
+    assert (
+        research_sessions._json_bytes(frozen)
+        <= research_sessions.MAX_PRIOR_OBLIGATION_CONTEXT_BYTES
+    )
+    compacted = [item for item in frozen if item.get("source_refs_omitted_count", 0)]
+    assert compacted
+    for item in compacted:
+        assert len(item["source_refs"]) == 2
+        assert item["source_refs"][0]["artifact_id"] == item["source_artifact_ids"][0]
+        assert item["source_refs"][-1]["artifact_id"] == item["source_artifact_ids"][-1]
+        assert (
+            item["source_refs_omitted_count"]
+            == research_sessions.MAX_OBLIGATION_SOURCE_ARTIFACTS - 2
+        )
+
+    saved = research_sessions._all(str(path))
+    assert len(saved) == 1 and len(saved[0]["artifacts"]) == len(artifacts)
+
+
 async def test_prior_obligation_overflow_blocks_before_creating_session(path: Path):
     view, strategy, credential, config = await setup(path)
     prior_id = str(uuid4())
@@ -2636,10 +2694,10 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
         except ProjectError as exc:
             message = str(exc)
             assert "Research was not started" in message
-            assert "create a new strategy informed by the saved findings" in message
+            assert "start a new, narrower strategy informed by its saved findings" in message
             assert "Disable the affected strategy" in message
-            assert omitted_id in message
-            assert indexed[5][strategy.id][0]["text"] in message
+            assert omitted_id not in message
+            assert indexed[5][strategy.id][0]["text"] not in message
         else:
             raise AssertionError("An over-bound history must block before session creation")
 
@@ -2682,10 +2740,11 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
                 str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
             )
         except ProjectError as exc:
-            assert indexed[4][strategy.id][0] in str(exc)
-            assert indexed[5][strategy.id][0]["text"] in str(exc)
-            assert "showing 32 of 41" in str(exc)
-            assert "Editing the original strategy does not remove its history" in str(exc)
+            assert "Research was not started" in str(exc)
+            assert "41 unresolved prior-session obligations" in str(exc)
+            assert "Disable the affected strategy" in str(exc)
+            assert indexed[4][strategy.id][0] not in str(exc)
+            assert indexed[5][strategy.id][0]["text"] not in str(exc)
         else:
             raise AssertionError("Large over-bound history must block before session creation")
     assert (path / "research-sessions" / f"{prior_id}.json").read_bytes() == prior_bytes

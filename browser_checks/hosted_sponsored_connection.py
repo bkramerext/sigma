@@ -504,6 +504,12 @@ def exercise(origin: str) -> None:
         page.reload(wait_until="domcontentloaded")
         guest_welcome = page.locator("#invitation-welcome-dialog")
         if guest_welcome.count():
+            expect(guest_welcome.locator(".invitation-welcome-intro")).to_contain_text(
+                "Welcome to SIGMA. Explore as a guest"
+            )
+            expect(guest_welcome.locator(".invitation-welcome-intro")).to_contain_text(
+                "request an invitation for sponsored access"
+            )
             guest_welcome.get_by_role("button", name="Continue as guest").click()
         about = page.locator(".home-topline .home-about-button")
         invite = page.locator(".home-topline .home-header-actions .project-invite-me")
