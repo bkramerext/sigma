@@ -7404,5 +7404,5 @@ or automated checks were run.
 
 ## Samples copy tooltip (2026-10-28)
 
-The Samples tab tooltip reads “Select a sample to create a project copy.”
+The Samples tab tooltip reads “Selecting a sample copies into a new project.”
 `git diff --check` passed; no browser or automated checks were run.
