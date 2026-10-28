@@ -802,6 +802,22 @@ def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root
             admin_summary = cloud_research.admin_workspace_spending(owner.workspace_id, 0.25)
             assert admin_summary["reload_eligible"] is False, admin_summary
             assert global_reserved_spend() == 0.45
+
+            # The post-reload token counter must not merely report zero:
+            # admission must genuinely accept another funded call. Meanwhile
+            # the previous unknown charge remains in the global ledger.
+            second["status"] = "ended"
+            cloud_research.sync_job(second)
+            third = job(owner.workspace_id)
+            third.update(project_id=project.project.id, project_path=project.path)
+            cloud_research.prepare_job(third)
+            assert cloud_research.claim_job(third["id"])
+            cloud_research.reserve_call(third["id"], "fresh-window", 0.10, 10)
+            after = cloud_research.snapshot()
+            assert after["user_reserved_or_observed_tokens"] == 10, after
+            assert after["held_usd"] == 0.10, after
+            assert after["remaining_usd"] == 0.15, after
+            assert abs(global_reserved_spend() - 0.55) < 1e-6
         finally:
             cloud_workspaces._CURRENT.reset(binding)
 
