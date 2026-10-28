@@ -270,16 +270,15 @@ def exercise(ui_url: str, root: Path) -> None:
         ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
         project_google = page.get_by_role("link", name="Sign in with Google")
-        project_invite = page.get_by_role("button", name="Invite me!")
-        project_google_box = project_google.bounding_box()
-        project_invite_box = project_invite.bounding_box()
-        assert project_invite_box["y"] >= project_google_box["y"] + project_google_box["height"]
-        assert abs(project_invite_box["x"] - project_google_box["x"]) < 2
+        expect(project_google).to_be_visible()
+        # Guests have not selected a verified Google account, so they cannot
+        # request an invitation yet. The two pills must never appear together.
+        expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
         expect(
             page.locator(
                 "header .header-controls button:visible, header .header-controls a:visible"
             )
-        ).to_have_count(6)
+        ).to_have_count(5)
         papers_before_dialog = len(paper_requests)
         page.get_by_role("button", name="LaTeX research paper").click()
         tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
