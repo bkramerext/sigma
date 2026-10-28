@@ -5381,7 +5381,7 @@ async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     assert all(strategy_id == second.id for strategy_id, _ in roles if strategy_id != first.id)
 
 
-async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path):
+async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path, *, streamed: bool = False):
     view, first, credential, config = await setup(path)
     credential["mode"] = "chatgpt"
     second = create_strategy(
@@ -5393,6 +5393,23 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path):
         payload = json.loads(request.content)
         context = json.loads(payload["input"])
         provider_calls.append(context["strategy"]["id"])
+        if streamed:
+            events = [
+                {"type": "response.created", "sequence_number": 0, "response": {"id": "limited-1"}},
+                {
+                    "type": "response.failed",
+                    "sequence_number": 1,
+                    "response": {
+                        "id": "limited-1",
+                        "status": "failed",
+                        "error": {"code": "subscription_sharing_usage_limit_exceeded"},
+                    },
+                },
+            ]
+            body = "".join(
+                f"event: {event['type']}\\ndata: {json.dumps(event)}\\n\\n" for event in events
+            )
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
         return httpx.Response(
             429,
             json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
@@ -5429,7 +5446,17 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path):
     assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"
-    assert limited["provider_http_status"] == 429
+    assert limited["provider_http_status"] == (200 if streamed else 429)
+    if streamed:
+        assert limited["provider_response_channel"] == "stream"
+        assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
+        assert "HTTP 400" not in limited.get("failure_message", "")
+        assert "HTTP 400" not in finished["message"]
+    else:
+        assert limited["provider_response_channel"] == "http"
+        assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
+    assert finished["estimated_cost_usd"] == 0.0
+    assert finished["estimated_cost_reserved_usd"] == 0.0
 
 
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
@@ -7569,6 +7596,16 @@ def main():
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
+        asyncio.run(
+            test_portfolio_stops_after_chatgpt_usage_limit(
+                root / "chatgpt-http-limit.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_stops_after_chatgpt_usage_limit(
+                root / "chatgpt-sse-limit.sigma", streamed=True
+            )
+        )
         asyncio.run(
             test_session_deadline_bounds_generous_call_timeout(
                 root / "generous-call-deadline.sigma"
