@@ -333,7 +333,7 @@ function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
   const duration = value.session_duration_minutes / durationUnitMinutes[unit];
   return { research_rounds: String(value.research_rounds), model_calls: String(value.model_calls), session_duration_value: String(duration), session_duration_unit: unit, output_tokens_per_call: String(value.output_tokens_per_call), maximum_estimated_cost_usd: value.maximum_estimated_cost_usd === null ? '' : String(value.maximum_estimated_cost_usd), maximum_input_tokens_per_session: value.maximum_input_tokens_per_session === null || value.maximum_input_tokens_per_session === undefined ? '' : String(value.maximum_input_tokens_per_session), max_concurrent_sessions: String(value.max_concurrent_sessions ?? '1') };
 }
-function validateLimitDraft(draft: ResearchLimitsDraft, requireSponsoredCost = false): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
+function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
   const errors: Partial<Record<keyof ResearchLimitsDraft, string>> = {};
   const value = {} as ResearchLimits;
   for (const key of Object.keys(limitBounds) as Array<keyof typeof limitBounds>) {
@@ -355,8 +355,7 @@ function validateLimitDraft(draft: ResearchLimitsDraft, requireSponsoredCost = f
       errors.session_duration_value = 'Enter a duration from 1 minute to 7 days.';
     } else value.session_duration_minutes = durationMinutes;
   }
-  if (draft.maximum_estimated_cost_usd === '' && requireSponsoredCost) errors.maximum_estimated_cost_usd = 'Set a maximum estimated session cost before saving limits for sponsored research.';
-  else if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
+  if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
   else if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(draft.maximum_estimated_cost_usd)) {
     errors.maximum_estimated_cost_usd = 'Enter a USD amount from $0.01 to $100.00, or leave blank for unlimited.';
   } else {
@@ -906,7 +905,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', poll); stopWatching(); };
   }, [activeSession?.id, activeSession?.status, load, path, projectId, reportReadFailure]);
 
-  const requiresSponsoredCost = cloud?.target === 'hosted'
+  const sponsoredSession = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
   async function begin(onlyIds?: string[]) {
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
@@ -925,7 +924,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
       const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
       const currentLimits = await limitResponse.json();
       if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
-      const validation = validateLimitDraft(draftLimits(currentLimits), requiresSponsoredCost);
+      const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
         throw new Error(validation.errors.maximum_estimated_cost_usd
           ?? 'Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
@@ -1046,14 +1045,14 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `${limits.model_calls} calls · ${limits.research_rounds} rounds · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, requiresSponsoredCost ? 15 : limits.session_duration_minutes)} min` : undefined,
+      confirmationSummary: limits ? `${limits.model_calls} calls · ${limits.research_rounds} rounds · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, sponsoredSession ? 15 : limits.session_duration_minutes)} min` : undefined,
       playDisabled: busy || !!readError || confirmStart || (activeSession
         ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, limits, onControlsChange, stop, play, playLabel, readError, sessions, requiresSponsoredCost]);
+  }, [activeSession, busy, confirmStart, eligible.length, limits, onControlsChange, stop, play, playLabel, readError, sessions, sponsoredSession]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -2555,8 +2554,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   const limitValidation = validateLimitDraft(
     limitDraft,
-    cloud?.target === 'hosted'
-      || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored'),
   );
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
   useEffect(() => {
@@ -2674,7 +2671,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         <>
           <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label>
           <input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/>
-          <p id="research-cost-help" className="settings-hint">Optional for personal use. Required for sponsored research. Set $0.01 to $100.00, or leave blank for unlimited when supported. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>
+          <p id="research-cost-help" className="settings-hint">Optional per-session cap. Without one, sponsored sessions remain subject to ChatGPT and SIGMA allowance limits. Set $0.01 to $100.00, or leave blank for no session cap. Estimates use published prices and reported tokens.</p>
           {limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
         </>
       </fieldset>

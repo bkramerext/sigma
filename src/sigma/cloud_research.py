@@ -427,10 +427,6 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable(
             "Cloud research requires the explicitly configured sponsor provider."
         )
-    if record.get("maximum_estimated_cost_usd") is None:
-        raise CloudResearchUnavailable(
-            "Configure a maximum estimated session cost in Project Settings → Limits before using sponsored research."
-        )
     if record.get("cost_status") != "available":
         raise CloudResearchUnavailable("Sponsored research requires a model with a reviewed price.")
     _spend_ceiling_decimal()
@@ -447,9 +443,14 @@ def prepare_job(record: dict[str, Any]) -> None:
         or not 2 <= call_limit <= call_ceiling
         or type(duration_limit) is not int
         or not 1 <= duration_limit <= MAX_SESSION_MINUTES
-        or type(maximum_cost) not in {int, float}
-        or not isinstance(maximum_cost, (int, float))
-        or not 0.01 <= maximum_cost <= 100
+        or (
+            maximum_cost is not None
+            and (
+                type(maximum_cost) not in {int, float}
+                or not isinstance(maximum_cost, (int, float))
+                or not 0.01 <= maximum_cost <= 100
+            )
+        )
     ):
         if cloud_workspaces.enabled():
             raise CloudResearchUnavailable(

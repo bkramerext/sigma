@@ -7512,16 +7512,17 @@ field and updated auth regression cases. Personal mode no longer silently
 changes back to sponsorship when its ChatGPT connection is disconnected or
 needs reauthorization.
 
-The session cost cap is now visible in hosted Project Settings and local
-sponsored settings, required when sponsored mode is selected, and checked
-before session confirmation. The confirmation describes an unset limit as “no
-session cost cap” instead of “unlimited cost.”
+The session cost cap is visible in hosted Project Settings and local sponsored
+settings. It is optional; without a project cap, sponsored sessions remain
+subject to ChatGPT and SIGMA allowance limits. The confirmation says “no
+session cost cap” when no project cap is configured.
 
 Verification was deferred for local user testing. A `tests/cloud_auth.py` run
 started just before that request and failed two scenarios that assumed new
 eligible accounts began in personal mode; those cases were updated but not
 rerun. After local testing was requested in parallel with automated
 verification, `tests/cloud_auth.py` passed all 60 tests. Frontend typecheck,
-Ruff check/format, and `git diff --check` passed. The real-browser check did
-not complete; it stopped at an assertion in the local connection-switching
-scenario.
+Ruff check/format, and `git diff --check` passed before the optional-cap
+follow-up. Verification of that follow-up is deferred until after local testing.
+The real-browser check did not complete; it stopped at an assertion in the
+local connection-switching scenario.
