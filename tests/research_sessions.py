@@ -5480,7 +5480,7 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         assert limited["provider_response_channel"] == "http"
         assert limited.get("provider_stream_event") is None
         assert "HTTP 429" in limited["failure_message"]
-    assert finished["estimated_cost_reserved_usd"] == 0.0
+    assert finished["calls_used"] == 1
 
 
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
