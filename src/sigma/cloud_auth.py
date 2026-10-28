@@ -1621,7 +1621,7 @@ def denied_identity(request: Request):
         raise HTTPException(404, "No denied sign-in is available.")
     with _db(cfg) as db:
         row = db.execute(
-            "SELECT subject,expires_at FROM denied_access WHERE token_hash=?",
+            "SELECT subject,email,expires_at FROM denied_access WHERE token_hash=?",
             (_hash(denied_cookie),),
         ).fetchone()
         if not row or row["expires_at"] <= _now():
