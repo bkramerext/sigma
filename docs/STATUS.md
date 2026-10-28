@@ -1,3 +1,15 @@
+## Guest Play sign-in and invitation pill alignment (2026-10-27)
+
+The Home and Project invitation actions now sit directly below and align with
+their Google sign-in pills. The signed-out Play flow stores a tab-scoped intent
+before starting Google sign-in; when an eligible user returns to the project,
+that intent suppresses the otherwise automatic welcome dialog. Normal sign-in
+to Home retains the welcome behavior. Real-Chrome `browser_checks/guest_samples.py`
+passed with geometric alignment assertions and sign-in intent persistence;
+`./sigma test` passed, including Ruff, Pyright, frontend typecheck and production
+build. No live provider calls, production configuration changes, or deployment
+occurred.
+
 ## T277 hosted TeX generation HTTP 400 (2026-10-27)
 
 Read-only IAP inspection found production `sigma.service` active and release pin

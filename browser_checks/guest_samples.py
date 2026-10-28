@@ -210,6 +210,12 @@ def exercise(ui_url: str, root: Path) -> None:
         assert len(long_error_toast.inner_text()) < 250
         page.unroute("**/api/test-long-error")
         expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        home_google = page.get_by_role("link", name="Sign in with Google")
+        home_invite = page.get_by_role("button", name="Invite me!")
+        home_google_box = home_google.bounding_box()
+        home_invite_box = home_invite.bounding_box()
+        assert home_invite_box["y"] >= home_google_box["y"] + home_google_box["height"]
+        assert abs(home_invite_box["x"] - home_google_box["x"]) < 2
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
@@ -263,6 +269,12 @@ def exercise(ui_url: str, root: Path) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
         expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
+        project_google = page.get_by_role("link", name="Sign in with Google")
+        project_invite = page.get_by_role("button", name="Invite me!")
+        project_google_box = project_google.bounding_box()
+        project_invite_box = project_invite.bounding_box()
+        assert project_invite_box["y"] >= project_google_box["y"] + project_google_box["height"]
+        assert abs(project_invite_box["x"] - project_google_box["x"]) < 2
         expect(
             page.locator(
                 "header .header-controls button:visible, header .header-controls a:visible"
@@ -314,6 +326,15 @@ def exercise(ui_url: str, root: Path) -> None:
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
         expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
+        page.unroute("**/api/cloud-auth/login**")
+        page.route(
+            "**/api/cloud-auth/login**",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="text/html",
+                body="<!doctype html><title>OAuth fixture</title>",
+            ),
+        )
         with page.expect_request("**/api/cloud-auth/login**") as sign_in_request:
             play_dialog.get_by_role("button", name="Sign in now").click()
         expect(play_dialog).to_have_count(0)
@@ -321,6 +342,7 @@ def exercise(ui_url: str, root: Path) -> None:
         assert sign_in_url.path == "/api/cloud-auth/login", sign_in_url
         return_to = parse_qs(sign_in_url.query).get("return_to", [None])[0]
         assert return_to == f"/project?path={opened_projects[-1]['path']}", return_to
+        assert page.evaluate("sessionStorage.getItem('sigma.playSignInReturn')") == "true"
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         assert not failures, failures

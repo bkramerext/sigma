@@ -2936,7 +2936,7 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill inviteInHeader/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button><HomeInvitationAction/>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill inviteInHeader/><HomeInvitationAction/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}</div></div>
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -3616,6 +3616,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </div>
     </section>
     {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} onSignIn={() => {
+      window.sessionStorage.setItem('sigma.playSignInReturn', 'true');
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
@@ -4228,6 +4229,9 @@ function CloudAuthGate() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [selectingConnection, setSelectingConnection] = useState(false);
   const [welcomeDismissedForPage, setWelcomeDismissedForPage] = useState(false);
+  const [playSignInReturn, setPlaySignInReturn] = useState(() =>
+    window.location.pathname === '/project' && window.sessionStorage.getItem('sigma.playSignInReturn') === 'true'
+  );
   const sponsoredMockSelected = useRef(false);
   const refresh = useCallback(async () => {
     try {
@@ -4267,6 +4271,13 @@ function CloudAuthGate() {
     window.addEventListener('sigma-cloud-auth-refresh', refresh);
     return () => { window.clearInterval(interval); window.removeEventListener('focus', refresh); window.removeEventListener('sigma-cloud-auth-refresh', refresh); };
   }, [refresh]);
+  useEffect(() => {
+    if (!playSignInReturn) return;
+    if (status?.authenticated || window.location.pathname !== '/project') {
+      window.sessionStorage.removeItem('sigma.playSignInReturn');
+      if (window.location.pathname !== '/project') setPlaySignInReturn(false);
+    }
+  }, [playSignInReturn, status?.authenticated]);
   const loadGrants = useCallback(async () => {
     const [response, requestsResponse, feedbackResponse] = await Promise.all([
       fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' }),
@@ -4399,6 +4410,7 @@ function CloudAuthGate() {
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = navigationEntry?.type !== 'reload'
     && (!!status?.account?.sponsorship.eligible || !!status?.account?.invitation_welcome_pending)
+    && !playSignInReturn
     && !welcomeDismissedForPage;
   const showGuestWelcome = !!status?.enabled && !status?.authenticated
     && window.location.pathname !== '/demo'
