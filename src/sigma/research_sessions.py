@@ -2738,7 +2738,13 @@ def _settle_request_budget(
         except BudgetExceeded as exc:
             step["hard_budget_status"] = "usage_exceeded_reservation"
             return str(exc)
-        record["tokens_reserved"] = max(0, int(record.get("tokens_reserved", 0)) - reserved_total)
+        # The cloud provider settlement already releases its single durable
+        # token reservation. A second decrement here can accidentally release
+        # tokens reserved by another concurrent strategy call.
+        if not cloud_research.billing_enabled():
+            record["tokens_reserved"] = max(
+                0, int(record.get("tokens_reserved", 0)) - reserved_total
+            )
         step["hard_budget_status"] = "settled"
         return None
     mark_unknown(ledger, call_id=call_id)
