@@ -1082,12 +1082,31 @@ def test_monthly_global_budget_retains_unknown_provider_holds(
                 db.execute(
                     "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at)"
                     " VALUES(?,?,?,?,?,?,?)",
-                    ("old-month-job", owner.workspace_id, "test-month", "old-month-key", "terminal", old, old),
+                    (
+                        "old-month-job",
+                        owner.workspace_id,
+                        "test-month",
+                        "old-month-key",
+                        "terminal",
+                        old,
+                        old,
+                    ),
                 )
                 db.execute(
                     "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
                     "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    ("old-month-call", "old-month-job", owner.workspace_id, 0.9, "usage_estimated", 1, 1, 0, old, old),
+                    (
+                        "old-month-call",
+                        "old-month-job",
+                        owner.workspace_id,
+                        0.9,
+                        "usage_estimated",
+                        1,
+                        1,
+                        0,
+                        old,
+                        old,
+                    ),
                 )
                 db.commit()
             summary = cloud_research.snapshot()
@@ -1095,9 +1114,7 @@ def test_monthly_global_budget_retains_unknown_provider_holds(
             assert summary["global_spend_period"] == "calendar_month"
             assert summary["global_reset_at"] is not None
             with cloud_research._connect() as db:
-                db.execute(
-                    "UPDATE calls SET status='unknown' WHERE call_id='old-month-call'"
-                )
+                db.execute("UPDATE calls SET status='unknown' WHERE call_id='old-month-call'")
                 db.commit()
             assert cloud_research.snapshot()["global_remaining_usd"] == 0.10
             with cloud_research._connect() as db:
@@ -1113,7 +1130,6 @@ def test_monthly_global_budget_retains_unknown_provider_holds(
                 assert summary["global_reset_at"] is None
         finally:
             cloud_workspaces._CURRENT.reset(context)
-
 
 
 def test_admin_unlimited_allowance_survives_monthly_global_renewal(
@@ -1147,12 +1163,31 @@ def test_admin_unlimited_allowance_survives_monthly_global_renewal(
                 db.execute(
                     "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at)"
                     " VALUES(?,?,?,?,?,?,?)",
-                    ("old-admin-month", owner.workspace_id, "old", "admin-old", "terminal", old, old),
+                    (
+                        "old-admin-month",
+                        owner.workspace_id,
+                        "old",
+                        "admin-old",
+                        "terminal",
+                        old,
+                        old,
+                    ),
                 )
                 db.execute(
                     "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
                     "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    ("old-admin-spend", "old-admin-month", owner.workspace_id, 0.95, "usage_estimated", 1100000, 1100000, 0, old, old),
+                    (
+                        "old-admin-spend",
+                        "old-admin-month",
+                        owner.workspace_id,
+                        0.95,
+                        "usage_estimated",
+                        1100000,
+                        1100000,
+                        0,
+                        old,
+                        old,
+                    ),
                 )
             summary = cloud_research.snapshot()
             assert summary["global_remaining_usd"] == 1.00, summary
@@ -1355,7 +1390,9 @@ def test_json_project_session_playback(
                         new=AsyncMock(return_value=configuration),
                     ),
                     patch.object(research_sessions, "execution_capabilities", return_value=[]),
-                    patch.object(research_sessions, "_call", new=AsyncMock(side_effect=provider)) as calls,
+                    patch.object(
+                        research_sessions, "_call", new=AsyncMock(side_effect=provider)
+                    ) as calls,
                 ):
                     started = await research_sessions.start_session(
                         project.path,
@@ -1652,9 +1689,7 @@ def main() -> None:
                 assert len(saved["artifacts"]) == 1
                 assert len(saved["steps"]) == 2
                 assert saved["calls_used"] == 2
-                assert [step["role"] for step in saved["steps"]] == [
-                    "investigator", "skeptic"
-                ]
+                assert [step["role"] for step in saved["steps"]] == ["investigator", "skeptic"]
                 assert any(event["kind"] == "call.completed" for event in saved["events"])
                 assert saved["outcome"]["metrics"]["operational"]
                 assert saved["estimated_cost_usd"] == integrated["estimated_cost_usd"]
@@ -1744,7 +1779,9 @@ def main() -> None:
                     before = cloud_research.snapshot()
                     outputs = research_outputs()
 
-                    async def completed_call(record, role, context, timeout_seconds=None, step_id=None):
+                    async def completed_call(
+                        record, role, context, timeout_seconds=None, step_id=None
+                    ):
                         del record, role, context, timeout_seconds
                         assert isinstance(step_id, str)
                         return outputs[0], {
@@ -2156,9 +2193,7 @@ def main() -> None:
                         patch.object(
                             research_sessions, "_outcome", return_value={"assessment": "pending"}
                         ),
-                        patch.object(
-                            research_sessions, "_strategy_assessments", return_value=[]
-                        ),
+                        patch.object(research_sessions, "_strategy_assessments", return_value=[]),
                         patch.object(research_sessions, "_portfolio_decision", return_value={}),
                     ):
                         assert (
