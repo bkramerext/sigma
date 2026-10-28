@@ -141,16 +141,22 @@ with sync_playwright() as playwright:
         running_status = page.locator(".session-running.session-status")
         expect(running_status).to_contain_text("running")
         expect(page.locator(".session-progress-inline")).to_contain_text(
-            "Est. cost $0.14"
+            "API-rate equivalent $0.14"
         )
         fixture["cost_status"] = "unavailable"
         fixture["estimated_cost_usd"] = None
         page.reload()
         expect(page.locator(".session-progress-inline")).to_contain_text(
-            "Est. cost unavailable"
+            "API-rate equivalent unavailable"
         )
+        fixture["mode"] = "api_key"
         fixture["cost_status"] = "available"
         fixture["estimated_cost_usd"] = 0.14372
+        page.reload()
+        expect(page.locator(".session-progress-inline")).to_contain_text(
+            "Est. cost $0.14"
+        )
+        fixture["mode"] = "chatgpt"
         assert running_status.locator("i").evaluate(
             "element => element === element.parentElement.lastElementChild"
         )
