@@ -340,27 +340,13 @@ def main(mode: str = "api_key") -> None:
                 fresh_limits = client.get("/api/projects/research-limits", params={"path": path})
                 assert fresh_limits.status_code == 200, fresh_limits.text
                 assert fresh_limits.json()["maximum_estimated_cost_usd"] is None
-                missing_cost_start = client.post(
-                    "/api/projects/research-sessions/start",
-                    json={
-                        "path": path,
-                        "strategy_id": strategy_id,
-                        "idempotency_key": str(uuid4()),
-                        "expected_project_id": project_id,
-                        "expected_binding": binding,
-                        "expected_limits": fresh_limits.json(),
-                    },
-                )
-                assert missing_cost_start.status_code == 400, missing_cost_start.text
-                assert "Configure a maximum estimated session cost" in missing_cost_start.text
-                assert provider_calls == []
                 limits = client.put(
                     "/api/projects/research-limits", json={"path": path, **settings}
                 )
                 assert limits.status_code == 200, limits.text
                 assert limits.json()["model_calls"] == 30
                 assert limits.json()["research_rounds"] == 5
-                assert limits.json()["session_duration_minutes"] == 15
+                assert limits.json()["session_duration_minutes"] == 60
                 assert limits.json()["maximum_estimated_cost_usd"] == 1.0
                 key = str(uuid4())
                 start_body = {

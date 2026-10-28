@@ -7682,9 +7682,12 @@ def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
         "current_action": "Budget limit",
         "reason": "Cloud inference cannot be bounded for this model.",
     }
-    message = research_sessions._portfolio_reservation_failure_message([branch])
+    message = research_sessions._portfolio_limit_message(
+        {"cycle": 1, "cycle_limit": 3, "calls_used": 0, "call_limit": 30, "steps": []},
+        [branch],
+    )
     assert message is not None
-    assert "provider-call reservation failed" in message
+    assert "account or global spending budget" in message
     assert "Cloud inference cannot be bounded" in message
 
 

@@ -746,8 +746,14 @@ def test_explicit_account_allowance_does_not_require_default(root: Path, ledger_
         binding = cloud_workspaces._CURRENT.set(member)
         try:
             candidate = job(member.workspace_id)
-            candidate.update(project_id=project.project.id, project_path=project.path)
+            candidate.update(
+                project_id=project.project.id,
+                project_path=project.path,
+                maximum_estimated_cost_usd=None,
+            )
             cloud_research.prepare_job(candidate)
+            assert cloud_research.claim_job(candidate["id"])
+            cloud_research.reserve_call(candidate["id"], "no-project-cap", 0.20, 10)
         finally:
             cloud_workspaces._CURRENT.reset(binding)
 

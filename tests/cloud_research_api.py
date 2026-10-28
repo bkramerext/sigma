@@ -170,7 +170,7 @@ def main() -> None:
                 assert limits.status_code == 200, limits.text
                 assert limits.json()["model_calls"] == 30
                 assert limits.json()["research_rounds"] == 5
-                assert limits.json()["session_duration_minutes"] == 15
+                assert limits.json()["session_duration_minutes"] == 60
                 assert limits.json()["maximum_estimated_cost_usd"] == 1.0
                 key = str(uuid4())
                 start_body = {
