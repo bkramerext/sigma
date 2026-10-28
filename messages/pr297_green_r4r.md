@@ -164,3 +164,59 @@ The seven requested session-playback acceptance cases belong to the next
 round and were not implemented here. Live OAuth/provider behavior remains
 unverified; no paid call, CI wait, merge, or deployment occurred. R4R is
 reported to the coordinator through the human.
+
+## R4R — same-email personal and sponsor credential separation
+
+Current implementation commit SHA: `4632e4a2c604af1a689d60ff38361813f723128a`.
+The preceding sponsor-identity privacy, local pilot admission, and
+bounded-spend fixes remain in place.
+
+### Defects corrected
+
+- The local Google admin's ChatGPT email was treated as proof of sponsor
+  credential ownership. `/api/ai/auth/begin` now always starts personal OAuth;
+  it never reroutes based on account email. Sponsor maintenance stays on the
+  administrator-only `/api/ai/sponsor-auth/begin` route.
+- Local Google-authenticated users previously shared the local sponsor
+  credential directory. Personal credentials now live in a private
+  subject-derived store, while shared sponsor credentials remain in the
+  SIGMA-owned sponsor store. OAuth attempts retain their intended store through
+  the callback, and personal disconnect only touches the current user's store.
+- The pill now follows the three-state contract: Sponsored ChatGPT,
+  Disconnect from ChatGPT, and Connect to ChatGPT. Personal mode has no
+  sponsorship or allowance text; sponsored mode has the appropriate allowance.
+  Admin sponsor identity and the concise member-safe tooltip/accessibility
+  content are asserted. Failed OAuth leaves the current funding mode intact.
+- Corrected a stale API test assertion: the connection response's `mode` is the
+  provider adapter (`chatgpt`), while funding selection is stored and verified
+  separately as `sponsored`.
+
+### Behavioral coverage and executed checks
+
+- `uv run --locked --no-sync python tests/cloud_auth.py CloudAuthTests.test_local_existing_cookie_keeps_same_email_personal_and_sponsor_credentials_separate CloudAuthTests.test_local_z_and_b_admins_have_unlimited_and_n_has_metered_sponsorship CloudAuthTests.test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth CloudAuthTests.test_local_admin_sponsored_mode_transition_uses_bounded_global_pilot CloudAuthTests.test_local_admin_connection_reports_validated_sponsor_identity CloudAuthTests.test_local_personal_mode_cannot_use_or_disconnect_active_sponsor_credential CloudAuthTests.test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor`
+  — passed, 7 tests. Uses Google Z's existing cookie with deliberate personal
+  mode and no `SIGMA_CLOUD_SPONSOR_EMAIL`, simulates the OAuth redirect,
+  loopback callback, token validation and persistence using the same ChatGPT
+  email for personal and sponsor credentials, then checks actual credential
+  routing, sponsor switch, personal disconnect, sponsor preservation, Z/B
+  unlimited and N metered allowances, and provider/budget mode admission.
+- `uv run --locked --no-sync python tests/cloud_sponsor.py` — passed, 19 tests.
+- `uv run --with playwright python browser_checks/local_admin_sponsor_pill.py`
+  — passed in Chromium. Asserts the three ChatGPT labels, both Google pill
+  states, OAuth request routes and payloads, Connected personal email tooltip,
+  sponsor-mode return and allowance, short hover content and accessibility
+  label, no member-visible sponsor email despite a deliberately overinclusive
+  API fixture, direct personal OAuth for a sponsored user, and canceled-OAuth
+  recovery without funding-mode change.
+- `npm run typecheck` from `frontend/` — passed.
+- Scoped `ruff check`, `ruff format --check`, `pyright` on the changed Python
+  modules, and `git diff --check` — passed.
+
+### Remaining unverified behavior
+
+The API sequence reopens a fresh TestClient with the existing cookie and
+persistent auth directory; it does not launch a separate OS process. Real
+Google/OpenAI OAuth, token validation, provider connectivity, and hosted
+personal OAuth were not exercised. No real provider or paid calls were made.
+The seven live session-playback acceptance scenarios remain for the next
+round. No full CI wait, merge, or deployment occurred.
