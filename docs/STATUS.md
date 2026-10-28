@@ -7629,30 +7629,31 @@ and no merge or deployment occurred. This initial validation did not reproduce
 the pill's local-admin click path; see the refined correction below. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
 
-## PR #297 refined local admin sponsor pill correction (2026-10-28)
+## PR #297 prior local admin sponsor pill correction (superseded, 2026-10-28)
 
-Follow-up to the reproduced admin 403: the frontend had sent the active
-ChatGPT account ID to generic `auth/begin` while local mode marked that account
-as personal. The local `auth_context` now identifies the designated sponsor
-registration with a boolean (without exposing its email). The admin pill routes
-that registration through `sponsor-auth/begin`; after OAuth it selects
-sponsored mode and refreshes connection state. A genuine personal account
-continues through `auth/begin` and remains personal. The designated sponsor
-email is required from `SIGMA_CLOUD_SPONSOR_EMAIL`, never inferred from Google.
-The API independently permits the sponsor path only to verified admins and
-denies member attempts without changing the saved credential. OAuth starts
-after the sponsor store lock is released.
+The prior correction incorrectly required an explicit local sponsor setting
+and used the invited sponsored member's email as the sponsor fixture. Both
+decisions are reverted in the coordinator correction below. The pill routing
+and personal-account distinction remain in place.
 
-Focused checks passed: two named `tests/cloud_auth.py` cases cover the local
-Google admin `zetacontinuation@gmail.com`, configured ChatGPT sponsor
-`nontrivialzeeros@gmail.com`, successful admin routing, and member denial with
-credential retention; `tests/cloud_sponsor.py` passed 19 tests, including
-callback persistence and connected state; Chromium
-`browser_checks/local_admin_sponsor_pill.py` passed sponsor and genuine-personal
-click paths; scoped Ruff, frontend typecheck, and `git diff --check` passed at
-implementation commit `aa3aeecc051d27e5d7c4a9ef20d0fc49eecc1d54`. The broader
-hosted sponsor browser check stopped at a fixture assertion expecting
-`$0.04 remaining` while the welcome dialog rendered without that text. Live
-Google/ChatGPT OAuth and provider connectivity remain unverified. No paid
-calls, full CI wait, merge, or deployment occurred. See
+## PR #297 coordinator review corrections (2026-10-28)
+
+Restored the established local sponsor fallback to
+`cloud_auth.INVITATION_RECIPIENT` (`zetacontinuation@gmail.com`) when
+`SIGMA_CLOUD_SPONSOR_EMAIL` is absent. The actual admin pill regression now
+starts with the Google admin and saved ChatGPT sponsor both
+`zetacontinuation@gmail.com`, personal mode selected, and the sponsor setting
+absent. It verifies sponsor OAuth routing and connected status after simulated
+completion. Genuine personal registrations keep their own route. The
+`/api/ai/sponsor-auth/begin` endpoint is now admin-only; eligible members are
+denied, as they are when they directly submit the sponsor registration to
+`/api/ai/auth/begin`, and the saved sponsor token remains unchanged.
+
+Two focused `tests/cloud_auth.py` cases passed, `tests/cloud_sponsor.py` passed
+19 tests, and Chromium `browser_checks/local_admin_sponsor_pill.py` passed both
+sponsor and personal pill paths. Scoped Ruff, frontend typecheck, and
+`git diff --check` passed at implementation commit
+`52c103c5c58635ceae58815a4d4da4f5f6b86069`. Live Google/ChatGPT OAuth and
+provider connectivity remain unverified; no CI wait, paid call, merge, or
+deployment occurred. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
