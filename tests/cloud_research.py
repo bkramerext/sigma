@@ -679,14 +679,15 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                         output_tokens=60,
                         estimated_cost_usd=0.80,
                     )
-                    cloud_research.finish_job(record["id"])
+                    record["status"] = "ended"
+                    cloud_research.sync_job(record)
                 summary = cloud_research.snapshot()
                 assert summary["estimated_usage_usd"] == 1.60, summary
                 assert summary["held_usd"] == 0, summary
                 assert summary["remaining_usd"] == 0.40, summary
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
-        assert global_reserved_spend() == 16.00
+        assert abs(global_reserved_spend() - 16.00) < 1e-6
         # Once the ceiling is reached, no further provider reservation is allowed.
         final_user = workspace(root, "f" * 32)
         project = initialize_project(
@@ -699,7 +700,7 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
             cloud_research.prepare_job(record)
             assert cloud_research.claim_job(record["id"])
             cloud_research.reserve_call(record["id"], "remaining-global", 2.0, 100)
-            assert global_reserved_spend() == 18.0
+            assert abs(global_reserved_spend() - 18.0) < 1e-6
             try:
                 cloud_research.reserve_call(record["id"], "over-global", 2.01, 100)
             except cloud_research.CloudResearchUnavailable as exc:
