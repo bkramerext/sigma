@@ -1059,7 +1059,7 @@ def reconcile_orphaned_jobs() -> list[str]:
                     if f"research-sessions/{session_id}.json" in members:
                         continue
                 else:
-                    session_record = session_directory / f"{session_id}.json"
+                    session_record = project / "research-sessions" / f"{session_id}.json"
                     if session_record.exists() or session_record.is_symlink():
                         continue
                 with _transaction() as db:
