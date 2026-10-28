@@ -56,6 +56,7 @@ def _ledger_workspace():
                 cloud_workspaces.workspace_for_subject(principal.subject),
                 path=projects_root(),
                 email=principal.email,
+                verified_subject=principal.subject,
             )
     return workspace
 
@@ -126,10 +127,17 @@ def _effective_user_spend_ceiling_decimal() -> Decimal:
     cfg = cloud_auth.config()
     if cfg.enabled and not cfg.error and workspace is not None and workspace.email:
         with cloud_auth._db(cfg) as db:
-            state = db.execute(
-                "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
-                (workspace.workspace_id,),
-            ).fetchone()
+            state = (
+                db.execute(
+                    "SELECT role,access_active,email FROM user_state WHERE subject=?",
+                    (workspace.verified_subject,),
+                ).fetchone()
+                if workspace.verified_subject
+                else db.execute(
+                    "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
+                    (workspace.workspace_id,),
+                ).fetchone()
+            )
         if (
             state is not None
             and state["role"] == "admin"
