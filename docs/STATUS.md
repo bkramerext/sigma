@@ -1,11 +1,14 @@
 ## Guest Play sign-in and invitation pill alignment (2026-10-27)
 
 The Home and Project invitation actions now sit directly below and align with
-their Google sign-in pills. The signed-out Play flow stores a tab-scoped intent
-before starting Google sign-in; when an eligible user returns to the project,
+their Google sign-in pills. Invitation-dialog Google sign-in now uses the underlined
+SIGMA action-link style and concise “Sign in with Google” label. The signed-out
+Play flow stores a tab-scoped intent before starting Google sign-in; when an
+eligible user returns to the project,
 that intent suppresses the otherwise automatic welcome dialog. Normal sign-in
 to Home retains the welcome behavior. Real-Chrome `browser_checks/guest_samples.py`
-passed with geometric alignment assertions and sign-in intent persistence;
+passed with geometric alignment assertions, consistent “Sign in with Google”
+actions in invitation and Ready to Investigate dialogs, and sign-in intent persistence;
 `./sigma test` passed, including Ruff, Pyright, frontend typecheck and production
 build. No live provider calls, production configuration changes, or deployment
 occurred.

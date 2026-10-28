@@ -216,6 +216,19 @@ def exercise(ui_url: str, root: Path) -> None:
         home_invite_box = home_invite.bounding_box()
         assert home_invite_box["y"] >= home_google_box["y"] + home_google_box["height"]
         assert abs(home_invite_box["x"] - home_google_box["x"]) < 2
+        home_invite.click()
+        invitation_dialog = page.get_by_role("dialog", name="Request an invitation")
+        invitation_signin = invitation_dialog.get_by_role("link", name="Sign in with Google")
+        expect(invitation_signin).to_have_attribute("href", "/api/cloud-auth/login?invite=1")
+        assert (
+            invitation_signin.evaluate("element => getComputedStyle(element).textDecorationLine")
+            == "underline"
+        )
+        assert (
+            invitation_signin.evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgba(0, 0, 0, 0)"
+        )
+        invitation_dialog.get_by_role("button", name="Close").click()
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
@@ -293,7 +306,7 @@ def exercise(ui_url: str, root: Path) -> None:
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
         expect(play_dialog).to_contain_text("Sign in to run a research session.")
-        expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
+        expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
         expect(play_dialog.get_by_role("button", name="Cancel")).to_be_visible()
         actions = play_dialog.locator(".settings-actions")
         assert (
@@ -325,7 +338,7 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
-        expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
+        expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
         page.unroute("**/api/cloud-auth/login**")
         page.route(
             "**/api/cloud-auth/login**",
@@ -336,7 +349,7 @@ def exercise(ui_url: str, root: Path) -> None:
             ),
         )
         with page.expect_request("**/api/cloud-auth/login**") as sign_in_request:
-            play_dialog.get_by_role("button", name="Sign in now").click()
+            play_dialog.get_by_role("button", name="Sign in with Google").click()
         expect(play_dialog).to_have_count(0)
         sign_in_url = urlsplit(sign_in_request.value.url)
         assert sign_in_url.path == "/api/cloud-auth/login", sign_in_url

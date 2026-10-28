@@ -3107,7 +3107,7 @@ function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => 
     <div className="settings-body">
       <p id="guest-research-message">Sign in to run a research session.</p>
       <div className="settings-actions session-remove-confirm-actions">
-        <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in now</button>
+        <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in with Google</button>
         <button type="button" className="text-view-link" onClick={dismiss}>Cancel</button>
       </div>
     </div>
@@ -3898,7 +3898,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         ? invitationRecorded
           ? <p role="status">{cloud?.deniedInvitationStatus === 'sending' ? 'Your invitation request is already recorded and being processed.' : "Glad you're interested! Your request has been sent along to the right person!"}</p>
           : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); dialog.current?.close(); }}/>
-        : <a className="project-google-signin google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google to continue</a>}
+        : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>
@@ -4230,7 +4230,7 @@ function CloudAuthGate() {
   const [selectingConnection, setSelectingConnection] = useState(false);
   const [welcomeDismissedForPage, setWelcomeDismissedForPage] = useState(false);
   const [playSignInReturn, setPlaySignInReturn] = useState(() =>
-    window.location.pathname === '/project' && window.sessionStorage.getItem('sigma.playSignInReturn') === 'true'
+    window.sessionStorage.getItem('sigma.playSignInReturn') === 'true'
   );
   const sponsoredMockSelected = useRef(false);
   const refresh = useCallback(async () => {
@@ -4410,7 +4410,7 @@ function CloudAuthGate() {
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = navigationEntry?.type !== 'reload'
     && (!!status?.account?.sponsorship.eligible || !!status?.account?.invitation_welcome_pending)
-    && !playSignInReturn
+    && !(playSignInReturn && window.location.pathname === '/project')
     && !welcomeDismissedForPage;
   const showGuestWelcome = !!status?.enabled && !status?.authenticated
     && window.location.pathname !== '/demo'

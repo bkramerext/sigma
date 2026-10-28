@@ -64,9 +64,18 @@ with sync_playwright() as playwright:
             "Sign in with Google so SIGMA can verify your account before recording an invitation request."
         )
     ).to_be_visible()
-    expect(
-        guest_invite_dialog.get_by_role("link", name="Sign in with Google to continue")
-    ).to_have_attribute("href", "/api/cloud-auth/login?invite=1")
+    expect(guest_invite_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+        "href", "/api/cloud-auth/login?invite=1"
+    )
+    invitation_signin = guest_invite_dialog.get_by_role("link", name="Sign in with Google")
+    assert (
+        invitation_signin.evaluate("element => getComputedStyle(element).textDecorationLine")
+        == "underline"
+    )
+    assert (
+        invitation_signin.evaluate("element => getComputedStyle(element).backgroundColor")
+        == "rgba(0, 0, 0, 0)"
+    )
     guest_invite_dialog.get_by_role("button", name="Close").click()
     expect(page.get_by_role("link", name="Sign in with Google")).to_have_attribute(
         "href", "/api/cloud-auth/login"
