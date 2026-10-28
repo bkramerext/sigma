@@ -90,6 +90,38 @@ class SponsorTests(IsolatedAsyncioTestCase):
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
 
+    async def test_hosted_admin_connection_is_role_based(self):
+        from types import SimpleNamespace
+        from fastapi import HTTPException
+        from sigma import api, cloud_auth
+
+        principal = SimpleNamespace(role="admin", email="admin@example.test", subject="admin-subject")
+        request = SimpleNamespace(state=SimpleNamespace(cloud_principal=principal))
+        cfg = SimpleNamespace(enabled=True, local=False)
+        with (
+            patch.object(cloud_auth, "config", return_value=cfg),
+            patch.object(cloud_auth, "Principal", SimpleNamespace),
+            patch.object(cloud_sponsor, "sponsor_account_id", AsyncMock(side_effect=ProjectError("missing"))),
+            patch.object(chatgpt_auth, "begin", AsyncMock(return_value={"id": "attempt"})) as begin,
+        ):
+            result = await api.auth_begin(api.AuthBeginRequest(), request)
+            self.assertEqual(result["id"], "attempt")
+            begin.assert_awaited_once_with(account_id=None, sponsor=True)
+
+            principal.role = "member"
+            with self.assertRaises(HTTPException) as rejected:
+                await api.auth_begin(api.AuthBeginRequest(), request)
+            self.assertEqual(rejected.exception.status_code, 403)
+
+    async def test_hosted_sponsor_connection_reads_saved_credentials(self):
+        async with ai_store.sponsor_transaction() as state:
+            state["accounts"]["sponsor"] = dict(self.account)
+            state["active"] = "sponsor"
+            state["mode"] = "chatgpt"
+        result = await cloud_sponsor.sponsor_session()
+        self.assertEqual(result["status"], "connected")
+        self.assertEqual(result["account"]["email"], "sponsor@example.test")
+
     async def test_hosted_sponsor_defaults_to_chatgpt_without_api_billing(self):
         with patch.dict(
             os.environ,
