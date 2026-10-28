@@ -7361,3 +7361,22 @@ checks, and full `./sigma test` passed. No live provider call or production
 configuration change was made. The conservative reserve may still reject a call
 under the unchanged $0.25 session cap; that remains to be observed and handled
 without weakening spend accounting.
+
+## Complete project export and import contract (2026-10-28)
+
+The standard `GET /api/projects/export` endpoint and the workspace's Project
+file action now return one portable JSON bundle containing every project file,
+including saved research history, evidence and artifacts. `POST
+/api/projects/import` restores that bundle into the current workspace without
+replacing existing projects. The former structured audit response remains at
+`GET /api/projects/audit`; readable reports continue to use
+`/api/projects/export/report`. `/api/projects/download` remains a compatibility
+alias for the complete bundle. The UI labels the project file as complete and
+importable and explains what it contains.
+
+Focused checks passed: `tests/project_bundle.py`,
+`tests/project_creation.py`, `tests/project_settings.py`, and
+`npm run typecheck` in `frontend/`. `git diff --check` passed. The full
+`./sigma test` run was stopped at the user's request while in
+`tests/research_sessions.py`; it is incomplete. No real-browser check was run for
+the export dialog change. Existing untracked project exports were left untouched.

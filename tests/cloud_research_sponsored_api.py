@@ -390,7 +390,7 @@ def main(mode: str = "api_key") -> None:
                 # Verify the actual owner-facing export boundary after research,
                 # not only the session status endpoint. Then read it again from
                 # a fresh application process to cover hosted workspace restart.
-                exported = client.get("/api/projects/export", params={"path": path})
+                exported = client.get("/api/projects/audit", params={"path": path})
                 assert exported.status_code == 200, exported.text
                 export_data = exported.json()
                 assert export_data["project"]["id"] == project_id
@@ -440,7 +440,7 @@ def main(mode: str = "api_key") -> None:
                         "files": [
                             {
                                 "path": "cloud-research-project.json",
-                                "source": "exact HTTP response bytes from /api/projects/export",
+                                "source": "exact HTTP response bytes from /api/projects/audit",
                                 "content_type": exported.headers.get("content-type"),
                             },
                             {
@@ -481,7 +481,7 @@ with TestClient(cloud_workspace_test_app.app) as reopened:
     assert session.status_code == 200, session.text
     value = session.json()
     assert value["status"] == "ended" and value["outcome"]["assessment"]
-    exported = reopened.get("/api/projects/export", params={"path": path})
+    exported = reopened.get("/api/projects/audit", params={"path": path})
     assert exported.status_code == 200, exported.text
     data = exported.json()
     assert data["project"]["id"] == expected_project_id
