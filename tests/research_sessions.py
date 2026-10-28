@@ -2589,6 +2589,126 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     assert research_sessions.get_limits(str(path)) == future
 
 
+async def test_prior_obligation_reference_compaction_keeps_text_and_traceability(path: Path):
+    view, strategy, _, _ = await setup(path)
+    obligation_texts = [
+        f"Resolve historical boundary case {index} without changing the invariant."
+        for index in range(15)
+    ]
+    artifacts = []
+    for obligation_text in obligation_texts:
+        for _ in range(research_sessions.MAX_OBLIGATION_SOURCE_ARTIFACTS):
+            artifacts.append(
+                {
+                    "id": str(uuid4()),
+                    "strategy_id": strategy.id,
+                    "claim_or_question": "Review the saved boundary case.",
+                    "open_obligations": [obligation_text],
+                }
+            )
+    prior_id = str(uuid4())
+    research_sessions._save(
+        str(path),
+        {
+            "id": prior_id,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy.id,
+            "status": "completed",
+            "created_at": research_sessions._now(),
+            "artifacts": artifacts,
+        },
+    )
+
+    with patch("sigma.sponsor_diagnostics.record") as diagnostic:
+        frozen, omitted, _, omitted_by_strategy, _, _ = (
+            research_sessions._prior_session_obligations_index(
+                str(path), str(uuid4()), [strategy.id], diagnostics=True
+            )
+        )
+    diagnostic.assert_called_once()
+    assert diagnostic.call_args.args[0] == "sponsor_context"
+    diagnostic_status = diagnostic.call_args.args[1]
+    assert diagnostic_status.startswith("o0_b")
+    assert len(diagnostic_status) <= 64 and diagnostic_status.replace("_", "").isalnum()
+
+    assert omitted == 0
+    assert omitted_by_strategy == {}
+    assert {item["text"] for item in frozen} == set(obligation_texts)
+    assert len(frozen) == len(obligation_texts)
+    assert (
+        research_sessions._json_bytes(frozen)
+        <= research_sessions.MAX_PRIOR_OBLIGATION_CONTEXT_BYTES
+    )
+    compacted = [item for item in frozen if item.get("source_refs_omitted_count", 0)]
+    assert compacted
+    for item in compacted:
+        assert len(item["source_refs"]) == 2
+        assert item["source_refs"][0]["artifact_id"] == item["source_artifact_ids"][0]
+        assert item["source_refs"][-1]["artifact_id"] == item["source_artifact_ids"][-1]
+        assert (
+            item["source_refs_omitted_count"]
+            == research_sessions.MAX_OBLIGATION_SOURCE_ARTIFACTS - 2
+        )
+
+    saved = research_sessions._all(str(path))
+    assert len(saved) == 1 and len(saved[0]["artifacts"]) == len(artifacts)
+
+
+async def test_aggregate_prior_obligation_snapshot_retains_all_under_64kb(path: Path):
+    view, first_strategy, _, _ = await setup(path)
+    strategies = [first_strategy]
+    for index in range(2):
+        strategies.append(
+            create_strategy(
+                path,
+                f"Saved approach {index + 2}",
+                "Check a saved result against its boundary cases.",
+            ).project.strategies[-1]
+        )
+
+    expected_texts = set()
+    for strategy_index, strategy in enumerate(strategies):
+        artifacts = []
+        for obligation_index in range(13):
+            text = (
+                f"Investigate saved boundary condition {strategy_index:02d}-{obligation_index:02d}: "
+                "preserve the original invariant and compare the reported cases."
+            )
+            expected_texts.add(text)
+            for _ in range(research_sessions.MAX_OBLIGATION_SOURCE_ARTIFACTS):
+                artifacts.append(
+                    {
+                        "id": str(uuid4()),
+                        "strategy_id": strategy.id,
+                        "claim_or_question": "Review the saved boundary case.",
+                        "open_obligations": [text],
+                    }
+                )
+        research_sessions._save(
+            str(path),
+            {
+                "id": str(uuid4()),
+                "project_path": view.path,
+                "project_id": view.project.id,
+                "strategy_id": strategy.id,
+                "status": "completed",
+                "created_at": research_sessions._now(),
+                "artifacts": artifacts,
+            },
+        )
+
+    frozen, omitted, _, omitted_by_strategy, _, _ = (
+        research_sessions._prior_session_obligations_index(
+            str(path), str(uuid4()), [strategy.id for strategy in strategies]
+        )
+    )
+    assert omitted == 0 and omitted_by_strategy == {}
+    assert {item["text"] for item in frozen} == expected_texts
+    frozen_bytes = research_sessions._json_bytes(frozen)
+    assert 32_000 < frozen_bytes <= research_sessions.MAX_PRIOR_OBLIGATION_CONTEXT_BYTES
+
+
 async def test_prior_obligation_overflow_blocks_before_creating_session(path: Path):
     view, strategy, credential, config = await setup(path)
     prior_id = str(uuid4())
@@ -2636,10 +2756,10 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
         except ProjectError as exc:
             message = str(exc)
             assert "Research was not started" in message
-            assert "create a new strategy informed by the saved findings" in message
+            assert "start a new, narrower strategy informed by its saved findings" in message
             assert "Disable the affected strategy" in message
-            assert omitted_id in message
-            assert indexed[5][strategy.id][0]["text"] in message
+            assert omitted_id not in message
+            assert indexed[5][strategy.id][0]["text"] not in message
         else:
             raise AssertionError("An over-bound history must block before session creation")
 
@@ -2682,10 +2802,11 @@ async def test_prior_obligation_overflow_blocks_before_creating_session(path: Pa
                 str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
             )
         except ProjectError as exc:
-            assert indexed[4][strategy.id][0] in str(exc)
-            assert indexed[5][strategy.id][0]["text"] in str(exc)
-            assert "showing 32 of 41" in str(exc)
-            assert "Editing the original strategy does not remove its history" in str(exc)
+            assert "Research was not started" in str(exc)
+            assert "41 unresolved prior-session obligations" in str(exc)
+            assert "Disable the affected strategy" in str(exc)
+            assert indexed[4][strategy.id][0] not in str(exc)
+            assert indexed[5][strategy.id][0]["text"] not in str(exc)
         else:
             raise AssertionError("Large over-bound history must block before session creation")
     assert (path / "research-sessions" / f"{prior_id}.json").read_bytes() == prior_bytes
@@ -2728,11 +2849,11 @@ def test_limits_validation(path: Path):
     initialize_project(path, "Limits project", "A question")
     before = research_sessions.get_limits(str(path))
     invalid = [
-        {**before, "model_calls": 31},
+        {**before, "model_calls": 121},
         {**before, "research_rounds": 6, "model_calls": 30},
         {**before, "research_rounds": 3, "model_calls": 5},
         {**before, "session_duration_minutes": 7 * 24 * 60 + 1},
-        {**before, "output_tokens_per_call": 16385},
+        {**before, "output_tokens_per_call": 20001},
         {**before, "maximum_estimated_cost_usd": 0.001},
         {**before, "maximum_estimated_cost_usd": 100.01},
         {**before, "maximum_estimated_cost_usd": float("inf")},
@@ -2748,9 +2869,9 @@ def test_limits_validation(path: Path):
     valid_upper = {
         **before,
         "research_rounds": 5,
-        "model_calls": 30,
+        "model_calls": 120,
         "session_duration_minutes": 7 * 24 * 60,
-        "output_tokens_per_call": 16384,
+        "output_tokens_per_call": 20000,
         "maximum_estimated_cost_usd": 100,
     }
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
@@ -5884,6 +6005,18 @@ async def test_single_project_admission(path: Path):
 
 
 async def test_response_transport_and_parsed_bounds(path: Path):
+    repeated_transport_failure = "Research provider transport exceeded the 1 MB safety bound"
+    assert (
+        research_sessions._portfolio_failure_message(
+            [
+                {"status": "failed", "reason": repeated_transport_failure},
+                {"status": "failed", "reason": f"  {repeated_transport_failure}  "},
+                {"status": "failed", "reason": "A separate branch failed."},
+                {"status": "completed", "reason": repeated_transport_failure},
+            ]
+        )
+        == f"{repeated_transport_failure}; A separate branch failed."
+    )
     view, strategy, credential, config = await setup(path)
     oversized_projects = path.parent / "transport.sigma"
     transport_view, transport_strategy, _, _ = await setup(oversized_projects)
@@ -7260,6 +7393,16 @@ def main():
             )
         )
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
+        asyncio.run(
+            test_prior_obligation_reference_compaction_keeps_text_and_traceability(
+                root / "prior-obligation-compaction.sigma"
+            )
+        )
+        asyncio.run(
+            test_aggregate_prior_obligation_snapshot_retains_all_under_64kb(
+                root / "prior-obligation-aggregate.sigma"
+            )
+        )
         asyncio.run(
             test_prior_obligation_overflow_blocks_before_creating_session(
                 root / "prior-obligation-overflow.sigma"

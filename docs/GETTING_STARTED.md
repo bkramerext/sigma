@@ -13,6 +13,69 @@ On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.
 
 Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop SIGMA with **Ctrl+C**, or use `./sigma shutdown` from another terminal. Running `./sigma start` again replaces a verified local instance; unrelated services using the ports are left alone.
 
+To preview sponsored mode locally for the Google account you sign in with, run
+`./sigma start --sponsored`. For eligible accounts, the pill shows the
+remaining allowance from the local sponsored ledger and forces sponsored
+provider selection. Sponsored inference uses SIGMA's designated
+`zetacontinuation@gmail.com` ChatGPT account, never the signed-in member's
+ChatGPT session. For local use, SIGMA reads that account from the private
+`SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
+spend is reserved against the signed-in member's configured allowance before
+provider dispatch. Local sponsored inference selects ChatGPT when
+`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. If the operator provisions a dedicated
+SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
+
+```bash
+SIGMA_CLOUD_INFERENCE_PROVIDER=api_key
+SIGMA_CLOUD_OPENAI_API_KEY_FILE=/absolute/path/to/sigma-sponsored-api-key
+./sigma start --sponsored
+```
+
+The key file must contain the sponsored project's API key. A direct
+`SIGMA_CLOUD_OPENAI_API_KEY` environment variable is also supported, but do not
+set both sources. SIGMA does not use the personal `OPENAI_API_KEY` for sponsored
+calls. The operator must confirm the sponsored API project's billing and usage
+limits before supplying this key; API usage is billed separately from a ChatGPT
+plan. To roll back local service-key routing, unset
+`SIGMA_CLOUD_INFERENCE_PROVIDER` and the dedicated key setting, then restart.
+An account with only `$0.01` remaining may still be unable to start a call:
+the server reserves a conservative, model-specific amount before each provider
+request and never exceeds the member's allowance.
+In local sponsored mode, **Project Settings → Limits** keeps the saved project
+call allowance (up to 30 calls); the hosted six-call cap does not apply. Local
+sponsored sessions remain capped at 15 minutes and $0.25 per session, with the
+member's remaining account allowance enforced separately before each call.
+Hosted deployments retain their own provider setting. The option does not
+enable the hosted forced-sponsored setting. Use `./sigma start` to return to
+normal local mode.
+
+If sponsored Play is temporarily unavailable, the signed-in member's research
+is preserved. The backend reports token-free status codes in the private,
+bounded `sponsor-diagnostics.log` file at the checkout root. Run
+`tail -n 30 sponsor-diagnostics.log` there to read the latest entries. The
+`sponsor_play` event shows whether the start request was accepted or rejected;
+`sponsor_inference` records call start, provider HTTP status, completion, and
+fixed failure categories. Endpoint-specific `sponsor_sessions_api`,
+`sponsor_config_api`, `sponsor_limits_api`, and `sponsor_project_api` events
+record failed project requests, including whether the error body was unusually
+large. No prompt, response, provider message, identity, or credential is
+written to this log.
+`credential_missing` means the server has no usable sponsor session. The
+eligible local member can click the sponsored pill to start the pinned sponsor
+reconnect flow and complete ChatGPT sign-in as `zetacontinuation@gmail.com`;
+local administrators can also start it from **Admin Settings**. The OAuth flow
+is bound to SIGMA's saved sponsor account, and an eligible member cannot access
+admin settings. The same log records
+`sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
+the operator can tell whether renewal completed. A member's Google sign-in
+alone does not renew the server's sponsor credential. A failed personal
+ChatGPT connection returns an eligible member to sponsored mode; only a
+successful personal connection selects personal mode.
+
+To test with mock identities and controls, use `./sigma start --mock-auth`.
+The mock member's $25 allowance is simulated. For its sponsored presentation,
+combine the options: `./sigma start --mock-auth --sponsored`.
+
 ## Start a project
 
 Home offers **Samples** and **Recent** projects. Choose a sample to create your own editable copy, reopen a recent project, or select **New Project** to enter a title, research problem, research type, and difficulty.

@@ -95,7 +95,13 @@ def ready(url: str, instance_id: str | None = None) -> bool:
         return False
 
 
-def run_ui(*, navigate: bool = False, signin: bool = False, mock_auth: bool = False) -> int:
+def run_ui(
+    *,
+    navigate: bool = False,
+    signin: bool = False,
+    mock_auth: bool = False,
+    sponsored: bool = False,
+) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
         return 2
@@ -156,6 +162,7 @@ def run_ui(*, navigate: bool = False, signin: bool = False, mock_auth: bool = Fa
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
+                child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
@@ -172,6 +179,8 @@ def run_ui(*, navigate: bool = False, signin: bool = False, mock_auth: bool = Fa
                                     or key
                                     not in {
                                         "OPENAI_API_KEY",
+                                        "SIGMA_CLOUD_OPENAI_API_KEY",
+                                        "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
                                         "ACCESS_TOKEN",
                                         "REFRESH_TOKEN",
                                         "ID_TOKEN",

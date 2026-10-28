@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from tempfile import mkdtemp
 
 import httpx
@@ -14,8 +15,12 @@ os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
 
-from sigma import proposals
+from sigma import proposals, samples
 from sigma.api import app
+
+# The fixture's project workspace is temporary and private, while sample
+# projects are immutable repository source data that the UI must still list.
+samples.SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 
 __all__ = ["app"]
 real_client = httpx.AsyncClient

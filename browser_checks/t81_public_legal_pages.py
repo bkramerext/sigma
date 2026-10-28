@@ -38,7 +38,7 @@ def main() -> None:
                     expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible()
                     if path == "/privacy":
                         expect(
-                            page.get_by_text("Owner review required before public use", exact=True)
+                            page.get_by_text("Prepared October 26, 2026 · Version 1.0", exact=True)
                         ).to_be_visible()
                     else:
                         expect(
@@ -54,8 +54,8 @@ def main() -> None:
             opener.click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
             expect(dialog).to_be_visible()
-            expect(dialog.get_by_role("link", name="Privacy Policy", exact=True)).to_have_attribute(
-                "href", "/privacy"
+            expect(dialog.get_by_role("link", name="Privacy Notice", exact=True)).to_have_attribute(
+                "href", "/privacy?return_to=%2F&return_dialog=about"
             )
             expect(
                 dialog.get_by_role("link", name="Terms of Service", exact=True)

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import './ai-connection.css';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
-type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; signal?: AbortSignal };
+type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; sponsor?: boolean; signal?: AbortSignal };
 type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<void> };
 const Context = createContext<AIState | null>(null);
 const providerActivity = new Set<string>();
@@ -19,7 +19,10 @@ export function setProviderActivity(key: string, active: boolean) {
 export function beginProviderRequest(label: string): () => void {
   const key = `request:${++providerActivitySequence}:${label}`;
   setProviderActivity(key, true);
-  return () => setProviderActivity(key, false);
+  return () => {
+    setProviderActivity(key, false);
+    window.dispatchEvent(new Event('sigma-sponsored-budget-refresh'));
+  };
 }
 export function watchResearchProviderActivity(path: string, projectId: string): () => void {
   if (researchActivityMonitors.has(projectId)) return () => {};
@@ -66,7 +69,11 @@ export function useAI() { const value = useContext(Context); if (!value) throw n
 const message = (error: unknown) => error instanceof Error ? error.message : 'Could not reach the local server.';
 export async function aiPost<T>(route: string, body: object = {}, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/ai/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
-  const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'AI account change failed'); return data;
+  let data: { error?: string; detail?: string };
+  try { data = await response.json() as typeof data; }
+  catch { data = {}; }
+  if (!response.ok) throw new Error(data.error ?? data.detail ?? 'AI account change failed');
+  return data as T;
 }
 export function AIProvider({ children, unavailable = false }: { children: ReactNode; unavailable?: boolean }) {
   const [info, setInfo] = useState<ConnectionInfo | null>(null);
@@ -106,6 +113,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
         const data: ConnectionInfo = await response.json();
         if (mounted.current && requestGeneration === generation.current) {
           setInfo(data);
+          window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
           const failed = data.status === 'unavailable';
           setHealthError(failed);
           retryCount.current = failed ? retryCount.current + 1 : 0;
@@ -191,7 +199,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
     const popup = controller.signal.aborted ? null : window.open('about:blank', '_blank'); if (popup) popup.opener = null;
     setConnecting(true); setError('');
     try {
-      const data = await aiPost<{ id: string; authorization_url: string }>('auth/begin', { account_id: options.accountId, enable_plan: !!options.enablePlan, retry_attempt_id: !options.newAccount && retryAttempt.current?.accountId === options.accountId ? retryAttempt.current?.id : undefined }, controller.signal);
+      const data = await aiPost<{ id: string; authorization_url: string }>(options.sponsor ? 'sponsor-auth/begin' : 'auth/begin', { account_id: options.accountId, enable_plan: !!options.enablePlan, retry_attempt_id: !options.newAccount && retryAttempt.current?.accountId === options.accountId ? retryAttempt.current?.id : undefined }, controller.signal);
       attempt.id = data.id;
       const url = new URL(data.authorization_url, window.location.origin);
       if (url.origin !== window.location.origin || url.pathname !== `/api/ai/auth/open/${data.id}` || url.search || url.hash) throw new Error('Unsafe sign-in handoff rejected.');
@@ -207,6 +215,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
           retryAttempt.current = state.retryable ? { id: data.id, accountId: options.accountId } : null;
           setError(state.message); return false;
         }
+        if (popup?.closed) { controller.abort(); return false; }
         await new Promise<void>(resolve => { const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve(); }; const timer = window.setTimeout(done, 500); controller.signal.addEventListener('abort', done, { once: true }); });
       }
       return false;
@@ -235,40 +244,100 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ projectHeader = false, cloudFunding }: { projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean } } = {}) {
+export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
+  const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const hosted = cloudFunding?.target === 'hosted';
-  const sponsoredSelected = hosted && cloudFunding?.selectedConnection === 'sponsored';
+  const simulatedSponsored = !!cloudFunding?.simulatedSponsored;
+  const hostedPillLabel = 'Sponsored ChatGPT';
+  const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored';
+  const sponsoredPill = !!hosted || (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
+  const localSponsorNeedsReconnect = cloudFunding?.target === 'local'
+    && !simulatedSponsored
+    && !!cloudFunding.authorized
+    && !!cloudFunding.sponsorshipEligible
+    && sponsoredSelected
+    && ai.info?.mode === 'chatgpt'
+    && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
   const hostedConnected = hosted && sponsoredSelected && cloudFunding?.provider?.status === 'connected';
-  const connected = (hosted ? hostedConnected : status === 'connected') && !googleRequired;
+  const forcedSponsored = !!cloudFunding?.forcedSponsored && !!cloudFunding?.authorized;
+  const connected = (hosted ? hostedConnected : simulatedSponsored
+    ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
+    : status === 'connected') && !googleRequired;
   const disabled = (!hosted && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
-  const dotStatus = projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = hosted
-    ? connected ? 'SIGMA-sponsored API connected' : cloudFunding?.selectingConnection || cloudFunding?.providerLoading ? 'Connecting to SIGMA API…' : 'Use SIGMA-sponsored API'
+  const dotStatus = simulatedSponsored
+    ? (connected ? 'connected' : 'disconnected')
+    : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
+  const visibleLabel = sponsoredPill
+    ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
+      ? 'Connecting to SIGMA-sponsored API…'
+      : hostedPillLabel
     : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+  const allowanceDescription = !cloudFunding?.authorized
+    ? 'Sign in to view your sponsored allowance.'
+    : cloudFunding.loading
+      ? 'Loading your remaining sponsored allowance…'
+      : cloudFunding.error
+        ? 'Your sponsored allowance is unavailable. Try again after reconnecting.'
+        : cloudFunding.budget
+          ? `${simulatedSponsored ? 'This mock sponsorship and its allowance are simulated; research cannot call a live provider. ' : 'SIGMA covers eligible model calls with this sponsored allowance; membership, spending and provider limits still apply. '}${cloudFunding.providerError ? 'Sponsored model connection could not be checked. ' : `Sponsored model connection: ${cloudFunding.provider?.status ?? 'not checked'}. `}${cloudFunding.budget.remaining_usd <= 0 ? 'No sponsored allowance remains.' : `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of $${cloudFunding.budget.allowance_usd.toFixed(2)} per-user allowance.`} $${cloudFunding.budget.estimated_usage_usd.toFixed(2)} estimated and $${cloudFunding.budget.held_usd.toFixed(2)} held.`
+          : sponsoredSelected ? 'Your sponsored allowance is unavailable.' : 'Sponsored access is not selected.';
+  const sponsorTooltip = `${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
+  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : ''}`;
+  const allowanceText = cloudFunding?.budget
+    ? `$${cloudFunding.budget.remaining_usd.toFixed(2)}`
+    : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
   async function connect() {
     if (ai.connecting || ai.transitioning) return;
     try {
       if (hosted) {
+        if (forcedSponsored && sponsoredSelected) return;
         await cloudFunding?.selectConnection?.('sponsored');
         return;
       }
-      await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted' });
+      if (localSponsorNeedsReconnect) {
+        if (await ai.signIn({ sponsor: true })) await ai.refresh('manual');
+        return;
+      }
+      if (cloudFunding?.authorized && cloudFunding.sponsorshipEligible) {
+        if (forcedSponsored && sponsoredSelected) return;
+        if (sponsoredSelected) {
+          const personalConnected = await ai.signIn({ newAccount: true });
+          if (personalConnected) await cloudFunding.selectConnection?.('personal');
+          else await cloudFunding.selectConnection?.('sponsored');
+        } else {
+          await cloudFunding.selectConnection?.('sponsored');
+        }
+        await ai.refresh('manual');
+        return;
+      }
+      const newLocalMemberAccount = !!cloudFunding?.authenticationEnabled
+        && !!cloudFunding.authorized
+        && !cloudFunding.sponsorshipEligible;
+      await ai.signIn({
+        accountId: newLocalMemberAccount ? undefined : ai.info?.active_account,
+        newAccount: newLocalMemberAccount,
+        enablePlan: ai.info?.status === 'plan_not_permitted',
+      });
     } catch {
       // The connection error is shown beside the pill by the AI provider state.
     }
   }
-  return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || ai.connecting || !!ai.handoff}>
-    <summary aria-label={visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted)) return; if (connected) void ai.disconnect(); else void connect(); }}>
-      <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span>
+  if (sponsoredPill && cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0) {
+    return zeroAllowanceAction ?? null;
+  }
+  return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
+    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+      <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
+      {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Sponsored allowance details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip-disabled onClick={event => { event.stopPropagation(); event.preventDefault(); if (localSponsorNeedsReconnect) void connect(); else setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorTooltip}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>
-    {ai.connecting && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>} <button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel</button></p>}
+    {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>}
     {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}
     {cloudFunding?.connectionError && <p className="connection-pill-message" role="alert">{cloudFunding.connectionError}</p>}
   </details>;

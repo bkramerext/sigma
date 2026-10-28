@@ -54,11 +54,11 @@ with sync_playwright() as playwright:
     cases = [
         (
             401,
-            "Model availability requires an authorized session. Sign in again or contact the SIGMA administrator. Saved settings are unchanged.",
+            "Model availability requires an authorized session. Saved settings are unchanged.",
         ),
         (
             403,
-            "Model availability requires an authorized session. Sign in again or contact the SIGMA administrator. Saved settings are unchanged.",
+            "Model availability requires an authorized session. Saved settings are unchanged.",
         ),
         (
             503,

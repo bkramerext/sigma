@@ -1345,6 +1345,91 @@ def export_complete_project(value: str | Path) -> bytes:
     return encode(path)
 
 
+def copy_project_between_workspaces(
+    value: str | Path,
+    source_workspace: Any | None,
+    target_workspace: Any | None,
+) -> str:
+    """Copy a complete project snapshot across an explicit workspace boundary.
+
+    The source remains intact. Project identity, session history, evidence and
+    artifacts are preserved by the portable bundle importer.
+    """
+    import base64
+
+    from sigma import cloud_workspaces
+    from sigma.project_bundle import BundleError, import_bundle
+
+    source_token = (
+        cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None
+    )
+    try:
+        source = project_path(value)
+        if source.suffix not in {".sigma", ".json"}:
+            raise ProjectError("Unsupported project storage format")
+        from sigma.research_sessions import list_sessions
+
+        if any(
+            session.get("status") in {"queued", "running", "paused"}
+            for session in list_sessions(str(source))
+        ):
+            raise ProjectError(
+                "Stop or finish the active research session before changing account access."
+            )
+        payload = json.loads(export_complete_project(source))
+    except (OSError, ValueError, BundleError) as exc:
+        raise ProjectError("Project could not be safely copied to this account.") from exc
+    finally:
+        if source_token is not None:
+            cloud_workspaces.reset(source_token)
+
+    target_token = (
+        cloud_workspaces.bind_workspace(target_workspace) if target_workspace is not None else None
+    )
+    try:
+        encoded_project = payload["files"]["project.json"]
+        document = json.loads(base64.b64decode(encoded_project, validate=True))
+        original_title = document["title"]
+        root = projects_root()
+        imported: Path | None = None
+        with _title_registry_lock(root):
+            for number in range(1, 1001):
+                suffix = (
+                    ""
+                    if number == 1
+                    else " (continued)"
+                    if number == 2
+                    else f" (continued {number})"
+                )
+                title = original_title[: 200 - len(suffix)].rstrip() + suffix
+                _, name = _project_name(title)
+                destination = root / name
+                if _title_key(title) in _occupied_titles(root):
+                    continue
+                bundle_destination = destination.with_suffix(".json")
+                if os.path.lexists(destination) or os.path.lexists(bundle_destination):
+                    continue
+                if title != original_title:
+                    document["title"] = title
+                    payload["files"]["project.json"] = base64.b64encode(
+                        (json.dumps(document, indent=2) + chr(10)).encode("utf-8")
+                    ).decode("ascii")
+                imported = import_bundle(payload, bundle_destination)
+                break
+        if imported is None:
+            raise ProjectError("A unique destination for the copied project is unavailable.")
+        view = inspect_project(imported)
+        from sigma.recents import record_access
+
+        record_access(view)
+        return str(imported)
+    except (KeyError, TypeError, ValueError, OSError, BundleError) as exc:
+        raise ProjectError("Project could not be safely copied to this account.") from exc
+    finally:
+        if target_token is not None:
+            cloud_workspaces.reset(target_token)
+
+
 def migrate_project(value: str | Path, destination: str | Path | None = None) -> ProjectView:
     """Copy a legacy project into one JSON file without deleting its source.
 

@@ -531,6 +531,118 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_admin_allowance_reload_preserves_provider_spend(root: Path, ledger_root: Path) -> None:
+    """A reload starts a new user allowance period but never erases global spend."""
+    owner = workspace(root, "9" * 32)
+    project = initialize_project(owner.path / "reload.sigma", "Reload", "Check allowance reload")
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            first = job(owner.workspace_id)
+            first.update(project_id=project.project.id, project_path=project.path)
+            cloud_research.prepare_job(first)
+            assert cloud_research.claim_job(first["id"])
+            cloud_research.reserve_call(first["id"], "before-reload", 0.2, 10)
+            cloud_research.settle_call(
+                first["id"],
+                "before-reload",
+                input_tokens=5,
+                output_tokens=5,
+                estimated_cost_usd=0.2,
+            )
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='terminal' WHERE session_id=?", (first["id"],))
+            db.close()
+            assert cloud_research.snapshot()["remaining_usd"] == 0.05
+            reset_at = cloud_research.admin_reload_workspace_allowance(
+                owner.workspace_id, "admin@example.org"
+            )
+            summary = cloud_research.snapshot()
+            assert summary["remaining_usd"] == 0.25, summary
+            assert summary["estimated_usage_usd"] == 0, summary
+            assert summary["reserved_and_estimated_usd"] == 0, summary
+            assert global_reserved_spend() == 0.2
+            db = cloud_research._connect()
+            event = db.execute(
+                "SELECT reset_at,actor_email FROM allowance_reload_events WHERE workspace_id=?",
+                (owner.workspace_id,),
+            ).fetchone()
+            db.close()
+            assert event["reset_at"] == reset_at and event["actor_email"] == "admin@example.org"
+
+            second = job(owner.workspace_id)
+            second.update(project_id=project.project.id, project_path=project.path)
+            cloud_research.prepare_job(second)
+            assert cloud_research.claim_job(second["id"])
+            cloud_research.reserve_call(second["id"], "after-reload", 0.25, 10)
+            cloud_research.mark_call_unknown(second["id"], "after-reload")
+            cloud_research.admin_reload_workspace_allowance(owner.workspace_id, "admin@example.org")
+            reloaded = cloud_research.snapshot()
+            assert reloaded["remaining_usd"] == 0.25, reloaded
+            assert reloaded["held_usd"] == 0, reloaded
+            admin_summary = cloud_research.admin_workspace_spending(owner.workspace_id, 0.25)
+            assert admin_summary["reload_eligible"] is False, admin_summary
+            assert global_reserved_spend() == 0.45
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_explicit_account_allowance_does_not_require_default(root: Path, ledger_root: Path) -> None:
+    """A member-specific cap works without configuring a fallback for other accounts."""
+    from sigma import cloud_auth, cloud_sponsor
+
+    member_email = "sponsored-member@example.test"
+    member = workspace(root, "9" * 32, member_email)
+    project = initialize_project(member.path / "explicit-allowance.sigma", "Explicit", "Question")
+    auth_root = root / "auth-explicit-allowance"
+    auth_root.mkdir(mode=0o700)
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_AUTH_LOCAL": "true",
+        "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:8000",
+        "SIGMA_CLOUD_AUTH_HOME": str(auth_root),
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch.object(cloud_sponsor, "inference_provider", return_value="api_key"),
+    ):
+        os.environ.pop("SIGMA_CLOUD_USER_SPEND_CEILING_USD", None)
+        cfg = cloud_auth.config()
+        assert cfg.enabled and cfg.error is None and cfg.database is not None
+        with cloud_auth._db(cfg) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
+                "VALUES('email',?,'member',1,?,0.25)",
+                (member_email, cloud_auth._now()),
+            )
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            candidate = job(member.workspace_id)
+            candidate.update(project_id=project.project.id, project_path=project.path)
+            cloud_research.prepare_job(candidate)
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
     root: Path, ledger_root: Path
 ) -> None:
@@ -600,6 +712,27 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         saved = research_sessions.save_limits(project.path, limits)
         assert saved == limits
         assert research_sessions.get_limits(project.path) == limits
+
+    # Local sponsored sessions need the durable spend ledger, but the hosted
+    # evaluation call cap must not silently rewrite their project setting.
+    sponsored_limits = {
+        **limits,
+        "research_rounds": 3,
+        "model_calls": 12,
+        "session_duration_minutes": 15,
+        "maximum_estimated_cost_usd": 0.25,
+    }
+    with (
+        patch.object(cloud_workspaces, "enabled", return_value=False),
+        patch.object(cloud_research, "billing_enabled", return_value=True),
+    ):
+        saved = research_sessions.save_limits(project.path, sponsored_limits)
+        assert saved == sponsored_limits
+        assert research_sessions.get_limits(project.path) == sponsored_limits
+        assert cloud_research.session_call_ceiling() == cloud_research.MAX_LOCAL_SESSION_CALLS
+
+    with patch.object(cloud_workspaces, "enabled", return_value=True):
+        assert cloud_research.session_call_ceiling() == cloud_research.MAX_SESSION_CALLS
 
 
 def main() -> None:
@@ -1113,6 +1246,12 @@ def main() -> None:
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
         test_workspace_spend_budget(root, budget_ledger)
+        reload_ledger = root / "allowance-reload-ledger"
+        reload_ledger.mkdir(mode=0o700)
+        test_admin_allowance_reload_preserves_provider_spend(root, reload_ledger)
+        explicit_allowance_ledger = root / "explicit-allowance-ledger"
+        explicit_allowance_ledger.mkdir(mode=0o700)
+        test_explicit_account_allowance_does_not_require_default(root, explicit_allowance_ledger)
         allowance_ledger = root / "allowance-ledger"
         allowance_ledger.mkdir(mode=0o700)
         test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(

@@ -24,6 +24,14 @@ provider fixture. They never call OpenAI or use real credentials. The fixture is
 not loaded by `sigma ui` and never belongs in a production launch. Test context
 and model names explicitly say TEST-FIXTURE.
 
+## Local sponsored call limits
+
+With the local SIGMA UI running on `127.0.0.1:5173`, run
+`uv run --with playwright --no-sync python browser_checks/local_sponsored_limits.py`.
+It starts a temporary deterministic API fixture, then uses real Chrome to save a
+12-call setting in Project Settings and verify it is still 12 after reload.
+No provider inference is made.
+
 ## Project About dialog
 
 With Vite running at `127.0.0.1:5173` and the isolated

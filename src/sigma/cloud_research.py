@@ -28,6 +28,7 @@ MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("15.00")
 MAX_SESSION_SPEND_USD = 0.25
 MAX_SESSION_CALLS = 6
+MAX_LOCAL_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
 
 
@@ -36,10 +37,38 @@ class CloudResearchUnavailable(RuntimeError):
 
 
 def _workspace_id() -> str:
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     return workspace.workspace_id
+
+
+def _ledger_workspace():
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        from sigma import cloud_auth
+
+        principal = cloud_auth.local_sponsored_principal(require_selected=False)
+        if principal is not None:
+            from dataclasses import replace
+
+            from sigma.projects import projects_root
+
+            workspace = replace(
+                cloud_workspaces.workspace_for_subject(principal.subject),
+                path=projects_root(),
+                email=principal.email,
+            )
+    return workspace
+
+
+def billing_enabled() -> bool:
+    """Whether provider calls must use the durable sponsored-spend ledger."""
+    if cloud_workspaces.enabled():
+        return True
+    from sigma import cloud_auth
+
+    return cloud_auth.local_sponsored_principal() is not None
 
 
 def _positive_int(name: str, default: int) -> int:
@@ -67,6 +96,12 @@ def _money_ceiling(name: str, *, maximum: Decimal, message: str) -> Decimal:
 
 
 def _spend_ceiling_decimal() -> Decimal:
+    from sigma import cloud_auth
+
+    if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
+    ):
+        return Decimal(str(MAX_SESSION_SPEND_USD))
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,
@@ -83,14 +118,37 @@ def _user_spend_ceiling_decimal() -> Decimal:
 
 
 def _effective_user_spend_ceiling_decimal() -> Decimal:
-    default = _user_spend_ceiling_decimal()
-    workspace = cloud_workspaces.current()
+    from sigma import cloud_auth
+
+    workspace = _ledger_workspace()
+    try:
+        default = _user_spend_ceiling_decimal()
+    except CloudResearchUnavailable:
+        if workspace is None or not workspace.email:
+            raise
+        default = None
     if workspace is None or not workspace.email:
+        if default is None:
+            raise CloudResearchUnavailable("Cloud research user allowance is unavailable.")
         return default
     try:
         from sigma.cloud_auth import effective_spending_allowance
 
-        value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
+        if default is None:
+            from sigma.cloud_auth import _allowance_in_db, _configured_default_allowance, _db
+
+            cfg = cloud_auth.config()
+            with _db(cfg) as db:
+                allowance = _allowance_in_db(
+                    db,
+                    cloud_auth._normalize_email(workspace.email),
+                    _configured_default_allowance(),
+                )
+            if allowance is None:
+                raise ValueError("No per-account sponsored allowance is configured.")
+            value = Decimal(str(allowance))
+        else:
+            value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
     except Exception as exc:
         raise CloudResearchUnavailable("Cloud access spending policy is unavailable.") from exc
     if not value.is_finite() or not Decimal("0.01") <= value <= MAX_GLOBAL_SPEND_USD:
@@ -153,6 +211,28 @@ def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def local_sponsored_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
+    """Bound local sponsored work without applying the hosted six-call cap."""
+    result = dict(limits)
+    calls = min(max(int(result["model_calls"]), 2), MAX_LOCAL_SESSION_CALLS)
+    result["model_calls"] = calls
+    result["research_rounds"] = min(max(int(result["research_rounds"]), 1), calls // 2)
+    result["session_duration_minutes"] = min(
+        int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
+    )
+    result["maximum_estimated_cost_usd"] = MAX_SESSION_SPEND_USD
+    return result
+
+
+def session_call_ceiling() -> int:
+    """Keep the hosted evaluation cap local to hosted workspaces.
+
+    Local sponsored inference still uses the durable per-account spend ledger,
+    but its project call limit is governed by the saved project setting.
+    """
+    return MAX_SESSION_CALLS if cloud_workspaces.enabled() else MAX_LOCAL_SESSION_CALLS
+
+
 def _database() -> Path:
     try:
         root = cloud_workspaces.storage_root()
@@ -207,6 +287,17 @@ def _connect() -> sqlite3.Connection:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS allowance_windows (
+                workspace_id TEXT PRIMARY KEY,
+                reset_at TEXT NOT NULL,
+                updated_by TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS allowance_reload_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id TEXT NOT NULL,
+                reset_at TEXT NOT NULL,
+                actor_email TEXT NOT NULL
+            );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
         if "project_relpath" not in columns:
@@ -251,10 +342,52 @@ def _transaction() -> Iterator[sqlite3.Connection]:
         db.close()
 
 
+def _user_call_amount_units(
+    db: sqlite3.Connection, workspace_id: str, status: str | None = None
+) -> int:
+    window = db.execute(
+        "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (workspace_id,)
+    ).fetchone()
+    where = "WHERE workspace_id=?"
+    parameters: list[Any] = [workspace_id]
+    if window:
+        where += " AND created_at>=?"
+        parameters.append(window["reset_at"])
+    if status:
+        where += " AND status=?"
+        parameters.append(status)
+    return _call_amount_units(db, where, tuple(parameters))
+
+
+def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str:
+    """Start a fresh per-user allowance window while preserving global cost history."""
+    if not isinstance(workspace_id, str) or len(workspace_id) != 32:
+        raise CloudResearchUnavailable("Workspace spending identity is invalid.")
+    if not isinstance(actor_email, str) or not actor_email:
+        raise CloudResearchUnavailable("Allowance reload actor is invalid.")
+    try:
+        with _transaction() as db:
+            reset_at = _now()
+            db.execute(
+                "INSERT INTO allowance_windows(workspace_id,reset_at,updated_by) VALUES(?,?,?) "
+                "ON CONFLICT(workspace_id) DO UPDATE SET reset_at=excluded.reset_at,updated_by=excluded.updated_by",
+                (workspace_id, reset_at, actor_email),
+            )
+            db.execute(
+                "INSERT INTO allowance_reload_events(workspace_id,reset_at,actor_email) VALUES(?,?,?)",
+                (workspace_id, reset_at, actor_email),
+            )
+        return reset_at
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
+
+
 def prepare_job(record: dict[str, Any]) -> None:
     """Atomically reserve a bounded queue slot for a persisted session ID."""
     owner = _workspace_id()
-    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    from sigma.cloud_sponsor import inference_provider
+
+    provider = inference_provider()
     if record.get("mode") != provider or provider not in {"api_key", "chatgpt"}:
         raise CloudResearchUnavailable(
             "Cloud research requires the explicitly configured sponsor provider."
@@ -264,24 +397,31 @@ def prepare_job(record: dict[str, Any]) -> None:
             "Cloud research requires a per-session cost limit and a model with a reviewed price."
         )
     _spend_ceiling_decimal()
-    _user_spend_ceiling_decimal()
+    # An explicit account allowance is sufficient. Require the configured
+    # default only when resolving an account that has no specific allowance.
+    _effective_user_spend_ceiling_decimal()
     _, _, per_user_queue, global_queue = _evaluation_queue_limits()
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")
     maximum_cost = record.get("maximum_estimated_cost_usd")
+    call_ceiling = session_call_ceiling()
     if (
         type(call_limit) is not int
-        or not 2 <= call_limit <= MAX_SESSION_CALLS
+        or not 2 <= call_limit <= call_ceiling
         or type(duration_limit) is not int
         or not 1 <= duration_limit <= MAX_SESSION_MINUTES
         or type(maximum_cost) not in {int, float}
         or not isinstance(maximum_cost, (int, float))
         or not 0.01 <= maximum_cost <= MAX_SESSION_SPEND_USD
     ):
+        if cloud_workspaces.enabled():
+            raise CloudResearchUnavailable(
+                "Hosted cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+            )
         raise CloudResearchUnavailable(
-            "Cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+            "Local sponsored research sessions are capped at 120 calls, 15 minutes, and $0.25. Update Project Settings → Limits."
         )
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     project_relpath = _project_relpath(record, workspace.path)
@@ -382,11 +522,13 @@ def begin_standalone_inference(project_id: str, project_path: str) -> str:
     """Reserve an owner-scoped execution slot for one non-session AI operation."""
     if not isinstance(project_id, str) or not project_id or not isinstance(project_path, str):
         raise CloudResearchUnavailable("Cloud inference project identity is invalid.")
+    from sigma.cloud_sponsor import inference_provider
+
     session_id = str(uuid4())
     prepare_job(
         {
             "id": session_id,
-            "mode": os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key"),
+            "mode": inference_provider(),
             "project_id": project_id,
             "project_path": project_path,
             "idempotency_key": str(uuid4()),
@@ -476,7 +618,7 @@ def start_provider_attempt(
     project_id: str, project_path: str, model: str, payload: Any, output_tokens: int
 ) -> ProviderAttempt | None:
     """Reserve one non-session provider attempt; local calls remain unchanged."""
-    if not cloud_workspaces.enabled():
+    if not billing_enabled():
         return None
     job_id = begin_standalone_inference(project_id, project_path)
     call_id = uuid4().hex
@@ -545,7 +687,7 @@ def finish_provider_attempt(attempt: ProviderAttempt | None) -> None:
 def sync_job(record: dict[str, Any]) -> None:
     """Persist lifecycle transitions as an owner-checked ledger projection."""
     owner = _workspace_id()
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     project_relpath = _project_relpath(record, workspace.path)
@@ -604,7 +746,7 @@ def reconcile_orphaned_jobs() -> list[str]:
     uncertain path/state or any provider-call row is preserved; age is never
     evidence for releasing a job or spend reservation.
     """
-    workspace = cloud_workspaces.current()
+    workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     owner = workspace.workspace_id
@@ -787,7 +929,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 raise CloudResearchUnavailable(
                     "The global inference-spend ceiling has been reached; saved research remains available."
                 )
-            user_used_units = _call_amount_units(db, "WHERE workspace_id=?", (owner,))
+            user_used_units = _user_call_amount_units(db, owner)
             if user_used_units + amount_units > user_ceiling_units:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
@@ -901,16 +1043,20 @@ def snapshot() -> dict[str, Any]:
                 "SELECT status,COUNT(*) AS count FROM jobs WHERE workspace_id=? GROUP BY status",
                 (owner,),
             ).fetchall()
-            total_units = _call_amount_units(db, "WHERE workspace_id=?", (owner,))
-            estimated_units = _call_amount_units(
-                db, "WHERE workspace_id=? AND status='usage_estimated'", (owner,)
+            total_units = _user_call_amount_units(db, owner)
+            estimated_units = _user_call_amount_units(db, owner, "usage_estimated")
+            held_units = _user_call_amount_units(db, owner, "reserved") + _user_call_amount_units(
+                db, owner, "unknown"
             )
-            held_units = _call_amount_units(
-                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (owner,)
-            )
-            unknown = db.execute(
-                "SELECT COUNT(*) FROM calls WHERE workspace_id=? AND status='unknown'", (owner,)
-            ).fetchone()[0]
+            window = db.execute(
+                "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (owner,)
+            ).fetchone()
+            unknown_query = "SELECT COUNT(*) FROM calls WHERE workspace_id=? AND status='unknown'"
+            unknown_parameters: tuple[Any, ...] = (owner,)
+            if window:
+                unknown_query += " AND created_at>=?"
+                unknown_parameters = (owner, window["reset_at"])
+            unknown = db.execute(unknown_query, unknown_parameters).fetchone()[0]
             tokens = db.execute(
                 "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?",
                 (owner,),
@@ -941,12 +1087,21 @@ def admin_workspace_spending(
     allowance_units = _ceiling_units(Decimal(str(allowance))) if allowance is not None else None
     try:
         with _connect() as db:
-            total = _call_amount_units(db, "WHERE workspace_id=?", (workspace_id,))
-            estimated = _call_amount_units(
-                db, "WHERE workspace_id=? AND status='usage_estimated'", (workspace_id,)
+            total = _user_call_amount_units(db, workspace_id)
+            estimated = _user_call_amount_units(db, workspace_id, "usage_estimated")
+            held = _user_call_amount_units(db, workspace_id, "reserved") + _user_call_amount_units(
+                db, workspace_id, "unknown"
             )
-            held = _call_amount_units(
-                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (workspace_id,)
+            window = db.execute(
+                "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (workspace_id,)
+            ).fetchone()
+            reload_query = "SELECT 1 FROM calls WHERE workspace_id=? AND amount_usd>0"
+            reload_parameters: tuple[Any, ...] = (workspace_id,)
+            if window:
+                reload_query += " AND created_at>=?"
+                reload_parameters = (workspace_id, window["reset_at"])
+            reload_eligible = bool(
+                db.execute(reload_query + " LIMIT 1", reload_parameters).fetchone()
             )
             return {
                 "estimated_usage_usd": round(estimated / USD_UNITS, 9),
@@ -955,6 +1110,7 @@ def admin_workspace_spending(
                 if allowance_units is not None
                 else None,
                 "reserved_and_estimated_usd": round(total / USD_UNITS, 9),
+                "reload_eligible": reload_eligible,
             }
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc

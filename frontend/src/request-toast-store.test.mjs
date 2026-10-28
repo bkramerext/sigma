@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  MAX_REQUEST_TOAST_MESSAGE_LENGTH,
   REQUEST_TOAST_EXIT_MS,
   REQUEST_TOAST_LIFETIME_MS,
   RequestToastStore,
@@ -114,12 +115,36 @@ test('dispose and burst eviction clear all timers', () => {
   const clock = new FakeClock();
   const store = makeStore(clock);
   store.add('oldest');
-  for (let index = 0; index < 4; index += 1) store.add(`new ${index}`);
-  assert.equal(store.getSnapshot().length, 4);
-  assert.equal(clock.timers.size, 4);
+  for (let index = 0; index < 5; index += 1) store.add(`new ${index}`);
+  assert.deepEqual(store.getSnapshot().map(item => item.message), ['new 0', 'new 1', 'new 2', 'new 3', 'new 4']);
+  assert.equal(store.getSnapshot().length, 5);
+  assert.equal(clock.timers.size, 5);
   store.dispose();
   assert.equal(store.getSnapshot().length, 0);
   assert.equal(clock.timers.size, 0);
+});
+
+test('adding a sixth toast immediately removes the oldest and keeps five visible', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const toasts = Array.from({ length: 6 }, (_, index) => store.add(`toast ${index}`));
+  assert.deepEqual(store.getSnapshot().map(item => item.id), toasts.slice(1).map(item => item.id));
+  assert.deepEqual(store.getSnapshot().map(item => item.message), [
+    'toast 1', 'toast 2', 'toast 3', 'toast 4', 'toast 5',
+  ]);
+  assert.equal(clock.timers.size, 5);
+  clock.advance(REQUEST_TOAST_LIFETIME_MS);
+  clock.advance(REQUEST_TOAST_EXIT_MS);
+  assert.equal(store.getSnapshot().length, 0);
+  assert.equal(clock.timers.size, 0);
+});
+
+test('long error messages are shortened before they can fill the screen', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const toast = store.add('provider detail '.repeat(200));
+  assert.equal(toast.message.length, MAX_REQUEST_TOAST_MESSAGE_LENGTH - 1);
+  assert.ok(toast.message.endsWith('… [message shortened]'));
 });
 
 test('exit phase slides down, stack gap collapses, and reduced-motion CSS disables motion', async () => {
@@ -127,4 +152,6 @@ test('exit phase slides down, stack gap collapses, and reduced-motion CSS disabl
   assert.match(css, /\.request-toast\[data-phase="exiting"\][^{]*\{[^}]*translateY\(calc\(100% \+ 10px\)\)/s);
   assert.match(css, /\.request-toast-item\[data-phase="exiting"\][^{]*\{[^}]*grid-template-rows:\s*0fr/s);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /max-height:\s*min\(70vh,\s*560px\)/);
+  assert.match(css, /max-height:\s*min\(60vh,\s*480px\)/);
 });

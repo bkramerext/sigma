@@ -967,6 +967,32 @@ substitute for those observations.
 
 ### Selected hostname, production OAuth, secrets, public ingress, launch
 
+#### Hosted sponsored-mode selection
+
+`SIGMA_CLOUD_FORCE_SPONSORED_MODE` is a deployment-wide launch setting and
+defaults to `false` in `deploy/compose.yaml` and `deploy/env.example`. It only
+has an effect when `SIGMA_CLOUD_SPONSORED_ENABLED=true`. With both settings
+enabled, the backend selects sponsored mode for authenticated accounts that
+already qualify under the current invitation and sponsorship rules. Guests,
+uninvited identities, revoked accounts, and accounts without sponsored
+eligibility are not granted sponsored inference. The setting is not a
+user-provided claim or a substitute for per-user grant eligibility.
+
+The server applies the mode at sign-in and status refresh, preserves the
+account's selected model, uses the existing per-user and global spend,
+concurrency, queue, and ledger checks, and rejects a personal-mode switch for
+eligible accounts while the flag is enabled. An exhausted allowance therefore
+blocks inference at the normal server admission boundary. The flag does not
+raise an allowance or select a new model.
+
+To roll back, set `SIGMA_CLOUD_FORCE_SPONSORED_MODE=false` in the protected
+deployment environment and apply the change using the guarded release/start
+procedure below. Existing sponsored selections remain saved; eligible users
+can then choose personal mode through the existing account pill. To disable
+sponsored access entirely, separately set `SIGMA_CLOUD_SPONSORED_ENABLED=false`;
+that existing kill switch resets accounts to personal and denies sponsored
+inference. Neither setting is enabled or changed in production by this issue.
+
 Each action below needs explicit operator approval:
 
 1. Confirm the DuckDNS A record `sigma-research.duckdns.org` equals the
@@ -1318,9 +1344,11 @@ authentication and filesystem-backed workspace implementation.
 
 ## Gate B research execution configuration
 
-Cloud research inference is enabled only when an operator explicitly supplies
-`SIGMA_CLOUD_OPENAI_API_KEY`, `SIGMA_CLOUD_USER_SPEND_CEILING_USD`, and
-`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Initial pilot values are `$2.00` per
+Cloud research inference requires an operator-supplied
+`SIGMA_CLOUD_OPENAI_API_KEY` and `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Set
+`SIGMA_CLOUD_USER_SPEND_CEILING_USD` when authorized accounts may rely on a
+fallback allowance; it may be omitted when each authorized account has an
+explicit email or domain allowance. Initial pilot values are `$2.00` per
 verified Google subject and `$15.00` globally. The five initial invited
 accounts (including the administrator) start with `$2.00` each, leaving `$5.00`
 under the global ceiling for operator-directed testing and unresolved charges.
