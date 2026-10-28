@@ -468,6 +468,21 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
   const provenance = session.outcome.execution_provenance;
   const runMetrics = session.outcome.metrics?.operational ?? [];
+  const budgetDenied = session.steps.some(step => step.failure_kind === 'budget_denied');
+  const budgetReason = session.strategy_runs?.find(branch => /allowance|inference[- ]spend|cost reserve|cost limit/i.test(branch.reason ?? ''))?.reason;
+  const budgetNotice = budgetDenied
+    ? session.calls_used === 0
+      ? 'The available research funds could not cover a provider call. No provider calls were made.'
+      : 'Research stopped because the remaining research funds could not cover another provider call. Saved findings are preserved.'
+    : '';
+  const statusHeading = budgetDenied
+    ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
+    : session.status === 'paused' ? 'Session paused'
+      : session.status === 'stopped' ? 'Session stopped'
+        : session.status === 'failed' ? 'Session failed' : 'Session ended';
+  const statusNextStep = session.next_step_guidance
+    || (budgetDenied ? 'Review the available research allowance before starting another session.'
+      : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
   const zeroPythonRuns = runMetrics.some(item => item.label === 'Python runs by status' && item.value === '0 executions');
   const zeroSageRuns = runMetrics.some(item => item.label === 'SageMath runs by status' && item.value === '0 executions');
   const noSavedLocalComputations = (provenance && provenance.records.length === 0 && provenance.unidentified_count === 0)
@@ -594,7 +609,11 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
       {provenancePrelude}
-      {((session.status === 'paused' || session.status === 'stopped' || session.status === 'failed') || !!session.next_step_guidance) && <aside className="research-pause-guidance" aria-label="Session next steps"><strong>{session.status === 'paused' ? 'Session paused' : session.status === 'stopped' ? 'Session stopped' : session.status === 'failed' ? 'Session failed' : 'Session ended'}</strong>{!!session.message && <p>{session.message}</p>}<p>{session.next_step_guidance || 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.'}</p></aside>}
+      {(budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+        <strong>{statusHeading}</strong>
+        {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
+        <p>{statusNextStep}</p>
+      </aside>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
           {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
@@ -987,7 +1006,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     setExpandedSessionIds(current => new Set(current).add(id));
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
-      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }));
   }
 
@@ -1007,7 +1026,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
         artifact.scrollIntoView({ block: 'center', behavior: 'smooth' });
         setAnnouncement(`Opened saved evidence from Session #${source.session_number}.`);
       } else if (row) {
-        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         setAnnouncement('The owning session is open; inspect its saved evidence.');
       }
     }));
