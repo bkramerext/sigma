@@ -730,6 +730,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
+    public = public or (request.method == "GET" and path.startswith("/api/ai/auth/callback/"))
     public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
@@ -844,6 +845,9 @@ async def middleware(request: Request, call_next):
         and not (
             (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
             or (request.method == "POST" and path == "/api/ai/mode")
+            or (principal.role == "admin" and request.method == "POST" and path in {"/api/ai/auth/begin", "/api/ai/sponsor-auth/begin"})
+            or (principal.role == "admin" and request.method == "GET" and (path.startswith("/api/ai/auth/open/") or path.startswith("/api/ai/auth/attempt/"))
+            or (principal.role == "admin" and request.method == "POST" and path.startswith("/api/ai/auth/cancel/"))
         )
     ):
         return JSONResponse(
