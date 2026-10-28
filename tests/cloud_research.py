@@ -1502,7 +1502,10 @@ def main() -> None:
                 recovered_queue = research_sessions._recover(stale)
                 assert recovered_queue["status"] == "paused"
                 assert recovered_queue["strategy_runs"][0]["status"] == "paused"
-                assert research_sessions._read(stale_project.path, stale["id"])["status"] == "paused"
+                saved_queue = research_sessions._read(stale_project.path, stale["id"])
+                assert saved_queue["status"] == "paused"
+                assert saved_queue["steps"] == []
+                assert saved_queue["events"][-1]["kind"] == "interrupted"
                 assert cloud_research.job_status(stale["id"]) == "interrupted"
 
                 # A reconnect can spawn a worker before anyone opens the
@@ -1536,6 +1539,8 @@ def main() -> None:
                 )
                 assert worker_snapshot["status"] == "paused"
                 assert worker_snapshot["strategy_runs"][0]["status"] == "paused"
+                assert worker_snapshot["steps"] == []
+                assert worker_snapshot["events"][-1]["kind"] == "interrupted"
                 assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
