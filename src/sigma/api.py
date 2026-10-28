@@ -1349,7 +1349,9 @@ async def sponsor_auth_begin(request: Request):
         try:
             account = cloud_auth._persist_user_state(cfg, principal)
         except (OSError, RuntimeError, sqlite3.Error):
-            raise HTTPException(503, "Sponsored account eligibility could not be checked.") from None
+            raise HTTPException(
+                503, "Sponsored account eligibility could not be checked."
+            ) from None
         if (
             principal.role != "member"
             or not cloud_auth.sponsored_access_enabled()
