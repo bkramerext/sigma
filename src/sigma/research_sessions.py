@@ -2682,21 +2682,24 @@ def _potential_truncation_fields(role: str, output: dict[str, Any]) -> list[str]
 def _refresh_token_accounting(record: dict[str, Any]) -> None:
     """Aggregate call usage without presenting missing usage as a zero total."""
     steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
-    completed = [step for step in steps if step.get("status") in {"completed", "incomplete"}]
+    # A provider can complete and report billable tokens even when the
+    # returned answer fails a local content/acknowledgment check. Include
+    # these securely metered failed attempts, but never infer token usage
+    # for rejected, timed-out, or unknown-dispatch calls.
+    metered = [
+        step
+        for step in steps
+        if step.get("status") in {"completed", "incomplete"}
+        or step.get("attempt_status") == "usage_estimated"
+    ]
     known = [
         step["token_usage"]
-        for step in completed
+        for step in metered
         if isinstance(step.get("token_usage"), dict)
         and type(step["token_usage"].get("input_tokens")) is int
         and type(step["token_usage"].get("output_tokens")) is int
     ]
-    incomplete_steps = any(
-        step.get("status") not in {"completed", "incomplete"}
-        or not isinstance(step.get("token_usage"), dict)
-        or type(step["token_usage"].get("input_tokens")) is not int
-        or type(step["token_usage"].get("output_tokens")) is not int
-        for step in steps
-    )
+    incomplete_steps = len(known) != len(steps)
     record["tokens_used"] = (
         sum(item["input_tokens"] + item["output_tokens"] for item in known) if known else None
     )
