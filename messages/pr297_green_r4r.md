@@ -82,3 +82,51 @@ sponsor reconnection path and genuine personal connection path are preserved.
 Live Google/ChatGPT OAuth and real provider connectivity remain unverified.
 No paid calls, CI wait, merge, or deployment occurred. Updated R4R is reported
 to the coordinator through the human.
+
+## Follow-up: local admin mode admission and connected identity
+
+Implementation commit: `4b3c71e24b4580096092e888d593165725225130` on
+`coordinator/signin-session-playback-stabilization`.
+
+The 503 cause was a pre-selection dependency: `/api/ai/mode` snapshots the
+ledger before persisting `mode=sponsored`, but `_spend_ceiling_decimal()` and
+`_global_spend_period()` only enabled local pilot defaults when the current
+selection was already sponsored. With an eligible Google admin deliberately
+in personal mode and no explicit global ceiling, the snapshot incorrectly
+required `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. These checks now use verified
+local sponsorship eligibility independently of selected mode. The local pilot
+still has a bounded $50 monthly global ceiling; explicit configured ceilings
+are unchanged. A failing snapshot does not change the selected mode.
+
+The established auth-state behavior selects Sponsored mode for an eligible
+admin unless personal mode was explicitly selected. Sponsor connection state
+is derived from the saved sponsor session and a catalog check. It now carries
+the authenticated account email to `/api/ai/connection` for the pill tooltip;
+the models response omits it, and no token is exposed. The pill shows Sponsored
+ChatGPT with Unlimited individual allowance initially, then ChatGPT Connected
+with the validated account identity after successful connection.
+
+### Focused verification
+
+- Three focused `tests/cloud_auth.py` cases — passed: the existing-cookie
+  admin’s default and deliberate personal modes; snapshot 503 leaves personal
+  mode unchanged; successful sponsored-mode selection works with no explicit
+  global ceiling and reports the bounded `$50` calendar-month ceiling; and the
+  local `/api/ai/connection` reports connected plus
+  `zetacontinuation@gmail.com` without returning tokens.
+- `uv run --locked --no-sync python tests/cloud_sponsor.py` — passed, 19 tests.
+  The simulated OAuth callback validates and persists the exact designated
+  `zetacontinuation@gmail.com` sponsor identity; subsequent saved-session and
+  catalog checks report connected. The models response continues to hide the
+  identity.
+- `npm run typecheck --prefix frontend` — passed.
+- `uv run --with playwright --no-project python browser_checks/local_admin_sponsor_pill.py`
+  — passed in Chromium. It checks initial Sponsored ChatGPT / Unlimited,
+  sponsor OAuth completion, the Connected label and account-email tooltip,
+  the sponsored-member unavailable/no-OAuth state, and the personal route.
+- Scoped Ruff check/format and `git diff --check` — passed.
+
+The OAuth code exchange/token validation and catalog check use deterministic
+fixtures; real Google/OpenAI sign-in and provider connectivity remain
+unverified. No paid calls, CI wait, merge, or deployment occurred. Updated R4R
+is reported to the coordinator through the human.

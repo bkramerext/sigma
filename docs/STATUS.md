@@ -7676,3 +7676,33 @@ sponsor and personal pill paths. Scoped Ruff, frontend typecheck, and
 provider connectivity remain unverified; no CI wait, paid call, merge, or
 deployment occurred. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
+
+## PR #297 local admin sponsor live-acceptance corrections (2026-10-28)
+
+The local `/api/ai/mode` transition checked a spending snapshot before saving
+the sponsored selection. Both the local pilot ceiling and its monthly window
+were gated on the current selection, so a verified eligible admin in personal
+mode was treated as outside the pilot and the snapshot failed when no explicit
+global ceiling was configured. The decision now uses verified local
+sponsorship eligibility while remaining before the mode switch. The bounded
+local pilot remains capped at $50 per UTC calendar month; explicit configured
+ceilings remain honored. A failed snapshot still returns 503 before changing
+the selected mode.
+
+The existing-cookie admin coverage checks default sponsor mode unless personal
+was explicitly selected, then checks successful selection and unchanged mode
+after a simulated snapshot failure. A post-OAuth local connection regression
+reads the saved sponsor credential, checks the ChatGPT catalog through a mock
+validation result, and verifies `connected` plus the sponsor email with no
+tokens in the response. The backend attaches that email only to connection
+status, not the broader models response. Chromium checks the initial Sponsored
+ChatGPT / Unlimited pill and Connected label and tooltip; OAuth remains
+simulated.
+
+Three focused local cloud-auth tests, all 19 `tests/cloud_sponsor.py` tests,
+frontend typecheck, Chromium `browser_checks/local_admin_sponsor_pill.py`,
+Ruff check/format, and `git diff --check` passed at implementation commit
+`4b3c71e24b4580096092e888d593165725225130`. Real Google/OpenAI OAuth,
+provider validation, and live allowance-store availability remain unverified.
+No paid calls, CI wait, merge, or deployment occurred. See
+[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
