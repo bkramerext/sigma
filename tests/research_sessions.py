@@ -7432,6 +7432,7 @@ def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     record = {
         "mode": "chatgpt",
         "model": MODEL,
+        "reasoning_effort": "high",
         "cloud_sponsored": True,
         "maximum_estimated_cost_usd": None,
         "output_token_limit": 12_000,
