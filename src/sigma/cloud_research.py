@@ -654,7 +654,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                         raise CloudResearchUnavailable(
                             "Your cumulative cloud research allowance has been reached; saved research remains available."
                         )
-                    if _user_call_tokens(db, owner) >= token_budget:
+                    if not unlimited_admin and _user_call_tokens(db, owner) >= token_budget:
                         raise CloudResearchUnavailable(
                             "The per-user research token budget has been reached."
                         )
@@ -684,7 +684,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
-            if _user_call_tokens(db, owner) >= token_budget:
+            if not unlimited_admin and _user_call_tokens(db, owner) >= token_budget:
                 raise CloudResearchUnavailable(
                     "The per-user research token budget has been reached."
                 )
@@ -1188,7 +1188,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
             user_tokens = _user_call_tokens(db, owner)
-            if user_tokens + token_reservation > token_budget:
+            if not unlimited_admin and user_tokens + token_reservation > token_budget:
                 raise CloudResearchUnavailable(
                     "The per-user research token budget has been reached."
                 )
