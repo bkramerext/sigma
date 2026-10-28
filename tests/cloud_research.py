@@ -709,9 +709,9 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                     project_path=project.path,
                     maximum_estimated_cost_usd=None,
                 )
-                cloud_research.prepare_job(record)
-                assert cloud_research.claim_job(record["id"])
                 if extra_number < 12:
+                    cloud_research.prepare_job(record)
+                    assert cloud_research.claim_job(record["id"])
                     cloud_research.reserve_call(
                         record["id"], f"at-global-{extra_number}", amount, 100
                     )
@@ -724,11 +724,13 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                     assert abs(global_reserved_spend() - 20.00) < 1e-6
                     assert cloud_research.snapshot()["remaining_usd"] == 2.00
                     try:
-                        cloud_research.reserve_call(record["id"], "over-global", amount, 100)
+                        cloud_research.prepare_job(record)
                     except cloud_research.CloudResearchUnavailable as exc:
                         assert "global inference-spend ceiling" in str(exc), str(exc)
                     else:
-                        raise AssertionError("An over-ceiling call by a funded user was admitted")
+                        raise AssertionError("An over-ceiling session was queued")
+                    # A hopeless new session must not be saved in the ledger.
+                    assert cloud_research.job_status(record["id"]) is None
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
 
