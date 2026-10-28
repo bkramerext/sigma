@@ -7396,8 +7396,41 @@ def test_outcome_includes_derived_execution_provenance() -> None:
     assert record == original
 
 
+def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
+    strategy_id = str(uuid4())
+    branch = {
+        "strategy_id": strategy_id,
+        "strategy_title": "Direct counting",
+        "status": "ended",
+        "current_action": "Cost limit",
+        "cycle": 1,
+        "calls_used": 1,
+        "reason": "A conservative cost reserve prevented another provider call.",
+    }
+    record = {
+        "status": "ended",
+        "cycle": 1,
+        "cycle_limit": 3,
+        "calls_used": 1,
+        "call_limit": 6,
+        "terminal_reason": f"Direct counting: {branch['reason']}",
+        "strategy_runs": [branch],
+        "steps": [{"strategy_id": strategy_id, "cycle": 1, "role": "investigator"}],
+        "artifacts": [],
+    }
+    message = research_sessions._portfolio_cost_limit_message(record, [branch])
+    assert message is not None
+    assert "cycle 1 of 3" in message
+    assert "1/6 calls" in message
+    assert "No Skeptic call was dispatched" in message
+    outcome = research_sessions._outcome_without_metrics(record)
+    assert "conservative cost reserve" in outcome["summary"]
+    assert "conservative cost reserve" in outcome["caveats"][-1]
+
+
 def main():
     test_outcome_includes_derived_execution_provenance()
+    test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()
