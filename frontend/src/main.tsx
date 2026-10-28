@@ -4560,8 +4560,7 @@ function CloudAuthGate() {
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = navigationEntry?.type !== 'reload'
-    && (!!status?.account?.invitation_welcome_pending
-      || (!!status?.account?.sponsorship.eligible && status?.user?.role !== 'admin'))
+    && !!status?.account?.invitation_welcome_pending
     && !(playSignInReturn && window.location.pathname === '/project')
     && !welcomeDismissedForPage;
   const showGuestWelcome = !!status?.enabled && !status?.authenticated
