@@ -279,8 +279,8 @@ def main(mode: str = "api_key") -> None:
                 )
                 admin_budget = client.get("/api/cloud-research/budget")
                 assert admin_budget.status_code == 200, admin_budget.text
-                assert admin_budget.json()["allowance_usd"] == 0.25
-                assert admin_budget.json()["remaining_usd"] == 0.25
+                assert admin_budget.json()["allowance_usd"] == float(cloud_research._spend_ceiling_decimal())
+                assert admin_budget.json()["remaining_usd"] == float(cloud_research._spend_ceiling_decimal())
                 client.headers.pop("X-Test-Role")
                 client.headers.update(
                     {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
