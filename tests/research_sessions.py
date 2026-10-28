@@ -6705,8 +6705,7 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     resumed_record["steps"][0]["backend_build_commit"] = "2" * 40
     resumed_metrics = research_sessions._outcome_metrics(resumed_record, loaded["outcome"])
     resumed_build = next(
-        item["value"] for item in resumed_metrics["operational"]
-        if item["label"] == "Backend build"
+        item["value"] for item in resumed_metrics["operational"] if item["label"] == "Backend build"
     )
     assert resumed_build == "Created: " + "1" * 40 + " · calls: " + "2" * 40
     assert metrics["sources"] == {
