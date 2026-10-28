@@ -24,7 +24,9 @@ def default_ledger() -> Path:
     if configured:
         return Path(configured).expanduser() / "cloud-research.sqlite3"
     auth = Path(
-        os.environ.get("SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth"))
+        os.environ.get(
+            "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
+        )
     ).expanduser()
     return auth / "workspaces" / "cloud-research.sqlite3"
 
@@ -44,7 +46,11 @@ def inspect_ledger(path: Path) -> dict[str, object]:
     if path.is_symlink():
         raise ValueError("Refusing symlinked ledger")
     info = path.stat()
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or info.st_mode & 0o077
+    ):
         raise ValueError("Refusing a ledger with unsafe ownership or permissions")
     uri = f"file:{quote(str(path.resolve()), safe='/')}?mode=ro"
     with sqlite3.connect(uri, uri=True, timeout=5) as db:
@@ -81,7 +87,10 @@ def inspect_ledger(path: Path) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--ledger", type=Path, default=default_ledger(), help="Existing private ledger file"
+        "--ledger",
+        type=Path,
+        default=default_ledger(),
+        help="Existing private ledger file",
     )
     args = parser.parse_args()
     try:
