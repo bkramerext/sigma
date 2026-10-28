@@ -1553,7 +1553,8 @@ class CloudAuthTests(TestCase):
         mismatch = mismatch_context.__enter__()
         self.addCleanup(mismatch_context.__exit__, None, None, None)
         denied = self.finish(
-            email="zetacontinuation@gmail.com", subject="different-google-subject",
+            email="zetacontinuation@gmail.com",
+            subject="different-google-subject",
             client=mismatch,
         )
         self.assertEqual(denied.headers["location"], "/?access=denied")
