@@ -1023,18 +1023,97 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert research_sessions.get_limits(project.path)["session_duration_minutes"] == 60
 
 
-def test_local_global_spend_default_stays_at_legacy_safe_ceiling() -> None:
-    """Raising project session caps does not implicitly raise the local aggregate ceiling."""
+def test_local_global_spend_default_supports_small_team_pilot() -> None:
+    """The local pilot renews monthly, while explicit operator caps stay cumulative."""
     with patch("sigma.cloud_auth.local_sponsored_principal", return_value=object()):
-        with patch.dict(os.environ, {}, clear=False):
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": ""}, clear=False):
             os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
-            assert cloud_research._spend_ceiling_decimal() == Decimal("0.25")
-            assert "$0.25" in cloud_research._global_ceiling_failure_message()
-            assert "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD" in (
-                cloud_research._global_ceiling_failure_message()
-            )
-        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00"}):
+            assert cloud_research._spend_ceiling_decimal() == Decimal("50.00")
+            assert cloud_research._global_spend_period() == "calendar_month"
+            assert "$50 monthly" in cloud_research._global_ceiling_failure_message()
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "",
+            },
+        ):
             assert cloud_research._spend_ceiling_decimal() == Decimal("5.00")
+            assert cloud_research._global_spend_period() == "cumulative"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "calendar_month",
+            },
+        ):
+            assert cloud_research._global_spend_period() == "calendar_month"
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "invalid"}):
+            try:
+                cloud_research._global_spend_period()
+            except cloud_research.CloudResearchUnavailable:
+                pass
+            else:
+                raise AssertionError("Invalid spend periods must fail closed")
+
+
+def test_monthly_global_budget_retains_unknown_provider_holds(
+    root: Path, ledger_root: Path
+) -> None:
+    """Old settled calls age out, but unresolved calls keep their full hold."""
+    from datetime import UTC, datetime, timedelta
+
+    owner = workspace(root / "monthly-global", "a" * 32)
+    old = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "calendar_month",
+            },
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        context = cloud_workspaces._CURRENT.set(owner)
+        try:
+            with cloud_research._connect() as db:
+                db.execute(
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    ("old-month-job", owner.workspace_id, "test-month", "old-month-key", "terminal", old, old),
+                )
+                db.execute(
+                    "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
+                    "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    ("old-month-call", "old-month-job", owner.workspace_id, 0.9, "usage_estimated", 1, 1, 0, old, old),
+                )
+                db.commit()
+            summary = cloud_research.snapshot()
+            assert summary["global_remaining_usd"] == 1.00
+            assert summary["global_spend_period"] == "calendar_month"
+            assert summary["global_reset_at"] is not None
+            with cloud_research._connect() as db:
+                db.execute(
+                    "UPDATE calls SET status='unknown' WHERE call_id='old-month-call'"
+                )
+                db.commit()
+            assert cloud_research.snapshot()["global_remaining_usd"] == 0.10
+            with cloud_research._connect() as db:
+                db.execute(
+                    "UPDATE calls SET status='usage_estimated' WHERE call_id='old-month-call'"
+                )
+                db.commit()
+            assert cloud_research.snapshot()["global_remaining_usd"] == 1.00
+            # Cumulative remains the default for explicitly configured caps.
+            with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "cumulative"}):
+                summary = cloud_research.snapshot()
+                assert summary["global_remaining_usd"] == 0.10
+                assert summary["global_reset_at"] is None
+        finally:
+            cloud_workspaces._CURRENT.reset(context)
+
 
 
 def test_json_project_orphan_recovery(
