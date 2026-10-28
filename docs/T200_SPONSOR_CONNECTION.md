@@ -1,11 +1,9 @@
 # Hosted ChatGPT sponsor connection (#200)
 
-The designated sponsor is the account explicitly configured by
-`SIGMA_CLOUD_SPONSOR_EMAIL` (the example below uses
-`zetacontinuation@gmail.com`). Google OIDC grants SIGMA workspace access; it
-does not issue OpenAI model credentials. The sponsor may be different from the
-Google administrator and must separately authorize ChatGPT plan use. Changing
-an OpenAI email does not create this authorization.
+The designated sponsor is `zetacontinuation@gmail.com`. Google OIDC grants
+SIGMA workspace access; it does not issue OpenAI model credentials. The sponsor
+must separately authorize ChatGPT plan use. Changing an OpenAI email does not
+create this authorization.
 
 ## Implementation
 

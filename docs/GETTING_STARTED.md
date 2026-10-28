@@ -16,12 +16,10 @@ Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop 
 To preview sponsored mode locally for the Google account you sign in with, run
 `./sigma start --sponsored`. For eligible accounts, the pill shows the
 remaining allowance from the local sponsored ledger and forces sponsored
-provider selection. Sponsored inference uses the ChatGPT account configured by
-`SIGMA_CLOUD_SPONSOR_EMAIL`, never the signed-in member's Google identity or
-personal ChatGPT session. Set this to the designated sponsor address; it may
-differ from the Google administrator email. For local use, SIGMA reads that
-account from the private `SIGMA_AUTH_HOME` store and pins it to this explicit
-address. Local
+provider selection. Sponsored inference uses SIGMA's designated
+`zetacontinuation@gmail.com` ChatGPT account, never the signed-in member's
+ChatGPT session. For local use, SIGMA reads that account from the private
+`SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
 spend is reserved against the signed-in member's configured allowance before
 provider dispatch. Local sponsored inference selects ChatGPT when
 `SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. Local sponsored research has a bounded **$50-per-UTC-calendar-month shared
