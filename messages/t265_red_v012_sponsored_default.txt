@@ -1,0 +1,28 @@
+Red · v0.1.2 hosted sponsored default follow-up
+
+Branch: red/release-v0.1.2-build-identity
+Deployed source commit: 2761c0e12190807bafabe58445d6beac479140c4
+
+Hosted accounts eligible for sponsorship now default to SIGMA-sponsored model
+access, avoiding the unsupported personal ChatGPT authentication path. The new
+SQLite model_access_selected marker preserves deliberate account choices across
+status refreshes. The additive schema migration preserves existing research,
+identity, and accounting records and does not change provider configuration or
+allowance limits.
+
+Validation: focused cloud auth tests (60) and hosted personal isolation tests
+(3) passed; full ./sigma test passed all steps, including Ruff, formatting,
+Pyright (0 diagnostics), frontend typecheck, and production build. Production
+pin, checkout, frontend/backend image revision labels, service activity,
+container health, and migration column were checked read-only. The public
+endpoint probe passed. Real headless Chrome showed Version 0.1.2 · Build
+2761c0e in About with no page errors. No provider inference or OAuth sign-in was
+performed. Hosted two-identity acceptance and a separately authorized live
+provider-backed sponsored inference remain unverified.
+
+Deployment used the established GCE release helper with backup-verified and
+schema-compatible assertions. Production data/configuration were preserved. A
+direct SSH attempt timed out; IAP SSH was used. An SSH troubleshooting command
+briefly enabled Network Management API and created a temporary connectivity
+test; that test was deleted and the API was disabled to restore prior project
+configuration.

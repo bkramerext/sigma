@@ -7361,3 +7361,36 @@ checks, and full `./sigma test` passed. No live provider call or production
 configuration change was made. The conservative reserve may still reject a call
 under the unchanged $0.25 session cap; that remains to be observed and handled
 without weakening spend accounting.
+
+### Hosted sponsored default and v0.1.2 deployment follow-up (2026-10-27)
+
+The hosted screenshot's personal-auth error came from eligible cloud accounts
+being initialized in `personal` mode even though personal ChatGPT OAuth is not
+available in hosted SIGMA. Eligible hosted accounts now default to the
+SIGMA-sponsored provider. A persisted `model_access_selected` marker keeps an
+account's explicit connection choice stable across status refreshes. The
+SQLite migration adds that column with a default and does not remove or rewrite
+research, account, or sponsorship ledger data. Sponsorship eligibility,
+allowance limits, and provider configuration remain unchanged.
+
+Deployed exact source commit
+`2761c0e12190807bafabe58445d6beac479140c4` on the existing GCE release helper
+with backup and schema compatibility assertions. The configured release pin,
+checkout HEAD, frontend image revision, and backend image revision all match.
+`sigma.service` is active and backend/frontend/edge containers are healthy. The
+production auth database has the new explicit-choice column. The public endpoint
+probe passed DNS, private-port closure, HTTP-to-HTTPS redirect, TLS, SPA deep
+link, and same-origin API checks. Real headless Chrome opened About and showed
+`Version 0.1.2 · Build 2761c0e` without page errors. `./sigma test` passed all
+steps, including Ruff, formatting, Pyright, frontend typecheck, and production
+build. No paid provider inference was run.
+
+Hosted Google sign-in and two-distinct-identity isolation acceptance remain
+unverified in this run because authorized test identities were not available in
+the execution environment. A live provider-backed sponsored inference also
+remains unverified; the acceptance procedure requires a separately authorized
+named budget ceiling. Prior target-host sandbox and anonymous/public-demo checks
+are recorded above for the preceding release commit; they do not substitute for
+repeating identity- and provider-dependent acceptance on this release. No
+production data or deployment credentials were read or changed; the auth schema
+migration is additive.
