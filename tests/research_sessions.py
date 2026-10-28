@@ -7462,10 +7462,18 @@ def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     assert "Cloud inference cannot be bounded" in message
 
 
+def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True):
+        assert research_sessions._portfolio_call_concurrency() == 1
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False):
+        assert research_sessions._portfolio_call_concurrency() == 3
+
+
 def main():
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
+    test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()

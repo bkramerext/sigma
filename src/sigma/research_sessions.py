@@ -8255,6 +8255,11 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     semaphore = asyncio.Semaphore(3)
 
+    # A sponsored call holds a conservative allowance reservation until usage
+    # settles. Dispatch sequentially so sibling calls do not fail just because
+    # they overlap those temporary reservations.
+    semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
+
     async def run_wave(calls: list[Any]) -> list[Any]:
         gates = await _acquire_gates()
         try:
@@ -8506,6 +8511,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             )
             _event(record, "coordinator.portfolio_review", record["message"])
             _save(path, record)
+
+
+def _portfolio_call_concurrency() -> int:
+    return 1 if cloud_research.billing_enabled() else 3
 
 
 def _bounded_note(value: Any, limit: int) -> str:
