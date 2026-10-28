@@ -666,7 +666,11 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
             try:
                 for session_number in range(2):
                     record = job(member.workspace_id)
-                    record.update(project_id=project.project.id, project_path=project.path)
+                    record.update(
+                        project_id=project.project.id,
+                        project_path=project.path,
+                        maximum_estimated_cost_usd=None,
+                    )
                     cloud_research.prepare_job(record)
                     assert cloud_research.claim_job(record["id"])
                     cloud_research.reserve_call(
@@ -696,7 +700,11 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
         binding = cloud_workspaces._CURRENT.set(final_user)
         try:
             record = job(final_user.workspace_id)
-            record.update(project_id=project.project.id, project_path=project.path)
+            record.update(
+                        project_id=project.project.id,
+                        project_path=project.path,
+                        maximum_estimated_cost_usd=None,
+                    )
             cloud_research.prepare_job(record)
             assert cloud_research.claim_job(record["id"])
             cloud_research.reserve_call(record["id"], "remaining-global", 2.0, 100)
