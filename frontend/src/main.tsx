@@ -388,7 +388,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; confirmationSummary?: string; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -469,6 +469,21 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
   const provenance = session.outcome.execution_provenance;
   const runMetrics = session.outcome.metrics?.operational ?? [];
+  const budgetDenied = session.steps.some(step => step.failure_kind === 'budget_denied');
+  const budgetReason = session.strategy_runs?.find(branch => /allowance|inference[- ]spend|cost reserve|cost limit/i.test(branch.reason ?? ''))?.reason;
+  const budgetNotice = budgetDenied
+    ? session.calls_used === 0
+      ? 'The available research funds could not cover a provider call. No provider calls were made.'
+      : 'Research stopped because the remaining research funds could not cover another provider call. Saved findings are preserved.'
+    : '';
+  const statusHeading = budgetDenied
+    ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
+    : session.status === 'paused' ? 'Session paused'
+      : session.status === 'stopped' ? 'Session stopped'
+        : session.status === 'failed' ? 'Session failed' : 'Session ended';
+  const statusNextStep = session.next_step_guidance
+    || (budgetDenied ? 'Review the available research allowance before starting another session.'
+      : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
   const zeroPythonRuns = runMetrics.some(item => item.label === 'Python runs by status' && item.value === '0 executions');
   const zeroSageRuns = runMetrics.some(item => item.label === 'SageMath runs by status' && item.value === '0 executions');
   const noSavedLocalComputations = (provenance && provenance.records.length === 0 && provenance.unidentified_count === 0)
@@ -595,7 +610,11 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
       {provenancePrelude}
-      {((session.status === 'paused' || session.status === 'stopped' || session.status === 'failed') || !!session.next_step_guidance) && <aside className="research-pause-guidance" aria-label="Session next steps"><strong>{session.status === 'paused' ? 'Session paused' : session.status === 'stopped' ? 'Session stopped' : session.status === 'failed' ? 'Session failed' : 'Session ended'}</strong>{!!session.message && <p>{session.message}</p>}<p>{session.next_step_guidance || 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.'}</p></aside>}
+      {(budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+        <strong>{statusHeading}</strong>
+        {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
+        <p>{statusNextStep}</p>
+      </aside>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
           {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
@@ -812,7 +831,7 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void }) {
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void }) {
   const cloud = useCloudIdentity();
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
@@ -842,11 +861,14 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   useEffect(() => {
     const revealRunningSession = () => {
       const running = sessions.find(item => item.status === 'running');
-      if (running) revealSession(running.id);
+      if (running) {
+        onRevealNewSession();
+        revealSession(running.id, true);
+      }
     };
     window.addEventListener('sigma-reveal-running-session', revealRunningSession);
     return () => window.removeEventListener('sigma-reveal-running-session', revealRunningSession);
-  }, [sessions]);
+  }, [sessions, onRevealNewSession]);
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -906,6 +928,8 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', poll); stopWatching(); };
   }, [activeSession?.id, activeSession?.status, load, path, projectId, reportReadFailure]);
 
+  const sponsoredSession = cloud?.target === 'hosted'
+    || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
   async function begin(onlyIds?: string[]) {
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
@@ -923,7 +947,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
       const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
       const currentLimits = await limitResponse.json();
       if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
-      const validation = validateLimitDraft(draftLimits(currentLimits), !!requiresSponsoredCost);
+      const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
         throw new Error(validation.errors.maximum_estimated_cost_usd
           ?? 'Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
@@ -958,7 +982,8 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
       await load(next.id);
-      revealSession(next.id);
+      if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
+      revealSession(next.id, next.status === 'running' || next.status === 'queued');
     } catch (cause) { setConfirmStart(false); await load().catch(() => {}); setError(errorMessage(cause)); }
     finally { submittingStart.current = false; setBusy(false); }
   }
@@ -980,13 +1005,13 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     void control('resume', target);
   }
 
-  function revealSession(id: string) {
+  function revealSession(id: string, collapsePrevious = false) {
     setExpanded(true);
     window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    setExpandedSessionIds(current => new Set(current).add(id));
+    setExpandedSessionIds(current => collapsePrevious ? new Set([id]) : new Set(current).add(id));
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
-      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }));
   }
 
@@ -1006,7 +1031,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
         artifact.scrollIntoView({ block: 'center', behavior: 'smooth' });
         setAnnouncement(`Opened saved evidence from Session #${source.session_number}.`);
       } else if (row) {
-        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         setAnnouncement('The owning session is open; inspect its saved evidence.');
       }
     }));
@@ -1045,14 +1070,15 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
-      play, stop, confirming: confirmStart, confirmationSummary: limits ? `${limits.model_calls} calls · ${limits.research_rounds} rounds · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, cloud?.target === 'hosted' || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored') ? 15 : limits.session_duration_minutes)} min` : undefined, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      confirmationSummary: limits ? `${limits.model_calls} calls · ${limits.research_rounds} rounds · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, sponsoredSession ? 15 : limits.session_duration_minutes)} min` : undefined,
       playDisabled: busy || !!readError || confirmStart || (activeSession
         ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions, limits, cloud?.target, cloud?.funding.selectedConnection]);
+  }, [activeSession, busy, confirmStart, eligible.length, limits, onControlsChange, stop, play, playLabel, readError, sessions, sponsoredSession]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -1060,8 +1086,9 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     const revealId = initialRevealSessionId.current;
     if (!revealId || activeSession?.id !== revealId) return;
     initialRevealSessionId.current = null;
-    revealSession(revealId);
-  }, [activeSession?.id]);
+    onRevealNewSession();
+    revealSession(revealId, true);
+  }, [activeSession?.id, onRevealNewSession]);
 
   const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
@@ -1086,7 +1113,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
                   {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError || (!!activeSession && activeSession.id !== item.id)} onClick={() => requestResume(item)}>Resume</button>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
-                  {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                  {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts?</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {(item.status === 'paused' || item.status === 'stopped') && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
@@ -1196,7 +1223,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
     if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const route = demo ? '/api/cloud-demo/report' : (exportType === 'bundle' ? '/api/projects/download' : '/api/projects/export/report');
+      const route = demo ? '/api/cloud-demo/report' : (exportType === 'bundle' ? '/api/projects/export' : '/api/projects/export/report');
       const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}) });
       const suffix = query.toString();
       const response = await fetch(`${route}${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' });
@@ -1239,9 +1266,9 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       </header>
       <div className="settings-body">
         <fieldset className="export-type-options" disabled={busy}>
-          <legend>Report type</legend>
-          {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Project file</label>}
-          <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
+          <legend>File type</legend>
+          {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Importable project</label>}
+          <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text report</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
@@ -2129,7 +2156,6 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
-      <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
       <details className="about-disclosure">
         <summary>Key Features</summary>
         <div className="about-disclosure-content">
@@ -2256,14 +2282,15 @@ function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView)
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
+  return <dialog ref={dialog} className="project-entry-dialog import-project-dialog" aria-labelledby="import-project-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <header className="entry-dialog-header"><h2 id="import-project-heading">Import Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header>
     <p className="entry-help">Import a complete SIGMA JSON project bundle. Existing projects are never replaced.</p>
     <form id="import-project-form" onSubmit={submit}><fieldset disabled={busy}><div className="import-project-label-row"><label htmlFor="import-project-file">Project file</label><button className="choose-project-file" type="button" onClick={() => fileInput.current?.click()}>Choose</button></div>
       <input ref={fileInput} className="sr-only" id="import-project-file" type="file" accept=".json,application/json" required onChange={event => setFile(event.target.files?.[0] ?? null)}/>
       <div className="import-project-file-row"><div className="import-project-selected-file" aria-live="polite">{file?.name ?? 'No file chosen'}</div></div>
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></form>
+    <footer className="import-project-footer"><button type="submit" form="import-project-form" className="entry-import" disabled={!file || busy}>{busy ? 'Importing…' : 'Import'}</button></footer>
   </dialog>;
 }
 
@@ -2557,8 +2584,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   const limitValidation = validateLimitDraft(
     limitDraft,
-    cloud?.target === 'hosted'
-      || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored'),
   );
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
   useEffect(() => {
@@ -2631,13 +2656,13 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
         <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => changeSettingsTab('preferences')}>Preferences</button>
       </div>}
-      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Choose this project’s research type and AI settings. Edit its title and description directly on the project page.' : 'Name a project and choose its research category.'}</p>
+      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Set this project’s research type and AI options.' : 'Name a project and choose its research category.'}</p>
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
@@ -2649,12 +2674,12 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
         {orderedCatalog.map(model => <option key={model.id} value={model.id}>{model.label.replace(/\s*\([^)]*\)$/, '').trim()} · {model.relative_cost}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
       </select>
-      <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately. ' : 'ChatGPT plan allowance or credits · connection required for generation. '}{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p></div>
+      <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately.' : 'ChatGPT plan or credits.'}{catalogMessage}{selected?.availability === 'unavailable' ? ' Model unavailable; it will not be replaced.' : ''}</p></div>
       <div><label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
         {!selected?.efforts.includes(values.reasoning_effort) && <option value={values.reasoning_effort}>{thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · {selected ? 'unsupported' : 'preserved'}</option>}
         {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
       </select>
-      <p className="settings-hint">Applies to future AI proposals. Higher thinking can take longer and consume more usage. API cost tiers are relative; <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">current token prices</a>. Earlier strategy provenance stays unchanged.</p></div>
+      <p className="settings-hint">Used for future AI proposals. Higher levels use more time and usage.</p></div>
       </div>
       {pairError && <p className="error" role="alert">{pairError}</p>}
       <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
@@ -2664,18 +2689,19 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>Research limits apply to future sessions. For local strategy generation, the model-call limit also sets the call budget. Existing sessions keep the limits captured when they started.</p>
-      {(cloud?.target === 'hosted' || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored')) && <p className="settings-hint">Sponsored sessions use these project limits, subject to your account allowance and the configured global spend ceiling. Session duration is capped at 15 minutes.</p>}
+      {cloud?.target === 'hosted' && <p className="settings-hint">Hosted research may apply service-side caps to saved session limits.</p>}
+      {cloud?.target === 'local' && <p className="settings-hint">Sponsored research is subject to the account allowance and service-side caps.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
-        <label htmlFor="research-concurrent-sessions">Maximum concurrent sessions</label><input id="research-concurrent-sessions" type="text" inputMode="numeric" value={limitDraft.max_concurrent_sessions} aria-invalid={!!limitValidation.errors.max_concurrent_sessions} aria-describedby="research-concurrent-sessions-help research-concurrent-sessions-error" onChange={event => setLimitDraft(value => ({ ...value, max_concurrent_sessions: event.target.value }))}/><p id="research-concurrent-sessions-help" className="settings-hint">Number of research sessions that may be queued or running in this project at once. Any positive whole number; default is 1. Stopped, completed, failed, and interrupted sessions do not use a slot.</p>{limitValidation.errors.max_concurrent_sessions && <p id="research-concurrent-sessions-error" className="limit-error" role="alert">{limitValidation.errors.max_concurrent_sessions}</p>}
+        <label htmlFor="research-concurrent-sessions">Maximum concurrent sessions</label><input id="research-concurrent-sessions" type="text" inputMode="numeric" value={limitDraft.max_concurrent_sessions} aria-invalid={!!limitValidation.errors.max_concurrent_sessions} aria-describedby="research-concurrent-sessions-help research-concurrent-sessions-error" onChange={event => setLimitDraft(value => ({ ...value, max_concurrent_sessions: event.target.value }))}/><p id="research-concurrent-sessions-help" className="settings-hint">Queued or running sessions allowed in this project. Any positive whole number; default is 1.</p>{limitValidation.errors.max_concurrent_sessions && <p id="research-concurrent-sessions-error" className="limit-error" role="alert">{limitValidation.errors.max_concurrent_sessions}</p>}
         <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
-        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2 * (Number(limitDraft.research_rounds) || 1)} max={120} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, up to 120 calls. Minimum is twice the Skeptic iterations (currently {2 * (Number(limitDraft.research_rounds) || 1)}); each selected strategy needs an Investigator/Skeptic pair. Local strategy generation also uses this as its call ceiling.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
+        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2 * (Number(limitDraft.research_rounds) || 1)} max={120} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Minimum: two provider calls per Skeptic iteration. Local strategy generation also uses this budget.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
         <label htmlFor="research-duration-value">Maximum session duration</label><div className="research-duration-controls"><input id="research-duration-value" type="number" min={1} max={Math.floor(MAX_SESSION_DURATION_MINUTES / durationUnitMinutes[limitDraft.session_duration_unit])} step={1} value={limitDraft.session_duration_value} aria-invalid={!!limitValidation.errors.session_duration_value} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_value: event.target.value }))}/><select id="research-duration-unit" aria-label="Maximum session duration unit" value={limitDraft.session_duration_unit} onChange={event => setLimitDraft(value => ({ ...value, session_duration_unit: event.target.value as DurationUnit }))}><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 minute to 7 days. Time spent stopped counts.</p>{limitValidation.errors.session_duration_value && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_value}</p>}
-        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={20000} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 20,000 tokens. Higher limits allow longer answers but increase the worst-case spend reserve and may stop a sponsored call before dispatch if it cannot fit the session allowance.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
+        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={20000} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">Higher limits allow longer answers but increase the worst-case spend reserve. Sponsored calls may be stopped if that reserve exceeds the session allowance.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
         <label htmlFor="research-input-tokens">Maximum input tokens per session</label><input id="research-input-tokens" type="number" min={4096} max={1000000} step={1} placeholder="Unlimited" value={limitDraft.maximum_input_tokens_per_session} aria-invalid={!!limitValidation.errors.maximum_input_tokens_per_session} aria-describedby="research-input-help research-input-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_input_tokens_per_session: event.target.value }))}/><p id="research-input-help" className="settings-hint">Optional cumulative cap. Before dispatch, SIGMA reserves the exact serialized request byte count plus an 8,192-token structural allowance as an upper bound; afterward, reported input usage must fit within that reservation. Unknown or in-flight calls retain their full reservation.</p>{limitValidation.errors.maximum_input_tokens_per_session && <p id="research-input-error" className="limit-error" role="alert">{limitValidation.errors.maximum_input_tokens_per_session}</p>}
         <>
           <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label>
           <input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/>
-          <p id="research-cost-help" className="settings-hint">Optional for personal use. Required for sponsored research. Set $0.01 to $100.00, or leave blank for unlimited when supported. Estimates use published prices and reported tokens; unknown prices or missing usage stop further calls when a cap is set.</p>
+          <p id="research-cost-help" className="settings-hint">Optional per-session cap. Without one, sponsored sessions remain subject to ChatGPT and SIGMA allowance limits. Set $0.01 to $100.00, or leave blank for no session cap. Estimates use published prices and reported tokens.</p>
           {limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
         </>
       </fieldset>
@@ -2701,6 +2727,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
+  const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
   const [error, setError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const pending = useRef(false);
@@ -2747,7 +2774,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }
   async function forget(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
-    try { await post('recent/forget', { project_id: entry.id }); setConfirmRemoveId(''); await load(); }
+    try { await post(`recent/forget?path=${encodeURIComponent(entry.path)}`, { project_id: entry.id }); setConfirmRemoveId(''); await load(); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
@@ -2777,9 +2804,13 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
           <div className="recent-title-row">
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}{entry.research_running && <span className="research-running-indicator" aria-hidden="true"/>}</button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Saved Projects`} aria-expanded={confirmRemoveId === entry.id} data-tooltip="Remove from Saved Projects; keep all research" onClick={event => {
+            if (confirmRemoveId === entry.id) { setConfirmRemoveId(''); return; }
+            const trigger = event.currentTarget.getBoundingClientRect();
+            setConfirmRemovePlacement(window.innerHeight - trigger.bottom < 190 ? 'above' : 'below');
+            setConfirmRemoveId(entry.id);
+          }}>Remove</button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Saved Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}</div>
           <span title={entry.path}>{entry.path}</span>
-          {confirmRemoveId === entry.id && <div className="recent-remove-actions"><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Recent Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
       </li>)}</ul>
@@ -2835,6 +2866,12 @@ function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView)
 }
 
 function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
+  const cloud = useCloudIdentity();
+  const savedTooltip = guest
+    ? 'Sign in to view your saved projects.'
+    : !cloud?.target || cloud.target === 'local'
+      ? 'In local mode, all signed-in accounts share this project list.'
+      : 'Show saved projects. Click again to collapse or expand all.';
   const [tab, setTab] = useState<'recent' | 'samples'>(() =>
     guest ? 'samples' : window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
   const recent = useRef<HTMLButtonElement>(null);
@@ -2860,8 +2897,8 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) =>
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
     if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
-    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={guest ? 'Sign in to save your projects.' : 'Show recent projects. Click again to collapse or expand all.'} onClick={() => switchTab('recent')}>Recent</button>
+    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Selecting a sample copies into a new project." onClick={() => switchTab('samples')}>Samples</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>Saved</button>
   </div>
     <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen}/>}</div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
@@ -3097,7 +3134,7 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, playButtonRef }: { controls: ProcessControls; disabled: boolean; guest?: boolean; onGuestPlay?: () => void; playButtonRef?: React.RefObject<HTMLButtonElement | null> }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
+        {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
         <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
@@ -3275,7 +3312,7 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
     finally { submitting.current = false; setSaving(false); }
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Accepting…' : 'Accept'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="copper-button proposal-heading-save" disabled={busy || saving}>{saving ? 'Accepting…' : 'Accept'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
     {!busy && <p id="proposal-help" className="hint">Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'} · call limit from this project’s settings{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
@@ -3451,6 +3488,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   function cancel() { setEditing(false); exitMode('new-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }
   function expandStrategies() { setStrategiesExpanded(true); window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true'); }
+  const collapseProjectAndStrategies = useCallback(() => {
+    setProjectExpanded(false);
+    setStrategiesExpanded(false);
+    window.localStorage.setItem(`sigma.projectPane:${path}`, 'false');
+    window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'false');
+  }, [path]);
   function startNewStrategy() {
     if (!enterMode('new-strategy')) return;
     expandStrategies(); setManualDraft(undefined); setEditing(true);
@@ -3548,9 +3591,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
         <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
       </button>
-      {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
+      <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
         <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
-      </button>}
+      </button>
       <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
@@ -3660,7 +3703,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
       setView(next);
       setAnnouncement('Advanced Outcome enabled.');
-    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning}/>
+    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning} onRevealNewSession={collapseProjectAndStrategies}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
@@ -3841,6 +3884,9 @@ function MockAuthSelector() {
 
 function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boolean }) {
   const cloud = useCloudIdentity();
+  const signedInAccountTooltip = cloud?.user?.email
+    ? `Signed in as ${cloud.user.email}`
+    : 'Signed in with Google';
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
@@ -3940,7 +3986,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }
   return <>
     {cloud?.enabled && cloud.authenticated
-      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip-disabled><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
+      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
         <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}

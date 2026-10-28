@@ -331,7 +331,7 @@ try:
     for project in manifest["projects"]:
         prefix = "subset" if project["slug"] == "nonconsecutive-subset-sums" else "algorithm"
         with urlopen(
-            api_url + "/api/projects/export?" + urlencode({"path": project["path"]}),
+            api_url + "/api/projects/audit?" + urlencode({"path": project["path"]}),
             timeout=25,
         ) as response:
             final_raw = response.read()

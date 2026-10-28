@@ -303,12 +303,44 @@ with sync_playwright() as playwright:
     assert project_path and Path(project_path, "project.json").is_file()
     row = second_copy.locator("xpath=../../..")
     row_before = row.bounding_box()
-    remove = row.get_by_role("button", name=re.compile("Remove .* from Recent Projects"))
+    remove = row.get_by_role("button", name=re.compile("Remove .* from Saved Projects"))
+    remove.evaluate("element => element.scrollIntoView({block: 'end'})")
+    remove.hover()
+    tooltip = page.get_by_role("tooltip")
+    expect(tooltip).to_have_text("Remove from Saved Projects; keep all research")
+    tooltip_box = tooltip.bounding_box()
+    viewport = page.evaluate("({width: innerWidth, height: innerHeight})")
+    assert (
+        tooltip_box
+        and 0 <= tooltip_box["y"]
+        and tooltip_box["y"] + tooltip_box["height"] <= viewport["height"]
+    )
+    assert tooltip_box["x"] >= 0 and tooltip_box["x"] + tooltip_box["width"] <= viewport["width"]
     remove.click()
     confirmation = row.get_by_role(
         "group", name="Confirm remove Nonconsecutive Subset Sums Modulo 3 v2"
     )
     expect(confirmation).to_be_visible()
+    confirmation_actions = confirmation.locator(".recent-remove-confirm-actions button")
+    assert confirmation_actions.all_text_contents() == ["Confirm", "Cancel"]
+    for action in confirmation_actions.all():
+        style = action.evaluate(
+            "element => ({decoration: getComputedStyle(element).textDecorationLine, color: getComputedStyle(element).color})"
+        )
+        assert style["decoration"] == "underline" and style["color"] == "rgb(241, 197, 141)", style
+    confirmation_box = confirmation.bounding_box()
+    remove_box = remove.bounding_box()
+    assert (
+        confirmation_box
+        and remove_box
+        and confirmation_box["y"] >= 0
+        and confirmation_box["y"] + confirmation_box["height"] <= viewport["height"]
+        and 0 <= remove_box["y"] - confirmation_box["y"] - confirmation_box["height"] < 80
+    )
+    assert (
+        confirmation_box["x"] >= 0
+        and confirmation_box["x"] + confirmation_box["width"] <= viewport["width"]
+    )
     row_after = row.bounding_box()
     assert row_before and row_after and abs(row_before["height"] - row_after["height"]) < 1
     confirmation.get_by_role("button", name="Cancel", exact=True).click()

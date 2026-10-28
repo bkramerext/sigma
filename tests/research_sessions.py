@@ -5382,6 +5382,57 @@ async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     assert all(strategy_id == second.id for strategy_id, _ in roles if strategy_id != first.id)
 
 
+async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path):
+    view, first, credential, config = await setup(path)
+    credential["mode"] = "chatgpt"
+    second = create_strategy(
+        path, "Independent approach", "Use a different derivation."
+    ).project.strategies[-1]
+    provider_calls = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        provider_calls.append(context["strategy"]["id"])
+        return httpx.Response(
+            429,
+            json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert len(provider_calls) == 1
+    assert provider_calls == [first.id]
+    assert (
+        "ChatGPT rejected a request because its plan or app usage limit was reached"
+        in finished["message"]
+    )
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    limited = next(step for step in finished["steps"] if step["status"] == "failed")
+    assert limited["failure_kind"] == "provider_limited"
+    assert limited["provider_http_status"] == 429
+
+
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -7556,9 +7607,52 @@ def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
     assert "conservative cost reserve" in outcome["caveats"][-1]
 
 
+def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
+    record = {
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "cloud_sponsored": True,
+        "maximum_estimated_cost_usd": None,
+        "output_token_limit": 12_000,
+    }
+    reserve = research_sessions._call_cost_reservation(
+        record, {"problem": "A bounded test"}, "investigator", None
+    )
+    assert reserve is not None and reserve > 0
+    assert (
+        research_sessions._call_cost_reservation(
+            {**record, "cloud_sponsored": False, "mode": "api_key"},
+            {"problem": "A bounded test"},
+            "investigator",
+            None,
+        )
+        is None
+    )
+
+    branch = {
+        "strategy_title": "Tadpole mechanism",
+        "current_action": "Budget limit",
+        "reason": "Cloud inference cannot be bounded for this model.",
+    }
+    message = research_sessions._portfolio_reservation_failure_message([branch])
+    assert message is not None
+    assert "provider-call reservation failed" in message
+    assert "Cloud inference cannot be bounded" in message
+
+
+def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True):
+        assert research_sessions._portfolio_call_concurrency() == 1
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False):
+        assert research_sessions._portfolio_call_concurrency() == 3
+
+
 def main():
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
+    test_sponsored_unlimited_cost_still_reserves_global_call_spend()
+    test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()

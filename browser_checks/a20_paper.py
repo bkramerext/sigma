@@ -50,7 +50,7 @@ with sync_playwright() as playwright:
     session = page.locator("li[data-session-id]").first
     expect(session.locator(".session-status")).to_have_text("ended", timeout=20000)
     record = page.evaluate(
-        "async path => (await (await fetch('/api/projects/export?' + new URLSearchParams({path}))).json())",
+        "async path => (await (await fetch('/api/projects/audit?' + new URLSearchParams({path}))).json())",
         path,
     )
     assert record["research_sessions"][0]["artifacts"]

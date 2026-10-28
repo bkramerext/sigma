@@ -216,9 +216,14 @@ def record_access(view: ProjectView) -> None:
         )
 
 
-def forget_recent(project_id: str) -> None:
+def forget_recent(project_id: str, path: str | None = None) -> None:
+    """Forget a saved entry by identity, or by its saved path if identity drifted."""
     with _index() as index:
-        index["entries"] = [entry for entry in index["entries"] if entry["id"] != project_id]
+        index["entries"] = [
+            entry
+            for entry in index["entries"]
+            if entry["id"] != project_id and (path is None or entry["path"] != path)
+        ]
 
 
 @dataclass(frozen=True)

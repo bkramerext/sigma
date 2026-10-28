@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import secrets
 import sqlite3
 from collections.abc import AsyncIterator
@@ -733,9 +734,9 @@ def inspect_view(path: str):
     return asdict(inspect_project(path))
 
 
-@app.get("/api/projects/export")
+@app.get("/api/projects/audit")
 def export_project_view(path: str):
-    """Export project, agentic evidence, and reconstructable research sessions."""
+    """Return the structured audit view used by reports and review tooling."""
     project = json.loads(_document(inspect_project(path).project))
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
     sessions = list(reversed(research_sessions.list_sessions(path)))
@@ -749,9 +750,10 @@ def export_project_view(path: str):
     }
 
 
+@app.get("/api/projects/export")
 @app.get("/api/projects/download")
 def download_project_bundle(path: str):
-    """Download the complete portable project, not the audit-only export."""
+    """Export every project file as one complete, importable JSON bundle."""
     from sigma.project_bundle import download_bytes, encode
     from sigma.projects import project_path
 
@@ -779,27 +781,56 @@ class ImportBundleRequest(BaseModel):
 @app.post("/api/projects/import", status_code=201)
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
-    import base64
-
-    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.project_bundle import (
+        BundleError,
+        bundle_project_document,
+        import_bundle,
+        rename_bundle_project,
+    )
     from sigma.projects import (
+        _occupied_titles,
         _project_name,
-        _require_available_title,
+        _title_key,
         _title_registry_lock,
         projects_root,
     )
 
     try:
-        document = json.loads(base64.b64decode(body.bundle["files"]["project.json"], validate=True))
+        document = bundle_project_document(body.bundle)
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
-        _, name = _project_name(title)
         root = projects_root()
-        destination = (root / name).with_suffix(".json")
         with _title_registry_lock(root):
-            _require_available_title(title, root)
-            imported = import_bundle(body.bundle, destination)
+            occupied_titles = _occupied_titles(root)
+            imported = None
+            version_match = re.search(r"(?i)\bv(\d+)$", title)
+            for number in range(1, 1001):
+                if number == 1:
+                    candidate = title
+                elif version_match:
+                    version_number = int(version_match.group(1)) + number - 1
+                    candidate = title[: version_match.start()] + f"v{version_number}"
+                else:
+                    suffix = " (imported)" if number == 2 else f" (imported {number - 1})"
+                    candidate = title[: 200 - len(suffix)].rstrip() + suffix
+                _, name = _project_name(candidate)
+                destination = (root / name).with_suffix(".json")
+                if (
+                    _title_key(candidate) in occupied_titles
+                    or os.path.lexists(destination)
+                    or os.path.lexists(root / name)
+                ):
+                    continue
+                payload = (
+                    body.bundle
+                    if candidate == title
+                    else rename_bundle_project(body.bundle, candidate)
+                )
+                imported = import_bundle(payload, destination)
+                break
+            if imported is None:
+                raise ProjectError("A unique name for the imported project is unavailable.")
         view = inspect_project(imported)
         from sigma.recents import record_access
 
@@ -1366,10 +1397,10 @@ class ForgetRecentRequest(BaseModel):
 
 
 @app.post("/api/projects/recent/forget")
-def forget_recent_view(body: ForgetRecentRequest):
+def forget_recent_view(body: ForgetRecentRequest, path: str | None = None):
     from sigma.recents import forget_recent
 
-    forget_recent(body.project_id)
+    forget_recent(body.project_id, path)
     return {"forgotten": True}
 
 

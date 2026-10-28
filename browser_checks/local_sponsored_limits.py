@@ -200,7 +200,7 @@ def main() -> None:
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(
                     settings.get_by_text(
-                        "Sponsored sessions use these project limits, subject to your account allowance and the configured global spend ceiling. Session duration is capped at 15 minutes."
+                        "Sponsored research is subject to the account allowance and service-side caps."
                     )
                 ).to_be_visible()
                 calls = settings.get_by_label("Maximum agent calls", exact=True)

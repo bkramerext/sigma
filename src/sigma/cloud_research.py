@@ -429,10 +429,6 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable(
             "Cloud research requires the explicitly configured sponsor provider."
         )
-    if record.get("maximum_estimated_cost_usd") is None:
-        raise CloudResearchUnavailable(
-            "Configure a maximum estimated session cost in Project Settings → Limits before using sponsored research."
-        )
     if record.get("cost_status") != "available":
         raise CloudResearchUnavailable("Sponsored research requires a model with a reviewed price.")
     _spend_ceiling_decimal()
@@ -449,9 +445,14 @@ def prepare_job(record: dict[str, Any]) -> None:
         or not 2 <= call_limit <= call_ceiling
         or type(duration_limit) is not int
         or not 1 <= duration_limit <= MAX_SESSION_MINUTES
-        or type(maximum_cost) not in {int, float}
-        or not isinstance(maximum_cost, (int, float))
-        or not 0.01 <= maximum_cost <= 100
+        or (
+            maximum_cost is not None
+            and (
+                type(maximum_cost) not in {int, float}
+                or not isinstance(maximum_cost, (int, float))
+                or not 0.01 <= maximum_cost <= 100
+            )
+        )
     ):
         if cloud_workspaces.enabled():
             raise CloudResearchUnavailable(
@@ -1111,6 +1112,27 @@ def mark_call_not_dispatched(session_id: str, call_id: str) -> None:
                     "UPDATE calls SET amount_usd=0,token_reservation=0,status='not_dispatched',updated_at=? WHERE call_id=?",
                     (_now(), call_id),
                 )
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def mark_call_provider_rejected(session_id: str, call_id: str) -> None:
+    """Release reservations after an explicit provider rejection (HTTP 429).
+
+    A received quota rejection is not an unknown in-flight attempt: the provider
+    rejected it before inference, so it must not consume the user's allowance.
+    Keep the call row as an auditable zero-cost usage estimate.
+    """
+    owner = _workspace_id()
+    try:
+        with _transaction() as db:
+            row = db.execute("SELECT * FROM calls WHERE call_id=?", (call_id,)).fetchone()
+            if not row or row["session_id"] != session_id or row["workspace_id"] != owner:
+                raise CloudResearchUnavailable("Provider attempt is unavailable.")
+            db.execute(
+                "UPDATE calls SET amount_usd=0,status='usage_estimated',token_reservation=0,input_tokens=NULL,output_tokens=NULL,updated_at=? WHERE call_id=?",
+                (_now(), call_id),
+            )
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 

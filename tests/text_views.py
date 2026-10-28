@@ -101,6 +101,8 @@ async def main_async(root: Path):
         context = json.loads(body["input"])
         calls.append(context)
         assert body["model"] == MODEL and body["reasoning"]["effort"] == "high"
+        assert "good/better" in body["instructions"]
+        assert "1/2 the people in this room" in body["instructions"]
         wire_schema = body["text"]["format"]["schema"]
         assert wire_schema == {
             "type": "object",
@@ -597,6 +599,7 @@ async def main_async(root: Path):
     def plan_handler(request):
         payload = json.loads(request.content)
         assert payload["stream"] is True and "max_output_tokens" not in payload
+        assert "good/better" in payload["instructions"]
         assert "maxLength" not in json.dumps(payload["text"]["format"]["schema"])
         assert "maxItems" not in json.dumps(payload["text"]["format"]["schema"])
         assert isinstance(payload["input"], list)

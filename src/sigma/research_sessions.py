@@ -37,6 +37,7 @@ from sigma.research_budget import (
     new_ledger,
     reserve_before_dispatch,
     settle_after_response,
+    settle_rejected,
 )
 from sigma.research_epistemics import (
     argument_availability,
@@ -2437,8 +2438,13 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     if match is None:
         return {"failure_kind": "provider_error"}
     status = int(match.group(1))
+    limited = status == 429 or "ChatGPT plan or app usage limit reached" in message
     result: dict[str, Any] = {
-        "failure_kind": "provider_rejected" if 400 <= status < 500 else "provider_error"
+        "failure_kind": "provider_limited"
+        if limited
+        else "provider_rejected"
+        if 400 <= status < 500
+        else "provider_error"
     }
     result["provider_http_status"] = status
     return result
@@ -2702,6 +2708,19 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
         input_byte_bound * max(prices["input"], prices["cache_write"])
         + output_tokens * prices["output"]
     ) / 1_000_000
+
+
+def _call_cost_reservation(
+    record: dict[str, Any], context: dict[str, Any], role: str, hard_ledger: Any
+) -> float | None:
+    """Estimate sponsored calls even when the project has no optional cost cap."""
+    if isinstance(hard_ledger, dict):
+        return None
+    if record.get("cloud_sponsored") is True or (
+        record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
+    ):
+        return _reserve_cost(record, context, role)
+    return None
 
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -7403,6 +7422,8 @@ async def _portfolio_role_call(
             branch = next(
                 item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
             )
+            if branch.get("status") not in {"queued", "running"}:
+                return False
             try:
                 context = _portfolio_context(record, branch, role, cycle)
                 context["execution_tools"] = tools
@@ -7517,6 +7538,7 @@ async def _portfolio_role_call(
             request_audit = _role_input_audit(record, role, context, credential.get("token"))
             hard_ledger = record.get("hard_budget_ledger")
             reserve = None
+            reserve = _call_cost_reservation(record, context, role, hard_ledger)
             token_reserve = (
                 len(json.dumps(context, ensure_ascii=False).encode("utf-8"))
                 + 65_536
@@ -7573,8 +7595,6 @@ async def _portfolio_role_call(
             if (
                 record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
             ) and record.get("maximum_estimated_cost_usd") is not None:
-                if not isinstance(hard_ledger, dict):
-                    reserve = _reserve_cost(record, context, role)
                 current_cost = record.get("estimated_cost_usd")
                 reserved_cost = float(record.get("estimated_cost_reserved_usd", 0.0))
                 if (
@@ -7822,15 +7842,28 @@ async def _portfolio_role_call(
                     item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
                 )
                 step = next(item for item in record["steps"] if item["id"] == step_id)
+                timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                if not timeout_failure:
+                    step.update(_provider_failure_fields(exc))
                 if isinstance(record.get("hard_budget_ledger"), dict):
-                    mark_unknown(record["hard_budget_ledger"], call_id=step_id)
+                    if step.get("failure_kind") == "provider_limited":
+                        settle_rejected(record["hard_budget_ledger"], call_id=step_id)
+                    else:
+                        mark_unknown(record["hard_budget_ledger"], call_id=step_id)
                 if cloud_research.billing_enabled():
-                    cloud_research.mark_call_unknown(session_id, step_id)
-                    step["attempt_status"] = "unknown"
+                    if step.get("failure_kind") == "provider_limited":
+                        cloud_research.mark_call_provider_rejected(session_id, step_id)
+                        step["attempt_status"] = "provider_rejected"
+                    else:
+                        cloud_research.mark_call_unknown(session_id, step_id)
+                        step["attempt_status"] = "unknown"
                 step["token_usage_status"] = "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):
-                    step["provider_input_audit"]["status"] = "call_failed_dispatch_unknown"
-                timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                    step["provider_input_audit"]["status"] = (
+                        "provider_response_rejected"
+                        if step.get("failure_kind") == "provider_limited"
+                        else "call_failed_dispatch_unknown"
+                    )
                 step.update(
                     {
                         "status": "failed",
@@ -7840,10 +7873,19 @@ async def _portfolio_role_call(
                 )
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
-                else:
-                    step.update(_provider_failure_fields(exc))
                 _record_guidance_interruption(record, step, "unacknowledged")
-                if step.get("cost_reserve") is not None:
+                if (
+                    step.get("cost_reserve") is not None
+                    and step.get("failure_kind") == "provider_limited"
+                ):
+                    record["estimated_cost_reserved_usd"] = max(
+                        0.0,
+                        float(record.get("estimated_cost_reserved_usd", 0.0))
+                        - float(step["cost_reserve"]),
+                    )
+                    record["cost_status"] = "available"
+                    record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
+                elif step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
                 branch["status"] = "failed"
@@ -7861,6 +7903,34 @@ async def _portfolio_role_call(
                         "Provider call failed; saved research artifacts were retained."
                     )
                 branch["reason"] = failure_message
+                if step.get("failure_kind") == "provider_limited":
+                    record["provider_usage_limited"] = True
+                    if record.get("mode") == "chatgpt":
+                        record["terminal_reason"] = (
+                            "The selected ChatGPT account rejected the request at its usage limit."
+                        )
+                        record["message"] = (
+                            "ChatGPT rejected this request because its plan or app usage limit was reached. "
+                            "No further strategy calls were dispatched. SIGMA released the rejected call's "
+                            "spend reservation; no API-key fallback occurred."
+                        )
+                    else:
+                        record["terminal_reason"] = (
+                            "The model provider rejected the request at its rate or usage limit."
+                        )
+                        record["message"] = (
+                            "The model provider rejected this request at its rate or usage limit. "
+                            "No further strategy calls were dispatched. SIGMA released the rejected call's "
+                            "spend reservation; no automatic retry or billing fallback occurred."
+                        )
+                    for other in record.get("strategy_runs", []):
+                        if other is not branch and other.get("status") in {"queued", "running"}:
+                            other["status"] = "ended"
+                            other["current_action"] = "Provider usage limit"
+                            other["reason"] = (
+                                "Not started because ChatGPT rejected a request at its usage limit."
+                            )
+                    _event(record, "provider.usage_limit", record["message"], role)
                 if (
                     role == "skeptic"
                     and len(record.get("strategy_runs", [])) == 1
@@ -8277,7 +8347,10 @@ def _portfolio_limit_message(record: dict[str, Any], runs: list[dict[str, Any]])
 
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
-    semaphore = asyncio.Semaphore(3)
+    # A sponsored call holds a conservative allowance reservation until usage
+    # settles. Dispatch sequentially so sibling calls do not fail just because
+    # they overlap those temporary reservations.
+    semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
 
     async def run_wave(calls: list[Any]) -> list[Any]:
         gates = await _acquire_gates()
@@ -8367,8 +8440,17 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     if incomplete_branches
                     else "All strategy branches finished or the shared call budget was exhausted."
                 )
-                limit_message = _portfolio_limit_message(record, runs)
-                if limit_message:
+                if record.get("provider_usage_limited") is True:
+                    record["current_action"] = "Provider usage limit"
+                    record["message"] = (
+                        "ChatGPT rejected a request because its plan or app usage limit was reached. "
+                        if record.get("mode") == "chatgpt"
+                        else "The model provider rejected a request at its rate or usage limit. "
+                    ) + (
+                        "No further strategy calls were dispatched. SIGMA released the rejected call's "
+                        "spend reservation; no automatic retry or billing fallback occurred."
+                    )
+                elif limit_message := _portfolio_limit_message(record, runs):
                     record["message"] = limit_message
                     record["terminal_reason"] = "; ".join(
                         f"{branch.get('strategy_title', 'Strategy')}: {branch.get('reason')}"
@@ -8528,6 +8610,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             )
             _event(record, "coordinator.portfolio_review", record["message"])
             _save(path, record)
+
+
+def _portfolio_call_concurrency() -> int:
+    return 1 if cloud_research.billing_enabled() else 3
 
 
 def _bounded_note(value: Any, limit: int) -> str:

@@ -10,6 +10,12 @@
 .home-page .project-entry-dialog .entry-dialog-header .entry-import, .home-page .project-entry-dialog .entry-dialog-header .entry-cancel { flex: 0 0 auto; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .home-page .project-entry-dialog .entry-dialog-header .entry-import:hover:not(:disabled), .home-page .project-entry-dialog .entry-dialog-header .entry-cancel:hover:not(:disabled) { background: transparent; color: #f3cd9e; }
 .home-page .project-entry-dialog .entry-dialog-header .entry-import:disabled { color: #929da5; cursor: not-allowed; }
+.home-page .import-project-dialog .entry-help { margin-bottom: 8px; }
+.home-page .import-project-dialog .import-project-label-row { margin-top: 6px; }
+.home-page .import-project-footer { display: flex; justify-content: flex-start; margin-top: 14px; }
+.home-page .import-project-footer .entry-import { width: auto; min-width: 0; min-height: 0; padding: 2px 0; border: 0; border-radius: 0; color: #d9b17e; background: transparent; box-shadow: none; font: 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.home-page .import-project-footer .entry-import:hover:not(:disabled) { color: #f3cd9e; background: transparent; box-shadow: none; }
+.home-page .import-project-footer .entry-import:disabled { color: #929da5; background: transparent; cursor: not-allowed; }
 .home-page .entry-help { margin: 0 0 22px; font-size: 13px; color: #afbecd; line-height: 1.65; }
 .home-page .project-entry-dialog fieldset { margin: 0; }
 .home-page .project-entry-dialog .error, .home-page .project-entry-dialog .entry-help, .home-page .project-entry-dialog .entry-hint, .home-page .project-entry-dialog code { box-sizing: border-box; max-width: 100%; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
