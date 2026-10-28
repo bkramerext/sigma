@@ -3,8 +3,9 @@
 - Issue: [#286](https://github.com/bkramerext/sigma/issues/286)
 - Branch: `blue/issue-286-concurrent-sessions`
 - Base: `main` at `e2f4f6e89ea4a83f9e01b74aa63ae3f1b267a910`
-- Head: see the PR head commit after push
-- PR: being created after this handoff commit is pushed
+- Implementation commit: `f3fea3a7a6222ea2a03f23c8cd18c0d59d0bc39a`
+- PR: [#287](https://github.com/bkramerext/sigma/pull/287), open against `main`
+- PR head at creation: `f3fea3a7a6222ea2a03f23c8cd18c0d59d0bc39a`
 
 ## Implementation
 

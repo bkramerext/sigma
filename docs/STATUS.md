@@ -36,8 +36,9 @@ provider calls, OAuth, or production changes occurred.
 The browser-exercised sample copy was exported with SIGMA's complete project
 export service; exact bytes and source/session manifest are in
 [`docs/evaluations/issue_286/exports`](evaluations/issue_286/exports/README.md).
-Implementation branch: `blue/issue-286-concurrent-sessions`; independent PR
-handoff: [`messages/issue_286_blue_r4r.md`](../messages/issue_286_blue_r4r.md).
+Implementation branch: `blue/issue-286-concurrent-sessions`; [PR #287](https://github.com/bkramerext/sigma/pull/287)
+is open for independent review. See the
+[`messages/issue_286_blue_r4r.md`](../messages/issue_286_blue_r4r.md) handoff.
 
 ## T277 hosted TeX generation HTTP 400 (2026-10-27)
 

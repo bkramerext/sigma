@@ -16,6 +16,6 @@ Limits exercise.
 - Included project setting: `max_concurrent_sessions` is the exact saved
   80 digit value. Project and strategy data are the existing sample copy.
 - Provider calls, costs, live OAuth, and deployment: none.
-- App/publishing commits: the same Issue #286 branch commit; see the linked
-  handoff in `messages/issue_286_blue_r4r.md` for its SHA.
+- Capture app commit: `f3fea3a7a6222ea2a03f23c8cd18c0d59d0bc39a`.
+- Publishing/report commit: see the branch handoff for the final SHA.
 - Omitted data: no research session records existed in this exercised project.
