@@ -355,9 +355,7 @@ def _initialize(path: Path) -> None:
                 "ALTER TABLE user_state ADD COLUMN model_access_selected INTEGER NOT NULL DEFAULT 0 CHECK(model_access_selected IN (0,1))"
             )
             if "model_access_explicit" in user_state_columns:
-                db.execute(
-                    "UPDATE user_state SET model_access_selected=model_access_explicit"
-                )
+                db.execute("UPDATE user_state SET model_access_selected=model_access_explicit")
         denied_columns = {row["name"] for row in db.execute("PRAGMA table_info(denied_access)")}
         if "subject" not in denied_columns:
             db.execute("ALTER TABLE denied_access ADD COLUMN subject TEXT")
