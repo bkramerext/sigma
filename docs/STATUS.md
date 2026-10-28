@@ -7124,7 +7124,9 @@ and reports the number of compacted references in the context manifest. If the
 obligations themselves still cannot fit, admission remains fail-closed with a
 short message and no saved research changes. The Play failure path no longer
 creates a duplicate toast. Guest intro copy now presents guest exploration,
-Google sign-in for saving, and invitation requests as separate choices.
+Google sign-in for saving, and invitation requests as separate choices. Guest copy
+now clarifies that guests cannot run or save projects and that the administrator
+decides whether to include sponsorship when granting an invitation.
 
 Regression coverage in `tests/research_sessions.py` passed, including 15 obligations
 with 32 source artifacts each and the retained over-count rejection. The hosted

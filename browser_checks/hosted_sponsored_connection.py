@@ -505,10 +505,13 @@ def exercise(origin: str) -> None:
         guest_welcome = page.locator("#invitation-welcome-dialog")
         if guest_welcome.count():
             expect(guest_welcome.locator(".invitation-welcome-intro")).to_contain_text(
-                "Welcome to SIGMA. Explore as a guest"
+                "Explore as a guest without running or saving projects"
             )
             expect(guest_welcome.locator(".invitation-welcome-intro")).to_contain_text(
-                "request an invitation for sponsored access"
+                "request an invitation to become a member"
+            )
+            expect(guest_welcome.locator(".invitation-welcome-intro")).to_contain_text(
+                "decides whether to include sponsorship when granting your invitation"
             )
             guest_welcome.get_by_role("button", name="Continue as guest").click()
         about = page.locator(".home-topline .home-about-button")
