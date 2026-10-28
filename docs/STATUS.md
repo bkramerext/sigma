@@ -7607,3 +7607,23 @@ status. Ruff check/format and `git diff --check` passed. No live provider calls
 were made. GitHub Actions all passed at implementation commit
 `f01d4417f1ae64123d9b20d2758b29224ca709c9`: SIGMA verification, T200, T201,
 T249, T92, and Research Outcome.
+
+## PR #297 sponsor sign-in regression validation (2026-10-28)
+
+Strengthened `tests/cloud_sponsor.py` to exercise the hosted
+`/api/ai/sponsor-auth/begin` route with a verified Google admin whose email is
+different from the configured ChatGPT sponsor; a member remains rejected. A
+deterministic hosted OAuth callback regression now performs the code exchange,
+validates the returned credential fixture, reads the saved sponsor account back
+from the protected store, and confirms its status is `connected`. This closes
+the previous coverage gap where the test only prepopulated credentials.
+
+`tests/cloud_sponsor.py` passed (18 tests), Ruff check/format passed, and
+`git diff --check` passed at implementation commit
+`588494d541f262886da1cee2e779aafa2d9a6fa6`. The focused real-browser check
+`browser_checks/hosted_sponsored_connection.py` could not start because
+Playwright is not installed in this checkout. Real Google/OpenAI OAuth and
+provider availability remain unverified; the test uses mocked code exchange
+and token validation. No product defect was found, no paid calls were made,
+and no merge or deployment occurred. See
+[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
