@@ -1151,7 +1151,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
         )
     if type(token_reservation) is not int or token_reservation <= 0:
         raise CloudResearchUnavailable("Cloud provider token reservation is invalid.")
-    if token_reservation > token_budget:
+    if not unlimited_admin and token_reservation > token_budget:
         raise CloudResearchUnavailable("The next provider call exceeds the per-user token budget.")
     try:
         with _transaction() as db:
