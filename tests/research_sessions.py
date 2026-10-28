@@ -7428,9 +7428,40 @@ def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
     assert "conservative cost reserve" in outcome["caveats"][-1]
 
 
+def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
+    record = {
+        "mode": "chatgpt",
+        "model": MODEL,
+        "cloud_sponsored": True,
+        "maximum_estimated_cost_usd": None,
+        "output_token_limit": 12_000,
+    }
+    reserve = research_sessions._call_cost_reservation(
+        record, {"problem": "A bounded test"}, "investigator", None
+    )
+    assert reserve is not None and reserve > 0
+    assert research_sessions._call_cost_reservation(
+        {**record, "cloud_sponsored": False, "mode": "api_key"},
+        {"problem": "A bounded test"},
+        "investigator",
+        None,
+    ) is None
+
+    branch = {
+        "strategy_title": "Tadpole mechanism",
+        "current_action": "Budget limit",
+        "reason": "Cloud inference cannot be bounded for this model.",
+    }
+    message = research_sessions._portfolio_reservation_failure_message([branch])
+    assert message is not None
+    assert "provider-call reservation failed" in message
+    assert "Cloud inference cannot be bounded" in message
+
+
 def main():
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
+    test_sponsored_unlimited_cost_still_reserves_global_call_spend()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()

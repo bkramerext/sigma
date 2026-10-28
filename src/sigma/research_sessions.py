@@ -2704,6 +2704,20 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
     ) / 1_000_000
 
 
+def _call_cost_reservation(
+    record: dict[str, Any], context: dict[str, Any], role: str, hard_ledger: Any
+) -> float | None:
+    """Estimate sponsored calls even when the project has no optional cost cap."""
+    if isinstance(hard_ledger, dict):
+        return None
+    if record.get("cloud_sponsored") is True or (
+        record.get("mode") == "api_key"
+        and record.get("maximum_estimated_cost_usd") is not None
+    ):
+        return _reserve_cost(record, context, role)
+    return None
+
+
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
@@ -7512,6 +7526,7 @@ async def _portfolio_role_call(
             request_audit = _role_input_audit(record, role, context, credential.get("token"))
             hard_ledger = record.get("hard_budget_ledger")
             reserve = None
+            reserve = _call_cost_reservation(record, context, role, hard_ledger)
             token_reserve = (
                 len(json.dumps(context, ensure_ascii=False).encode("utf-8"))
                 + 65_536
@@ -7559,8 +7574,6 @@ async def _portfolio_role_call(
             if (
                 record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
             ) and record.get("maximum_estimated_cost_usd") is not None:
-                if not isinstance(hard_ledger, dict):
-                    reserve = _reserve_cost(record, context, role)
                 current_cost = record.get("estimated_cost_usd")
                 reserved_cost = float(record.get("estimated_cost_reserved_usd", 0.0))
                 if (
@@ -8220,6 +8233,28 @@ def _portfolio_cost_limit_message(record: dict[str, Any], runs: list[dict[str, A
     )
 
 
+def _portfolio_reservation_failure_message(runs: list[dict[str, Any]]) -> str | None:
+    blocked = [branch for branch in runs if branch.get("current_action") == "Budget limit"]
+    if not blocked:
+        return None
+    details = []
+    seen: set[str] = set()
+    for branch in blocked:
+        title = str(branch.get("strategy_title") or "Strategy").strip()
+        reason = " ".join(
+            str(branch.get("reason") or "Provider call reservation failed.").split()
+        )
+        detail = f"{title}: {reason}"
+        if detail not in seen:
+            seen.add(detail)
+            details.append(detail)
+    return (
+        "Research stopped before completing these branches because provider-call "
+        "reservation failed. "
+        + "; ".join(details)
+    )
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     semaphore = asyncio.Semaphore(3)
@@ -8320,6 +8355,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                         for branch in runs
                         if branch.get("current_action") == "Cost limit"
                     )
+                reservation_failure_message = _portfolio_reservation_failure_message(runs)
+                if not cost_limit_message and reservation_failure_message:
+                    record["message"] = reservation_failure_message
                 record["updated_at"] = _now()
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
