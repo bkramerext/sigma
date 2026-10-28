@@ -1,4 +1,4 @@
-"""T92 real-Chromium acceptance: active Recent status, polling, mobile and reload.
+"""T92 real-Chromium acceptance: active Saved status, polling, mobile and reload.
 
 Uses an isolated local fixture API; status alone is controlled at the transport
 boundary. No provider requests or research work are dispatched.
@@ -6,6 +6,7 @@ boundary. No provider requests or research work are dispatched.
 
 import json
 import os
+import re
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -49,17 +50,19 @@ with sync_playwright() as playwright:
         "button", name="Open Nonconsecutive Subset Sums Modulo 3", exact=True
     )
     sample.click()
-    expect(
-        page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3 v1")
-    ).to_be_visible()
+    project_heading = page.get_by_role(
+        "heading", name=re.compile(r"^Nonconsecutive Subset Sums Modulo 3 v\d+$")
+    )
+    expect(project_heading).to_be_visible()
+    project_title = project_heading.inner_text()
     project_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     project_id = json.loads(Path(project_path, "project.json").read_text())["id"]
     page.locator(".project-art-header .project-header-art").click()
-    recent = page.get_by_role("tabpanel", name="Recent")
+    recent = page.get_by_role("tabpanel", name="Saved")
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
         recent_group.locator("summary").click()
-    entry = recent.get_by_role("button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True)
+    entry = recent.get_by_role("button", name=project_title, exact=True)
     expect(entry).to_be_visible()
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     initial = metadata.inner_text()
@@ -86,11 +89,11 @@ with sync_playwright() as playwright:
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
 
     page.reload()
-    recent = page.get_by_role("tabpanel", name="Recent")
+    recent = page.get_by_role("tabpanel", name="Saved")
     recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
     if not recent_group.evaluate("group => group.open"):
         recent_group.locator("summary").click()
-    entry = recent.get_by_role("button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True)
+    entry = recent.get_by_role("button", name=project_title, exact=True)
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(metadata).to_contain_text(" · Running · ", timeout=10000)
     running.clear()

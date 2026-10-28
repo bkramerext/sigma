@@ -1,3 +1,28 @@
+## Backend access log build SHA (2026-10-28)
+
+Uvicorn access entries place the seven-character SHA immediately after the
+client IP address and port. The backend
+uses the configured build commit when supplied, or the checkout HEAD for a
+local launch. A local restart is needed to see the new format.
+
+## Context-aware AI text conversion (2026-10-28)
+
+The shared AI Plain/Markdown conversion prompt now asks the model to decide
+slash notation from sentence context: `good/better` in prose remains wording,
+while `1/2 the people in this room` expresses a fraction. It explicitly keeps
+ordinary slash-separated words out of math delimiters and LaTeX fractions.
+The conversion still preserves the source and uses the existing structured
+response path. Offline request assertions cover both API-key and ChatGPT-plan
+payloads; live model quality remains unverified. `tests/text_views.py` passed
+after the prompt change. The full `./sigma test` ran through the Python and
+frontend suites but failed at an outdated hosted-personal fixture expectation,
+two Ruff import-order findings, and three Ruff formatting findings. The
+fixture now explicitly selects personal mode before testing it, and those
+Ruff findings have been corrected. A second full run passed the hosted-personal
+scenario and all Python scenarios, Ruff check, Pyright, and frontend typecheck;
+it found one remaining formatting issue in `src/sigma/research_budget.py`, now
+corrected. Final verification remains pending.
+
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 
 Added **Maximum concurrent sessions** to Project Settings → Limits. The
@@ -7361,3 +7386,224 @@ checks, and full `./sigma test` passed. No live provider call or production
 configuration change was made. The conservative reserve may still reject a call
 under the unchanged $0.25 session cap; that remains to be observed and handled
 without weakening spend accounting.
+
+## Complete project export and import contract (2026-10-28)
+
+The standard `GET /api/projects/export` endpoint and the workspace's Project
+file action now return one portable JSON bundle containing every project file,
+including saved research history, evidence and artifacts. `POST
+/api/projects/import` restores that bundle into the current workspace without
+replacing existing projects. The former structured audit response remains at
+`GET /api/projects/audit`; readable reports continue to use
+`/api/projects/export/report`. `/api/projects/download` remains a compatibility
+alias for the complete bundle. The UI labels the project file as complete and
+importable and explains what it contains.
+
+Focused checks passed: `tests/project_bundle.py`,
+`tests/project_creation.py`, `tests/project_settings.py`, and
+`npm run typecheck` in `frontend/`. `git diff --check` passed. The full
+`./sigma test` run was stopped at the user's request while in
+`tests/research_sessions.py`; it is incomplete. No real-browser check was run for
+the export dialog change. Existing untracked project exports were left untouched.
+
+## Identity tooltip and configurable hosted call limit copy (2026-10-28)
+
+The authenticated Google sign-out pill now exposes a hover/focus tooltip with
+the signed-in email. Hosted Project Settings → Limits shows the current
+configured call count and distinguishes it from the hosted maximum of six calls.
+`git diff --check` passed. No automated or real-browser checks were run for this
+copy and tooltip update.
+
+## Home Saved tab label (2026-10-28)
+
+The Home catalog tab now reads “Saved,” and its tooltip describes saved
+projects. Existing recent-project storage and navigation behavior are unchanged.
+`git diff --check` passed; no browser or automated checks were run.
+
+## Local Saved tab sharing disclosure (2026-10-28)
+
+The Saved tab tooltip now clarifies that local mode uses one shared project
+list. Hosted guests retain the sign-in tooltip, and hosted signed-in accounts
+retain the regular saved-project tooltip. `git diff --check` passed; no browser
+or automated checks were run.
+
+## Samples copy tooltip (2026-10-28)
+
+The Samples tab tooltip reads “Selecting a sample copies into a new project.”
+`git diff --check` passed; no browser or automated checks were run.
+
+## About dialog spacing (2026-10-28)
+
+Removed the “Strategies set direction…” sentence from the About dialog. The
+space between the intro and disclosures is now just the intro's 8px bottom gap.
+`git diff --check` passed; no browser or automated checks were run.
+
+## Project file export label (2026-10-28)
+
+The export option now reads “Project file”; its hover text says it can be
+imported into a different SIGMA account. `git diff --check` passed; no browser
+or automated checks were run.
+
+## Readable project export and viewport-safe remove tooltip (2026-10-28)
+
+Portable project exports now use bundle version 2: JSON members are embedded
+as JSON, UTF-8 members as text, and only binary or invalid-UTF-8 content is
+Base64 encoded. Import still accepts version 1 and stores projects in the
+existing internal format. Operational `.lock` files are omitted because they
+are regenerated locally. The Saved Projects Remove tooltip now uses the
+viewport-positioned tooltip.
+
+Focused checks passed: project bundle, project creation/import API, project
+reports, and Ruff on the changed Python and browser-check files. The real
+browser recents check and full `./sigma test` suite were not run.
+
+The Saved Projects removal confirmation flips above its Remove row near the
+bottom of the viewport, staying adjacent to its trigger. Confirm and Cancel
+retain the underlined text-action style and use the standard yellow action
+color. The browser check asserts the tooltip and
+confirmation stay within the viewport and the confirmation stays close to its
+trigger. The frontend TypeScript and production build passed; the browser check
+remains unrun because the local API server was unavailable.
+
+## Forget unavailable Saved Projects by path (2026-10-28)
+
+The Remove action sends the saved path as a query parameter alongside the
+ID-only JSON body, which remains compatible with older running servers. The
+forget endpoint removes a matching entry by either stable ID or saved path, so
+identity drift in the project document does not block cleanup. The
+recents scenario verifies removal when the project document ID no longer
+matches its saved index identity. Focused recents tests and Ruff passed.
+
+## Sponsored ChatGPT pill spacing (2026-10-28)
+
+The Sponsored ChatGPT pill now matches the Sign out indicator-to-label gap and
+tightens the label-to-allowance gap. Frontend build passed.
+
+Request toast Dismiss actions use the same yellow text-action color as other
+actions in the app.
+
+## Project limits copy and field sizing (2026-10-28)
+
+Removed fixed hosted/local call, duration, and spending amounts from the
+Project Settings → Limits guidance. Shortened Maximum concurrent sessions help
+to one sentence. Limit inputs now share a compact width that fits eight-digit
+values. The local sponsored-limits browser assertion follows the revised copy.
+The duration unit selector is narrower and has added right padding for its
+chevron.
+
+## Project settings Research tab sizing (2026-10-28)
+
+Narrowed the Difficulty and Thinking level controls in the edit dialog and
+shortened the Research tab introduction.
+
+The Project Settings dialog title now reads “Project Settings.” Research type
+and Model controls share a 240px width, the Research type icon-to-label gap and
+space above the control are smaller, and the Research introduction's bottom
+margin is reduced. Thinking level and Model captions are shorter. The project
+header Thinking pill is left-aligned, and the Model pill no longer repeats its
+label.
+
+## Issue #289 — Project configured sponsored limits (2026-10-28)
+
+Sponsored sessions now use the saved Project Settings call, round, and maximum
+estimated cost limits rather than overriding them with six calls or $0.25.
+Hosted and local sponsored sessions retain the service 15-minute cap and
+account/global allowance checks. Unknown provider attempts continue to retain
+their reservation. A cost-limited portfolio now reports the affected cycle,
+call count, branch reason, and undispatched next role while retaining its
+partial cycle in the outcome. Starting sponsored work without a configured
+maximum estimated cost returns an actionable Project Settings message.
+
+Import title collisions now preserve the exported project by assigning a new
+versioned title (for example, “v1” becomes “v2”); non-versioned collisions use
+an imported suffix. Existing imported bundle formats remain supported.
+
+Focused verification passed: `tests/cloud_research.py`,
+`tests/cloud_research_api.py`, `tests/cloud_research_sponsored_api.py`,
+`tests/research_sessions.py`, `tests/project_creation.py`, and
+`npm --prefix frontend run build`; Ruff formatting and `git diff --check` also
+passed. The full `./sigma test` was not run, as requested. No real-browser
+check was run. Hosted personal ChatGPT authorization remains disabled by the
+existing hosted integration, so hosted personal-account switching is blocked
+and unchanged; no authorization requirement was bypassed. No live or paid
+provider calls were made.
+
+Follow-up from local Session 6: its first sponsored provider call received an
+explicit ChatGPT plan/app usage-limit rejection. SIGMA had retained the full
+write-ahead reservation as unknown, then attempted the remaining strategies,
+which were reported as cumulative sponsored allowance failures. Known HTTP 429
+or explicit ChatGPT usage-limit responses now settle as zero-usage rejected
+attempts, release the held spend/token reservation, stop remaining strategy
+dispatch, and report the provider limit without switching billing sources.
+The session remove confirmation also no longer says that other strategies and
+sessions will remain. Regression coverage was added; verification is deferred
+for local testing. This cannot clear the designated ChatGPT account's own usage
+cap, so a new session can proceed only after that provider limit permits use.
+
+## Sponsored account initial connection (2026-10-28)
+
+Eligible accounts now start with SIGMA sponsorship selected until the user
+explicitly chooses a connection. The selection is persisted so a personal
+choice remains personal on refresh. Added a migration-safe explicit-choice
+field and updated auth regression cases. Personal mode no longer silently
+changes back to sponsorship when its ChatGPT connection is disconnected or
+needs reauthorization.
+
+The session cost cap is visible in hosted Project Settings and local sponsored
+settings. It is optional; without a project cap, sponsored sessions remain
+subject to ChatGPT and SIGMA allowance limits. The confirmation says “no
+session cost cap” when no project cap is configured.
+
+Verification was deferred for local user testing. A `tests/cloud_auth.py` run
+started just before that request and failed two scenarios that assumed new
+eligible accounts began in personal mode; those cases were updated but not
+rerun. After local testing was requested in parallel with automated
+verification, `tests/cloud_auth.py` passed all 60 tests. Frontend typecheck,
+Ruff check/format, and `git diff --check` passed before the optional-cap
+follow-up. Verification of that follow-up is deferred until after local testing.
+The real-browser check did not complete; it stopped at an assertion in the
+local connection-switching scenario.
+
+## Lean project action visibility (2026-10-28)
+
+The disabled Lean proof action is now visible in the project button bar for all
+research types, matching the consistently visible TeX and export actions. No
+tests were run; this change is committed for local browser verification.
+
+## Sponsored unlimited-cost session reservation (2026-10-28)
+
+Diagnosed the tadpole session ending with 0/30 calls. Its five sponsored
+strategy branches were all rejected before provider dispatch because the
+optional project cost cap was unset and no per-call estimate was passed to the
+global sponsored allowance ledger. Sponsored calls now reserve their reviewed
+model estimate against SIGMA's global allowance even when no project cap is
+configured. Reservation failures are surfaced with their actual reason instead
+of the generic shared-call-budget message. Sponsored portfolio calls are
+serialized within a session so concurrent sibling reservations do not consume
+the available allowance while a call is still in flight.
+
+`tests/research_sessions.py` and scoped Ruff check/format passed at the final
+implementation SHA. `./sigma test` was run and stopped with unrelated failures
+in `tests/cloud_personal.py` (the
+fixture expected an unavailable personal account) and a pre-existing import
+ordering issue in `src/sigma/api.py`; Pyright and frontend typecheck passed, and
+the frontend build was skipped after those failures. No provider calls were
+made.
+
+## PR #293 stabilization (2026-10-28)
+
+Updated browser acceptance checks for the current Saved tab label, Project
+Settings title, optional Unlimited sponsored session cost, and current Home
+pill spacing. T92 now reads the created sample's versioned title instead of
+assuming `v1`; Home status coverage explicitly expands saved project groups.
+This fixes stale T92 and T201 browser expectations without changing product
+behavior.
+
+`./sigma test` passed all steps locally (Python 3.14.7), including streamed
+provider diagnostics and portfolio finalization. Real-browser checks passed
+for hosted sponsored connection, model availability, local sponsored limits,
+T92 Saved running status, T201 guest sample workflow, and Home Saved running
+status. Ruff check/format and `git diff --check` passed. No live provider calls
+were made. GitHub Actions all passed at implementation commit
+`f01d4417f1ae64123d9b20d2758b29224ca709c9`: SIGMA verification, T200, T201,
+T249, T92, and Research Outcome.

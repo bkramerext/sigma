@@ -187,32 +187,33 @@ def main() -> None:
                 assert chemistry.json()["project"]["show_advanced_outcome_details"] is False
                 # Full portable download and authenticated-workspace import.
                 downloaded = client.get(
-                    "/api/projects/download", params={"path": response.json()["path"]}
+                    "/api/projects/export", params={"path": response.json()["path"]}
                 )
                 assert downloaded.status_code == 200, downloaded.text
                 assert "attachment" in downloaded.headers["content-disposition"]
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
-                from sigma.project_bundle import read_bundle
-
-                assert portable == read_bundle(response.json()["path"])
-                imported_document = json.loads(
-                    __import__("base64").b64decode(portable["files"]["project.json"])
+                assert portable["version"] == 2
+                # Both the canonical export route and the legacy download
+                # alias must return one complete, importable file bundle.
+                legacy_download = client.get(
+                    "/api/projects/download", params={"path": response.json()["path"]}
                 )
-                imported_document["title"] = "API math imported"
-                portable["files"]["project.json"] = (
-                    __import__("base64")
-                    .b64encode((json.dumps(imported_document) + "\n").encode())
-                    .decode()
-                )
+                assert legacy_download.status_code == 200
+                assert legacy_download.content == downloaded.content
+                imported_document = portable["files"]["project.json"]
+                imported_document["title"] = "API math imported v1"
+                portable["files"]["project.json"] = imported_document
                 imported = client.post("/api/projects/import", json={"bundle": portable})
                 assert imported.status_code == 201, imported.text
                 assert Path(imported.json()["path"]).suffix == ".json"
+                duplicate_import = client.post("/api/projects/import", json={"bundle": portable})
+                assert duplicate_import.status_code == 201, duplicate_import.text
+                assert duplicate_import.json()["project"]["title"] == "API math imported v2"
+                assert duplicate_import.json()["path"] != imported.json()["path"]
                 assert (
-                    client.post("/api/projects/import", json={"bundle": portable}).status_code
-                    == 400
+                    inspect_project(imported.json()["path"]).project.title == "API math imported v1"
                 )
-                assert inspect_project(imported.json()["path"]).project.title == "API math imported"
                 # Home discovery and Open Project must work for both original
                 # and imported single-file projects, not only legacy directories.
                 from sigma.projects import list_json_projects

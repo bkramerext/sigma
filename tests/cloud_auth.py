@@ -1012,7 +1012,7 @@ class CloudAuthTests(TestCase):
         self.assertTrue(status["account"]["workspace"]["available"])
         self.assertEqual(
             status["account"]["model_access"],
-            {"mode": "personal", "connection": "checking"},
+            {"mode": "sponsored", "connection": "checking"},
         )
         self.assertTrue(status["account"]["sponsorship"]["eligible"])
         self.assertEqual(status["admin_contact_email"], "admin@example.org")
@@ -1050,7 +1050,7 @@ class CloudAuthTests(TestCase):
                 1,
                 status["account"]["workspace"]["id"],
                 1,
-                "personal",
+                "sponsored",
                 "checking",
             ),
         )
@@ -1300,12 +1300,17 @@ class CloudAuthTests(TestCase):
         try:
             columns = {row[1] for row in db.execute("PRAGMA table_info(user_state)")}
             self.assertIn("invitation_welcome_pending", columns)
+            self.assertIn("model_access_explicit", columns)
             pending = db.execute(
                 "SELECT invitation_welcome_pending FROM user_state WHERE subject='legacy-subject'"
+            ).fetchone()[0]
+            explicit = db.execute(
+                "SELECT model_access_explicit FROM user_state WHERE subject='legacy-subject'"
             ).fetchone()[0]
         finally:
             db.close()
         self.assertEqual(pending, 0)
+        self.assertEqual(explicit, 0)
 
     def test_invitation_request_fails_closed_when_notification_unconfigured(self):
         denied = self.finish(email="visitor@example.org", subject="request-retry")
@@ -2235,6 +2240,34 @@ class CloudAuthTests(TestCase):
                 self.assertEqual(credential["token"], "fixture-sponsored-key")
                 self.assertTrue(openai_connection.cloud_credential(credential))
 
+                # A selected personal funding source must fail closed on a
+                # temporary provider outage instead of silently spending the
+                # sponsor allowance.
+                cloud_auth.set_model_access("local-service-key-member", "personal")
+                with patch.object(
+                    openai_connection.chatgpt_auth,
+                    "session",
+                    new=AsyncMock(
+                        return_value={
+                            "mode": "chatgpt",
+                            "account": {"email": "personal@example.org", "access_token": ""},
+                            "status": "unavailable",
+                        }
+                    ),
+                ):
+                    principal_token = cloud_auth._CURRENT_PRINCIPAL.set(principal)
+                    try:
+                        personal_credential = asyncio.run(openai_connection.auth_context())
+                    finally:
+                        cloud_auth._CURRENT_PRINCIPAL.reset(principal_token)
+                self.assertEqual(personal_credential["status"], "unavailable")
+                self.assertEqual(personal_credential["token"], "")
+                self.assertFalse(openai_connection.cloud_credential(personal_credential))
+                self.assertEqual(
+                    cloud_auth.model_access_for_subject("local-service-key-member"), "personal"
+                )
+                cloud_auth.set_model_access("local-service-key-member", "sponsored")
+
                 investigator = {
                     "claim": "The base case suggests the recurrence bound.",
                     "method": "Check the first recurrence value.",
@@ -2380,7 +2413,7 @@ class CloudAuthTests(TestCase):
                     self.assertEqual(saved["status"], "ended", saved)
                     self.assertEqual(calls.await_count, 2)
 
-    def test_local_expired_personal_connection_restores_sponsorship_and_admin_can_renew(self):
+    def test_local_expired_personal_connection_does_not_switch_funding_and_admin_can_renew(self):
         local_origin = "http://127.0.0.1:5173"
         with patch.dict(
             os.environ,
@@ -2416,6 +2449,12 @@ class CloudAuthTests(TestCase):
             )
             self.assertEqual(login.status_code, 303)
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            initial_status = member.get("/api/cloud-auth/status").json()
+            self.assertTrue(initial_status["account"]["sponsorship"]["eligible"])
+            self.assertEqual(initial_status["account"]["model_access"]["mode"], "sponsored")
+            # Once the user explicitly selects personal mode, later status
+            # refreshes must preserve that choice.
+            cloud_auth.set_model_access("local-sponsored-member", "personal")
             with (
                 patch(
                     "sigma.openai_connection.chatgpt_auth.session",
@@ -2431,12 +2470,11 @@ class CloudAuthTests(TestCase):
                 connection = member.get("/api/ai/connection")
             self.assertEqual(connection.status_code, 200, connection.text)
             self.assertEqual(personal_session.await_count, 1)
-            self.assertEqual(sponsor_session.await_count, 1)
-            self.assertIn("temporarily unavailable", connection.json()["guidance"])
+            self.assertEqual(sponsor_session.await_count, 0)
+            self.assertIn("session has expired", connection.json()["guidance"])
             self.assertNotIn("administrator", connection.json()["guidance"].lower())
-            self.assertNotIn("Your ChatGPT session has expired", connection.json()["guidance"])
             status = member.get("/api/cloud-auth/status").json()
-            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+            self.assertEqual(status["account"]["model_access"]["mode"], "personal")
             with (
                 patch(
                     "sigma.cloud_sponsor.sponsor_account_id",
@@ -2508,6 +2546,7 @@ class CloudAuthTests(TestCase):
                 client=member,
             )
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            cloud_auth.set_model_access("local-sponsored-member", "personal")
 
             async def seed():
                 async with sponsor_transaction() as state:
@@ -2561,7 +2600,7 @@ class CloudAuthTests(TestCase):
             cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
         )
         initial = self.client.get("/api/cloud-auth/status").json()
-        self.assertEqual(initial["account"]["model_access"]["mode"], "personal")
+        self.assertEqual(initial["account"]["model_access"]["mode"], "sponsored")
         headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
         with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
             selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)

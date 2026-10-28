@@ -251,6 +251,28 @@ def check(root: Path, base: Path) -> None:
             ).status_code
             == 200
         )
+        from sigma.project_bundle import read_file, write_file
+
+        identity_drift = create_project("Codex identity drift", "Saved from a Codex session")
+        document = json.loads(read_file(identity_drift.path, "project.json"))
+        document["id"] = str(uuid4())
+        write_file(identity_drift.path, "project.json", json.dumps(document).encode())
+        drifted_entry = next(
+            item
+            for item in api.get("/api/projects/recent").json()["projects"]
+            if item["path"] == identity_drift.path
+        )
+        assert drifted_entry["available"] is False
+        removed = api.post(
+            "/api/projects/recent/forget",
+            params={"path": drifted_entry["path"]},
+            json={"project_id": document["id"]},
+        )
+        assert removed.status_code == 200, removed.text
+        assert all(
+            item["path"] != identity_drift.path
+            for item in api.get("/api/projects/recent").json()["projects"]
+        )
     command = subprocess.run(
         [str(ROOT / "sigma"), "create", "--title", "CLI recent", "--problem", "Own work"],
         capture_output=True,

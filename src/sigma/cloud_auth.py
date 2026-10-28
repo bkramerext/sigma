@@ -283,8 +283,12 @@ def _initialize(path: Path) -> None:
                 workspace_id TEXT,
                 sponsorship_eligible INTEGER NOT NULL CHECK(sponsorship_eligible IN (0,1)),
                 model_access TEXT NOT NULL CHECK(model_access IN ('personal','sponsored')),
+                model_access_selected INTEGER NOT NULL DEFAULT 0
+                    CHECK(model_access_selected IN (0,1)),
                 model_connection_status TEXT NOT NULL DEFAULT 'checking'
                     CHECK(model_connection_status IN ('checking','connected','unconfigured','disconnected','unauthorized','forbidden','limited','unavailable','invalid_response','reauth_required')),
+                model_access_explicit INTEGER NOT NULL DEFAULT 0
+                    CHECK(model_access_explicit IN (0,1)),
                 invitation_welcome_pending INTEGER NOT NULL DEFAULT 0
                     CHECK(invitation_welcome_pending IN (0,1)),
                 updated_at INTEGER NOT NULL
@@ -338,10 +342,20 @@ def _initialize(path: Path) -> None:
         if "allowance_usd" not in columns:
             db.execute("ALTER TABLE grants ADD COLUMN allowance_usd REAL")
         user_state_columns = {row["name"] for row in db.execute("PRAGMA table_info(user_state)")}
+        if "model_access_explicit" not in user_state_columns:
+            db.execute(
+                "ALTER TABLE user_state ADD COLUMN model_access_explicit INTEGER NOT NULL DEFAULT 0 CHECK(model_access_explicit IN (0,1))"
+            )
         if "invitation_welcome_pending" not in user_state_columns:
             db.execute(
                 "ALTER TABLE user_state ADD COLUMN invitation_welcome_pending INTEGER NOT NULL DEFAULT 0 CHECK(invitation_welcome_pending IN (0,1))"
             )
+        if "model_access_selected" not in user_state_columns:
+            db.execute(
+                "ALTER TABLE user_state ADD COLUMN model_access_selected INTEGER NOT NULL DEFAULT 0 CHECK(model_access_selected IN (0,1))"
+            )
+            if "model_access_explicit" in user_state_columns:
+                db.execute("UPDATE user_state SET model_access_selected=model_access_explicit")
         denied_columns = {row["name"] for row in db.execute("PRAGMA table_info(denied_access)")}
         if "subject" not in denied_columns:
             db.execute("ALTER TABLE denied_access ADD COLUMN subject TEXT")
@@ -474,13 +488,13 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             workspace_id = workspace_for_subject(principal.subject).workspace_id
         except WorkspaceUnavailable as exc:
             raise RuntimeError("Private workspace is unavailable.") from exc
-    # Hosted users begin on their explicitly personal choice. Sponsored access
-    # is available only after an authenticated user selects it.
-    model_access = "personal"
     with _db(cfg) as db:
         sponsorship_eligible = _sponsorship_eligibility_in_db(
             db, cfg, principal.subject, principal.email, principal.role
         )
+        # Eligible accounts start on sponsorship until they explicitly select
+        # personal inference. The choice persists across status refreshes.
+        model_access = "sponsored" if sponsorship_eligible else "personal"
         _upsert_user_state(
             db,
             principal.subject,
@@ -495,16 +509,8 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
                 (principal.subject,),
             )
-        elif (
-            (not cfg.local and force_sponsored_mode_enabled())
-            or (cfg.local and _local_sponsored_test_mode(cfg))
-        ) and sponsorship_eligible:
-            db.execute(
-                "UPDATE user_state SET model_access='sponsored' WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
-                (principal.subject,),
-            )
         row = db.execute(
-            "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_connection_status,invitation_welcome_pending FROM user_state WHERE subject=?",
+            "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_access_selected,model_connection_status,invitation_welcome_pending FROM user_state WHERE subject=?",
             (principal.subject,),
         ).fetchone()
     assert row is not None
@@ -538,11 +544,16 @@ def _upsert_user_state(
 ) -> None:
     db.execute(
         """INSERT INTO user_state(subject,email,role,access_active,workspace_id,
-               sponsorship_eligible,model_access,model_connection_status,updated_at)
-           VALUES(?,?,?,1,?,?,?,'checking',?)
+               sponsorship_eligible,model_access,model_access_selected,model_connection_status,updated_at)
+           VALUES(?,?,?,1,?,?,?,0,'checking',?)
            ON CONFLICT(subject) DO UPDATE SET email=excluded.email,
                role=excluded.role,access_active=1,workspace_id=excluded.workspace_id,
                sponsorship_eligible=excluded.sponsorship_eligible,
+               model_access=CASE WHEN excluded.sponsorship_eligible=0 THEN 'personal'
+                   WHEN user_state.model_access_selected=0 THEN excluded.model_access
+                   ELSE user_state.model_access END,
+               model_access_selected=CASE WHEN excluded.sponsorship_eligible=0 THEN 0
+                   ELSE user_state.model_access_selected END,
                updated_at=excluded.updated_at""",
         (subject, email, role, workspace_id, sponsorship_eligible, model_access, _now()),
     )
@@ -594,7 +605,7 @@ def set_model_access(subject: str, mode: str) -> None:
         ):
             raise PermissionError("Sponsored mode is required for this account.")
         changed = db.execute(
-            "UPDATE user_state SET model_access=?,updated_at=? WHERE subject=? AND access_active=1"
+            "UPDATE user_state SET model_access=?,model_access_selected=1,model_access_explicit=1,updated_at=? WHERE subject=? AND access_active=1"
             + (" AND sponsorship_eligible=1" if mode == "sponsored" else ""),
             (mode, _now(), subject),
         ).rowcount

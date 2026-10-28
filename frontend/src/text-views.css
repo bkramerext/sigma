@@ -38,7 +38,7 @@
 .workspace-page .project-text-views .text-editable:hover { background: #1a2d3960; }
 .workspace-page .project-text-views .text-editable:focus-visible { outline: 1px solid #c69962; outline-offset: 3px; }
 .workspace-page .project-text-views .text-view-editor { display: flex; flex-direction: column; }
-.workspace-page .project-text-views .text-view-editor textarea { flex: 1 1 auto; min-height: 74px; resize: none; }
+.workspace-page .project-text-views .text-view-editor textarea { flex: 0 0 auto; min-height: 0; resize: none; }
 .workspace-page .project-pane .project-text-views .text-view-editor textarea:focus { outline: 2px solid #edbc77; outline-offset: -3px; }
 .workspace-page .project-text-views .text-view-editor .form-actions { flex: 0 0 auto; }
 .workspace-page .inline-description-editor textarea:hover { background: #10202b55; }

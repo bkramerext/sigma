@@ -1355,10 +1355,8 @@ def copy_project_between_workspaces(
     The source remains intact. Project identity, session history, evidence and
     artifacts are preserved by the portable bundle importer.
     """
-    import base64
-
     from sigma import cloud_workspaces
-    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.project_bundle import BundleError, bundle_project_document, import_bundle
 
     source_token = (
         cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None
@@ -1387,8 +1385,7 @@ def copy_project_between_workspaces(
         cloud_workspaces.bind_workspace(target_workspace) if target_workspace is not None else None
     )
     try:
-        encoded_project = payload["files"]["project.json"]
-        document = json.loads(base64.b64decode(encoded_project, validate=True))
+        document = bundle_project_document(payload)
         original_title = document["title"]
         root = projects_root()
         imported: Path | None = None
@@ -1411,9 +1408,7 @@ def copy_project_between_workspaces(
                     continue
                 if title != original_title:
                     document["title"] = title
-                    payload["files"]["project.json"] = base64.b64encode(
-                        (json.dumps(document, indent=2) + chr(10)).encode("utf-8")
-                    ).decode("ascii")
+                    payload["files"]["project.json"] = document
                 imported = import_bundle(payload, bundle_destination)
                 break
         if imported is None:

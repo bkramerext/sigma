@@ -139,7 +139,7 @@ def main():
         assert "difficulty" not in json.loads((legacy / "project.json").read_bytes())
         assert inspect_project(legacy).project.difficulty is None
         with TestClient(app) as client:
-            exported_legacy = client.get("/api/projects/export", params={"path": str(legacy)})
+            exported_legacy = client.get("/api/projects/audit", params={"path": str(legacy)})
             assert exported_legacy.status_code == 200
             assert "difficulty" not in exported_legacy.json()["project"]
             report_legacy = client.get(
@@ -253,7 +253,7 @@ def main():
                 is True
             )
             assert client.post("/api/projects/update", json=body).status_code == 400
-            exported = client.get("/api/projects/export", params={"path": str(path)})
+            exported = client.get("/api/projects/audit", params={"path": str(path)})
             assert exported.status_code == 200
             assert exported.json()["project"]["difficulty"] == "medium"
             assert exported.json()["project"]["show_advanced_outcome_details"] is True

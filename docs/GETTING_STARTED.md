@@ -41,10 +41,10 @@ plan. To roll back local service-key routing, unset
 An account with only `$0.01` remaining may still be unable to start a call:
 the server reserves a conservative, model-specific amount before each provider
 request and never exceeds the member's allowance.
-In local sponsored mode, **Project Settings → Limits** keeps the saved project
-call allowance (up to 30 calls); the hosted six-call cap does not apply. Local
-sponsored sessions remain capped at 15 minutes and $0.25 per session, with the
-member's remaining account allowance enforced separately before each call.
+In sponsored mode, **Project Settings → Limits** controls the session call,
+round, and estimated-cost limits. Sponsored sessions remain capped at 15 minutes.
+The member's remaining account allowance and configured global spend ceiling
+are enforced separately before each call.
 Hosted deployments retain their own provider setting. The option does not
 enable the hosted forced-sponsored setting. Use `./sigma start` to return to
 normal local mode.
@@ -68,9 +68,10 @@ is bound to SIGMA's saved sponsor account, and an eligible member cannot access
 admin settings. The same log records
 `sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
 the operator can tell whether renewal completed. A member's Google sign-in
-alone does not renew the server's sponsor credential. A failed personal
-ChatGPT connection returns an eligible member to sponsored mode; only a
-successful personal connection selects personal mode.
+alone does not renew the server's sponsor credential. A failed or temporarily
+unavailable personal ChatGPT connection stays in personal mode and does not
+spend the sponsored allowance. Click **ChatGPT connected** to intentionally
+return to sponsorship after a successful personal connection.
 
 To test with mock identities and controls, use `./sigma start --mock-auth`.
 The mock member's $25 allowance is simulated. For its sponsored presentation,
@@ -96,7 +97,7 @@ Review the **Outcome** and its conclusion alongside detailed findings, objection
 
 ## Reports and exports
 
-Use the workspace's **Report / Export** actions to produce audit data or readable reports in the formats offered by the dialog. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots. The dialog shows provider-use bounds before you start; progress, cancellation, and resumable checkpoints are available. A paper preserves the exported Outcome and underlying research records, including any saved reasoning and optional conclusion. Review its omission warnings, objections, limitations, and verification status before relying on it. When material evidence is omitted, the paper marks conclusions provisional and does not leave affected claims established. Missing Outcome conclusions are not invented. Reports communicate findings, not independent verification.
+Use the workspace's **Report / Export** actions to create a complete, importable project file or readable text/HTML reports. The project file contains the project and its saved research history, evidence, and artifacts in one JSON bundle; use **Import Project** to restore it. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots. The dialog shows provider-use bounds before you start; progress, cancellation, and resumable checkpoints are available. A paper preserves the exported Outcome and underlying research records, including any saved reasoning and optional conclusion. Review its omission warnings, objections, limitations, and verification status before relying on it. When material evidence is omitted, the paper marks conclusions provisional and does not leave affected claims established. Missing Outcome conclusions are not invented. Reports communicate findings, not independent verification.
 
 ## Optional computational experiments
 

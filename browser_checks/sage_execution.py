@@ -128,7 +128,7 @@ with TemporaryDirectory(prefix="sigma-sage-browser-") as temporary, sync_playwri
     expect(record_view).to_contain_text("COUNTEREXAMPLE: 341")
     expect(record_view).to_contain_text(evidence["source_sha256"])
     expect(record_view).to_contain_text("srange(3,1000,2)")
-    exported = page.request.get(fixture_url + "/api/projects/export", params={"path": path}).json()
+    exported = page.request.get(fixture_url + "/api/projects/audit", params={"path": path}).json()
     assert exported["research_sessions"][0]["outcome"]["metrics"] == session["outcome"]["metrics"]
     for fmt in ("txt", "html"):
         report = page.request.get(

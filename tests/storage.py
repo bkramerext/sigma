@@ -140,7 +140,7 @@ def main() -> None:
                     },
                 )
                 assert strategy.status_code == 201, strategy.text
-                exported = client_a.get("/api/projects/export", params={"path": project_path})
+                exported = client_a.get("/api/projects/audit", params={"path": project_path})
                 assert (
                     exported.status_code == 200 and b"T100 persisted strategy" in exported.content
                 )

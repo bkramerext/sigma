@@ -60,7 +60,7 @@ with sync_playwright() as playwright:
     )
     assert maximum_state.read_bytes() == maximum_before
     maximum_export = page.evaluate(
-        "async path => (await (await fetch('/api/projects/export?' + new URLSearchParams({path}))).json())",
+        "async path => (await (await fetch('/api/projects/audit?' + new URLSearchParams({path}))).json())",
         maximum_path,
     )
     assert len(maximum_export["agentic_runs"]) == 1
@@ -82,7 +82,7 @@ with sync_playwright() as playwright:
 
     def export():
         return page.evaluate(
-            "async path => (await (await fetch('/api/projects/export?' + new URLSearchParams({path}))).json())",
+            "async path => (await (await fetch('/api/projects/audit?' + new URLSearchParams({path}))).json())",
             path,
         )
 

@@ -24,6 +24,7 @@ from sigma.projects import (
     project_path,
     set_strategy_enabled,
 )
+from sigma.research_budget import BudgetExceeded
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
@@ -5381,6 +5382,107 @@ async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     assert all(strategy_id == second.id for strategy_id, _ in roles if strategy_id != first.id)
 
 
+async def test_portfolio_stops_after_chatgpt_usage_limit(
+    path: Path, *, streamed: bool = False, sse_error_event: bool = False
+):
+    view, first, credential, config = await setup(path)
+    credential["mode"] = "chatgpt"
+    second = create_strategy(
+        path, "Independent approach", "Use a different derivation."
+    ).project.strategies[-1]
+    provider_calls = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"][0]["content"])
+        provider_calls.append(context["strategy"]["id"])
+        if streamed:
+            events = [
+                {"type": "response.created", "sequence_number": 0, "response": {"id": "limited-1"}},
+                (
+                    {
+                        "type": "error",
+                        "sequence_number": 1,
+                        "error": {"code": "subscription_sharing_usage_limit_exceeded"},
+                    }
+                    if sse_error_event
+                    else {
+                        "type": "response.failed",
+                        "sequence_number": 1,
+                        "response": {
+                            "id": "limited-1",
+                            "status": "failed",
+                            "error": {"code": "subscription_sharing_usage_limit_exceeded"},
+                        },
+                    }
+                ),
+            ]
+            body = "".join(
+                f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+            )
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+        return httpx.Response(
+            429,
+            json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert len(provider_calls) == 1
+    assert provider_calls == [first.id]
+    assert (
+        "ChatGPT rejected a request because its plan or app usage limit was reached"
+        in finished["message"]
+    )
+    branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
+    assert branches[first.id]["status"] == "failed"
+    assert branches[second.id]["status"] == "ended"
+    assert "Not started because ChatGPT rejected a request" in branches[second.id]["reason"]
+    limited = next(step for step in finished["steps"] if step["status"] == "failed")
+    assert limited["failure_kind"] == "provider_limited"
+    assert limited["provider_http_status"] == (200 if streamed else 429)
+    assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
+    metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert "1 rejected" in metrics["Model calls by status"]
+    assert "subscription_sharing_usage_limit_exceeded" in limited["failure_message"]
+    assert "separate from SIGMA's sponsored-dollar allowance" in limited["failure_message"]
+    if streamed:
+        assert limited["provider_response_channel"] == "stream"
+        assert limited["provider_stream_event"] == (
+            "error" if sse_error_event else "response.failed"
+        )
+        assert "HTTP transport 200" in limited["failure_message"]
+        assert "HTTP 400" not in limited["failure_message"]
+        assert "HTTP 400" not in finished["message"]
+    else:
+        assert limited["provider_response_channel"] == "http"
+        assert limited.get("provider_stream_event") is None
+        assert "HTTP 429" in limited["failure_message"]
+    assert finished["calls_used"] == 1
+
+
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -5857,6 +5959,133 @@ async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path)
     assert len(finished["strategy_assessments"]) == 2
     assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
     assert finished["events"][-1]["kind"] == "portfolio.completed"
+
+
+async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
+    """A completed Investigator followed by a refused Skeptic reports the real 1/6 stop."""
+    view, strategy, credential, config = await setup(path)
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "model_calls": 6,
+        "research_rounds": 3,
+        "maximum_estimated_cost_usd": 0.05,
+    }
+    limits = research_sessions.save_limits(str(path), limits)
+    calls = []
+
+    async def handler(request):
+        role = json.loads(request.content)["text"]["format"]["name"]
+        calls.append(role)
+        return httpx.Response(
+            200,
+            json=provider_response(
+                investigation(1) if role == "research_investigator" else skeptic(1)
+            ),
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_reserve_cost", side_effect=[0.03, 0.05]),
+        patch.object(research_sessions, "_estimate_cost", return_value=0.02),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert calls == ["research_investigator"]
+    assert finished["calls_used"] == 1 and finished["call_limit"] == 6, finished
+    assert finished["status"] == "ended"
+    assert "cycle 1 of 3, after 1/6 calls" in finished["message"]
+    assert "configured session cost limit" in finished["message"]
+    assert "No Skeptic call was dispatched" in finished["message"]
+    assert "conservative cost reserve" in finished["outcome"]["summary"]
+
+
+async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
+    token_message = research_sessions._portfolio_limit_message(
+        {"cycle": 1, "cycle_limit": 3, "calls_used": 1, "call_limit": 6, "steps": []},
+        [
+            {
+                "strategy_title": "Saved approach",
+                "current_action": "Token limit",
+                "calls_used": 1,
+                "cycle": 1,
+                "reason": "The bounded session token budget cannot reserve another provider call.",
+            }
+        ],
+    )
+    assert token_message and "1/6 calls" in token_message
+    assert "bounded session token budget" in token_message
+    assert "No Skeptic call was dispatched" in token_message
+
+    view, strategy, credential, config = await setup(path.parent / "hard-ledger.sigma")
+    hard_limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "model_calls": 6,
+        "research_rounds": 3,
+        "maximum_estimated_cost_usd": 1.0,
+        "maximum_input_tokens_per_session": 600_000,
+    }
+    dispatches = []
+    real_reserve = research_sessions.reserve_before_dispatch
+
+    async def provider(request):
+        role = json.loads(request.content)["text"]["format"]["name"]
+        return httpx.Response(
+            200,
+            json=provider_response(
+                investigation(1) if role == "research_investigator" else skeptic(1)
+            ),
+        )
+
+    def refuse_second_hard_reservation(*args, **kwargs):
+        dispatches.append("reserve")
+        if len(dispatches) == 2:
+            raise BudgetExceeded("Research arm cumulative input-token limit would be exceeded")
+        return real_reserve(*args, **kwargs)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(
+            research_sessions, "reserve_before_dispatch", side_effect=refuse_second_hard_reservation
+        ),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(provider), **kwargs
+            ),
+        ),
+    ):
+        hard_limits = research_sessions.save_limits(str(view.path), hard_limits)
+        started = await research_sessions.start_session(
+            str(view.path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            hard_limits,
+        )
+        hard_stopped = await wait_for(view.path, started["id"])
+
+    assert hard_stopped["calls_used"] == 1 and hard_stopped["call_limit"] == 6, {
+        "calls_used": hard_stopped.get("calls_used"),
+        "call_limit": hard_stopped.get("call_limit"),
+        "message": hard_stopped.get("message"),
+        "terminal_reason": hard_stopped.get("terminal_reason"),
+    }
+    assert "hard token/cost budget refused" in hard_stopped["message"], hard_stopped.get("message")
+    assert "No Skeptic call was dispatched" in hard_stopped["message"]
+    assert hard_stopped["outcome"]["summary"]
 
 
 async def test_generic_objective_review_on_binary_strings(path: Path):
@@ -7396,8 +7625,87 @@ def test_outcome_includes_derived_execution_provenance() -> None:
     assert record == original
 
 
+def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
+    strategy_id = str(uuid4())
+    branch = {
+        "strategy_id": strategy_id,
+        "strategy_title": "Direct counting",
+        "status": "ended",
+        "current_action": "Cost limit",
+        "cycle": 1,
+        "calls_used": 1,
+        "reason": "A conservative cost reserve prevented another provider call.",
+    }
+    record = {
+        "status": "ended",
+        "cycle": 1,
+        "cycle_limit": 3,
+        "calls_used": 1,
+        "call_limit": 6,
+        "terminal_reason": f"Direct counting: {branch['reason']}",
+        "strategy_runs": [branch],
+        "steps": [{"strategy_id": strategy_id, "cycle": 1, "role": "investigator"}],
+        "artifacts": [],
+    }
+    message = research_sessions._portfolio_cost_limit_message(record, [branch])
+    assert message is not None
+    assert "cycle 1 of 3" in message
+    assert "1/6 calls" in message
+    assert "No Skeptic call was dispatched" in message
+    outcome = research_sessions._outcome_without_metrics(record)
+    assert "conservative cost reserve" in outcome["summary"]
+    assert "conservative cost reserve" in outcome["caveats"][-1]
+
+
+def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
+    record = {
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "cloud_sponsored": True,
+        "maximum_estimated_cost_usd": None,
+        "output_token_limit": 12_000,
+    }
+    reserve = research_sessions._call_cost_reservation(
+        record, {"problem": "A bounded test"}, "investigator", None
+    )
+    assert reserve is not None and reserve > 0
+    assert (
+        research_sessions._call_cost_reservation(
+            {**record, "cloud_sponsored": False, "mode": "api_key"},
+            {"problem": "A bounded test"},
+            "investigator",
+            None,
+        )
+        is None
+    )
+
+    branch = {
+        "strategy_title": "Tadpole mechanism",
+        "current_action": "Budget limit",
+        "reason": "Cloud inference cannot be bounded for this model.",
+    }
+    message = research_sessions._portfolio_limit_message(
+        {"cycle": 1, "cycle_limit": 3, "calls_used": 0, "call_limit": 30, "steps": []},
+        [branch],
+    )
+    assert message is not None
+    assert "account or global spending budget" in message
+    assert "Cloud inference cannot be bounded" in message
+
+
+def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True):
+        assert research_sessions._portfolio_call_concurrency() == 1
+    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False):
+        assert research_sessions._portfolio_call_concurrency() == 3
+
+
 def main():
     test_outcome_includes_derived_execution_provenance()
+    test_cost_limit_outcome_preserves_partial_cycle_reason()
+    test_sponsored_unlimited_cost_still_reserves_global_call_spend()
+    test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()
@@ -7442,6 +7750,19 @@ def main():
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
+        asyncio.run(
+            test_portfolio_stops_after_chatgpt_usage_limit(root / "chatgpt-http-limit.sigma")
+        )
+        asyncio.run(
+            test_portfolio_stops_after_chatgpt_usage_limit(
+                root / "chatgpt-sse-limit.sigma", streamed=True
+            )
+        )
+        asyncio.run(
+            test_portfolio_stops_after_chatgpt_usage_limit(
+                root / "chatgpt-sse-error-event.sigma", streamed=True, sse_error_event=True
+            )
+        )
         asyncio.run(
             test_session_deadline_bounds_generous_call_timeout(
                 root / "generous-call-deadline.sigma"
@@ -7571,6 +7892,16 @@ def main():
         asyncio.run(
             test_portfolio_budget_too_small_for_next_pair_is_finalized(
                 root / "portfolio-tight-budget.sigma"
+            )
+        )
+        asyncio.run(
+            test_configured_cost_cap_reports_second_call_refusal(
+                root / "portfolio-cost-cap-second-call.sigma"
+            )
+        )
+        asyncio.run(
+            test_session_token_and_hard_ledger_stops_are_diagnostic(
+                root / "portfolio-token-hard-limit.sigma"
             )
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))

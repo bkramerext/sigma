@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sigma import cloud_research, cloud_workspaces
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
-from sigma.plan_stream import completed, failure
+from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
@@ -37,6 +37,7 @@ from sigma.research_budget import (
     new_ledger,
     reserve_before_dispatch,
     settle_after_response,
+    settle_rejected,
 )
 from sigma.research_epistemics import (
     argument_availability,
@@ -661,12 +662,12 @@ def get_limits(path: str) -> dict[str, Any]:
                             raise current_error
             except ValueError as exc:
                 raise ProjectError("Research limits are invalid") from exc
-        return _effective_limits(limits)
+        return limits
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
         limits = dict(DEFAULT_LIMITS)
-        return _effective_limits(limits)
+        return limits
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
         raise ProjectError("Research limits file is unsafe or too large")
     try:
@@ -685,7 +686,7 @@ def get_limits(path: str) -> dict[str, Any]:
                 limits = _validate_legacy_limits(raw)
             except ProjectError:
                 raise current_error
-    return _effective_limits(limits)
+    return limits
 
 
 def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -1214,6 +1215,7 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     status = record.get("status")
     if not artifacts:
         branch_findings = _strategy_findings(record, artifacts)
+        terminal_reason = str(record.get("terminal_reason") or "").strip()
         if status in {"queued", "running"}:
             assessment, label = "pending", "Pending"
             summary = "No Investigator/Skeptic cycle has produced a saved artifact yet."
@@ -1222,12 +1224,23 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             summary = "Execution failed before a research artifact was saved."
         else:
             assessment, label = "mixed", "Mixed · no saved result"
-            summary = "The session ended before a complete research cycle was saved."
+            summary = (
+                f"The session ended before a complete research cycle was saved. {terminal_reason}"
+                if terminal_reason
+                else "The session ended before a complete research cycle was saved."
+            )
         outcome = {
             "assessment": assessment,
             "label": label,
             "summary": summary,
-            "caveats": ["No complete research artifact is available."],
+            "caveats": [
+                "No complete research artifact is available.",
+                *(
+                    [terminal_reason]
+                    if status not in {"queued", "running", "failed"} and terminal_reason
+                    else []
+                ),
+            ],
             "basis_artifact_ids": [],
             "provisional": assessment == "pending",
             "solution_review": {
@@ -1528,9 +1541,10 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
             "canceled",
         }:
             bucket = "interrupted / cancelled"
-        elif failure_kind == "provider_rejected" or (
+        elif failure_kind in {"provider_rejected", "provider_limited"} or (
             type(http_status) is int and 400 <= http_status < 500
         ):
+            # A successful HTTP 200 transport can carry an in-band refusal.
             bucket = "rejected"
         elif status == "failed":
             # Older records kept only a safe provider diagnostic in failure_message.
@@ -2420,13 +2434,38 @@ def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
 
 def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     """Persist bounded response classification without storing provider bodies."""
+    if isinstance(exc, ChatGPTProviderRejection):
+        kind = (
+            "provider_limited"
+            if exc.state == "limited"
+            else "provider_rejected"
+            if exc.state in {"unauthorized", "forbidden", "plan_not_permitted"}
+            else "provider_error"
+        )
+        # HTTP 200 can contain an SSE response.failed. Preserve the *actual*
+        # transport status and in-band error category as separate fields.
+        fields: dict[str, Any] = {
+            "failure_kind": kind,
+            "provider_http_status": exc.http_status,
+            "provider_response_channel": "stream" if exc.streamed else "http",
+        }
+        if exc.code is not None:
+            fields["provider_error_code"] = exc.code
+        if exc.stream_event is not None:
+            fields["provider_stream_event"] = exc.stream_event
+        return fields
     message = str(exc)
     match = re.search(r"HTTP\s+(\d{3})", message)
     if match is None:
         return {"failure_kind": "provider_error"}
     status = int(match.group(1))
+    limited = status == 429 or "ChatGPT plan or app usage limit reached" in message
     result: dict[str, Any] = {
-        "failure_kind": "provider_rejected" if 400 <= status < 500 else "provider_error"
+        "failure_kind": "provider_limited"
+        if limited
+        else "provider_rejected"
+        if 400 <= status < 500
+        else "provider_error"
     }
     result["provider_http_status"] = status
     return result
@@ -2692,12 +2731,24 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
     ) / 1_000_000
 
 
+def _call_cost_reservation(
+    record: dict[str, Any], context: dict[str, Any], role: str, hard_ledger: Any
+) -> float | None:
+    """Estimate sponsored calls even when the project has no optional cost cap."""
+    if isinstance(hard_ledger, dict):
+        return None
+    if record.get("cloud_sponsored") is True or (
+        record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
+    ):
+        return _reserve_cost(record, context, role)
+    return None
+
+
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
-        limits = _effective_limits(limits)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         try:
             transform_members(
@@ -2710,7 +2761,6 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
     limits = _validate_limits(raw)
-    limits = _effective_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     with _project_manager_lock(path):
@@ -4207,6 +4257,7 @@ async def start_session(
                 raise ProjectError(
                     "Research limits changed before confirmation; review the current limits and retry"
                 )
+            runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
                 (r for r in records if r.get("idempotency_key") == idempotency_key), None
@@ -4246,12 +4297,10 @@ async def start_session(
             from sigma.openai_connection import cloud_credential
 
             if cloud_research.billing_enabled() and (
-                not cloud_credential(credential)
-                or limits["maximum_estimated_cost_usd"] is None
-                or config["model"] not in TOKEN_PRICES_PER_MILLION
+                not cloud_credential(credential) or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
                 raise ProjectError(
-                    "Cloud research requires the configured sponsor credential, a per-session cost limit, and a model with a reviewed price."
+                    "Sponsored research requires the configured sponsor credential and a model with a reviewed price."
                 )
             if limits.get("maximum_input_tokens_per_session") is not None and (
                 (credential["mode"] != "api_key" and not cloud_research.billing_enabled())
@@ -4336,13 +4385,15 @@ async def start_session(
                 "updated_at": _now(),
                 "started_at": _now(),
                 "deadline_at": (
-                    datetime.now(UTC) + timedelta(minutes=limits["session_duration_minutes"])
+                    datetime.now(UTC)
+                    + timedelta(minutes=runtime_limits["session_duration_minutes"])
                 ).isoformat(),
                 "calls_used": 0,
                 "call_limit": limits["model_calls"],
                 "max_concurrent_sessions": limits["max_concurrent_sessions"],
                 "cycle_limit": limits["research_rounds"],
-                "duration_limit_minutes": limits["session_duration_minutes"],
+                "configured_duration_limit_minutes": limits["session_duration_minutes"],
+                "duration_limit_minutes": runtime_limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
                 "total_token_limit": limits["model_calls"]
                 * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
@@ -5115,6 +5166,14 @@ async def _call(
             status = "context_limit"
         elif isinstance(exc, httpx.HTTPError):
             status = "network_error"
+        elif isinstance(exc, ChatGPTProviderRejection):
+            status = (
+                "provider_plan_or_app_limited"
+                if exc.state == "limited"
+                else "provider_stream_rejected"
+                if exc.streamed
+                else "provider_http_rejected"
+            )
         elif "account or billing identity changed" in message:
             status = "identity_changed"
         elif any(word in message for word in ("budget", "allowance", "cost limit", "token limit")):
@@ -7388,6 +7447,8 @@ async def _portfolio_role_call(
             branch = next(
                 item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
             )
+            if branch.get("status") not in {"queued", "running"}:
+                return False
             try:
                 context = _portfolio_context(record, branch, role, cycle)
                 context["execution_tools"] = tools
@@ -7502,6 +7563,7 @@ async def _portfolio_role_call(
             request_audit = _role_input_audit(record, role, context, credential.get("token"))
             hard_ledger = record.get("hard_budget_ledger")
             reserve = None
+            reserve = _call_cost_reservation(record, context, role, hard_ledger)
             token_reserve = (
                 len(json.dumps(context, ensure_ascii=False).encode("utf-8"))
                 + 65_536
@@ -7521,7 +7583,16 @@ async def _portfolio_role_call(
                     branch["reason"] = str(exc)
                     branch["current_action"] = "Budget limit"
                     record["status"] = "ended"
-                    record["message"] = str(exc)
+                    record["current_action"] = "Completed · budget limit"
+                    record["terminal_reason"] = str(exc)
+                    record["message"] = (
+                        f"Session stopped at cycle {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
+                        f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} calls "
+                        f"because the hard token/cost budget refused another provider call. {exc}"
+                    )
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
                     record["updated_at"] = _now()
                     _event(record, "call.not_dispatched", str(exc), role)
                     _save(path, record)
@@ -7549,8 +7620,6 @@ async def _portfolio_role_call(
             if (
                 record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
             ) and record.get("maximum_estimated_cost_usd") is not None:
-                if not isinstance(hard_ledger, dict):
-                    reserve = _reserve_cost(record, context, role)
                 current_cost = record.get("estimated_cost_usd")
                 reserved_cost = float(record.get("estimated_cost_reserved_usd", 0.0))
                 if (
@@ -7798,15 +7867,28 @@ async def _portfolio_role_call(
                     item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
                 )
                 step = next(item for item in record["steps"] if item["id"] == step_id)
+                timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                if not timeout_failure:
+                    step.update(_provider_failure_fields(exc))
                 if isinstance(record.get("hard_budget_ledger"), dict):
-                    mark_unknown(record["hard_budget_ledger"], call_id=step_id)
+                    if step.get("failure_kind") == "provider_limited":
+                        settle_rejected(record["hard_budget_ledger"], call_id=step_id)
+                    else:
+                        mark_unknown(record["hard_budget_ledger"], call_id=step_id)
                 if cloud_research.billing_enabled():
-                    cloud_research.mark_call_unknown(session_id, step_id)
-                    step["attempt_status"] = "unknown"
+                    if step.get("failure_kind") == "provider_limited":
+                        cloud_research.mark_call_provider_rejected(session_id, step_id)
+                        step["attempt_status"] = "provider_rejected"
+                    else:
+                        cloud_research.mark_call_unknown(session_id, step_id)
+                        step["attempt_status"] = "unknown"
                 step["token_usage_status"] = "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):
-                    step["provider_input_audit"]["status"] = "call_failed_dispatch_unknown"
-                timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                    step["provider_input_audit"]["status"] = (
+                        "provider_response_rejected"
+                        if step.get("failure_kind") == "provider_limited"
+                        else "call_failed_dispatch_unknown"
+                    )
                 step.update(
                     {
                         "status": "failed",
@@ -7816,10 +7898,19 @@ async def _portfolio_role_call(
                 )
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
-                else:
-                    step.update(_provider_failure_fields(exc))
                 _record_guidance_interruption(record, step, "unacknowledged")
-                if step.get("cost_reserve") is not None:
+                if (
+                    step.get("cost_reserve") is not None
+                    and step.get("failure_kind") == "provider_limited"
+                ):
+                    record["estimated_cost_reserved_usd"] = max(
+                        0.0,
+                        float(record.get("estimated_cost_reserved_usd", 0.0))
+                        - float(step["cost_reserve"]),
+                    )
+                    record["cost_status"] = "available"
+                    record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
+                elif step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
                 branch["status"] = "failed"
@@ -7837,6 +7928,44 @@ async def _portfolio_role_call(
                         "Provider call failed; saved research artifacts were retained."
                     )
                 branch["reason"] = failure_message
+                if isinstance(exc, ChatGPTProviderRejection):
+                    # Structured error descriptions are locally authored from
+                    # allowlisted codes, not arbitrary provider text.
+                    step["failure_message"] = failure_message
+                if step.get("failure_kind") == "provider_limited":
+                    record["provider_usage_limited"] = True
+                    if record.get("mode") == "chatgpt":
+                        record["terminal_reason"] = (
+                            "The selected ChatGPT account rejected the request at its usage limit."
+                        )
+                        record["message"] = (
+                            "ChatGPT rejected this request because its plan or app usage limit was reached. "
+                            + (
+                                "This was not a SIGMA sponsored-dollar allowance denial. "
+                                if record.get("cloud_sponsored")
+                                else ""
+                            )
+                            + "ChatGPT does not identify whether the limit is plan-wide or app-specific. "
+                            "No further strategy calls were dispatched. SIGMA released the rejected call's "
+                            "spend reservation; no API-key fallback occurred."
+                        )
+                    else:
+                        record["terminal_reason"] = (
+                            "The model provider rejected the request at its rate or usage limit."
+                        )
+                        record["message"] = (
+                            "The model provider rejected this request at its rate or usage limit. "
+                            "No further strategy calls were dispatched. SIGMA released the rejected call's "
+                            "spend reservation; no automatic retry or billing fallback occurred."
+                        )
+                    for other in record.get("strategy_runs", []):
+                        if other is not branch and other.get("status") in {"queued", "running"}:
+                            other["status"] = "ended"
+                            other["current_action"] = "Provider usage limit"
+                            other["reason"] = (
+                                "Not started because ChatGPT rejected a request at its usage limit."
+                            )
+                    _event(record, "provider.usage_limit", record["message"], role)
                 if (
                     role == "skeptic"
                     and len(record.get("strategy_runs", [])) == 1
@@ -8179,9 +8308,84 @@ def _portfolio_failure_message(runs: list[dict[str, Any]]) -> str:
     return "; ".join(messages)
 
 
+def _portfolio_cost_limit_message(record: dict[str, Any], runs: list[dict[str, Any]]) -> str | None:
+    limited = [branch for branch in runs if branch.get("current_action") == "Cost limit"]
+    if not limited:
+        return None
+    cycle = int(record.get("cycle", 0))
+    cycle_limit = int(record.get("cycle_limit", 0))
+    calls_used = int(record.get("calls_used", 0))
+    call_limit = int(record.get("call_limit", 0))
+    reasons = []
+    for branch in limited:
+        reason = str(
+            branch.get("reason") or "A conservative cost reserve prevented another provider call."
+        ).strip()
+        branch_steps = [
+            step
+            for step in record.get("steps", [])
+            if step.get("strategy_id") == branch.get("strategy_id")
+            and step.get("cycle") == branch.get("cycle")
+        ]
+        skeptic_started = any(step.get("role") == "skeptic" for step in branch_steps)
+        partial = ""
+        if int(branch.get("calls_used", 0)) > 0 and not skeptic_started:
+            partial = " No Skeptic call was dispatched for this cycle."
+        reasons.append(f"{branch.get('strategy_title', 'Strategy')}: {reason}{partial}")
+    return (
+        f"Session stopped at cycle {cycle} of {cycle_limit}, after {calls_used}/{call_limit} calls "
+        f"because the configured session cost limit blocked a required reserve. "
+        + " ".join(reasons)
+    )
+
+
+def _portfolio_limit_message(record: dict[str, Any], runs: list[dict[str, Any]]) -> str | None:
+    actions = {"Cost limit", "Budget limit", "Token limit"}
+    limited = [branch for branch in runs if branch.get("current_action") in actions]
+    if not limited:
+        return None
+    action = str(limited[0].get("current_action"))
+    branch_reason = str(limited[0].get("reason") or "")
+    reason_text = {
+        "Cost limit": "the configured session cost limit blocked a required reserve",
+        "Budget limit": "the account or global spending budget refused a required reserve",
+        "Token limit": "the bounded session token budget could not reserve another provider call",
+    }[action]
+    if action == "Budget limit" and (
+        "token" in branch_reason.lower() or "cost" in branch_reason.lower()
+    ):
+        reason_text = "the hard token/cost budget refused a required provider call"
+    cycle = int(record.get("cycle", 0))
+    cycle_limit = int(record.get("cycle_limit", 0))
+    calls_used = int(record.get("calls_used", 0))
+    call_limit = int(record.get("call_limit", 0))
+    details = []
+    for branch in limited:
+        reason = str(branch.get("reason") or "The next provider call was not dispatched.").strip()
+        branch_steps = [
+            step
+            for step in record.get("steps", [])
+            if step.get("strategy_id") == branch.get("strategy_id")
+            and step.get("cycle") == branch.get("cycle")
+        ]
+        partial = ""
+        if int(branch.get("calls_used", 0)) > 0 and not any(
+            step.get("role") == "skeptic" for step in branch_steps
+        ):
+            partial = " No Skeptic call was dispatched for this cycle."
+        details.append(f"{branch.get('strategy_title', 'Strategy')}: {reason}{partial}")
+    return (
+        f"Session stopped at cycle {cycle} of {cycle_limit}, after {calls_used}/{call_limit} calls "
+        f"because {reason_text}. " + " ".join(details)
+    )
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
-    semaphore = asyncio.Semaphore(3)
+    # A sponsored call holds a conservative allowance reservation until usage
+    # settles. Dispatch sequentially so sibling calls do not fail just because
+    # they overlap those temporary reservations.
+    semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
 
     async def run_wave(calls: list[Any]) -> list[Any]:
         gates = await _acquire_gates()
@@ -8271,6 +8475,30 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     if incomplete_branches
                     else "All strategy branches finished or the shared call budget was exhausted."
                 )
+                if record.get("provider_usage_limited") is True:
+                    record["current_action"] = "Provider usage limit"
+                    record["message"] = (
+                        "ChatGPT rejected a request because its plan or app usage limit was reached. "
+                        + (
+                            "This was not a SIGMA sponsored-dollar allowance denial. "
+                            if record.get("cloud_sponsored")
+                            else ""
+                        )
+                        + "ChatGPT does not identify whether the limit is plan-wide or app-specific. "
+                        if record.get("mode") == "chatgpt"
+                        else "The model provider rejected a request at its rate or usage limit. "
+                    ) + (
+                        "No further strategy calls were dispatched. SIGMA released the rejected call's "
+                        "spend reservation; no automatic retry or billing fallback occurred."
+                    )
+                elif limit_message := _portfolio_limit_message(record, runs):
+                    record["message"] = limit_message
+                    record["terminal_reason"] = "; ".join(
+                        f"{branch.get('strategy_title', 'Strategy')}: {branch.get('reason')}"
+                        for branch in runs
+                        if branch.get("current_action")
+                        in {"Cost limit", "Budget limit", "Token limit"}
+                    )
                 record["updated_at"] = _now()
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
@@ -8423,6 +8651,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             )
             _event(record, "coordinator.portfolio_review", record["message"])
             _save(path, record)
+
+
+def _portfolio_call_concurrency() -> int:
+    return 1 if cloud_research.billing_enabled() else 3
 
 
 def _bounded_note(value: Any, limit: int) -> str:

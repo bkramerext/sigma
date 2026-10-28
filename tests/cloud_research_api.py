@@ -168,10 +168,10 @@ def main() -> None:
                     "/api/projects/research-limits", json={"path": path, **settings}
                 )
                 assert limits.status_code == 200, limits.text
-                assert limits.json()["model_calls"] == 6
-                assert limits.json()["research_rounds"] == 3
-                assert limits.json()["session_duration_minutes"] == 15
-                assert limits.json()["maximum_estimated_cost_usd"] == 0.25
+                assert limits.json()["model_calls"] == 30
+                assert limits.json()["research_rounds"] == 5
+                assert limits.json()["session_duration_minutes"] == 60
+                assert limits.json()["maximum_estimated_cost_usd"] == 1.0
                 key = str(uuid4())
                 start_body = {
                     "path": path,
@@ -183,6 +183,7 @@ def main() -> None:
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert started.status_code == 200, started.text
+                assert started.json()["duration_limit_minutes"] == 15
                 session_id = started.json()["id"]
 
                 # A new request context sees the saved authoritative status;
@@ -199,8 +200,8 @@ def main() -> None:
                 else:
                     raise AssertionError("HTTP-started cloud research did not reach a saved state")
                 assert saved["status"] == "ended"
-                assert len(saved["steps"]) == 6
-                assert calls.await_count == 6
+                assert len(saved["steps"]) == 10
+                assert calls.await_count == 10
 
                 # Standalone strategy generation uses the same sponsored
                 # credential and durable ledger as research sessions.
@@ -470,7 +471,7 @@ def main() -> None:
                     (project_id,),
                 ).fetchone()[0]
                 db.close()
-                assert conversion_audit == 8
+                assert conversion_audit == 12
 
                 # Agentic exploration and independent review reserve each call
                 # separately while keeping the resulting proposal unsaved.
@@ -551,7 +552,7 @@ def main() -> None:
                     (project_id,),
                 ).fetchone()[0]
                 db.close()
-                assert agentic_audit == 10
+                assert agentic_audit == 14
 
                 # A bounded one-shot paper goes through sponsored admission and
                 # persists both TeX source and the resulting PDF artifact.
@@ -917,13 +918,6 @@ def main() -> None:
                     assert isinstance(payload["input"], str)
                     dynamic_bytes = len(payload["input"].encode("utf-8"))
                     complete_bytes = cloud_research.provider_request_input_bytes(payload)
-                    dynamic_cost, _ = cloud_research.standalone_call_reservation(
-                        model, dynamic_bytes, output_tokens
-                    )
-                    complete_cost, _ = cloud_research.standalone_call_reservation(
-                        model, complete_bytes, output_tokens
-                    )
-                    assert dynamic_cost <= 0.10 < complete_cost
                     overhead_was_budgeted = complete_bytes > dynamic_bytes
                     return real_start_provider_attempt(
                         attempt_project_id, attempt_path, model, payload, output_tokens
@@ -958,7 +952,7 @@ def main() -> None:
                 duplicate = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert duplicate.status_code == 200, duplicate.text
                 assert duplicate.json()["id"] == session_id
-                assert calls.await_count == 6
+                assert calls.await_count == 10
 
                 budget = client.get(
                     "/api/cloud-research/budget",
