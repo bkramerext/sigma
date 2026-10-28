@@ -187,12 +187,19 @@ def main() -> None:
                 assert chemistry.json()["project"]["show_advanced_outcome_details"] is False
                 # Full portable download and authenticated-workspace import.
                 downloaded = client.get(
-                    "/api/projects/download", params={"path": response.json()["path"]}
+                    "/api/projects/export", params={"path": response.json()["path"]}
                 )
                 assert downloaded.status_code == 200, downloaded.text
                 assert "attachment" in downloaded.headers["content-disposition"]
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
+                # Both the canonical export route and the legacy download
+                # alias must return one complete, importable file bundle.
+                legacy_download = client.get(
+                    "/api/projects/download", params={"path": response.json()["path"]}
+                )
+                assert legacy_download.status_code == 200
+                assert legacy_download.content == downloaded.content
                 from sigma.project_bundle import read_bundle
 
                 assert portable == read_bundle(response.json()["path"])

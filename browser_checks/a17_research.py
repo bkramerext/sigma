@@ -1545,7 +1545,7 @@ with sync_playwright() as playwright:
         max_record["outcome"]["solution_review"]["verification_status"] == "convincing_unverified"
     )
     audit = page.evaluate(
-        "async path => await (await fetch('/api/projects/export?' + new URLSearchParams({path}))).json()",
+        "async path => await (await fetch('/api/projects/audit?' + new URLSearchParams({path}))).json()",
         max_regions_path,
     )
     exported_max = audit["research_sessions"][0]

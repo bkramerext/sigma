@@ -1187,7 +1187,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
     if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const route = demo ? '/api/cloud-demo/report' : (exportType === 'bundle' ? '/api/projects/download' : '/api/projects/export/report');
+      const route = demo ? '/api/cloud-demo/report' : (exportType === 'bundle' ? '/api/projects/export' : '/api/projects/export/report');
       const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}) });
       const suffix = query.toString();
       const response = await fetch(`${route}${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' });
@@ -1231,10 +1231,11 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       <div className="settings-body">
         <fieldset className="export-type-options" disabled={busy}>
           <legend>Report type</legend>
-          {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Project file</label>}
+          {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Complete project file (importable)</label>}
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
         </fieldset>
+        {!demo && exportType === 'bundle' && <p className="entry-hint">Includes the project, research history, evidence, and artifacts in one file. Import it in SIGMA to restore the project.</p>}
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
           onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf)$/i, '')); setError(''); }}/>

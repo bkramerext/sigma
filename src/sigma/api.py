@@ -729,9 +729,9 @@ def inspect_view(path: str):
     return asdict(inspect_project(path))
 
 
-@app.get("/api/projects/export")
+@app.get("/api/projects/audit")
 def export_project_view(path: str):
-    """Export project, agentic evidence, and reconstructable research sessions."""
+    """Return the structured audit view used by reports and review tooling."""
     project = json.loads(_document(inspect_project(path).project))
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
     sessions = list(reversed(research_sessions.list_sessions(path)))
@@ -745,9 +745,10 @@ def export_project_view(path: str):
     }
 
 
+@app.get("/api/projects/export")
 @app.get("/api/projects/download")
 def download_project_bundle(path: str):
-    """Download the complete portable project, not the audit-only export."""
+    """Export every project file as one complete, importable JSON bundle."""
     from sigma.project_bundle import download_bytes, encode
     from sigma.projects import project_path
 
