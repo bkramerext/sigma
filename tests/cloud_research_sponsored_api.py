@@ -337,6 +337,23 @@ def main(mode: str = "api_key") -> None:
                 assert strategy_response.status_code == 201, strategy_response.text
                 strategy = client.get("/api/projects/strategies", params={"path": path})
                 strategy_id = strategy.json()["strategies"][0]["id"]
+                fresh_limits = client.get("/api/projects/research-limits", params={"path": path})
+                assert fresh_limits.status_code == 200, fresh_limits.text
+                assert fresh_limits.json()["maximum_estimated_cost_usd"] is None
+                missing_cost_start = client.post(
+                    "/api/projects/research-sessions/start",
+                    json={
+                        "path": path,
+                        "strategy_id": strategy_id,
+                        "idempotency_key": str(uuid4()),
+                        "expected_project_id": project_id,
+                        "expected_binding": binding,
+                        "expected_limits": fresh_limits.json(),
+                    },
+                )
+                assert missing_cost_start.status_code == 400, missing_cost_start.text
+                assert "Configure a maximum estimated session cost" in missing_cost_start.text
+                assert provider_calls == []
                 limits = client.put(
                     "/api/projects/research-limits", json={"path": path, **settings}
                 )
@@ -356,6 +373,7 @@ def main(mode: str = "api_key") -> None:
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert started.status_code == 200, started.text
+                assert started.json()["duration_limit_minutes"] == 15
                 session_id = started.json()["id"]
 
                 # A new request context sees the saved authoritative status;

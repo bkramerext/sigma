@@ -183,6 +183,7 @@ def main() -> None:
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert started.status_code == 200, started.text
+                assert started.json()["duration_limit_minutes"] == 15
                 session_id = started.json()["id"]
 
                 # A new request context sees the saved authoritative status;

@@ -333,7 +333,7 @@ function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
   const duration = value.session_duration_minutes / durationUnitMinutes[unit];
   return { research_rounds: String(value.research_rounds), model_calls: String(value.model_calls), session_duration_value: String(duration), session_duration_unit: unit, output_tokens_per_call: String(value.output_tokens_per_call), maximum_estimated_cost_usd: value.maximum_estimated_cost_usd === null ? '' : String(value.maximum_estimated_cost_usd), maximum_input_tokens_per_session: value.maximum_input_tokens_per_session === null || value.maximum_input_tokens_per_session === undefined ? '' : String(value.maximum_input_tokens_per_session), max_concurrent_sessions: String(value.max_concurrent_sessions ?? '1') };
 }
-function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
+function validateLimitDraft(draft: ResearchLimitsDraft, requireSponsoredCost = false): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
   const errors: Partial<Record<keyof ResearchLimitsDraft, string>> = {};
   const value = {} as ResearchLimits;
   for (const key of Object.keys(limitBounds) as Array<keyof typeof limitBounds>) {
@@ -355,7 +355,8 @@ function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits
       errors.session_duration_value = 'Enter a duration from 1 minute to 7 days.';
     } else value.session_duration_minutes = durationMinutes;
   }
-  if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
+  if (draft.maximum_estimated_cost_usd === '' && requireSponsoredCost) errors.maximum_estimated_cost_usd = 'Set a maximum estimated session cost before saving limits for sponsored research.';
+  else if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
   else if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(draft.maximum_estimated_cost_usd)) {
     errors.maximum_estimated_cost_usd = 'Enter a USD amount from $0.01 to $100.00, or leave blank for unlimited.';
   } else {
@@ -1055,6 +1056,8 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   }
 
   const playLabel = 'Start a new research session';
+  const requiresSponsoredCost = cloud?.target === 'hosted'
+    || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
   const play = useCallback(() => {
     if (busy || readError) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
@@ -2385,12 +2388,15 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) throw new Error('Model availability requires an authorized session. Saved settings are unchanged.');
+        if (response.status === 401 || response.status === 403) {
+          if (!controller.signal.aborted) { setModels([]); setMessage('Model availability requires an authorized session. Saved settings are unchanged.'); }
+          return null;
+        }
         throw new Error(`Model availability check failed (HTTP ${response.status}). Retry after connectivity is restored. Saved settings are unchanged.`);
       }
       return response.json();
     }).then(data => {
-      if (!controller.signal.aborted) setModels(Array.isArray(data.models) ? data.models : []);
+      if (!controller.signal.aborted && data) setModels(Array.isArray(data.models) ? data.models : []);
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         setModels(reviewedModelPreferences);

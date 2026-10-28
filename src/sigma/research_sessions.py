@@ -662,12 +662,12 @@ def get_limits(path: str) -> dict[str, Any]:
                             raise current_error
             except ValueError as exc:
                 raise ProjectError("Research limits are invalid") from exc
-        return _effective_limits(limits)
+        return limits
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
         limits = dict(DEFAULT_LIMITS)
-        return _effective_limits(limits)
+        return limits
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
         raise ProjectError("Research limits file is unsafe or too large")
     try:
@@ -686,7 +686,7 @@ def get_limits(path: str) -> dict[str, Any]:
                 limits = _validate_legacy_limits(raw)
             except ProjectError:
                 raise current_error
-    return _effective_limits(limits)
+    return limits
 
 
 def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -2749,7 +2749,6 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
-        limits = _effective_limits(limits)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         try:
             transform_members(
@@ -2762,7 +2761,6 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
     limits = _validate_limits(raw)
-    limits = _effective_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     with _project_manager_lock(path):
@@ -4259,6 +4257,7 @@ async def start_session(
                 raise ProjectError(
                     "Research limits changed before confirmation; review the current limits and retry"
                 )
+            runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
                 (r for r in records if r.get("idempotency_key") == idempotency_key), None
@@ -4297,6 +4296,10 @@ async def start_session(
                 )
             from sigma.openai_connection import cloud_credential
 
+            if cloud_research.billing_enabled() and limits["maximum_estimated_cost_usd"] is None:
+                raise ProjectError(
+                    "Configure a maximum estimated session cost in Project Settings → Limits before using sponsored research."
+                )
             if cloud_research.billing_enabled() and (
                 not cloud_credential(credential) or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
@@ -4386,13 +4389,15 @@ async def start_session(
                 "updated_at": _now(),
                 "started_at": _now(),
                 "deadline_at": (
-                    datetime.now(UTC) + timedelta(minutes=limits["session_duration_minutes"])
+                    datetime.now(UTC)
+                    + timedelta(minutes=runtime_limits["session_duration_minutes"])
                 ).isoformat(),
                 "calls_used": 0,
                 "call_limit": limits["model_calls"],
                 "max_concurrent_sessions": limits["max_concurrent_sessions"],
                 "cycle_limit": limits["research_rounds"],
-                "duration_limit_minutes": limits["session_duration_minutes"],
+                "configured_duration_limit_minutes": limits["session_duration_minutes"],
+                "duration_limit_minutes": runtime_limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
                 "total_token_limit": limits["model_calls"]
                 * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
@@ -7582,7 +7587,16 @@ async def _portfolio_role_call(
                     branch["reason"] = str(exc)
                     branch["current_action"] = "Budget limit"
                     record["status"] = "ended"
-                    record["message"] = str(exc)
+                    record["current_action"] = "Completed · budget limit"
+                    record["terminal_reason"] = str(exc)
+                    record["message"] = (
+                        f"Session stopped at cycle {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
+                        f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} calls "
+                        f"because the hard token/cost budget refused another provider call. {exc}"
+                    )
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
                     record["updated_at"] = _now()
                     _event(record, "call.not_dispatched", str(exc), role)
                     _save(path, record)
@@ -8329,29 +8343,49 @@ def _portfolio_cost_limit_message(record: dict[str, Any], runs: list[dict[str, A
     )
 
 
-def _portfolio_reservation_failure_message(runs: list[dict[str, Any]]) -> str | None:
-    blocked = [branch for branch in runs if branch.get("current_action") == "Budget limit"]
-    if not blocked:
+def _portfolio_limit_message(record: dict[str, Any], runs: list[dict[str, Any]]) -> str | None:
+    actions = {"Cost limit", "Budget limit", "Token limit"}
+    limited = [branch for branch in runs if branch.get("current_action") in actions]
+    if not limited:
         return None
+    action = str(limited[0].get("current_action"))
+    branch_reason = str(limited[0].get("reason") or "")
+    reason_text = {
+        "Cost limit": "the configured session cost limit blocked a required reserve",
+        "Budget limit": "the account or global spending budget refused a required reserve",
+        "Token limit": "the bounded session token budget could not reserve another provider call",
+    }[action]
+    if action == "Budget limit" and (
+        "token" in branch_reason.lower() or "cost" in branch_reason.lower()
+    ):
+        reason_text = "the hard token/cost budget refused a required provider call"
+    cycle = int(record.get("cycle", 0))
+    cycle_limit = int(record.get("cycle_limit", 0))
+    calls_used = int(record.get("calls_used", 0))
+    call_limit = int(record.get("call_limit", 0))
     details = []
-    seen: set[str] = set()
-    for branch in blocked:
-        title = str(branch.get("strategy_title") or "Strategy").strip()
-        reason = " ".join(str(branch.get("reason") or "Provider call reservation failed.").split())
-        detail = f"{title}: {reason}"
-        if detail not in seen:
-            seen.add(detail)
-            details.append(detail)
+    for branch in limited:
+        reason = str(branch.get("reason") or "The next provider call was not dispatched.").strip()
+        branch_steps = [
+            step
+            for step in record.get("steps", [])
+            if step.get("strategy_id") == branch.get("strategy_id")
+            and step.get("cycle") == branch.get("cycle")
+        ]
+        partial = ""
+        if int(branch.get("calls_used", 0)) > 0 and not any(
+            step.get("role") == "skeptic" for step in branch_steps
+        ):
+            partial = " No Skeptic call was dispatched for this cycle."
+        details.append(f"{branch.get('strategy_title', 'Strategy')}: {reason}{partial}")
     return (
-        "Research stopped before completing these branches because provider-call "
-        "reservation failed. " + "; ".join(details)
+        f"Session stopped at cycle {cycle} of {cycle_limit}, after {calls_used}/{call_limit} calls "
+        f"because {reason_text}. " + " ".join(details)
     )
 
 
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
-    semaphore = asyncio.Semaphore(3)
-
     # A sponsored call holds a conservative allowance reservation until usage
     # settles. Dispatch sequentially so sibling calls do not fail just because
     # they overlap those temporary reservations.
@@ -8461,17 +8495,14 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                         "No further strategy calls were dispatched. SIGMA released the rejected call's "
                         "spend reservation; no automatic retry or billing fallback occurred."
                     )
-                cost_limit_message = _portfolio_cost_limit_message(record, runs)
-                if cost_limit_message:
-                    record["message"] = cost_limit_message
+                elif limit_message := _portfolio_limit_message(record, runs):
+                    record["message"] = limit_message
                     record["terminal_reason"] = "; ".join(
                         f"{branch.get('strategy_title', 'Strategy')}: {branch.get('reason')}"
                         for branch in runs
-                        if branch.get("current_action") == "Cost limit"
+                        if branch.get("current_action")
+                        in {"Cost limit", "Budget limit", "Token limit"}
                     )
-                reservation_failure_message = _portfolio_reservation_failure_message(runs)
-                if not cost_limit_message and reservation_failure_message:
-                    record["message"] = reservation_failure_message
                 record["updated_at"] = _now()
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)

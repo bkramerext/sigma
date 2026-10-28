@@ -24,6 +24,7 @@ from sigma.projects import (
     project_path,
     set_strategy_enabled,
 )
+from sigma.research_budget import BudgetExceeded
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
@@ -5957,6 +5958,133 @@ async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path)
     assert finished["events"][-1]["kind"] == "portfolio.completed"
 
 
+async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
+    """A completed Investigator followed by a refused Skeptic reports the real 1/6 stop."""
+    view, strategy, credential, config = await setup(path)
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "model_calls": 6,
+        "research_rounds": 3,
+        "maximum_estimated_cost_usd": 0.05,
+    }
+    limits = research_sessions.save_limits(str(path), limits)
+    calls = []
+
+    async def handler(request):
+        role = json.loads(request.content)["text"]["format"]["name"]
+        calls.append(role)
+        return httpx.Response(
+            200,
+            json=provider_response(
+                investigation(1) if role == "research_investigator" else skeptic(1)
+            ),
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_reserve_cost", side_effect=[0.03, 0.05]),
+        patch.object(research_sessions, "_estimate_cost", return_value=0.02),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert calls == ["research_investigator"]
+    assert finished["calls_used"] == 1 and finished["call_limit"] == 6, finished
+    assert finished["status"] == "ended"
+    assert "cycle 1 of 3, after 1/6 calls" in finished["message"]
+    assert "configured session cost limit" in finished["message"]
+    assert "No Skeptic call was dispatched" in finished["message"]
+    assert "conservative cost reserve" in finished["outcome"]["summary"]
+
+
+async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
+    token_message = research_sessions._portfolio_limit_message(
+        {"cycle": 1, "cycle_limit": 3, "calls_used": 1, "call_limit": 6, "steps": []},
+        [
+            {
+                "strategy_title": "Saved approach",
+                "current_action": "Token limit",
+                "calls_used": 1,
+                "cycle": 1,
+                "reason": "The bounded session token budget cannot reserve another provider call.",
+            }
+        ],
+    )
+    assert token_message and "1/6 calls" in token_message
+    assert "bounded session token budget" in token_message
+    assert "No Skeptic call was dispatched" in token_message
+
+    view, strategy, credential, config = await setup(path.parent / "hard-ledger.sigma")
+    hard_limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "model_calls": 6,
+        "research_rounds": 3,
+        "maximum_estimated_cost_usd": 1.0,
+        "maximum_input_tokens_per_session": 600_000,
+    }
+    dispatches = []
+    real_reserve = research_sessions.reserve_before_dispatch
+
+    async def provider(request):
+        role = json.loads(request.content)["text"]["format"]["name"]
+        return httpx.Response(
+            200,
+            json=provider_response(
+                investigation(1) if role == "research_investigator" else skeptic(1)
+            ),
+        )
+
+    def refuse_second_hard_reservation(*args, **kwargs):
+        dispatches.append("reserve")
+        if len(dispatches) == 2:
+            raise BudgetExceeded("Research arm cumulative input-token limit would be exceeded")
+        return real_reserve(*args, **kwargs)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(
+            research_sessions, "reserve_before_dispatch", side_effect=refuse_second_hard_reservation
+        ),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(provider), **kwargs
+            ),
+        ),
+    ):
+        hard_limits = research_sessions.save_limits(str(view.path), hard_limits)
+        started = await research_sessions.start_session(
+            str(view.path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            hard_limits,
+        )
+        hard_stopped = await wait_for(view.path, started["id"])
+
+    assert hard_stopped["calls_used"] == 1 and hard_stopped["call_limit"] == 6, {
+        "calls_used": hard_stopped.get("calls_used"),
+        "call_limit": hard_stopped.get("call_limit"),
+        "message": hard_stopped.get("message"),
+        "terminal_reason": hard_stopped.get("terminal_reason"),
+    }
+    assert "hard token/cost budget refused" in hard_stopped["message"], hard_stopped.get("message")
+    assert "No Skeptic call was dispatched" in hard_stopped["message"]
+    assert hard_stopped["outcome"]["summary"]
+
+
 async def test_generic_objective_review_on_binary_strings(path: Path):
     problem = (
         "For each integer n >= 0, count binary strings of length n containing no two "
@@ -7758,6 +7886,16 @@ def main():
         asyncio.run(
             test_portfolio_budget_too_small_for_next_pair_is_finalized(
                 root / "portfolio-tight-budget.sigma"
+            )
+        )
+        asyncio.run(
+            test_configured_cost_cap_reports_second_call_refusal(
+                root / "portfolio-cost-cap-second-call.sigma"
+            )
+        )
+        asyncio.run(
+            test_session_token_and_hard_ledger_stops_are_diagnostic(
+                root / "portfolio-token-hard-limit.sigma"
             )
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))

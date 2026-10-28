@@ -94,13 +94,19 @@ def main() -> None:
                 def forward(route) -> None:
                     if route.request.url.endswith("/api/cloud-auth/welcome"):
                         route.fulfill(status=204)
+                    elif route.request.url.endswith("/api/ai/models"):
+                        route.fulfill(
+                            status=503,
+                            content_type="application/json",
+                            body=json.dumps({"error": "Model access is not currently verifiable."}),
+                        )
                     elif route.request.url.endswith("/api/cloud-auth/status"):
                         route.fulfill(
                             status=200,
                             content_type="application/json",
                             body=json.dumps(
                                 {
-                                    "target": "local",
+                                    "target": "hosted",
                                     "enabled": True,
                                     "ready": True,
                                     "authenticated": True,
@@ -114,13 +120,38 @@ def main() -> None:
                             ),
                         )
                     else:
-                        response = route.fetch(url=route.request.url.replace(UI_ORIGIN, api_origin))
+                        headers = dict(route.request.headers)
+                        headers["origin"] = os.environ.get(
+                            "SIGMA_BROWSER_FORWARD_ORIGIN", "http://127.0.0.1:5173"
+                        )
+                        headers.pop("host", None)
+                        response = route.fetch(
+                            url=route.request.url.replace(UI_ORIGIN, api_origin),
+                            headers=headers,
+                        )
                         route.fulfill(response=response)
 
                 page.route(
                     "**/api/**",
                     lambda route: forward(route),
                 )
+                page.goto(f"{UI_ORIGIN}/", wait_until="networkidle")
+                home_connection = page.locator(".home-page .api-connection summary")
+                expect(home_connection.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+                welcome = page.locator("#invitation-welcome-dialog")
+                if welcome.count() and welcome.is_visible():
+                    dismiss = welcome.get_by_role("button", name="Let's get started")
+                    assert (
+                        dismiss.evaluate("element => getComputedStyle(element).borderTopColor")
+                        == "rgb(223, 180, 118)"
+                    )
+                    dismiss.hover()
+                    assert (
+                        dismiss.evaluate("element => getComputedStyle(element).borderTopColor")
+                        == "rgb(255, 225, 173)"
+                    )
+                    dismiss.click()
+                    expect(welcome).to_have_count(0)
                 page.goto(
                     f"{UI_ORIGIN}/project?{urlencode({'path': path})}",
                     wait_until="networkidle",
@@ -129,6 +160,36 @@ def main() -> None:
                 if welcome.count() and welcome.is_visible():
                     welcome.get_by_role("button", name="Let's get started").click()
                     expect(welcome).to_have_count(0)
+                connection_summary = page.locator(".api-connection summary")
+                expect(connection_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+                model = page.locator("button.project-model-pill")
+                expect(model).to_be_enabled()
+                original_model = model.inner_text()
+                model.click()
+                expect(model).not_to_have_text(original_model)
+                model.click()
+                confirmation = page.locator(".project-model-confirm-popover")
+                expect(confirmation).to_be_visible()
+                confirmation_actions = confirmation.locator(".project-model-confirm-actions button")
+                assert (
+                    confirmation_actions.nth(0).evaluate(
+                        "element => getComputedStyle(element).color"
+                    )
+                    == "rgb(241, 197, 141)"
+                )
+                assert (
+                    confirmation_actions.nth(1).evaluate(
+                        "element => getComputedStyle(element).color"
+                    )
+                    == "rgb(241, 197, 141)"
+                )
+                confirmation_actions.nth(1).click()
+                expect(confirmation).to_be_hidden()
+                thinking = page.locator("button.project-thinking-pill")
+                expect(thinking).to_be_enabled()
+                original_thinking = thinking.inner_text()
+                thinking.click()
+                expect(thinking).not_to_have_text(original_thinking)
                 if not page.get_by_role("button", name="Project settings", exact=True).count():
                     raise AssertionError(
                         f"Project page did not render. URL={page.url}; "
@@ -145,6 +206,16 @@ def main() -> None:
                 calls = settings.get_by_label("Maximum agent calls", exact=True)
                 expect(calls).to_have_value("30")
                 calls.fill("12")
+                cost = settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
+                expect(cost).to_be_visible()
+                expect(settings.get_by_text("Required for sponsored research.")).to_be_visible()
+                expect(cost).to_have_attribute("aria-invalid", "true")
+                expect(
+                    settings.get_by_text(
+                        "Set a maximum estimated session cost before saving limits for sponsored research."
+                    )
+                ).to_be_visible()
+                cost.fill("0.50")
                 settings.get_by_role("button", name="Save", exact=True).click()
                 expect(settings).to_be_hidden()
                 saved = page.evaluate(
@@ -155,11 +226,15 @@ def main() -> None:
                     }"""
                 )
                 assert saved["model_calls"] == 12, saved
+                assert saved["maximum_estimated_cost_usd"] == 0.5, saved
                 page.reload(wait_until="networkidle")
                 page.get_by_role("button", name="Project settings", exact=True).click()
                 settings = page.get_by_role("dialog", name="Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(settings.get_by_label("Maximum agent calls", exact=True)).to_have_value("12")
+                expect(
+                    settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
+                ).to_have_value("0.5")
                 assert not errors, errors
                 page.screenshot(path="/tmp/sigma-local-sponsored-limits.png", full_page=True)
             finally:

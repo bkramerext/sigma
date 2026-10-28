@@ -3,7 +3,7 @@ import './ai-connection.css';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
 type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; sponsor?: boolean; signal?: AbortSignal };
-type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<void> };
+type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<boolean> };
 const Context = createContext<AIState | null>(null);
 const providerActivity = new Set<string>();
 const providerActivityListeners = new Set<() => void>();
@@ -238,7 +238,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
   function cancelSignIn() { pending.current?.controller.abort(); }
   function invalidateChecks() { generation.current += 1; check.current?.controller.abort(); check.current = null; retryCount.current = 0; setHealthError(false); setChecking(false); setInitialLoading(false); setBackgroundRefreshing(false); }
   async function selectMode(mode: 'chatgpt' | 'api_key', accountId?: string) { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { const next = await aiPost<ConnectionInfo>('mode', { mode, account_id: accountId }); if (selectedGeneration === generation.current) setInfo(next); } catch (error) { if (selectedGeneration === generation.current) setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
-  async function disconnect() { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { await aiPost<{ message: string; remote_revocation_confirmed: boolean }>('disconnect'); setInfo(current => current ? { ...current, status: 'disconnected', label: 'Connect to ChatGPT', account_label: undefined, active_account: undefined, checked_at: new Date().toISOString() } : current); await refresh('background'); } catch (error) { if (selectedGeneration === generation.current) setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
+  async function disconnect() { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { await aiPost<{ message: string; remote_revocation_confirmed: boolean }>('disconnect'); setInfo(current => current ? { ...current, status: 'disconnected', label: 'Connect to ChatGPT', account_label: undefined, active_account: undefined, checked_at: new Date().toISOString() } : current); await refresh('background'); return true; } catch (error) { if (selectedGeneration === generation.current) setError(message(error)); return false; } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
   const value = { info, checking, initialLoading, backgroundRefreshing, healthError, connecting, transitioning, error, handoff, welcome, dismissWelcome: () => setWelcome(false), refresh, signIn, cancelSignIn, selectMode, disconnect };
   return <Context.Provider value={value}>{children}{welcome && !document.querySelector('dialog[open]') && <div className="plan-welcome-toast"><PlanWelcome/></div>}</Context.Provider>;
 }
@@ -320,9 +320,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         if (sponsoredSelected) {
           const personalConnected = await ai.signIn({ newAccount: true });
           if (personalConnected) await cloudFunding.selectConnection?.('personal');
-          else await cloudFunding.selectConnection?.('sponsored');
         } else {
-          await cloudFunding.selectConnection?.('sponsored');
+          const connected = await ai.signIn({
+            accountId: ai.info?.active_account,
+            newAccount: false,
+            enablePlan: ai.info?.status === 'plan_not_permitted',
+          });
+          if (connected) await cloudFunding.selectConnection?.('personal');
         }
         await ai.refresh('manual');
         return;
@@ -343,7 +347,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     return zeroAllowanceAction ?? null;
   }
   return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
-    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={connectionTooltip} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void cloudFunding.selectConnection?.('sponsored'); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={connectionTooltip} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) await cloudFunding.selectConnection?.('sponsored'); })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Sponsored allowance details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip-disabled onClick={event => { event.stopPropagation(); event.preventDefault(); if (localSponsorNeedsReconnect) void connect(); else setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorTooltip}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>
