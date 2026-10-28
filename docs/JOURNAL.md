@@ -315,3 +315,67 @@ We made progress on authentication, portable projects, research recovery, cloud 
 There was still work to do. Cloud feature parity and isolation needed acceptance, some PRs remained open, and a running application didn't tell us whether its research was any good.
 
 But SIGMA was looking less like a development project and more like a product. That was the real progress of Day 6.
+
+## Day 7 — October 27, 2026
+
+**Theme: The Invited Experience** — Making SIGMA ready for someone other than me.
+
+By Day 7, SIGMA had most of the pieces I wanted. The question was becoming whether another person could arrive, understand what was available, and actually use it.
+
+That mattered because I had been building SIGMA partly to show what I could do. I had asked a recruiter at OneBrief to hold off on my application while I finished something more substantial. I thought a working application would say more than a description of one. My original estimate had been four days, with the weekend as a cushion. By Tuesday, we were well past that.
+
+The extra time was beginning to bother me. But I also didn't want to invite someone into an application that only appeared to work.
+
+### Making an invitation mean something
+
+We finished bringing together the guest, invited-member, and sponsored-research experiences.
+
+A guest needed a clear way to ask for access. An invited member needed to understand what had been granted. A sponsored user needed to see the allowance available for research without confusing that with their own ChatGPT account.
+
+Green's work added the invited welcome and sponsored-access controls, including a more personal set of welcome messages. It also made the remaining sponsorship allowance visible and provided a way to force sponsored mode for the hosted launch.
+
+The UI needed to stay simple even though the rules beneath it weren't. I wanted a person to recognize what they could do from the account controls, not have to understand our authentication architecture.
+
+### When accounts and funding overlap
+
+One question exposed how complicated the design could become: what happens if a sponsored user later connects and uses their own ChatGPT account?
+
+Signing in to SIGMA, being eligible for sponsorship, and having a working inference connection are different things. A personal account connection doesn't necessarily prove that the account can execute the requested research. Automatically switching funding sources could also change spending behavior in surprising ways.
+
+We considered the additional state transitions, then decided not to build them yet.
+
+That was a useful decision. An edge case can be real without needing a solution before the first outside user arrives. SIGMA already had enough complexity to test.
+
+### More than one research session
+
+Blue finished another important piece of work: a configurable maximum number of concurrent research sessions per project.
+
+The default remained one, but the limit could now be raised in Project Settings. The setting had to survive project export and import, and admission needed to work across both local sessions and the hosted reservation ledger.
+
+The difficult part wasn't the input field. Older saved reservations didn't have all the information the new accounting expected. An independent review found that some active sessions might escape the new count after an upgrade.
+
+Blue corrected the migration behavior and added regression coverage. Then Green's changes landed first, so Blue had to reconcile the concurrency work with the new sponsorship logic. Both sets of changes were tested together before merging.
+
+It was a good example of the value of review: the feature looked finished, but one older-state case could have undermined its central guarantee.
+
+### Closing the work, not just the tickets
+
+By the end of the day, Green's and Blue's PRs were merged, and we closed the corresponding tickets for concurrent sessions, sponsored allowance controls, and the Invite me action.
+
+The four color workers were clear of their current assignments. That was satisfying after days of overlapping branches, handoffs, and integration conflicts.
+
+It didn't mean every problem had disappeared. A hosted paper-generation request had still returned an OpenAI HTTP 400, and production verification remained important. We kept that issue open instead of treating a merged change as proof that the live workflow worked.
+
+We also prepared the next deployment. I corrected the release target to 0.1.2 and found why production displayed an unknown build identifier: the frontend Docker build didn't receive the Git commit, and it had no Git history from which to recover it. Red was assigned to fix that permanently, including a regression check, before deploying.
+
+A release should identify exactly what code is running. We'd already learned not to trust container health alone as evidence that the public site was serving the intended UI.
+
+### Day 7 retrospective
+
+Day 7 brought a change in perspective. Earlier in the week, I was asking whether SIGMA could do the research and preserve the evidence. Now I was asking what would happen when someone else tried it.
+
+That shifted attention toward invitations, allowances, clear account states, concurrency, and reliable releases. None of those features was the original reason for building SIGMA, but they were part of making the research engine usable.
+
+I was still uneasy about how long the project had taken. The temptation was to keep adding one more fix before showing it to anyone. We made one deliberate choice not to do that.
+
+SIGMA was substantially closer to a demonstration I could put in someone's hands. The next test wasn't another merge. It was whether the deployed experience lived up to what we'd built.
