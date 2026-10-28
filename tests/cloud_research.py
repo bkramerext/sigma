@@ -2005,8 +2005,12 @@ def main() -> None:
                     research_sessions._save(expiry_project.path, expired)
                     with (
                         patch.object(cloud_research, "claim_job", return_value=False),
-                        patch.object(research_sessions, "_outcome", return_value={"assessment": "pending"}),
-                        patch.object(research_sessions, "_strategy_assessments", return_value=[]),
+                        patch.object(
+                            research_sessions, "_outcome", return_value={"assessment": "pending"}
+                        ),
+                        patch.object(
+                            research_sessions, "_strategy_assessments", return_value=[]
+                        ),
                         patch.object(research_sessions, "_portfolio_decision", return_value={}),
                     ):
                         assert (
