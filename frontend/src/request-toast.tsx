@@ -24,6 +24,7 @@ function describeError(body: unknown): string | null {
 }
 
 async function responseError(response: Response): Promise<string> {
+  const maxDetailLength = 600;
   let detail: string | null = null;
   try {
     const body = await response.clone().text();
@@ -33,6 +34,9 @@ async function responseError(response: Response): Promise<string> {
     }
   } catch { /* Failure to read the body must not interfere with the caller. */ }
   const status = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+  if (detail && detail.length > maxDetailLength) {
+    return `${status}: The server returned an unusually long error response. SIGMA shortened it; review the session status for details.`;
+  }
   return detail ? `${status}: ${detail}` : status;
 }
 

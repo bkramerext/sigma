@@ -24,7 +24,7 @@ with sync_playwright() as playwright:
         ),
     )
     page.goto(UI + "/")
-    opener = page.get_by_role("button", name="About", exact=True)
+    opener = page.get_by_role("button", name="About SIGMA", exact=True)
     opener.click()
     dialog = page.get_by_role("dialog", name="About SIGMA")
     expect(dialog).to_be_visible()

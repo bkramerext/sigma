@@ -293,7 +293,7 @@ with sync_playwright() as playwright:
         ),
     )
     admin_page.goto(BASE_URL, wait_until="networkidle")
-    admin_page.get_by_role("button", name="About", exact=True).click()
+    admin_page.get_by_role("button", name="About SIGMA", exact=True).click()
     expect(admin_page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
     admin_page.get_by_text("Send product feedback").click()
     admin_page.get_by_label("Feedback").fill("The signed-in feedback form is easy to find.")
@@ -314,7 +314,7 @@ with sync_playwright() as playwright:
     expect(admin_page.get_by_role("link", name="Administrator settings")).to_be_visible()
     admin_page.get_by_role("link", name="Administrator settings").click()
     expect(admin_page.get_by_role("heading", name="Administrator Settings")).to_be_visible()
-    expect(admin_page.get_by_role("heading", name="Invitation requests")).to_be_visible()
+    expect(admin_page.get_by_role("heading", name="Invitation/reload requests")).to_be_visible()
     expect(admin_page.get_by_text("visitor@example.org").first).to_be_visible()
     expect(admin_page.get_by_role("heading", name="Product feedback")).to_be_visible()
     expect(admin_page.get_by_text("Please make project creation easier to find.")).to_be_visible()

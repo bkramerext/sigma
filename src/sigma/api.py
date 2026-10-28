@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import secrets
 import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
@@ -36,6 +37,7 @@ from sigma.projects import (
     _document,
     change_stage,
     close_project,
+    copy_project_between_workspaces,
     create_project,
     create_strategy,
     edit_strategy,
@@ -172,7 +174,7 @@ def ui_instance() -> dict[str, str | None]:
 @app.get("/api/cloud-research/budget")
 def cloud_research_budget():
     """Return only the authenticated workspace's persisted inference budget."""
-    if not cloud_workspaces.enabled():
+    if not cloud_research.billing_enabled():
         raise HTTPException(404, "Cloud research budget is unavailable.")
     try:
         return JSONResponse(
@@ -232,6 +234,41 @@ async def local_browser_only(request: Request, call_next):
     if origin and origin not in allowed_origins:
         return JSONResponse({"error": "Untrusted browser origin"}, status_code=403)
     response = await cloud_auth.middleware(request, call_next)
+    sponsored_start = request.url.path == "/api/projects/research-sessions/start"
+    if (
+        cfg.local
+        and request.url.path.startswith("/api/projects/")
+        and (response.status_code >= 400 or sponsored_start)
+    ):
+        principal = getattr(request.state, "cloud_principal", None)
+        if isinstance(principal, cloud_auth.Principal):
+            try:
+                if cloud_auth.model_access_for_subject(principal.subject) == "sponsored":
+                    from sigma.sponsor_diagnostics import record
+
+                    content_length = response.headers.get("content-length", "")
+                    large_body = content_length.isdigit() and int(content_length) > 600
+                    if sponsored_start:
+                        route = "sponsor_play"
+                    elif request.url.path.startswith("/api/projects/research-sessions"):
+                        route = "sponsor_sessions_api"
+                    elif request.url.path.endswith("/api/projects/proposals/config"):
+                        route = "sponsor_config_api"
+                    elif request.url.path.endswith("/api/projects/research-limits"):
+                        route = "sponsor_limits_api"
+                    else:
+                        route = "sponsor_project_api"
+                    outcome = (
+                        "accepted"
+                        if sponsored_start and response.status_code < 400
+                        else f"{request.method.lower()}_{response.status_code}"
+                    )
+                    if large_body and response.status_code >= 400:
+                        outcome += "_large"
+                    record(route, outcome)
+            except (OSError, RuntimeError, sqlite3.Error, ValueError, ImportError):
+                # Diagnostics never alter or delay the API response.
+                pass
     if request.url.path.startswith("/api/ai/"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -250,6 +287,36 @@ async def workspace_access_error(request: Request, exc: WorkspaceAccessError):
 
 class OpenRequest(BaseModel):
     path: str
+
+
+class GuestProjectCopyRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+
+
+@app.post("/api/projects/guest-copy", status_code=201)
+def copy_project_to_guest_workspace(body: GuestProjectCopyRequest):
+    """Copy the current project into a private, temporary guest workspace."""
+    source = cloud_workspaces.current()
+    cfg = cloud_auth.config()
+    if (source is None and not cfg.local) or (source is not None and source.guest):
+        raise HTTPException(401, "Sign in to copy this project to a guest workspace.")
+    guest_token = secrets.token_hex(32)
+    target = cloud_workspaces.guest_workspace(guest_token, create=True)
+    if target is None:
+        raise HTTPException(503, "A temporary guest workspace is unavailable.")
+    try:
+        copied_path = copy_project_between_workspaces(body.path, source, target)
+    except ProjectError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    response = JSONResponse({"path": copied_path}, status_code=201)
+    response.set_cookie(
+        cloud_auth._cookie_name(cloud_auth.GUEST_COOKIE, cfg),
+        guest_token,
+        **cloud_auth._cookie_options(
+            cfg, cloud_auth.GUEST_COOKIE, max_age=cloud_auth.SESSION_SECONDS
+        ),
+    )
+    return response
 
 
 class ResearchStartRequest(OpenRequest):
@@ -293,9 +360,9 @@ class ResearchExecutionRequest(OpenRequest):
 class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
     research_rounds: int = Field(ge=1, le=5)
-    model_calls: int = Field(ge=2, le=30)
+    model_calls: int = Field(ge=2, le=120)
     session_duration_minutes: int = Field(ge=1, le=research_sessions.MAX_SESSION_DURATION_MINUTES)
-    output_tokens_per_call: int = Field(ge=256, le=16384)
+    output_tokens_per_call: int = Field(ge=256, le=20000)
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
     maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)
     max_concurrent_sessions: int | str = "1"
@@ -1122,7 +1189,51 @@ class ApiKeyRequest(BaseModel):
 
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):
+    if cloud_auth.config().local and body.account_id is not None:
+        from sigma.ai_store import sponsor_transaction
+        from sigma.cloud_sponsor import expected_email
+
+        async with sponsor_transaction() as state:
+            account = state["accounts"].get(body.account_id) or {}
+            if account.get("email", "").casefold() == expected_email():
+                raise HTTPException(403, "Use Admin Settings to renew the sponsor account.")
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
+
+
+@app.post("/api/ai/sponsor-auth/begin")
+async def sponsor_auth_begin(request: Request):
+    """Let admins or eligible local members renew only the designated sponsor."""
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    if (
+        not cfg.local
+        or not isinstance(principal, cloud_auth.Principal)
+        or principal.subject.startswith("mock:")
+    ):
+        raise HTTPException(403, "An authenticated local account is required to renew sponsorship.")
+    if principal.role != "admin":
+        try:
+            account = cloud_auth._persist_user_state(cfg, principal)
+        except (OSError, RuntimeError, sqlite3.Error):
+            raise HTTPException(
+                503, "Sponsored account eligibility could not be checked."
+            ) from None
+        if (
+            principal.role != "member"
+            or not cloud_auth.sponsored_access_enabled()
+            or not account["sponsorship"]["eligible"]
+        ):
+            raise HTTPException(403, "Eligible sponsored access is required to renew sponsorship.")
+    from sigma.cloud_sponsor import sponsor_account_id
+
+    try:
+        account_id = await sponsor_account_id()
+        return await chatgpt_auth.begin(account_id=account_id, sponsor=True)
+    except ProjectError as exc:
+        from sigma.sponsor_diagnostics import record
+
+        record("sponsor_oauth", "begin_failed")
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.post("/api/ai/api-key")
@@ -1160,6 +1271,25 @@ async def auth_cancel(identifier: str):
 async def auth_mode(body: AuthModeRequest, request: Request):
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
+    if cfg.local and isinstance(principal, cloud_auth.Principal):
+        if body.mode not in {"personal", "sponsored"} or body.account_id is not None:
+            raise HTTPException(422, "Choose personal or sponsored access.")
+        if body.mode == "sponsored":
+            if not cloud_auth.sponsored_access_enabled():
+                raise HTTPException(403, "Sponsored access is disabled.")
+            try:
+                allowance = cloud_research.snapshot()
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise HTTPException(503, "Sponsored allowance is unavailable.") from exc
+            if float(allowance.get("remaining_usd", 0)) <= 0:
+                raise HTTPException(409, "No sponsored allowance remains.")
+        try:
+            cloud_auth.set_model_access(principal.subject, body.mode)
+        except PermissionError as exc:
+            raise HTTPException(403, "This account cannot select sponsored access.") from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(503, "Connection choice could not be saved.") from exc
+        return await connection(refresh=True)
     if cfg.enabled and not cfg.local:
         if not isinstance(principal, cloud_auth.Principal):
             raise HTTPException(401, "Authentication required.")
@@ -1187,6 +1317,14 @@ async def auth_mode(body: AuthModeRequest, request: Request):
 
 @app.post("/api/ai/disconnect")
 async def auth_disconnect():
+    if cloud_auth.config().local:
+        from sigma.ai_store import sponsor_transaction
+        from sigma.cloud_sponsor import expected_email
+
+        async with sponsor_transaction() as state:
+            active = state["accounts"].get(state.get("active")) or {}
+            if active.get("email", "").casefold() == expected_email():
+                raise HTTPException(403, "The sponsor account cannot be disconnected here.")
     return await chatgpt_auth.disconnect()
 
 

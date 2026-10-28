@@ -18,6 +18,7 @@ import jwt
 
 from sigma.ai_store import transaction
 from sigma.projects import ProjectError
+from sigma.sponsor_diagnostics import record
 
 ISSUER = "https://auth.openai.com"
 RESOURCE = "https://api.openai.com/v1"
@@ -180,6 +181,7 @@ class Attempt:
     nonce: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     verifier: str = field(default_factory=lambda: secrets.token_urlsafe(48))
     account_id: str | None = None
+    sponsor: bool = False
     client_id: str = "dynamic_agent_client"
     redirect_uri: str = ""
     status: str = "connecting"
@@ -197,6 +199,8 @@ _attempts: dict[str, Attempt] = {}
 
 def finish(attempt: Attempt, status: str, message: str) -> None:
     attempt.status, attempt.message = status, message
+    if attempt.sponsor:
+        record("sponsor_oauth", status)
     _urls.pop(attempt.id, None)
     if attempt.server:
         attempt.server.close()
@@ -207,7 +211,11 @@ def finish(attempt: Attempt, status: str, message: str) -> None:
 
 
 async def begin(
-    account_id: str | None = None, enable_plan: bool = False, retry_attempt_id: str | None = None
+    account_id: str | None = None,
+    enable_plan: bool = False,
+    retry_attempt_id: str | None = None,
+    *,
+    sponsor: bool = False,
 ) -> dict:
     for key, attempt in list(_attempts.items()):
         if time.monotonic() > attempt.expires + 60:
@@ -218,7 +226,7 @@ async def begin(
         )
     try:
         endpoints = await discovery()
-        attempt = Attempt(account_id=account_id)
+        attempt = Attempt(account_id=account_id, sponsor=sponsor)
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
             if (
@@ -280,6 +288,8 @@ async def begin(
         if enable_plan:
             params["prompt"] = "consent"
         _urls[attempt.id] = endpoints["authorization_endpoint"] + "?" + urlencode(params)
+        if sponsor:
+            record("sponsor_oauth", "started")
         return {
             "id": attempt.id,
             "status": attempt.status,
@@ -486,11 +496,14 @@ async def callback(
             _urls.pop(attempt.id, None)
 
 
-async def session() -> dict:
+async def session(account_id: str | None = None) -> dict:
     """Return backend-only credential snapshot, refreshing serially when necessary."""
     async with transaction() as state:
-        mode = state["mode"]
-        account = state["accounts"].get(state["active"])
+        # An explicitly selected account (the designated sponsor) is independent
+        # of the shared UI billing choice made by a local personal connection.
+        mode = "chatgpt" if account_id is not None else state["mode"]
+        selected_id = account_id if account_id is not None else state["active"]
+        account = state["accounts"].get(selected_id)
         if mode != "chatgpt":
             return {"mode": mode, "account": None}
         if not account or not account.get("access_token"):
@@ -533,7 +546,7 @@ async def session() -> dict:
                     refreshed = await validate_tokens(
                         raw, account["client_id"], None, account, state["ext_agent_host_id"]
                     )
-                    state["accounts"][state["active"]] = account = refreshed
+                    state["accounts"][selected_id] = account = refreshed
                 except (
                     httpx.HTTPError,
                     TimeoutError,
@@ -549,7 +562,7 @@ async def session() -> dict:
             "mode": mode,
             "account": dict(account),
             "status": status,
-            "account_id": state["active"],
+            "account_id": selected_id,
         }
 
 

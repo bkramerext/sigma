@@ -64,7 +64,7 @@ MAX_CONTEXT_OBLIGATIONS = 128
 MAX_CONTEXT_OMISSION_POINTERS = 32
 MAX_CONTEXT_MANIFEST_BYTES = 12_000
 MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
-MAX_PRIOR_OBLIGATION_CONTEXT_BYTES = 32_000
+MAX_PRIOR_OBLIGATION_CONTEXT_BYTES = 64_000
 MAX_OBLIGATION_SOURCE_ARTIFACTS = 32
 MAX_RESEARCH_RESPONSE_BYTES = 1_000_000
 MAX_SESSION_INTERVENTIONS = 24
@@ -624,6 +624,14 @@ def _directory(path: str | Path) -> Path:
     return directory
 
 
+def _effective_limits(limits: dict[str, Any]) -> dict[str, Any]:
+    if cloud_workspaces.enabled():
+        return cloud_research.evaluation_session_limits(limits)
+    if cloud_research.billing_enabled():
+        return cloud_research.local_sponsored_session_limits(limits)
+    return limits
+
+
 def get_limits(path: str) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
         import base64
@@ -653,20 +661,12 @@ def get_limits(path: str) -> dict[str, Any]:
                             raise current_error
             except ValueError as exc:
                 raise ProjectError("Research limits are invalid") from exc
-        return (
-            cloud_research.evaluation_session_limits(limits)
-            if cloud_workspaces.enabled()
-            else limits
-        )
+        return _effective_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
         limits = dict(DEFAULT_LIMITS)
-        return (
-            cloud_research.evaluation_session_limits(limits)
-            if cloud_workspaces.enabled()
-            else limits
-        )
+        return _effective_limits(limits)
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
         raise ProjectError("Research limits file is unsafe or too large")
     try:
@@ -685,9 +685,7 @@ def get_limits(path: str) -> dict[str, Any]:
                 limits = _validate_legacy_limits(raw)
             except ProjectError:
                 raise current_error
-    return (
-        cloud_research.evaluation_session_limits(limits) if cloud_workspaces.enabled() else limits
-    )
+    return _effective_limits(limits)
 
 
 def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -696,7 +694,7 @@ def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
         "research_rounds": (1, 10),
         "model_calls": (2, 20),
         "session_duration_minutes": (1, 120),
-        "output_tokens_per_call": (256, 16384),
+        "output_tokens_per_call": (256, 20000),
     }
     for key, (minimum, maximum) in previous_bounds.items():
         value = raw.get(key)
@@ -753,9 +751,9 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     result["max_concurrent_sessions"] = concurrency
     bounds = {
         "research_rounds": (1, 5),
-        "model_calls": (2, 30),
+        "model_calls": (2, 120),
         "session_duration_minutes": (1, MAX_SESSION_DURATION_MINUTES),
-        "output_tokens_per_call": (256, 16384),
+        "output_tokens_per_call": (256, 20000),
     }
     for key, (minimum, maximum) in bounds.items():
         value = result.get(key)
@@ -2175,6 +2173,8 @@ INVESTIGATOR_GUIDANCE = (
     "you have not received its original source, so do not claim to have inspected or verified it. "
     "Use only supplied_source_artifact_ids as evidence and plan inspection of the original. "
     "If text_complete is false or prior_session_obligations_omitted is nonzero, explicitly preserve that uncertainty. "
+    "When a prior obligation has *_omitted_count reference fields, its text remains complete; "
+    "the first and latest source pointers are supplied, and the full reference history remains saved. "
     "When other_strategy_evidence is supplied, treat "
     "it as unverified peer work; state whether it changes this strategy's reasoning and never "
     "silently present another branch's result as independently derived. When a peer_handoff is "
@@ -2191,7 +2191,9 @@ SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
     "the compact findings from prior sessions, including assumptions, limitations and computation "
     "status, and the deterministic selected extracts from current-session artifacts. The context "
-    "manifest explains selection and omissions; an extract is not the original source. Treat "
+    "manifest explains selection and omissions; an extract is not the original source. An obligation "
+    "with *_omitted_count reference fields retains its complete saved text; context supplies its "
+    "first and latest source pointers, and durable artifacts retain the full reference history. Treat "
     "prior-session notes as "
     "unverified unless their recorded evidence status says otherwise; cite their artifact IDs "
     "when relying on them and request the original artifact when a truncated note matters. The "
@@ -2695,8 +2697,7 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
-        if cloud_workspaces.enabled():
-            limits = cloud_research.evaluation_session_limits(limits)
+        limits = _effective_limits(limits)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         try:
             transform_members(
@@ -2709,8 +2710,7 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
     limits = _validate_limits(raw)
-    if cloud_workspaces.enabled():
-        limits = cloud_research.evaluation_session_limits(limits)
+    limits = _effective_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     with _project_manager_lock(path):
@@ -2820,7 +2820,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
             return {member: encoded}
 
         transform_members(path, update)
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             try:
                 cloud_research.sync_job(record)
             except cloud_research.CloudResearchUnavailable as exc:
@@ -2851,7 +2851,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
         finally:
             staged.unlink(missing_ok=True)
         fcntl.flock(lock, fcntl.LOCK_UN)
-    if cloud_workspaces.enabled() and not record.get("simulated"):
+    if cloud_research.billing_enabled() and not record.get("simulated"):
         try:
             cloud_research.sync_job(record)
         except cloud_research.CloudResearchUnavailable as exc:
@@ -3139,7 +3139,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     # Queued cloud sessions have not crossed a provider-dispatch boundary and
     # can be safely picked up when an owner reconnects. Running calls are never
     # replayed automatically; _recover below records them as interrupted.
-    if record["status"] == "queued" and cloud_workspaces.enabled():
+    if record["status"] == "queued" and cloud_research.billing_enabled():
         try:
             queue_status = cloud_research.job_status(record["id"])
         except cloud_research.CloudResearchUnavailable as exc:
@@ -3173,7 +3173,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         for step in record.get("steps", []):
             if step.get("status") == "running":
                 if (
-                    cloud_workspaces.enabled()
+                    cloud_research.billing_enabled()
                     and step.get("attempt_status") == "preparing"
                     and isinstance(step.get("attempt_id"), str)
                 ):
@@ -3228,7 +3228,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             record["estimated_cost_usd"] = None
         _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             try:
                 cloud_research.recover_job(record["id"])
             except cloud_research.CloudResearchUnavailable as exc:
@@ -3505,7 +3505,7 @@ def has_active_session(path: str) -> bool:
         task = _tasks.get(record["id"])
         if task is not None and not task.done():
             return True
-        if status == "queued" and cloud_workspaces.enabled():
+        if status == "queued" and cloud_research.billing_enabled():
             return True
         lock_path = _worker_lock_path(path, record["id"])
         try:
@@ -3526,7 +3526,7 @@ def has_active_session(path: str) -> bool:
 
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
-    if not cloud_workspaces.enabled():
+    if not cloud_research.billing_enabled():
         return
     # A mock-only workspace must never touch the hosted job service.
     queued = [
@@ -4190,7 +4190,7 @@ async def start_session(
         raise ProjectError("Choose a saved, active strategy before investigating")
     if not strategy.enabled:
         raise ProjectError("This strategy is disabled; enable it before starting research")
-    if cloud_workspaces.enabled():
+    if cloud_research.billing_enabled():
         try:
             cloud_research.reconcile_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
@@ -4245,7 +4245,7 @@ async def start_session(
                 )
             from sigma.openai_connection import cloud_credential
 
-            if cloud_workspaces.enabled() and (
+            if cloud_research.billing_enabled() and (
                 not cloud_credential(credential)
                 or limits["maximum_estimated_cost_usd"] is None
                 or config["model"] not in TOKEN_PRICES_PER_MILLION
@@ -4254,7 +4254,7 @@ async def start_session(
                     "Cloud research requires the configured sponsor credential, a per-session cost limit, and a model with a reviewed price."
                 )
             if limits.get("maximum_input_tokens_per_session") is not None and (
-                (credential["mode"] != "api_key" and not cloud_workspaces.enabled())
+                (credential["mode"] != "api_key" and not cloud_research.billing_enabled())
                 or limits.get("maximum_estimated_cost_usd") is None
                 or config["model"] not in TOKEN_PRICES_PER_MILLION
             ):
@@ -4352,12 +4352,12 @@ async def start_session(
                 "token_usage_status": "pending",
                 "tokens_reserved": 0,
                 "maximum_estimated_cost_usd": limits["maximum_estimated_cost_usd"],
-                "cloud_sponsored": cloud_workspaces.enabled(),
+                "cloud_sponsored": cloud_research.billing_enabled(),
                 "estimated_cost_usd": 0.0
-                if credential["mode"] == "api_key" or cloud_workspaces.enabled()
+                if credential["mode"] == "api_key" or cloud_research.billing_enabled()
                 else None,
                 "cost_status": "available"
-                if (credential["mode"] == "api_key" or cloud_workspaces.enabled())
+                if (credential["mode"] == "api_key" or cloud_research.billing_enabled())
                 and config["model"] in TOKEN_PRICES_PER_MILLION
                 else "unavailable",
                 "cycle": 0,
@@ -4391,8 +4391,13 @@ async def start_session(
                 record["prior_session_obligation_omitted_ids"],
                 record["prior_session_obligation_omitted_by_strategy"],
                 record["prior_session_obligation_omitted_ids_by_strategy"],
-                omitted_details_by_strategy,
-            ) = _prior_session_obligations_index(view.path, record["id"], record["strategy_ids"])
+                _,
+            ) = _prior_session_obligations_index(
+                view.path,
+                record["id"],
+                record["strategy_ids"],
+                diagnostics=cloud_research.billing_enabled(),
+            )
             omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
             if omitted_by_strategy:
                 blocked = []
@@ -4405,33 +4410,15 @@ async def start_session(
                         for item in selected_strategies
                         if item is not None and item.id == selected_strategy_id
                     )
-                    omitted_ids = record["prior_session_obligation_omitted_ids_by_strategy"].get(
-                        selected_strategy_id, []
-                    )
-                    shown_ids = (
-                        "; ".join(
-                            f"{item['id']} ({item['text']})"
-                            for item in omitted_details_by_strategy.get(selected_strategy_id, [])
-                        )
-                        or "bounded ID list unavailable"
-                    )
-                    pointer_note = (
-                        f" (showing {len(omitted_ids)} of {omitted_count})"
-                        if len(omitted_ids) < omitted_count
-                        else ""
-                    )
                     blocked.append(
-                        f"{selected_strategy.title}: {omitted_count} unresolved obligation(s) "
-                        f"exceed the frozen context bound; omitted obligation IDs{pointer_note}: {shown_ids}"
+                        f"{selected_strategy.title}: {omitted_count} unresolved prior-session "
+                        "obligations exceed the safe context bound"
                     )
                 raise ProjectError(
-                    "Research was not started and no provider call was made because prior-session "
-                    "obligations exceed the context bound. "
+                    "Research was not started; no provider call was made. "
                     + "; ".join(blocked)
-                    + ". Disable the affected strategy before starting another session. To pursue "
-                    "a narrower question, create a new strategy informed by the saved findings; "
-                    "earlier evidence remains in the saved session. Editing the original strategy "
-                    "does not remove its history. Earlier sessions and evidence remain available."
+                    + ". Saved research is unchanged. Disable the affected strategy or start a "
+                    "new, narrower strategy informed by its saved findings."
                 )
             record["session_number"] = _allocate_session_number(view.path, records)
             obligation_source_ids = {
@@ -4467,7 +4454,7 @@ async def start_session(
                 record["prior_session_failure_omitted_attempt_ids"],
             ) = _prior_session_failures_index(view.path, record["id"])
             _event(record, "queued", record["message"])
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 try:
                     cloud_research.prepare_job(record)
                 except cloud_research.CloudResearchUnavailable as exc:
@@ -4483,7 +4470,7 @@ async def start_session(
 async def control_session(path: str, session_id: str, action: str) -> dict[str, Any]:
     if action not in {"pause", "resume", "stop"}:
         raise ProjectError("Unknown research session action")
-    if action == "resume" and cloud_workspaces.enabled():
+    if action == "resume" and cloud_research.billing_enabled():
         try:
             cloud_research.reconcile_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
@@ -4671,7 +4658,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             )
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 try:
                     cloud_research.prepare_job(record)
                 except cloud_research.CloudResearchUnavailable as exc:
@@ -4785,7 +4772,7 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
     return False
 
 
-async def _call(
+async def _call_provider(
     record: dict[str, Any],
     role: str,
     context: dict[str, Any],
@@ -4814,6 +4801,7 @@ async def _call(
         timeout_seconds if timeout_seconds is not None else float(CALL_TIMEOUT),
         _call_timeout_seconds(record),
     )
+    _sponsor_inference_diagnostic(record, "request_attempted")
     async with (
         asyncio.timeout(timeout_seconds),
         httpx.AsyncClient(
@@ -4826,10 +4814,12 @@ async def _call(
             content=_serialized_role_request(payload),
         ) as response,
     ):
+        _sponsor_inference_diagnostic(record, f"http_{response.status_code}")
         collected = bytearray()
         async for chunk in response.aiter_bytes():
             collected.extend(chunk)
             if len(collected) > MAX_RESEARCH_RESPONSE_BYTES:
+                _sponsor_inference_diagnostic(record, "response_overflow")
                 raise ProjectError("Research provider transport exceeded the 1 MB safety bound")
         body = bytes(collected)
         if response.status_code != 200:
@@ -4837,6 +4827,15 @@ async def _call(
                 error_data = json.loads(body)
             except ValueError:
                 error_data = {}
+            code = None
+            if isinstance(error_data, dict) and isinstance(error_data.get("error"), dict):
+                code = error_data["error"].get("code")
+            suffix = (
+                str(code)
+                if isinstance(code, str) and re.fullmatch(r"[a-zA-Z0-9_]{1,32}", code)
+                else "unknown"
+            )
+            _sponsor_inference_diagnostic(record, f"http_{response.status_code}_{suffix}".lower())
             failure(response.status_code, error_data, credential["mode"], "research")
         if credential["mode"] == "chatgpt":
             raw = await completed(
@@ -5082,6 +5081,56 @@ async def _call(
     return validated, _usage(raw)
 
 
+def _sponsor_inference_diagnostic(record: dict[str, Any], status: str) -> None:
+    """Write fixed, token-free outcome codes for sponsored inference calls."""
+    if record.get("cloud_sponsored") is not True:
+        return
+    try:
+        from sigma.sponsor_diagnostics import record as write_diagnostic
+
+        write_diagnostic("sponsor_inference", status)
+    except (OSError, RuntimeError, ValueError, ImportError):
+        # Diagnostics must never block a research call or change its outcome.
+        return
+
+
+async def _call(
+    record: dict[str, Any],
+    role: str,
+    context: dict[str, Any],
+    timeout_seconds: float | None = None,
+    step_id: str | None = None,
+) -> tuple[dict[str, Any], dict[str, int | None] | None]:
+    _sponsor_inference_diagnostic(record, "call_started")
+    try:
+        result = await _call_provider(record, role, context, timeout_seconds, step_id)
+    except (TimeoutError, httpx.TimeoutException):
+        _sponsor_inference_diagnostic(record, "call_timeout")
+        raise
+    except Exception as exc:
+        message = str(exc).casefold()
+        if "transport exceeded the 1 mb safety bound" in message:
+            status = "response_overflow"
+        elif isinstance(exc, ResearchContextLimitError):
+            status = "context_limit"
+        elif isinstance(exc, httpx.HTTPError):
+            status = "network_error"
+        elif "account or billing identity changed" in message:
+            status = "identity_changed"
+        elif any(word in message for word in ("budget", "allowance", "cost limit", "token limit")):
+            status = "preflight_rejected"
+        elif isinstance(exc, ProjectError) or any(
+            phrase in message for phrase in ("malformed", "did not complete", "declined")
+        ):
+            status = "response_invalid"
+        else:
+            status = "call_failed"
+        _sponsor_inference_diagnostic(record, status)
+        raise
+    _sponsor_inference_diagnostic(record, "response_completed")
+    return result
+
+
 def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:
     """Deterministic, durable role context; no dependence on provider conversation state."""
     artifacts = record["artifacts"]
@@ -5258,6 +5307,24 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    compacted_prior_obligation_references = [
+        {
+            "obligation_id": item.get("obligation_id"),
+            "omitted_reference_counts": {
+                key: value
+                for key, value in item.items()
+                if key.endswith("_omitted_count") and isinstance(value, int) and value > 0
+            },
+        }
+        for item in prior_session_obligations
+        if isinstance(item, dict)
+        and any(
+            key.endswith("_omitted_count") and isinstance(value, int) and value > 0
+            for key, value in item.items()
+        )
+    ]
+    if compacted_prior_obligation_references:
+        context["compacted_prior_obligation_references"] = compacted_prior_obligation_references
     if cycle == 1 and isinstance(record.get("initial_question_source"), dict):
         context["question_source"] = record["initial_question_source"]
     if role == "skeptic" and isinstance(investigator_step_id, str):
@@ -5306,6 +5373,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "count": relevant_omission_count,
         "obligation_ids": context["prior_session_obligation_omitted_ids"],
         "reason": "bounded strategy-scoped historical obligation snapshot; saved originals remain intact",
+    }
+    manifest["compacted_prior_obligation_references"] = {
+        "count": len(compacted_prior_obligation_references),
+        "obligations": compacted_prior_obligation_references,
+        "reason": "first and latest source pointers are frozen in context; complete references remain in saved source artifacts",
     }
     group = _manifest_source_group(
         "prior_operational_failure",
@@ -7461,7 +7533,7 @@ async def _portfolio_role_call(
                 )
                 reserve = float(budget_reservation["cost_bound_usd"])
                 record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
-            if cloud_workspaces.enabled() and (
+            if cloud_research.billing_enabled() and (
                 int(record.get("tokens_used") or 0)
                 + int(record.get("tokens_reserved", 0))
                 + token_reserve
@@ -7521,14 +7593,14 @@ async def _portfolio_role_call(
             )
             step_id = record["current_step"]
             timeout_seconds = _call_timeout_seconds(record)
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 _event(record, "call.preparing", record["message"], role)
             else:
                 _event(record, "call.started", record["message"], role)
             step = {
                 "id": step_id,
                 "attempt_id": step_id,
-                "attempt_status": "preparing" if cloud_workspaces.enabled() else None,
+                "attempt_status": "preparing" if cloud_research.billing_enabled() else None,
                 "cycle": cycle,
                 "role": role,
                 "strategy_id": strategy_id,
@@ -7569,8 +7641,10 @@ async def _portfolio_role_call(
                 "human_intervention_ids": [item["intervention_id"] for item in human_guidance],
                 "computation_inspections": _context_computation_inspections(context),
                 "cost_reserve": reserve,
-                "global_cost_reservation_usd": reserve if cloud_workspaces.enabled() else None,
-                "token_reservation": token_reserve if cloud_workspaces.enabled() else None,
+                "global_cost_reservation_usd": reserve
+                if cloud_research.billing_enabled()
+                else None,
+                "token_reservation": token_reserve if cloud_research.billing_enabled() else None,
             }
             step["provider_input_audit"] = request_audit
             _record_guidance_delivery(
@@ -7583,7 +7657,7 @@ async def _portfolio_role_call(
             )
             record["steps"].append(step)
             _save(path, record)
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 try:
                     if reserve is None:
                         raise cloud_research.CloudResearchUnavailable(
@@ -7634,7 +7708,7 @@ async def _portfolio_role_call(
             )
             _validate_guidance_acknowledgments(human_guidance, output)
         except asyncio.CancelledError:
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 cloud_research.mark_call_unknown(session_id, step_id)
             async with state_lock:
                 interrupted = _read(path, session_id)
@@ -7726,7 +7800,7 @@ async def _portfolio_role_call(
                 step = next(item for item in record["steps"] if item["id"] == step_id)
                 if isinstance(record.get("hard_budget_ledger"), dict):
                     mark_unknown(record["hard_budget_ledger"], call_id=step_id)
-                if cloud_workspaces.enabled():
+                if cloud_research.billing_enabled():
                     cloud_research.mark_call_unknown(session_id, step_id)
                     step["attempt_status"] = "unknown"
                 step["token_usage_status"] = "unavailable"
@@ -7799,7 +7873,7 @@ async def _portfolio_role_call(
                 output=output,
             )
             step.update({"status": "completed", "finished_at": _now(), "output": output})
-            if cloud_workspaces.enabled():
+            if cloud_research.billing_enabled():
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 input_tokens = usage.get("input_tokens") if usage else None
                 output_tokens = usage.get("output_tokens") if usage else None
@@ -8091,6 +8165,20 @@ def _commit_portfolio_review_safely(
         )
 
 
+def _portfolio_failure_message(runs: list[dict[str, Any]]) -> str:
+    messages: list[str] = []
+    seen: set[str] = set()
+    for branch in runs:
+        if branch.get("status") != "failed":
+            continue
+        reason = str(branch.get("reason") or "A strategy branch failed.").strip()
+        normalized = " ".join(reason.split())
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            messages.append(reason)
+    return "; ".join(messages)
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     semaphore = asyncio.Semaphore(3)
@@ -8171,18 +8259,13 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     else "ended"
                 )
                 record["current_action"] = "Completed" if record["status"] == "ended" else "Failed"
-                failures = [
-                    branch.get("reason", "A strategy branch failed.")
-                    for branch in runs
-                    if branch["status"] == "failed"
-                ]
                 incomplete_branches = [
                     branch
                     for branch in runs
                     if branch.get("current_action") == "Incomplete · output limit"
                 ]
                 record["message"] = (
-                    "; ".join(failures)
+                    _portfolio_failure_message(runs)
                     if record["status"] == "failed"
                     else "One or more provider responses were clipped; saved partial output and usage are incomplete. No clipped call was retried."
                     if incomplete_branches
@@ -8602,7 +8685,11 @@ def _prior_session_findings_index(
 
 
 def _prior_session_obligations_index(
-    project_path: Any, current_session_id: Any, strategy_ids: list[str]
+    project_path: Any,
+    current_session_id: Any,
+    strategy_ids: list[str],
+    *,
+    diagnostics: bool = False,
 ) -> tuple[
     list[dict[str, Any]],
     int,
@@ -8620,6 +8707,10 @@ def _prior_session_obligations_index(
     omitted_by_strategy: dict[str, int] = {}
     omitted_ids_by_strategy: dict[str, list[str]] = {}
     omitted_details: dict[str, list[dict[str, str]]] = {}
+    max_text_bytes = 0
+    max_scope_bytes = 0
+    max_rationale_bytes = 0
+    max_reference_bytes = 0
     sessions = [
         item
         for item in _all(project_path)
@@ -8666,6 +8757,30 @@ def _prior_session_obligations_index(
                 "basis_step_ids": obligation.get("basis_step_ids", []),
                 "rationale": obligation.get("rationale", ""),
             }
+            max_text_bytes = max(max_text_bytes, len(str(compact.get("text", "")).encode("utf-8")))
+            max_scope_bytes = max(
+                max_scope_bytes, _json_bytes(compact.get("scope_assumptions", []))
+            )
+            max_rationale_bytes = max(
+                max_rationale_bytes,
+                len(str(compact.get("rationale", "")).encode("utf-8")),
+            )
+            max_reference_bytes = max(
+                max_reference_bytes,
+                _json_bytes(
+                    {
+                        key: compact.get(key)
+                        for key in (
+                            "source_artifact_ids",
+                            "source_refs",
+                            "source_artifact_count",
+                            "source_step_ids",
+                            "basis_artifact_ids",
+                            "basis_step_ids",
+                        )
+                    }
+                ),
+            )
             if (
                 len([item for item in selected if item.get("strategy_id") == strategy_id])
                 >= MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY
@@ -8683,6 +8798,15 @@ def _prior_session_obligations_index(
                     )
                 continue
             if _json_bytes([*selected, compact]) > MAX_PRIOR_OBLIGATION_CONTEXT_BYTES:
+                # Keep every obligation's full text and scope when repeated
+                # provenance pointers, rather than the obligations themselves,
+                # are what exceed the frozen context budget. The complete
+                # references remain in their durable source artifacts; this
+                # snapshot keeps the first and latest pointers and records how
+                # many intermediate pointers were compacted.
+                selected = [_compact_prior_obligation_references(item) for item in selected]
+                compact = _compact_prior_obligation_references(compact)
+            if _json_bytes([*selected, compact]) > MAX_PRIOR_OBLIGATION_CONTEXT_BYTES:
                 omitted_count += 1
                 omitted_ids.append(compact["obligation_id"])
                 omitted_by_strategy[strategy_id] = omitted_by_strategy.get(strategy_id, 0) + 1
@@ -8696,6 +8820,18 @@ def _prior_session_obligations_index(
                     )
                 continue
             selected.append(compact)
+    if diagnostics:
+        try:
+            from sigma.sponsor_diagnostics import record as write_diagnostic
+
+            write_diagnostic(
+                "sponsor_context",
+                f"o{omitted_count}_b{_json_bytes(selected)}_t{max_text_bytes}"
+                f"_a{max_scope_bytes}_r{max_rationale_bytes}_p{max_reference_bytes}",
+            )
+        except (OSError, RuntimeError, ValueError, ImportError):
+            # Diagnostic failure must not change admission behavior.
+            pass
     return (
         selected,
         omitted_count,
@@ -8707,6 +8843,29 @@ def _prior_session_obligations_index(
         },
         omitted_details,
     )
+
+
+def _compact_prior_obligation_references(obligation: dict[str, Any]) -> dict[str, Any]:
+    """Bound repeated provenance while retaining obligation text and traceable endpoints."""
+    result = dict(obligation)
+    for field in (
+        "source_artifact_ids",
+        "source_refs",
+        "source_step_ids",
+        "basis_artifact_ids",
+        "basis_step_ids",
+    ):
+        values = result.get(field)
+        if not isinstance(values, list) or len(values) <= 2:
+            continue
+        result[field] = [values[0], values[-1]]
+        omitted_count = len(values) - 2
+        if field in {"source_artifact_ids", "source_refs"}:
+            source_count = result.get("source_artifact_count")
+            if isinstance(source_count, int):
+                omitted_count = max(omitted_count, source_count - 2)
+        result[f"{field}_omitted_count"] = omitted_count
+    return result
 
 
 def _prior_session_failures(
@@ -8789,7 +8948,7 @@ def _prior_session_failures_index(
 
 
 async def _claim_cloud_job(session_id: str, path: str) -> bool:
-    if not cloud_workspaces.enabled():
+    if not cloud_research.billing_enabled():
         return True
     while True:
         record = _read(path, session_id)
@@ -9298,7 +9457,7 @@ async def _worker(session_id: str, path: str) -> None:
                 step["token_usage_status"] = "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):
                     step["provider_input_audit"]["status"] = "call_interrupted_dispatch_unknown"
-                if cloud_workspaces.enabled() and step.get("attempt_id"):
+                if cloud_research.billing_enabled() and step.get("attempt_id"):
                     step["attempt_status"] = "unknown"
                     try:
                         cloud_research.mark_call_unknown(record["id"], step["attempt_id"])
@@ -9407,7 +9566,7 @@ async def _worker(session_id: str, path: str) -> None:
         except (ProjectError, OSError):
             pass
     finally:
-        if cloud_workspaces.enabled():
+        if cloud_research.billing_enabled():
             try:
                 current = _read(path, session_id)
                 cloud_research.release_job(

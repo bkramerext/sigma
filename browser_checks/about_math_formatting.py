@@ -49,7 +49,7 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     page.route("**/api/**", app_fixture)
     page.goto(UI_URL)
-    opener = page.get_by_role("button", name="About", exact=True)
+    opener = page.get_by_role("button", name="About SIGMA", exact=True)
     expect(opener).to_be_visible()
     opener.click()
     dialog = page.get_by_role("dialog", name="About SIGMA")

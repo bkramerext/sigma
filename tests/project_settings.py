@@ -283,9 +283,9 @@ def main():
             )
             for invalid in (
                 {**defaults, "research_rounds": 6, "model_calls": 30},
-                {**defaults, "model_calls": 31},
+                {**defaults, "model_calls": 121},
                 {**defaults, "session_duration_minutes": 7 * 24 * 60 + 1},
-                {**defaults, "output_tokens_per_call": 16385},
+                {**defaults, "output_tokens_per_call": 20001},
                 {**defaults, "maximum_estimated_cost_usd": 0.001},
             ):
                 assert (

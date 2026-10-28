@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import socket
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from playwright.sync_api import expect, sync_playwright
@@ -134,7 +137,7 @@ def exercise(ui_url: str, root: Path) -> None:
         mutation_requests: list[str] = []
         research_dispatch_requests: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
-        page.route("**/api/cloud-auth/login", lambda route: route.abort())
+        page.route("**/api/cloud-auth/login**", lambda route: route.abort())
         page.on(
             "response",
             lambda response: (
@@ -168,9 +171,65 @@ def exercise(ui_url: str, root: Path) -> None:
         page.on("response", capture)
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        # The guest landing page intentionally starts with Projects, not a welcome heading.
-        expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
+        welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
+        expect(welcome).to_be_visible()
+        expect(welcome).to_contain_text("Explore as a guest without running or saving projects")
+        expect(welcome).to_contain_text("request an invitation to become a member")
+        expect(welcome).to_contain_text(
+            "decides whether to include sponsorship when granting your invitation"
+        )
+        expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
+        assert welcome.evaluate("el => getComputedStyle(el).transform") == (
+            "matrix(1.25, 0, 0, 1.25, 0, 0)"
+        )
+        assert (
+            welcome.locator(".invitation-welcome-intro").evaluate(
+                "el => getComputedStyle(el).marginBottom"
+            )
+            == "16px"
+        )
+        assert (
+            welcome.locator("#invitation-welcome-phrase").evaluate(
+                "el => getComputedStyle(el).fontStyle"
+            )
+            == "italic"
+        )
+        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
+        welcome.get_by_role("button", name="Let's get started").click()
+        expect(welcome).to_have_count(0)
+        page.route(
+            "**/api/test-long-error",
+            lambda route: route.fulfill(
+                status=503,
+                headers={"content-type": "application/json"},
+                body='{"error":"' + ("provider detail " * 200) + '"}',
+            ),
+        )
+        page.evaluate("fetch('/api/test-long-error')")
+        long_error_toast = page.locator(".request-toast").last
+        expect(long_error_toast).to_contain_text("unusually long error response")
+        assert len(long_error_toast.inner_text()) < 250
+        page.unroute("**/api/test-long-error")
         expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        home_google = page.get_by_role("link", name="Sign in with Google")
+        home_invite = page.get_by_role("button", name="Invite me!")
+        home_google_box = home_google.bounding_box()
+        home_invite_box = home_invite.bounding_box()
+        assert home_invite_box["y"] >= home_google_box["y"] + home_google_box["height"]
+        assert abs(home_invite_box["x"] - home_google_box["x"]) < 2
+        home_invite.click()
+        invitation_dialog = page.get_by_role("dialog", name="Request an invitation")
+        invitation_signin = invitation_dialog.get_by_role("link", name="Sign in with Google")
+        expect(invitation_signin).to_have_attribute("href", "/api/cloud-auth/login?invite=1")
+        assert (
+            invitation_signin.evaluate("element => getComputedStyle(element).textDecorationLine")
+            == "underline"
+        )
+        assert (
+            invitation_signin.evaluate("element => getComputedStyle(element).backgroundColor")
+            == "rgba(0, 0, 0, 0)"
+        )
+        invitation_dialog.get_by_role("button", name="Close").click()
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
         expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
@@ -189,8 +248,9 @@ def exercise(ui_url: str, root: Path) -> None:
         page.get_by_role("tab", name="Samples").click()
         sign_in = page.get_by_role("link", name="Sign in with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
-        expect(page.locator(".api-connection > summary")).to_contain_text("Connect to ChatGPT")
+        expect(page.locator(".home-auth-pills .api-connection")).to_have_count(0)
         expect(page.get_by_role("dialog", name="Account and model settings")).to_have_count(0)
+
         sample_group = page.locator("details.sample-type-group").filter(
             has_text="Did Jesus Use Cannabis?"
         )
@@ -198,9 +258,9 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(sample_group.locator("button.sample-open")).to_be_visible()
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
 
-        page.get_by_role("button", name="About", exact=True).click()
+        page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
-        policy = page.get_by_role("link", name="Privacy Policy")
+        policy = page.get_by_role("link", name="Privacy Notice")
         policy.scroll_into_view_if_needed()
         expect(policy).to_be_visible()
         policy.click()
@@ -209,9 +269,31 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
 
         sample_group.locator("button.sample-open").evaluate("button => button.click()")
-        expect(page.get_by_role("heading", name="Did Jesus Use Cannabis? v1")).to_be_visible(
-            timeout=15000
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible(timeout=15000)
+        page.get_by_role("link", name="Go back to home page").click()
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        sample_group = page.locator("details.sample-type-group").filter(
+            has_text="Did Jesus Use Cannabis?"
         )
+        expect(sample_group).to_have_attribute("open", "")
+        sample_group.locator("button.sample-open").click()
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible(timeout=15000)
+        expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
+        project_google = page.get_by_role("link", name="Sign in with Google")
+        project_invite = page.get_by_role("button", name="Invite me!")
+        project_google_box = project_google.bounding_box()
+        project_invite_box = project_invite.bounding_box()
+        assert project_invite_box["y"] >= project_google_box["y"] + project_google_box["height"]
+        assert abs(project_invite_box["x"] - project_google_box["x"]) < 2
+        expect(
+            page.locator(
+                "header .header-controls button:visible, header .header-controls a:visible"
+            )
+        ).to_have_count(6)
         papers_before_dialog = len(paper_requests)
         page.get_by_role("button", name="LaTeX research paper").click()
         tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
@@ -224,10 +306,8 @@ def exercise(ui_url: str, root: Path) -> None:
         dispatches_before_play = len(research_dispatch_requests)
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
-        expect(play_dialog).to_contain_text(
-            "Sign in to run a research session. You can explore sample projects as a guest."
-        )
-        expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
+        expect(play_dialog).to_contain_text("Sign in to run a research session.")
+        expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
         expect(play_dialog.get_by_role("button", name="Cancel")).to_be_visible()
         actions = play_dialog.locator(".settings-actions")
         assert (
@@ -259,21 +339,130 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(page.get_by_text("Authentication required.")).to_have_count(0)
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
-        expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
-        with page.expect_request("**/api/cloud-auth/login") as sign_in_request:
-            play_dialog.get_by_role("button", name="Sign in now").click()
-        expect(play_dialog).to_have_count(0)
-        assert sign_in_request.value.url.endswith("/api/cloud-auth/login"), (
-            sign_in_request.value.url
+        expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
+        page.unroute("**/api/cloud-auth/login**")
+        page.route(
+            "**/api/cloud-auth/login**",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="text/html",
+                body="<!doctype html><title>OAuth fixture</title>",
+            ),
         )
-        assert len(mutation_requests) == mutations_before_play, mutation_requests
-        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        with page.expect_request("**/api/cloud-auth/login**") as sign_in_request:
+            play_dialog.get_by_role("button", name="Sign in with Google").click()
+        expect(play_dialog).to_have_count(0)
+        sign_in_url = urlsplit(sign_in_request.value.url)
+        assert sign_in_url.path == "/api/cloud-auth/login", sign_in_url
+        return_to = parse_qs(sign_in_url.query).get("return_to", [None])[0]
+        assert return_to == f"/project?path={opened_projects[-1]['path']}&resume_play=1", return_to
+        assert page.evaluate("sessionStorage.getItem('sigma.playSignInReturn')") == "true"
+        assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") == "true"
+        session = {"authenticated": True}
+
+        def cloud_status(route):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "enabled": True,
+                        "ready": True,
+                        "authenticated": session["authenticated"],
+                        "user": {"email": "member@example.org", "role": "member"}
+                        if session["authenticated"]
+                        else None,
+                        "account": {
+                            "identity": {"email": "member@example.org", "verified": True},
+                            "access": {"status": "active", "role": "member"},
+                            "workspace": {"available": True, "id": "fixture"},
+                            "model_access": {"mode": "personal", "connection": "connected"},
+                            "sponsorship": {"eligible": False, "forced": False},
+                        }
+                        if session["authenticated"]
+                        else None,
+                        "target": "local",
+                        "admin_contact_email": None,
+                    }
+                ),
+            )
+
+        page.route("**/api/cloud-auth/status", cloud_status)
+        page.route(
+            "**/api/projects/proposals/config?**",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "available": True,
+                        "binding": "fixture-member",
+                        "model": "gpt-6.1-sol",
+                        "reasoning_effort": "high",
+                        "project_id": "fixture-project",
+                        "message": "Fixture connection is ready.",
+                    }
+                ),
+            ),
+        )
+
+        def generous_research_limits(route):
+            response = route.fetch()
+            limits = response.json()
+            limits["model_calls"] = 30
+            route.fulfill(response=response, json=limits)
+
+        page.route("**/api/projects/research-limits?**", generous_research_limits)
+        page.goto(f"{ui_url}{return_to}", wait_until="networkidle")
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible()
+        expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
+        expect(page.get_by_role("button", name="Start new session #1")).to_be_visible(timeout=15000)
+        assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
+        resumed_mutations = len(mutation_requests)
+        page.locator(".session-start-link").filter(has_text="Cancel").click()
+        assert len(mutation_requests) == resumed_mutations, mutation_requests
+        assert not any(
+            "/api/projects/research-sessions/start" in url for url in research_dispatch_requests
+        ), research_dispatch_requests
+        page.route(
+            "**/api/projects/guest-copy",
+            lambda route: route.fulfill(
+                status=201,
+                content_type="application/json",
+                body=json.dumps({"path": opened_projects[-1]["path"]}),
+            ),
+        )
+
+        def sign_out(route):
+            session["authenticated"] = False
+            route.fulfill(status=204)
+
+        page.route("**/api/cloud-auth/logout", sign_out)
+        # This member context did not previously show a guest welcome. Signing
+        # out should not make the same tab look like a first-time guest visit.
+        page.evaluate("sessionStorage.removeItem('sigma.guestWelcomeDismissed')")
+        page.get_by_role("button", name="Sign out of Google").click()
+        expect(page).to_have_url(re.compile(r"/project\?path="))
+        expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible()
         assert not failures, failures
         assert (
             not list((root / "saved-projects").glob("*.sigma"))
             if (root / "saved-projects").exists()
             else True
         )
+        backdrop_context = browser.new_context(viewport={"width": 1280, "height": 850})
+        backdrop_page = backdrop_context.new_page()
+        backdrop_page.goto(ui_url, wait_until="networkidle")
+        backdrop_welcome = backdrop_page.get_by_role("dialog", name="Welcome to SIGMA!")
+        expect(backdrop_welcome).to_be_visible()
+        backdrop_page.mouse.click(2, 2)
+        expect(backdrop_welcome).to_have_count(0)
+        backdrop_context.close()
         browser.close()
 
 

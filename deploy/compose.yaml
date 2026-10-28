@@ -44,6 +44,7 @@ services:
       GOOGLE_OIDC_CLIENT_SECRET_FILE: /run/secrets/google_oidc_client_secret
       SIGMA_CLOUD_OPENAI_API_KEY_FILE: /run/secrets/cloud_openai_api_key
       SIGMA_CLOUD_SPONSORED_ENABLED: ${SIGMA_CLOUD_SPONSORED_ENABLED:-false}
+      SIGMA_CLOUD_FORCE_SPONSORED_MODE: ${SIGMA_CLOUD_FORCE_SPONSORED_MODE:-false}
       SIGMA_INVITATION_SMTP_USERNAME: ${SIGMA_INVITATION_SMTP_USERNAME:?set authenticated notification sender account}
       SIGMA_INVITATION_SMTP_PASSWORD_FILE: /run/secrets/invitation_smtp_password
       SIGMA_CLOUD_USER_SPEND_CEILING_USD: ${SIGMA_CLOUD_USER_SPEND_CEILING_USD:-2.00}

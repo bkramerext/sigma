@@ -69,6 +69,20 @@ def check_failures() -> None:
 
 
 def check_start_cli() -> None:
+    for flags, mock_auth in ((["--sponsored"], False), (["--sponsored", "--mock-auth"], True)):
+        with (
+            patch("sys.argv", ["sigma", "start", *flags]),
+            patch("sigma.cli.run_ui", return_value=0) as launch,
+        ):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                assert exc.code == 0
+            else:
+                raise AssertionError("start did not exit")
+        launch.assert_called_once_with(
+            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True
+        )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
         try:
@@ -119,6 +133,16 @@ def check_command_help() -> None:
         assert "--title TITLE         Set title (required)" in help_text
         assert "(default: medium)" in help_text
         assert "Example:" in help_text and "SIGMA_PROJECTS_ROOT" in help_text
+
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("start --help did not exit")
+    assert "--sponsored" in output.getvalue()
 
     output = StringIO()
     with patch("sys.argv", ["sigma", "-h"]), redirect_stdout(output):
@@ -275,6 +299,45 @@ def check_local_google_startup() -> None:
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
     assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+
+
+def check_sponsored_local_startup() -> None:
+    backend, frontend = Mock(), Mock()
+    backend.poll.return_value = frontend.poll.return_value = None
+    owner = MagicMock()
+    owner.__enter__.return_value.replacement_request.return_value = None
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+                "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/private/fixture-key",
+            },
+            clear=True,
+        ),
+        patch("sigma.ui.Instance", return_value=owner),
+        patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.wait_for_ports"),
+        patch("sigma.ui.subprocess.Popen", side_effect=[backend, frontend]) as launch,
+        patch("sigma.ui.ready", return_value=True),
+        patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
+        patch("sigma.ui.stop_servers"),
+    ):
+        assert run_ui(sponsored=True) == 0
+    backend_env = launch.call_args_list[0].kwargs["env"]
+    assert backend_env["SIGMA_MOCK_AUTH"] == "0"
+    assert backend_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] == "1"
+    assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+    assert backend_env["SIGMA_LOCAL_AUTO_ADMIN"] == "false"
+    assert backend_env["SIGMA_CLOUD_INFERENCE_PROVIDER"] == "api_key"
+    assert backend_env["SIGMA_CLOUD_OPENAI_API_KEY_FILE"] == "/private/fixture-key"
+    frontend_env = launch.call_args_list[1].kwargs["env"]
+    assert "SIGMA_CLOUD_OPENAI_API_KEY" not in frontend_env
+    assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" not in frontend_env
 
 
 def check_local_google_setup_warning() -> None:
@@ -439,6 +502,7 @@ def main() -> None:
         check_command_help()
         check_ui()
         check_local_google_startup()
+        check_sponsored_local_startup()
         check_local_google_setup_warning()
         check_partial_google_startup_remains_guest_without_admin()
         check_signin_without_admin_contact_fails_before_launch()

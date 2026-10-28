@@ -13,11 +13,42 @@ import jwt
 from sigma import chatgpt_auth
 from sigma.ai_store import read, sponsor_directory, sponsor_transaction, use_directory
 from sigma.projects import ProjectError
+from sigma.sponsor_diagnostics import record
+
+_last_issue: tuple[str, float] | None = None
+
+
+def _diagnose(issue: str | None) -> None:
+    """Report a bounded sponsor state to the server log without account secrets."""
+    global _last_issue
+    if issue is None:
+        _last_issue = None
+        return
+    now = time.monotonic()
+    if _last_issue is None or _last_issue[0] != issue or now - _last_issue[1] >= 60:
+        record("sponsor_connection", issue)
+        _last_issue = (issue, now)
+
+
+def inference_provider() -> str:
+    """Return the provider bound to sponsored inference in this deployment."""
+    from sigma import cloud_auth, cloud_workspaces
+
+    if cloud_auth.config().local and not cloud_workspaces.enabled():
+        # Local sponsored access defaults to the designated ChatGPT session.
+        # A service API key is used only when the operator selects it explicitly.
+        return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
+    return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
 
 
 def expected_email() -> str:
     email = os.environ.get("SIGMA_CLOUD_SPONSOR_EMAIL", "").strip().casefold()
-    if not email or "@" not in email:
+    if not email:
+        from sigma import cloud_auth, cloud_workspaces
+
+        if cloud_auth.config().local and not cloud_workspaces.enabled():
+            return cloud_auth.INVITATION_RECIPIENT
+    if "@" not in email:
         raise ProjectError("Configure the explicit SIGMA_CLOUD_SPONSOR_EMAIL first.")
     return email
 
@@ -27,16 +58,60 @@ async def sponsor_session() -> dict:
     try:
         email = expected_email()
         async with sponsor_transaction() as state:
-            account = state["accounts"].get(state["active"]) or {}
-            if state["mode"] != "chatgpt" or account.get("email", "").casefold() != email:
+            account_id = _designated_account_id(state, email)
+            if account_id is None:
+                _diagnose("registration_missing")
                 return {"status": "disconnected"}
+            account = state["accounts"][account_id]
+            missing_credentials = not account.get("access_token") and not account.get(
+                "refresh_token"
+            )
         with use_directory(sponsor_directory()):
-            selected = await chatgpt_auth.session()
+            selected = await chatgpt_auth.session(account_id=account_id)
         if (selected.get("account") or {}).get("email", "").casefold() != email:
+            _diagnose("identity_mismatch")
             return {"status": "forbidden"}
+        if selected.get("status") == "connected":
+            _diagnose(None)
+        else:
+            _diagnose(
+                "credential_missing"
+                if missing_credentials
+                else "credential_" + str(selected.get("status", "unavailable"))
+            )
         return selected
     except ProjectError:
+        _diagnose("storage_or_configuration_unavailable")
         return {"status": "unavailable"}
+
+
+async def sponsor_account_id() -> str:
+    """Find the designated account for an administrator's local renewal flow."""
+    email = expected_email()
+    async with sponsor_transaction() as state:
+        account_id = _designated_account_id(state, email)
+    if account_id is None:
+        raise ProjectError("The designated sponsor account has not been provisioned.")
+    return account_id
+
+
+def _designated_account_id(state: dict, email: str) -> str | None:
+    """Prefer a usable duplicate over a stale sponsor registration."""
+    matches = [
+        key
+        for key, account in state["accounts"].items()
+        if account.get("email", "").casefold() == email
+    ]
+    if not matches:
+        return None
+    return max(
+        matches,
+        key=lambda key: (
+            bool(state["accounts"][key].get("access_token")),
+            bool(state["accounts"][key].get("refresh_token")),
+            key == state.get("active"),
+        ),
+    )
 
 
 async def import_session(source: Path) -> None:

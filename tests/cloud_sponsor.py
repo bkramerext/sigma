@@ -7,7 +7,14 @@ from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase, main
 from unittest.mock import AsyncMock, patch
 
-from sigma import ai_store, chatgpt_auth, cloud_sponsor, openai_connection
+from sigma import (
+    ai_store,
+    chatgpt_auth,
+    cloud_sponsor,
+    openai_connection,
+    research_sessions,
+    sponsor_diagnostics,
+)
 from sigma.projects import ProjectError
 
 
@@ -67,12 +74,141 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def sponsor_context(self):
         return await openai_connection.sponsored_auth_context("a" * 64)
 
+    async def test_local_sponsor_defaults_to_the_designated_admin_identity(self):
+        from sigma import cloud_auth
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_AUTH_HOME": str(self.root / "local-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            self.assertEqual(cloud_sponsor.expected_email(), cloud_auth.INVITATION_RECIPIENT)
+            os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
+            self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
+
+    async def test_local_service_key_requires_explicit_provider_and_dedicated_secret(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                    "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+                    "SIGMA_CLOUD_OPENAI_API_KEY": "fixture-sponsored-key",
+                },
+            ),
+            patch.object(cloud_sponsor, "sponsor_session", AsyncMock()) as session,
+        ):
+            self.assertEqual(cloud_sponsor.inference_provider(), "api_key")
+            context = await self.sponsor_context()
+            session.assert_not_called()
+            self.assertEqual(context["mode"], "api_key")
+            self.assertEqual(context["status"], "connected")
+            self.assertEqual(context["token"], "fixture-sponsored-key")
+            self.assertTrue(openai_connection.cloud_credential(context))
+
+            os.environ.pop("SIGMA_CLOUD_OPENAI_API_KEY")
+            unconfigured = await self.sponsor_context()
+            self.assertEqual(unconfigured["status"], "unconfigured")
+            self.assertEqual(unconfigured["token"], "")
+            with patch.object(
+                chatgpt_auth,
+                "preferences",
+                AsyncMock(
+                    side_effect=AssertionError("sponsored service key read ChatGPT preferences")
+                ),
+            ):
+                state = await openai_connection.connection(context=unconfigured)
+            self.assertEqual(state["mode"], "api_key")
+            self.assertEqual(state["accounts"], [])
+
+            os.environ["SIGMA_CLOUD_INFERENCE_PROVIDER"] = "invalid"
+            invalid = await self.sponsor_context()
+            self.assertEqual(invalid["status"], "unavailable")
+            self.assertEqual(invalid["token"], "")
+
     async def test_missing_session_never_uses_local_or_service_credentials(self):
-        context = await self.sponsor_context()
+        with (
+            patch.object(cloud_sponsor, "_last_issue", None),
+            patch.object(cloud_sponsor, "record") as record,
+        ):
+            context = await self.sponsor_context()
+            await self.sponsor_context()
+        record.assert_called_once_with("sponsor_connection", "registration_missing")
         self.assertEqual(context["mode"], "chatgpt")
         self.assertEqual(context["status"], "disconnected")
         self.assertEqual(context["token"], "")
         self.assertFalse((self.root / "local-must-not-be-used").exists())
+
+    async def test_local_diagnostics_are_private_bounded_and_token_free(self):
+        path = self.root / sponsor_diagnostics.LOG_NAME
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_LOCAL": "true"}),
+            patch.object(sponsor_diagnostics, "ROOT", self.root),
+            patch.object(sponsor_diagnostics._LOG, "warning") as warning,
+        ):
+            sponsor_diagnostics.record("sponsor_connection", "credential_missing")
+            sponsor_diagnostics.record("sponsor_play", "http_400")
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertIn("sponsor_connection status=credential_missing", path.read_text())
+            self.assertIn("sponsor_play status=http_400", path.read_text())
+            self.assertNotIn(self.account["email"], path.read_text())
+            self.assertNotIn(self.account["access_token"], path.read_text())
+            path.write_bytes(b"x" * 65536)
+            sponsor_diagnostics.record("sponsor_oauth", "started")
+            self.assertLess(path.stat().st_size, 256)
+            self.assertIn("sponsor_oauth status=started", path.read_text())
+            path.unlink()
+            target = self.root / "protected-target"
+            target.write_text("unchanged")
+            path.symlink_to(target)
+            sponsor_diagnostics.record("sponsor_connection", "credential_missing")
+            self.assertEqual(target.read_text(), "unchanged")
+            self.assertIn("sponsor_diagnostics status=file_unavailable", str(warning.call_args))
+
+    async def test_sponsored_inference_diagnostics_record_only_fixed_status_codes(self):
+        with patch.object(sponsor_diagnostics, "record") as write_diagnostic:
+            research_sessions._sponsor_inference_diagnostic(
+                {"cloud_sponsored": False}, "call_started"
+            )
+            write_diagnostic.assert_not_called()
+            research_sessions._sponsor_inference_diagnostic(
+                {"cloud_sponsored": True}, "http_403_subscription_sharing_unsupported_capability"
+            )
+        write_diagnostic.assert_called_once_with(
+            "sponsor_inference", "http_403_subscription_sharing_unsupported_capability"
+        )
+
+    async def test_designated_sponsor_is_used_when_a_personal_account_is_active(self):
+        personal = dict(self.account, email="personal@example.test", subject="personal-subject")
+        async with ai_store.sponsor_transaction() as state:
+            state["mode"] = "chatgpt"
+            state["active"] = "personal"
+            state["accounts"] = {"personal": personal, "sponsor": self.account}
+        selected = await cloud_sponsor.sponsor_session()
+        self.assertEqual(selected["status"], "connected")
+        self.assertEqual(selected["account_id"], "sponsor")
+        self.assertEqual(selected["account"]["email"], "sponsor@example.test")
+        async with ai_store.sponsor_transaction() as state:
+            self.assertEqual(state["active"], "personal")
+
+    async def test_duplicate_sponsor_prefers_usable_account_after_personal_billing_choice(self):
+        stale = dict(self.account)
+        stale.pop("access_token")
+        stale.pop("refresh_token")
+        async with ai_store.sponsor_transaction() as state:
+            state["mode"] = "api_key"
+            state["active"] = "stale"
+            state["accounts"] = {"stale": stale, "usable": self.account}
+        self.assertEqual(await cloud_sponsor.sponsor_account_id(), "usable")
+        selected = await cloud_sponsor.sponsor_session()
+        self.assertEqual(selected["status"], "connected")
+        self.assertEqual(selected["account_id"], "usable")
+        self.assertEqual(selected["account"]["email"], "sponsor@example.test")
 
     async def test_import_selected_account_preserves_vm_host_and_is_used(self):
         async with ai_store.transaction() as state:

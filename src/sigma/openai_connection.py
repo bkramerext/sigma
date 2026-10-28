@@ -180,7 +180,9 @@ async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
 
     if subject_hash is None:
         return AuthContext(token="", mode="chatgpt", status="unavailable", identity="cloud_unbound")
-    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+    from sigma.cloud_sponsor import inference_provider
+
+    provider = inference_provider()
     if provider == "chatgpt":
         from sigma.cloud_sponsor import sponsor_session
 
@@ -231,7 +233,31 @@ async def auth_context() -> AuthContext:
         if selected_mode == "personal":
             return await cloud_personal.auth_context(subject_hash)
         return await _cloud_sponsored_context(subject_hash)
+    from sigma import cloud_auth
+
+    local_principal = cloud_auth.local_sponsored_principal(require_selected=False)
+    if (
+        local_principal is not None
+        and cloud_auth.model_access_for_subject(local_principal.subject) == "sponsored"
+    ):
+        workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
+        return await _cloud_sponsored_context(workspace.subject_hash)
     selected = await chatgpt_auth.session()
+    if (
+        local_principal is not None
+        and selected["mode"] == "chatgpt"
+        and selected.get("status") in {"disconnected", "reauth_required", "plan_not_permitted"}
+    ):
+        # An unsuccessful personal connection attempt must not strand an
+        # eligible member in personal mode after a reload or later Play click.
+        try:
+            cloud_auth.set_model_access(local_principal.subject, "sponsored")
+            workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
+        except (OSError, RuntimeError, ValueError, PermissionError):
+            return AuthContext(
+                token="", mode="chatgpt", status="unavailable", identity="cloud_state_unavailable"
+            )
+        return await _cloud_sponsored_context(workspace.subject_hash)
     mode = selected["mode"]
     if mode == "api_key":
         token = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -242,6 +268,18 @@ async def auth_context() -> AuthContext:
             identity="api_key",
         )
     account = selected.get("account") or {}
+    if cloud_auth.config().local:
+        from sigma.cloud_sponsor import expected_email
+
+        sponsor_account_selected = account.get("email", "").casefold() == expected_email()
+    else:
+        sponsor_account_selected = False
+    if sponsor_account_selected:
+        # The local credential store predates Google accounts and is shared.
+        # A member's personal choice must never spend the sponsor's ChatGPT plan.
+        return AuthContext(
+            token="", mode="chatgpt", status="disconnected", identity="local_personal_unconnected"
+        )
     return AuthContext(
         token=account.get("access_token", ""),
         mode=mode,
@@ -257,7 +295,9 @@ def cloud_credential(context: Mapping[str, Any]) -> bool:
 
     if not cloud_auth.sponsored_access_enabled():
         return False
-    provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+    from sigma.cloud_sponsor import inference_provider
+
+    provider = inference_provider()
     return (
         bool(context.get("token"))
         and context.get("status") == "connected"
@@ -343,7 +383,7 @@ async def connection(
                 "welcome_pending": False,
                 "usage_url": None,
             }
-            if cloud_workspaces.enabled()
+            if cloud_workspaces.enabled() or str(context.get("identity", "")).startswith("cloud_")
             else await chatgpt_auth.preferences()
         )
     except ProjectError:
@@ -382,17 +422,12 @@ async def connection(
         from sigma.cloud_personal import UNAVAILABLE_GUIDANCE
 
         guidance = UNAVAILABLE_GUIDANCE
-    elif (
-        cloud_workspaces.enabled()
-        and mode == "chatgpt"
-        and str(context.get("identity", "")).startswith("cloud_sponsor:")
-    ):
+    elif mode == "chatgpt" and str(context.get("identity", "")).startswith("cloud_sponsor:"):
         label = "SIGMA-sponsored ChatGPT · " + str(state["status"]).replace("_", " ")
         if state["status"] != "connected":
             guidance = (
-                "The administrator must provision or renew the configured ChatGPT sponsor session "
-                "on the server. Google sign-in does not authorize ChatGPT plan use. "
-                "No API-key fallback was selected; saved research is unchanged."
+                "SIGMA-sponsored ChatGPT is temporarily unavailable. Please try again later. "
+                "Saved research is unchanged."
             )
     return {
         **state,

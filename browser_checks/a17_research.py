@@ -29,6 +29,20 @@ with sync_playwright() as playwright:
         if tab.get_attribute("aria-selected") != "true":
             tab.click()
 
+    def open_counting_sample():
+        select_samples()
+        panel = page.get_by_role("tabpanel", name="Samples", exact=True)
+        groups = panel.locator("details.sample-type-group")
+        expect(groups.first).to_be_visible()
+        group = next(
+            candidate
+            for candidate in groups.all()
+            if "Mathematics" in candidate.locator(":scope > summary").inner_text()
+        )
+        if group.get_attribute("open") is None:
+            group.locator(":scope > summary").click()
+        panel.get_by_role("button", name="Open Counting Constrained Binary Strings").click()
+
     errors = []
     starts = []
     start_payloads = []
@@ -183,75 +197,24 @@ with sync_playwright() as playwright:
     home_credit = page.locator(".home-art-credit")
     expect(
         home_credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")
-    ).to_have_text(["Brian Kramer", "& OpenAI Models"])
+    ).to_have_text(["Crafted by Brian Kramer", re.compile(r"and [a-z-]+ OpenAI agents\.")])
     expect(home_credit.locator("time")).to_have_count(0)
     credit_box = home_credit.bounding_box()
     assert credit_box and credit_box["x"] + credit_box["width"] <= 1440
     assert credit_box["y"] + credit_box["height"] <= 900
     assert home_credit.evaluate("e => getComputedStyle(e).userSelect") == "none"
     page.screenshot(path="/tmp/sigma-a1771-home-credit.png")
-    select_samples()
-    page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
-        "button", name="Open Counting Constrained Binary Strings"
-    ).click()
+    open_counting_sample()
     page.wait_for_url("**/project?*")
     expect(page.get_by_role("heading", name="Project")).to_be_visible()
-    expect(page.get_by_role("button", name="Back to home", exact=True)).to_be_visible()
-    header_title = page.locator(".project-header-title")
-    back_row = page.locator(".project-back-row")
-    title_box = header_title.bounding_box()
-    back_box = back_row.bounding_box()
+    home_link = page.get_by_role("link", name="Go back to home page", exact=True)
+    expect(home_link).to_be_visible()
     art_box = page.locator(".project-header-art").bounding_box()
-    assert title_box and back_box and art_box
-    assert back_box["x"] >= art_box["x"] + art_box["width"] * 0.55
-    assert back_box["x"] + back_box["width"] <= art_box["x"] + art_box["width"] + 2
-    assert back_box["y"] < art_box["y"] + art_box["height"] / 2
-    back_button_box = page.get_by_role("button", name="Back to home", exact=True).bounding_box()
-    back_caption = page.get_by_role("button", name="Back to home caption", exact=True)
-    expect(back_caption).to_be_visible()
-    expect(back_caption).to_have_css("text-decoration-line", "underline")
-    expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
-    expect(back_caption).to_have_css("font-size", "13px")
-    expect(back_caption).to_have_css("font-weight", "600")
-    reference_action = page.locator(".strategy-inline-commands .text-view-link").first
-    if not reference_action.count():
-        reference_action = page.locator(".strategy-heading-actions .text-view-link").first
-    action_style = reference_action.evaluate(
-        "e => {const s=getComputedStyle(e); return [s.color,s.font,s.letterSpacing,s.textDecorationLine,s.textUnderlineOffset]}"
-    )
-    for selector in (
-        ".project-back-label",
-        ".strategy-heading-actions .text-view-link",
-        ".strategy-remove-anchor > .text-view-link",
-    ):
-        for action in page.locator(selector).all():
-            assert (
-                action.evaluate(
-                    "e => {const s=getComputedStyle(e); return [s.color,s.font,s.letterSpacing,s.textDecorationLine,s.textUnderlineOffset]}"
-                )
-                == action_style
-            ), selector
-    back_label_box = back_caption.bounding_box()
-    assert back_button_box and back_label_box
-    assert (
-        abs(
-            (back_button_box["y"] + back_button_box["height"] / 2)
-            - (back_label_box["y"] + back_label_box["height"] / 2)
-        )
-        < 2
-    )
-    back_caption.hover()
-    expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
-    expect(page.get_by_role("tooltip")).to_have_count(0)
-    page.get_by_role("button", name="Back to home", exact=True).hover()
-    expect(page.get_by_role("tooltip")).to_have_count(0)
-    back_caption.click()
+    assert art_box
+    home_link.click()
     page.wait_for_url(browser_base_url + "/")
     expect(page.get_by_role("tooltip")).to_have_count(0)
-    select_samples()
-    page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
-        "button", name="Open Counting Constrained Binary Strings"
-    ).click()
+    open_counting_sample()
     page.wait_for_url("**/project?*")
     untitled_controls = page.locator(
         ".project-pane button:not([data-tooltip-disabled]), .strategies-pane button:not([data-tooltip-disabled]), .sessions-pane button:not([data-tooltip-disabled])"
@@ -937,7 +900,46 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Start new session #2", exact=True).click()
     pause_row = research.locator("li[data-session-id]").filter(has_text="Session #2")
     expect(pause_row.locator(".session-status")).to_contain_text("running", timeout=10000)
+    live_label = pause_row.locator(".session-outcome-inline")
+    running_record = page.evaluate(
+        """async ({path, id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()""",
+        {"path": path, "id": pause_row.get_attribute("data-session-id")},
+    )
+    has_live_text = bool(
+        running_record.get("current_action") or running_record.get("current_question")
+    )
+    if has_live_text:
+        expect(live_label).not_to_contain_text("provisional")
+        live_words = live_label.inner_text().split()
+        assert 0 < len(live_words) <= 50, live_words
+    else:
+        expect(live_label).to_have_text("Pending · provisional")
     expect(pause_row.locator(".session-row-content")).to_be_visible()
+
+    # Reopening the active project from Home should reveal and scroll to its
+    # running session, retaining the concise current-focus summary.
+    page.locator("a.brand").click()
+    expect(page.get_by_role("tab", name="Recent", exact=True)).to_be_visible()
+    page.get_by_role("tab", name="Recent", exact=True).click()
+    recent_project = page.locator(".recent-open").filter(has_text=workspace_title)
+    recent_group = page.locator(".recent-type-group").filter(has=recent_project)
+    if recent_group.locator("summary").count() and recent_group.get_attribute("open") is None:
+        recent_group.locator("summary").click()
+    recent_project.click()
+    reopened_row = page.locator(".sessions-pane li[data-session-id]").filter(has_text="Session #2")
+    expect(reopened_row.locator(".session-status")).to_contain_text("running", timeout=10000)
+    reopened_box = reopened_row.bounding_box()
+    assert (
+        reopened_box
+        and -1 <= reopened_box["y"]
+        and reopened_box["y"] + reopened_box["height"] <= 900
+    ), reopened_box
+    reopened_label = reopened_row.locator(".session-outcome-inline")
+    if has_live_text:
+        expect(reopened_label).not_to_contain_text("provisional")
+        assert 0 < len(reopened_label.inner_text().split()) <= 50
+    else:
+        expect(reopened_label).to_have_text("Pending · provisional")
     open_outcome_section(pause_row, "Status")
     page.get_by_role("button", name="Sessions", exact=True).click()
     expect(page.locator("#sessions-pane-content")).to_be_hidden()
@@ -1421,7 +1423,7 @@ with sync_playwright() as playwright:
         )
         == "0px"
     )
-    expect(page.get_by_role("button", name="Back to home", exact=True)).to_be_visible()
+    expect(page.get_by_role("link", name="Go back to home page", exact=True)).to_be_visible()
     page.get_by_role("button", name="Export project", exact=True).click()
     mobile_export = page.get_by_role("dialog", name="Export Project")
     mobile_box = mobile_export.bounding_box()
@@ -1452,7 +1454,7 @@ with sync_playwright() as playwright:
     expect(mobile_dialog).to_be_hidden()
     page.screenshot(path="/tmp/sigma-a174-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
-    page.get_by_role("button", name="Back to home", exact=True).click()
+    page.get_by_role("link", name="Go back to home page", exact=True).click()
     page.wait_for_url(browser_base_url + "/")
     select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
