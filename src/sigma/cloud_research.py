@@ -1258,8 +1258,16 @@ def snapshot() -> dict[str, Any]:
             unknown = db.execute(unknown_query, unknown_parameters).fetchone()[0]
             tokens = _user_call_tokens(db, owner)
             to_usd = lambda units: round(units / USD_UNITS, 9)
+            # An individual can have remaining allowance after the shared
+            # inference ceiling is exhausted. Expose aggregate *capacity*
+            # only, never another account's usage or identity, so the UI
+            # cannot suggest that research is fundable when it is not.
+            global_remaining_units = max(
+                0, _ceiling_units(_spend_ceiling_decimal()) - _call_amount_units(db, "")
+            )
             return {
                 "jobs": {row["status"]: row["count"] for row in own},
+                "global_remaining_usd": to_usd(global_remaining_units),
                 "allowance_usd": float(allowance),
                 "estimated_usage_usd": to_usd(estimated_units),
                 "held_usd": to_usd(held_units),
