@@ -264,6 +264,10 @@ def _initialize(path: Path) -> None:
                 email TEXT PRIMARY KEY,
                 subject TEXT NOT NULL UNIQUE
             );
+            CREATE TABLE IF NOT EXISTS contact_admin_subject (
+                email TEXT PRIMARY KEY,
+                subject TEXT NOT NULL UNIQUE
+            );
             CREATE TABLE IF NOT EXISTS sessions (
                 token_hash TEXT PRIMARY KEY,
                 subject TEXT NOT NULL,
@@ -397,6 +401,23 @@ def _authorization(cfg: Config, subject: str, email: str) -> str | None:
 def _authorization_in_db(
     db: sqlite3.Connection, cfg: Config, subject: str, email: str
 ) -> str | None:
+    # The configured admin contact is an administrator even after a different
+    # bootstrap identity was bound. Pin each contact email to its first
+    # verified Google subject to prevent subject substitution.
+    if cfg.admin_contact_email and email == cfg.admin_contact_email:
+        contact = db.execute(
+            "SELECT subject FROM contact_admin_subject WHERE email=?", (email,)
+        ).fetchone()
+        if contact is not None:
+            return "admin" if contact["subject"] == subject else None
+        try:
+            db.execute(
+                "INSERT INTO contact_admin_subject(email,subject) VALUES(?,?)",
+                (email, subject),
+            )
+        except sqlite3.IntegrityError:
+            return None
+        return "admin"
     bootstrap_email = _bootstrap_admin_email(db, cfg)
     bound = db.execute(
         "SELECT subject FROM bootstrap_subject WHERE email=?", (bootstrap_email,)
@@ -528,7 +549,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 and row["sponsorship_eligible"]
             ),
         },
-        "invitation_welcome_pending": bool(row["invitation_welcome_pending"]),
+        "invitation_welcome_pending": (
+            bool(row["invitation_welcome_pending"]) and row["role"] != "admin"
+        ),
     }
 
 
@@ -1510,14 +1533,17 @@ async def callback(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
         bootstrap_email = _bootstrap_admin_email(db, cfg)
-        bootstrap_identity = email == bootstrap_email
+        bootstrap_identity = email == bootstrap_email or email == cfg.admin_contact_email
         domain = email.rsplit("@", 1)[1]
         explicit_invite = db.execute(
             "SELECT 1 FROM grants WHERE active=1 AND ((kind='email' AND value=?) OR (kind='domain' AND value=?)) LIMIT 1",
             (email, domain),
         ).fetchone()
         newly_invited = (
-            existing_account is None and not bootstrap_identity and explicit_invite is not None
+            existing_account is None
+            and role != "admin"
+            and not bootstrap_identity
+            and explicit_invite is not None
         )
         db.execute(
             "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
@@ -1537,7 +1563,12 @@ async def callback(
             if not cfg.local and sponsored_access_enabled() and force_sponsored_mode_enabled()
             else "personal",
         )
-        if newly_invited:
+        if role == "admin":
+            db.execute(
+                "UPDATE user_state SET invitation_welcome_pending=0 WHERE subject=?",
+                (subject,),
+            )
+        elif newly_invited:
             db.execute(
                 "UPDATE user_state SET invitation_welcome_pending=1 WHERE subject=?",
                 (subject,),
