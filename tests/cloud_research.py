@@ -1723,6 +1723,69 @@ def main() -> None:
                 with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
                     asyncio.run(run_invalid_response())
 
+                async def run_rejected_call() -> None:
+                    """Explicit HTTP 429 cannot retain durable or session-local token holds."""
+                    before = cloud_research.snapshot()
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(
+                            research_sessions,
+                            "_call",
+                            new=AsyncMock(
+                                side_effect=research_sessions.ProjectError(
+                                    "ChatGPT plan or app usage limit reached (HTTP 429)."
+                                )
+                            ),
+                        ) as calls,
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            failed = research_sessions.get_session(live_view.path, started["id"])
+                            if failed["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("rejected provider call never reached a saved state")
+                        assert calls.await_count == 1
+                        assert failed["status"] in {"ended", "failed"}, failed["message"]
+                        assert failed["steps"][0]["failure_kind"] == "provider_limited"
+                        assert failed["steps"][0]["attempt_status"] == "provider_rejected"
+                        assert failed["tokens_reserved"] == 0
+                        assert failed["estimated_cost_reserved_usd"] == 0
+                        with cloud_research._connect() as db:
+                            call = db.execute(
+                                "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
+                                (failed["steps"][0]["id"],),
+                            ).fetchone()
+                            assert call["status"] == "usage_estimated"
+                            assert call["amount_usd"] == 0
+                            assert call["token_reservation"] == 0
+                        after = cloud_research.snapshot()
+                        assert after["held_usd"] == before["held_usd"]
+                        assert after["user_reserved_or_observed_tokens"] == (
+                            before["user_reserved_or_observed_tokens"]
+                        )
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_rejected_call())
+
                 async def run_ambiguous_failure() -> None:
                     key = str(uuid4())
                     with (
