@@ -13,7 +13,7 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
-_COMMIT = re.compile(r"[0-9a-fA-F]{7,40}\\Z")
+_COMMIT = re.compile(r"[0-9a-fA-F]{7,40}")
 
 
 @lru_cache(maxsize=1)
