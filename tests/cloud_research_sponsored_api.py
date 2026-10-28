@@ -302,10 +302,8 @@ def main(mode: str = "api_key") -> None:
                     cloud_research._spend_ceiling_decimal()
                 )
                 assert data["live_inference_verified"] is False
-                assert data["preflight_ready"] is (mode == "api_key")
-                assert ("customer_api_key_provider_not_selected" in data["blockers"]) is (
-                    mode == "chatgpt"
-                )
+                assert data["preflight_ready"] is True
+                assert "sponsored_provider_invalid" not in data["blockers"]
                 assert "fake-server-credential" not in readiness.text
                 assert "fake-plan-credential" not in readiness.text
                 assert "admin@example.test" not in readiness.text
