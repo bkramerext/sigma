@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import httpx
 import jwt
 
-from sigma.ai_store import transaction
+from sigma.ai_store import directory, sponsor_directory, transaction, transaction_at
 from sigma.projects import ProjectError
 from sigma.sponsor_diagnostics import record
 
@@ -182,6 +182,7 @@ class Attempt:
     verifier: str = field(default_factory=lambda: secrets.token_urlsafe(48))
     account_id: str | None = None
     sponsor: bool = False
+    hosted: bool = False
     client_id: str = "dynamic_agent_client"
     redirect_uri: str = ""
     status: str = "connecting"
@@ -226,7 +227,9 @@ async def begin(
         )
     try:
         endpoints = await discovery()
-        attempt = Attempt(account_id=account_id, sponsor=sponsor)
+        from sigma import cloud_workspaces
+
+        attempt = Attempt(account_id=account_id, sponsor=sponsor, hosted=cloud_workspaces.enabled())
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
             if (
@@ -240,7 +243,7 @@ async def begin(
                     "Previous sign-in can no longer be retried. Start a new sign-in."
                 )
             attempt.client_id = failed.retry_client_id
-        async with transaction() as state:
+        async with transaction_at(sponsor_directory() if sponsor else directory()) as state:
             previous = state["accounts"].get(account_id) if account_id else None
             if account_id and not previous:
                 raise ProjectError("Saved account was not found. Choose Connect another account.")
@@ -251,7 +254,15 @@ async def begin(
             lambda reader, writer: callback(attempt, reader, writer), "127.0.0.1", 0, limit=8192
         )
         port = attempt.server.sockets[0].getsockname()[1]
-        attempt.redirect_uri = f"http://127.0.0.1:{port}/auth/callback"
+        if attempt.hosted:
+            from sigma.cloud_auth import config
+
+            origin = config().origin
+            if not origin or urlsplit(origin).scheme != "https" or urlsplit(origin).path not in ("", "/"):
+                raise ProjectError("Hosted ChatGPT callback requires a configured HTTPS public origin.")
+            attempt.redirect_uri = origin.rstrip("/") + "/api/ai/auth/callback/" + attempt.id
+        else:
+            attempt.redirect_uri = f"http://127.0.0.1:{port}/auth/callback"
         _attempts[attempt.id] = attempt
         attempt.timer = asyncio.get_running_loop().call_later(
             300,
@@ -367,7 +378,7 @@ async def callback(
             query = parse_qs(parsed.query, strict_parsing=True)
             if (
                 method != "GET"
-                or parsed.path != "/auth/callback"
+                or parsed.path != ("/api/ai/auth/callback/" + attempt.id if attempt.hosted else "/auth/callback")
                 or parsed.netloc
                 or parsed.scheme
                 or headers.get("host") != urlsplit(attempt.redirect_uri).netloc
@@ -404,7 +415,7 @@ async def callback(
                 code = query.get("code", [""])[0]
                 if not 1 <= len(code) <= 4000:
                     raise ValueError()
-                async with transaction() as state:
+                async with transaction_at(sponsor_directory() if attempt.sponsor else directory()) as state:
                     previous = (
                         state["accounts"].get(attempt.account_id) if attempt.account_id else None
                     )
@@ -658,3 +669,24 @@ async def disconnect() -> dict:
         if confirmed
         else "Local tokens cleared. Remote revocation was not confirmed; disconnect SIGMA in ChatGPT Settings → Usage if needed.",
     }
+
+
+async def hosted_callback(identifier: str, query: str) -> None:
+    """Forward a public HTTPS OAuth callback to the existing single-use verifier."""
+    attempt = _attempts.get(identifier)
+    if not attempt or not attempt.hosted or attempt.status != "connecting":
+        raise ProjectError("ChatGPT sign-in attempt is not active.")
+    # Only the validated HTTPS route can reach this bridge. The verifier checks
+    # the exact Host, callback path, OAuth state, nonce and PKCE code exchange.
+    target = "/api/ai/auth/callback/" + identifier
+    if query:
+        target += "?" + query
+    host = urlsplit(attempt.redirect_uri).netloc
+    reader, writer = await asyncio.open_connection("127.0.0.1", attempt.server.sockets[0].getsockname()[1])
+    try:
+        writer.write(f"GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n".encode("ascii"))
+        await writer.drain()
+        await asyncio.wait_for(reader.read(4096), timeout=25)
+    finally:
+        writer.close()
+        await writer.wait_closed()
