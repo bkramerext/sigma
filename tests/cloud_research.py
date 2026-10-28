@@ -1654,6 +1654,75 @@ def main() -> None:
                 with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
                     asyncio.run(run_clipped_call())
 
+                async def run_invalid_response() -> None:
+                    """Known usage must settle even when the agent violates an acknowledgment rule."""
+                    before = cloud_research.snapshot()
+                    outputs = research_outputs()
+
+                    async def completed_call(record, role, context, timeout_seconds=None, step_id=None):
+                        del record, role, context, timeout_seconds
+                        assert isinstance(step_id, str)
+                        return outputs[0], {
+                            "input_tokens": 90,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 30,
+                        }
+
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(research_sessions, "_call", side_effect=completed_call),
+                        patch.object(
+                            research_sessions,
+                            "_validate_guidance_acknowledgments",
+                            side_effect=research_sessions.ProjectError(
+                                "Agent response did not acknowledge delivered intervention"
+                            ),
+                        ),
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            failed = research_sessions.get_session(live_view.path, started["id"])
+                            if failed["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("invalid response did not reach a saved state")
+                        assert failed["status"] == "failed", failed["message"]
+                        assert failed["steps"][0]["failure_kind"] == "response_invalid"
+                        assert failed["steps"][0]["attempt_status"] == "usage_estimated"
+                        assert failed["steps"][0]["token_usage_status"] == "reported"
+                        assert failed["tokens_reserved"] == 0
+                        assert "output" not in failed["steps"][0]
+                        with cloud_research._connect() as db:
+                            call = db.execute(
+                                "SELECT status,input_tokens,output_tokens FROM calls WHERE call_id=?",
+                                (failed["steps"][0]["id"],),
+                            ).fetchone()
+                            assert call["status"] == "usage_estimated"
+                            assert call["input_tokens"] == 90
+                            assert call["output_tokens"] == 30
+                        assert cloud_research.snapshot()["held_usd"] == before["held_usd"]
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_invalid_response())
+
                 async def run_ambiguous_failure() -> None:
                     key = str(uuid4())
                     with (
