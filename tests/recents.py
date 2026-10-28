@@ -265,7 +265,8 @@ def check(root: Path, base: Path) -> None:
         assert drifted_entry["available"] is False
         removed = api.post(
             "/api/projects/recent/forget",
-            json={"project_id": document["id"], "path": drifted_entry["path"]},
+            params={"path": drifted_entry["path"]},
+            json={"project_id": document["id"]},
         )
         assert removed.status_code == 200, removed.text
         assert all(

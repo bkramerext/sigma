@@ -7442,8 +7442,17 @@ remains unrun because the local API server was unavailable.
 
 ## Forget unavailable Saved Projects by path (2026-10-28)
 
-The Remove action now sends the saved path alongside the indexed project ID.
-The forget endpoint removes a matching entry by either stable ID or saved
-path, so identity drift in the project document does not block cleanup. The
+The Remove action sends the saved path as a query parameter alongside the
+ID-only JSON body, which remains compatible with older running servers. The
+forget endpoint removes a matching entry by either stable ID or saved path, so
+identity drift in the project document does not block cleanup. The
 recents scenario verifies removal when the project document ID no longer
 matches its saved index identity. Focused recents tests and Ruff passed.
+
+## Sponsored ChatGPT pill spacing (2026-10-28)
+
+Reduced the gap between the Sponsored ChatGPT label and dollar allowance to
+zero in the pill on Home and workspace views. Frontend build passed.
+
+Request toast Dismiss actions use the same yellow text-action color as other
+actions in the app.

@@ -1362,14 +1362,13 @@ def sample_open_view(body: SampleOpenRequest):
 class ForgetRecentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_id: str
-    path: str | None = None
 
 
 @app.post("/api/projects/recent/forget")
-def forget_recent_view(body: ForgetRecentRequest):
+def forget_recent_view(body: ForgetRecentRequest, path: str | None = None):
     from sigma.recents import forget_recent
 
-    forget_recent(body.project_id, body.path)
+    forget_recent(body.project_id, path)
     return {"forgotten": True}
 
 

@@ -242,6 +242,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .home-topline .api-connection { width: max-content; min-width: 0; max-width: 240px; margin-left: 0; }
 .home-page .home-topline .api-connection.api-connection { top: 0; }
 .home-page .home-topline .api-connection > summary { box-sizing: border-box; gap: 7px; min-height: 34px; margin-left: 0; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); align-items: center; font-size: 11px; line-height: 1.5; max-width: 100%; white-space: normal; }
+.home-page .home-topline .api-connection > summary.has-sponsored-allowance { gap: 0; }
 .home-page .home-topline .api-connection > summary [role="status"] { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .cloud-chatgpt-allowance { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-top: 1px solid #a9654844; border-bottom: 1px solid #a9654844; }
 .cloud-chatgpt-allowance strong { color: #e5b388; }
