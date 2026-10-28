@@ -81,6 +81,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         or request.url.path == "/api/ui-instance"
         or request.url.path == "/api/projects/samples"
         or request.url.path.startswith("/api/cloud-auth/")
+        or request.url.path.startswith("/api/ai/auth/callback/")
     ):
         yield
         return
