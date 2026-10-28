@@ -227,8 +227,8 @@ async def cloud_research_readiness(request: Request):
     blockers: list[str] = []
     if not enabled:
         blockers.append("sponsorship_disabled")
-    if provider != "api_key":
-        blockers.append("customer_api_key_provider_not_selected")
+    if provider not in {"chatgpt", "api_key"}:
+        blockers.append("sponsored_provider_invalid")
     if not provider_token_present:
         blockers.append("sponsored_provider_credential_missing")
     elif provider_status != "connected":
