@@ -7439,3 +7439,11 @@ color. The browser check asserts the tooltip and
 confirmation stay within the viewport and the confirmation stays close to its
 trigger. The frontend TypeScript and production build passed; the browser check
 remains unrun because the local API server was unavailable.
+
+## Forget unavailable Saved Projects by path (2026-10-28)
+
+The Remove action now sends the saved path alongside the indexed project ID.
+The forget endpoint removes a matching entry by either stable ID or saved
+path, so identity drift in the project document does not block cleanup. The
+recents scenario verifies removal when the project document ID no longer
+matches its saved index identity. Focused recents tests and Ruff passed.

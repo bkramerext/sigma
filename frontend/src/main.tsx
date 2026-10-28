@@ -2728,7 +2728,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }
   async function forget(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
-    try { await post('recent/forget', { project_id: entry.id }); setConfirmRemoveId(''); await load(); }
+    try { await post('recent/forget', { project_id: entry.id, path: entry.path }); setConfirmRemoveId(''); await load(); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
