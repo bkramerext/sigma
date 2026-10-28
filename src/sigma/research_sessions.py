@@ -7815,7 +7815,9 @@ async def _portfolio_role_call(
                 # Counting it again leaks session tokens on every completed
                 # call and eventually prevents otherwise affordable research.
                 if not isinstance(hard_ledger, dict):
-                    record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
+                    record["tokens_reserved"] = (
+                        int(record.get("tokens_reserved", 0)) + token_reserve
+                    )
                 step["attempt_status"] = "reserved"
                 _event(record, "call.started", record["message"], role)
                 _save(path, record)
