@@ -692,6 +692,7 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
         assert abs(global_reserved_spend() - 16.00) < 1e-6
+        assert cloud_research.snapshot()["global_remaining_usd"] == 4.00
         # Fill the global cap with separate users, then attempt one more call
         # from an account whose personal allowance is still untouched. A single
         # account would fail at its $2 per-user cap first and would not test the
@@ -736,7 +737,11 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                     cloud_research.sync_job(record)
                 else:
                     assert abs(global_reserved_spend() - 20.00) < 1e-6
-                    assert cloud_research.snapshot()["remaining_usd"] == 2.00
+                    budget = cloud_research.snapshot()
+                    assert budget["remaining_usd"] == 2.00
+                    # Personal allowance is positive, but provider research
+                    # is still blocked by the independent shared ceiling.
+                    assert budget["global_remaining_usd"] == 0.00
                     try:
                         cloud_research.prepare_job(record)
                     except cloud_research.CloudResearchUnavailable as exc:
