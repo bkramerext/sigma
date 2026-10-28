@@ -7589,3 +7589,19 @@ fixture expected an unavailable personal account) and a pre-existing import
 ordering issue in `src/sigma/api.py`; Pyright and frontend typecheck passed, and
 the frontend build was skipped after those failures. No provider calls were
 made.
+
+## PR #293 stabilization (2026-10-28)
+
+Updated browser acceptance checks for the current Saved tab label, Project
+Settings title, optional Unlimited sponsored session cost, and current Home
+pill spacing. T92 now reads the created sample's versioned title instead of
+assuming `v1`; Home status coverage explicitly expands saved project groups.
+This fixes stale T92 and T201 browser expectations without changing product
+behavior.
+
+`./sigma test` passed all steps locally (Python 3.14.7), including streamed
+provider diagnostics and portfolio finalization. Real-browser checks passed
+for hosted sponsored connection, model availability, local sponsored limits,
+T92 Saved running status, T201 guest sample workflow, and Home Saved running
+status. Ruff check/format and `git diff --check` passed. No live provider calls
+were made. GitHub Actions for the updated PR commit are pending.

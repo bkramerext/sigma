@@ -196,11 +196,11 @@ def main() -> None:
                         f"text={page.locator('body').inner_text()[:800]}; errors={errors}"
                     )
                 page.get_by_role("button", name="Project settings", exact=True).click()
-                settings = page.get_by_role("dialog", name="Settings")
+                settings = page.get_by_role("dialog", name="Project Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(
                     settings.get_by_text(
-                        "Sponsored research is subject to the account allowance and service-side caps."
+                        "Hosted research may apply service-side caps to saved session limits."
                     )
                 ).to_be_visible()
                 calls = settings.get_by_label("Maximum agent calls", exact=True)
@@ -208,14 +208,8 @@ def main() -> None:
                 calls.fill("12")
                 cost = settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
                 expect(cost).to_be_visible()
-                expect(settings.get_by_text("Required for sponsored research.")).to_be_visible()
-                expect(cost).to_have_attribute("aria-invalid", "true")
-                expect(
-                    settings.get_by_text(
-                        "Set a maximum estimated session cost before saving limits for sponsored research."
-                    )
-                ).to_be_visible()
-                cost.fill("0.50")
+                expect(cost).to_have_attribute("placeholder", "Unlimited")
+                expect(cost).to_have_value("")
                 settings.get_by_role("button", name="Save", exact=True).click()
                 expect(settings).to_be_hidden()
                 saved = page.evaluate(
@@ -226,12 +220,31 @@ def main() -> None:
                     }"""
                 )
                 assert saved["model_calls"] == 12, saved
+                assert saved["maximum_estimated_cost_usd"] is None, saved
+                page.reload(wait_until="networkidle")
+                page.get_by_role("button", name="Project settings", exact=True).click()
+                settings = page.get_by_role("dialog", name="Project Settings")
+                settings.get_by_role("tab", name="Limits", exact=True).click()
+                expect(settings.get_by_label("Maximum agent calls", exact=True)).to_have_value("12")
+                expect(
+                    settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
+                ).to_have_value("")
+                cost = settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
+                cost.fill("0.50")
+                settings.get_by_role("button", name="Save", exact=True).click()
+                expect(settings).to_be_hidden()
+                saved = page.evaluate(
+                    """async () => {
+                      const path = new URL(location.href).searchParams.get('path');
+                      const response = await fetch('/api/projects/research-limits?' + new URLSearchParams({path}));
+                      return await response.json();
+                    }"""
+                )
                 assert saved["maximum_estimated_cost_usd"] == 0.5, saved
                 page.reload(wait_until="networkidle")
                 page.get_by_role("button", name="Project settings", exact=True).click()
-                settings = page.get_by_role("dialog", name="Settings")
+                settings = page.get_by_role("dialog", name="Project Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
-                expect(settings.get_by_label("Maximum agent calls", exact=True)).to_have_value("12")
                 expect(
                     settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
                 ).to_have_value("0.5")

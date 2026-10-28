@@ -232,18 +232,18 @@ def exercise(ui_url: str, root: Path) -> None:
         invitation_dialog.get_by_role("button", name="Close").click()
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
-        expect(page.get_by_role("tab", name="Recent")).to_be_enabled()
+        expect(page.get_by_role("tab", name="Saved")).to_be_enabled()
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert page.locator("details.sample-type-group[open]").count() == 0
-        page.get_by_role("tab", name="Recent").click()
+        page.get_by_role("tab", name="Saved").click()
         message = page.locator(".guest-recent-message")
         expect(message.locator("span").nth(0)).to_have_text("Sign in to create and")
         expect(message.locator("span").nth(1)).to_have_text("save your own projects.")
         typography = message.evaluate("element => getComputedStyle(element)")
         assert typography["fontFamily"].startswith("Georgia"), typography
         assert typography["fontSize"] == "18px", typography
-        expect(page.get_by_role("tab", name="Recent")).to_have_attribute("aria-selected", "true")
+        expect(page.get_by_role("tab", name="Saved")).to_have_attribute("aria-selected", "true")
         assert recent_responses == [], recent_responses
         page.get_by_role("tab", name="Samples").click()
         sign_in = page.get_by_role("link", name="Sign in with Google")

@@ -1,4 +1,4 @@
-"""Real Chrome: Home Recent reflects persisted session activity without reload."""
+"""Real Chrome: Home Saved reflects persisted session activity without reload."""
 
 import fcntl
 import json
@@ -66,14 +66,13 @@ with sync_playwright() as playwright:
 
     def expand_recent_groups(panel) -> None:
         for group in panel.locator(".recent-type-group").all():
-            if group.get_attribute("open") is None:
-                group.locator("summary").click()
+            group.evaluate("element => { element.open = true; }")
 
     page.route("**/api/**", forward)
     page.goto(UI_ORIGIN + "/")
-    recent_tab = page.get_by_role("tab", name="Recent", exact=True)
+    recent_tab = page.get_by_role("tab", name="Saved", exact=True)
     recent_tab.click()
-    recent_panel = page.get_by_role("tabpanel", name="Recent")
+    recent_panel = page.get_by_role("tabpanel", name="Saved")
     expand_recent_groups(recent_panel)
     project_button = (
         recent_panel.locator(".recent-open").filter(has_text=project["project"]["title"]).first
@@ -111,7 +110,7 @@ with sync_playwright() as playwright:
         home_pill_gap = page.locator(".identity-pill-stack").evaluate(
             "element => getComputedStyle(element).rowGap"
         )
-        assert home_pill_gap == "8px", home_pill_gap
+        assert home_pill_gap == "13px", home_pill_gap
         home_pill_padding = page.evaluate("""() => {
           const google = getComputedStyle(document.querySelector('.identity-pill-stack > .project-google-signin'));
           const chatgpt = getComputedStyle(document.querySelector('.identity-pill-stack .api-connection > summary'));
@@ -123,8 +122,10 @@ with sync_playwright() as playwright:
         assert recent_panel.locator(".home-runnable-state").count() == 0
 
         project_button.click()
+        expect(page.locator(".workspace-layout")).to_be_visible(timeout=10_000)
+        expect(page.locator(".workspace-page .site-header")).to_be_visible(timeout=10_000)
         header_stacking = page.evaluate("""() => {
-          const header = document.querySelector('.workspace-page > .site-header');
+          const header = document.querySelector('.workspace-page .site-header');
           const pane = document.querySelector('.workspace-layout');
           return [Number(getComputedStyle(header).zIndex), Number(getComputedStyle(pane).zIndex)];
         }""")
@@ -172,9 +173,9 @@ with sync_playwright() as playwright:
         assert narrow_pill_padding[:4] == narrow_pill_padding[4:], narrow_pill_padding
 
         page.goto(UI_ORIGIN + "/")
-        recent_tab = page.get_by_role("tab", name="Recent", exact=True)
+        recent_tab = page.get_by_role("tab", name="Saved", exact=True)
         recent_tab.click()
-        recent_panel = page.get_by_role("tabpanel", name="Recent")
+        recent_panel = page.get_by_role("tabpanel", name="Saved")
         expand_recent_groups(recent_panel)
         narrow_home_gap = page.locator(".identity-pill-stack").evaluate(
             "element => getComputedStyle(element).rowGap"
@@ -202,6 +203,6 @@ with sync_playwright() as playwright:
         fcntl.flock(worker_lock.fileno(), fcntl.LOCK_UN)
     assert not page.locator("[role=alert]").count()
     print(
-        "PASS real Chrome Home Recent updates inline Running status as the persisted session starts and stops"
+        "PASS real Chrome Home Saved updates inline Running status as the persisted session starts and stops"
     )
     browser.close()
