@@ -2444,6 +2444,12 @@ class CloudAuthTests(TestCase):
             )
             self.assertEqual(login.status_code, 303)
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            initial_status = member.get("/api/cloud-auth/status").json()
+            self.assertTrue(initial_status["account"]["sponsorship"]["eligible"])
+            self.assertEqual(initial_status["account"]["model_access"]["mode"], "sponsored")
+            # Once the user explicitly selects personal mode, later status
+            # refreshes must preserve that choice.
+            cloud_auth.set_model_access("local-sponsored-member", "personal")
             with (
                 patch(
                     "sigma.openai_connection.chatgpt_auth.session",
@@ -2535,6 +2541,7 @@ class CloudAuthTests(TestCase):
                 client=member,
             )
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            cloud_auth.set_model_access("local-sponsored-member", "personal")
 
             async def seed():
                 async with sponsor_transaction() as state:

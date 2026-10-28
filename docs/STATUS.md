@@ -7388,3 +7388,13 @@ availability returns 403, the higher-cost confirmation uses the light-copper
 action color, and a saved 12-call Project Settings limit survives reload. No
 live or paid provider call was made. This is deterministic local/hosted-path
 coverage, not a claim of live hosted deployment acceptance.
+
+Follow-up for initial local sign-in: eligible local sponsored accounts now start
+in sponsored mode, so the Sponsored ChatGPT pill is visible without first
+clicking the connection control. Explicit personal/sponsored selections persist
+across account-status refreshes; hosted account defaults are unchanged. The
+regression test confirms initial sponsorship followed by a retained explicit
+personal choice. Verification after this follow-up: all 60 `tests.cloud_auth`
+tests passed, frontend typecheck passed, and real Chrome verified the Sponsored
+ChatGPT pill is present before any pill interaction. The full `./sigma test`
+suite was not rerun after this follow-up.

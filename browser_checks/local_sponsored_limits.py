@@ -143,6 +143,8 @@ def main() -> None:
                 if welcome.count() and welcome.is_visible():
                     welcome.get_by_role("button", name="Let's get started").click()
                     expect(welcome).to_have_count(0)
+                connection_summary = page.locator(".api-connection summary")
+                expect(connection_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
                 model = page.locator("button.project-model-pill")
                 expect(model).to_be_enabled()
                 original_model = model.inner_text()
@@ -152,12 +154,18 @@ def main() -> None:
                 confirmation = page.locator(".project-model-confirm-popover")
                 expect(confirmation).to_be_visible()
                 confirmation_actions = confirmation.locator(".project-model-confirm-actions button")
-                assert confirmation_actions.nth(0).evaluate(
-                    "element => getComputedStyle(element).color"
-                ) == "rgb(241, 197, 141)"
-                assert confirmation_actions.nth(1).evaluate(
-                    "element => getComputedStyle(element).color"
-                ) == "rgb(241, 197, 141)"
+                assert (
+                    confirmation_actions.nth(0).evaluate(
+                        "element => getComputedStyle(element).color"
+                    )
+                    == "rgb(241, 197, 141)"
+                )
+                assert (
+                    confirmation_actions.nth(1).evaluate(
+                        "element => getComputedStyle(element).color"
+                    )
+                    == "rgb(241, 197, 141)"
+                )
                 confirmation_actions.nth(1).click()
                 expect(confirmation).to_be_hidden()
                 thinking = page.locator("button.project-thinking-pill")
