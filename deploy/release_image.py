@@ -57,6 +57,8 @@ def build(repository: Path, requested: str, runner=_run) -> None:
                     "linux/amd64",
                     "--label",
                     f"{LABEL}={commit}",
+                    "--build-arg",
+                    f"SIGMA_BUILD_COMMIT={commit}",
                     "--tag",
                     f"sigma-{name}:{commit}",
                     "--file",

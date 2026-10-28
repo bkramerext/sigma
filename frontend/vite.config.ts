@@ -2,11 +2,17 @@ import { copyFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 
-function buildCommit(): string {
+function buildCommit(requireIdentity: boolean): string {
   const supplied = process.env.SIGMA_BUILD_COMMIT ?? process.env.GITHUB_SHA;
-  if (supplied) return supplied.slice(0, 7);
+  if (supplied) {
+    if (!/^[0-9a-f]{7,40}$/.test(supplied)) throw new Error('Invalid SIGMA_BUILD_COMMIT; expected a Git SHA');
+    return supplied.slice(0, 7);
+  }
   try { return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' }).trim(); }
-  catch { return 'unknown'; }
+  catch {
+    if (requireIdentity) throw new Error('Production build requires SIGMA_BUILD_COMMIT, GITHUB_SHA, or Git metadata');
+    return 'unknown';
+  }
 }
 
 // Python project metadata is the canonical product version.
@@ -30,7 +36,10 @@ for (const name of [
   copyFileSync(new URL(`../assets/${name}`, import.meta.url), new URL(`./public/${name}`, import.meta.url));
 }
 
-export default defineConfig({
-  define: { __SIGMA_BUILD_COMMIT__: JSON.stringify(buildCommit()), __SIGMA_VERSION__: JSON.stringify(productVersion()) },
+export default defineConfig(({ command }) => ({
+  define: {
+    __SIGMA_BUILD_COMMIT__: JSON.stringify(buildCommit(command === 'build')),
+    __SIGMA_VERSION__: JSON.stringify(productVersion()),
+  },
   server: { proxy: { '/api': process.env.SIGMA_API_TARGET ?? 'http://127.0.0.1:8000' } },
-});
+}));

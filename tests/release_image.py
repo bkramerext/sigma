@@ -58,6 +58,8 @@ class ReleaseImageTests(unittest.TestCase):
         for index, (args, marker) in enumerate(observed):
             self.assertEqual(marker, "commit one\n")
             self.assertIn(f"org.opencontainers.image.revision={self.first}", args)
+            self.assertIn(f"SIGMA_BUILD_COMMIT={self.first}", args)
+            self.assertIn("--build-arg", args)
             image_name = "backend" if index == 0 else "frontend"
             self.assertIn(f"sigma-{image_name}:{self.first}", args)
             self.assertNotIn("uncommitted", marker)
@@ -77,6 +79,14 @@ class ReleaseImageTests(unittest.TestCase):
             ):
                 release_image.build(self.repository, requested, runner=docker)
         self.assertFalse(invoked)
+
+    def test_production_frontend_requires_and_receives_release_sha(self) -> None:
+        dockerfile = (ROOT / "deploy/frontend.Dockerfile").read_text(encoding="utf-8")
+        vite = (ROOT / "frontend/vite.config.ts").read_text(encoding="utf-8")
+        self.assertIn("ARG SIGMA_BUILD_COMMIT", dockerfile)
+        self.assertIn("ENV SIGMA_BUILD_COMMIT=${SIGMA_BUILD_COMMIT}", dockerfile)
+        self.assertIn("command === 'build'", vite)
+        self.assertIn("if (requireIdentity) throw new Error", vite)
 
     def test_wrong_image_source_label_is_refused_and_correct_digests_are_recorded(self) -> None:
         def inspect(args: list[str]) -> str:
