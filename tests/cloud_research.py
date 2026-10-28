@@ -1152,11 +1152,12 @@ def test_admin_unlimited_allowance_survives_monthly_global_renewal(
                 db.execute(
                     "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
                     "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    ("old-admin-spend", "old-admin-month", owner.workspace_id, 0.95, "usage_estimated", 10, 5, 5, old, old),
+                    ("old-admin-spend", "old-admin-month", owner.workspace_id, 0.95, "usage_estimated", 1100000, 1100000, 0, old, old),
                 )
             summary = cloud_research.snapshot()
             assert summary["global_remaining_usd"] == 1.00, summary
             assert summary["remaining_usd"] == 1.00, summary
+            assert summary["user_reserved_or_observed_tokens"] > 1000000
 
             first = job(owner.workspace_id)
             first.update(
