@@ -606,7 +606,10 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert exported_session["backend_build_commit"] == "a" * 40
     assert all(step["backend_build_commit"] == "a" * 40 for step in exported_session["steps"])
     metrics = exported_session["outcome"]["metrics"]
-    assert next(item["value"] for item in metrics["operational"] if item["label"] == "Backend build") == "a" * 40
+    assert (
+        next(item["value"] for item in metrics["operational"] if item["label"] == "Backend build")
+        == "a" * 40
+    )
     assert metrics == finished["outcome"]["metrics"]
     assert metrics["sources"]["session_id"] == finished["id"]
     assert metrics["sources"]["step_ids"] == sorted(step["id"] for step in finished["steps"])
