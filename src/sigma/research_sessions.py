@@ -1585,7 +1585,11 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     usage_steps = [
         step.get("token_usage")
         for step in unique_steps
-        if step.get("status") == "completed" and isinstance(step.get("token_usage"), dict)
+        if (
+            step.get("status") in {"completed", "incomplete"}
+            or step.get("attempt_status") == "usage_estimated"
+        )
+        and isinstance(step.get("token_usage"), dict)
     ]
     all_calls_have_usage = dispatched == 0 or (
         len(usage_steps) == dispatched and not unrecorded_calls
