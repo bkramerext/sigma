@@ -267,7 +267,7 @@ def main():
             )
             limits_url = "/api/projects/research-limits"
             defaults = client.get(limits_url, params={"path": str(path)}).json()
-            assert defaults == research_sessions.DEFAULT_LIMITS
+            assert defaults == {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": "1"}
             assert defaults["model_calls"] == 30
             assert defaults["session_duration_minutes"] == 60
             assert defaults["output_tokens_per_call"] == 12000
@@ -291,6 +291,38 @@ def main():
                 assert (
                     client.put(limits_url, json={"path": str(path), **invalid}).status_code == 422
                 )
+            for invalid_concurrency in (0, "0", "-1", "1.5", "not-a-number"):
+                assert (
+                    client.put(
+                        limits_url,
+                        json={
+                            "path": str(path),
+                            **changed_limits,
+                            "max_concurrent_sessions": invalid_concurrency,
+                        },
+                    ).status_code
+                    == 400
+                )
+            arbitrary_positive = "9" * 100
+            unlimited_range = client.put(
+                limits_url,
+                json={
+                    "path": str(path),
+                    **changed_limits,
+                    "max_concurrent_sessions": arbitrary_positive,
+                },
+            )
+            assert unlimited_range.status_code == 200
+            assert unlimited_range.json()["max_concurrent_sessions"] == arbitrary_positive
+            numeric_limit = client.put(
+                limits_url,
+                json={"path": str(path), **changed_limits, "max_concurrent_sessions": 17},
+            )
+            assert numeric_limit.status_code == 200
+            assert numeric_limit.json()["max_concurrent_sessions"] == "17"
+            assert (
+                research_sessions.get_limits(str(sibling.path)) == research_sessions.DEFAULT_LIMITS
+            )
         expected = asdict(project_settings(inspect_project(path).project))
         result = subprocess.run(
             [

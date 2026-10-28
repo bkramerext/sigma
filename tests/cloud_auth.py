@@ -240,6 +240,9 @@ class CloudAuthTests(TestCase):
             patch.object(research_sessions, "_read", return_value=record),
             patch.object(research_sessions, "_all", return_value=[record]),
             patch.object(research_sessions, "_save") as save,
+            patch.object(
+                research_sessions, "get_limits", return_value=research_sessions.DEFAULT_LIMITS
+            ),
         ):
             resumed = research_sessions.control_mock_session(
                 "/mock/private-a", session_id, "resume"

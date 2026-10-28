@@ -1,3 +1,44 @@
+## Issue #286 — Maximum concurrent sessions (2026-10-27)
+
+Added **Maximum concurrent sessions** to Project Settings → Limits. The
+application default is 1. Users can enter any positive decimal integer without
+an application-defined maximum; the API carries the value as decimal text so
+JavaScript number precision does not truncate it. Legacy projects inherit 1,
+and the saved setting remains in the project limits bundle and each new
+session's admission snapshot.
+
+Admission and resume count queued/running sessions for that project while
+holding the existing cross-process project manager lock. The hosted reservation
+ledger also checks the per-project count inside its SQLite write transaction.
+Other projects are no longer blocked by a local active-session check. Raising
+the value admits new sessions immediately; lowering it leaves current sessions
+alone and blocks additional admission while the count is at or above the new
+limit. Completed, failed, stopped, and paused sessions do not consume slots.
+Local stale work is recovered before counting. A hosted queued session without
+a durable queue reservation is paused with a no-dispatch explanation; running
+provider calls retain the existing unknown-completion safeguards and are never
+automatically replayed.
+
+Verification: `tests/research_sessions.py` passed concurrent start admission
+and capacity reuse after stop; `tests/project_settings.py` passed default,
+invalid input, sibling-project isolation, numeric API input, and 100 digit
+decimal save/load; `tests/project_bundle.py` passed JSON bundle round-trip with
+an 80 digit setting; `tests/cloud_research.py`, `tests/cloud_auth.py`, and
+`tests/sage_execution.py` passed hosted admission, interrupted recovery, and
+the updated per-project scope. Real Chrome
+`browser_checks/issue286_concurrent_sessions.py` passed default-1, zero
+rejection, 80 digit save/reopen, and narrow viewport checks using an isolated
+local fixture. The full `./sigma test` passed every step, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. Vite emitted the
+existing advisory for the 519 kB main JavaScript chunk. No paid or live
+provider calls, OAuth, or production changes occurred.
+
+The browser-exercised sample copy was exported with SIGMA's complete project
+export service; exact bytes and source/session manifest are in
+[`docs/evaluations/issue_286/exports`](evaluations/issue_286/exports/README.md).
+Implementation branch: `blue/issue-286-concurrent-sessions`; independent PR
+handoff: [`messages/issue_286_blue_r4r.md`](../messages/issue_286_blue_r4r.md).
+
 ## T277 hosted TeX generation HTTP 400 (2026-10-27)
 
 Read-only IAP inspection found production `sigma.service` active and release pin

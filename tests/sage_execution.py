@@ -373,7 +373,7 @@ async def test_failure_reuse_then_revision(path):
 
 
 async def test_mixed_queue_stop_and_resume(root):
-    from sigma.projects import ProjectError, create_strategy
+    from sigma.projects import create_strategy
 
     path = root / "mixed-queue.sigma"
     view, strategy_a, credential, config = await setup(path)
@@ -424,20 +424,19 @@ async def test_mixed_queue_stop_and_resume(root):
             strategy_ids=[strategy_a.id, peer.id],
         )
         await asyncio.wait_for(entered.wait(), 2)
-        # Existing architecture admits one research session at a time. Preserve
-        # that policy rather than introducing cross-session concurrency in T26.
-        try:
-            await research_sessions.start_session(
-                str(root / "second-session.sigma"),
-                strategy_b.id,
-                str(uuid4()),
-                view_b.project.id,
-                credential["identity"],
-            )
-        except ProjectError as exc:
-            assert "Another research worker" in str(exc)
-        else:
-            raise AssertionError("Second research session unexpectedly admitted")
+        # The project limit is scoped per project, so another project can reserve
+        # its own session while this session is waiting on a sandbox execution.
+        second_session = await research_sessions.start_session(
+            str(root / "second-session.sigma"),
+            strategy_b.id,
+            str(uuid4()),
+            view_b.project.id,
+            credential["identity"],
+        )
+        assert second_session["status"] == "queued"
+        await research_sessions.control_session(
+            str(root / "second-session.sigma"), second_session["id"], "stop"
+        )
         for _ in range(200):
             current = research_sessions.get_session(str(path), started["id"])
             if "Waiting for Python execution" in current["strategy_runs"][1]["current_action"]:

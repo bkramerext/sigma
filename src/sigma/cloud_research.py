@@ -192,6 +192,7 @@ def _connect() -> sqlite3.Connection:
                 updated_at TEXT NOT NULL,
                 project_relpath TEXT NOT NULL DEFAULT '',
                 process_epoch TEXT NOT NULL DEFAULT '',
+                session_slot INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(workspace_id, idempotency_key)
             );
             CREATE INDEX IF NOT EXISTS jobs_workspace_status ON jobs(workspace_id, status);
@@ -213,6 +214,8 @@ def _connect() -> sqlite3.Connection:
             db.execute("ALTER TABLE jobs ADD COLUMN project_relpath TEXT NOT NULL DEFAULT ''")
         if "process_epoch" not in columns:
             db.execute("ALTER TABLE jobs ADD COLUMN process_epoch TEXT NOT NULL DEFAULT ''")
+        if "session_slot" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN session_slot INTEGER NOT NULL DEFAULT 0")
         os.chmod(path, 0o600)
         return db
     except (OSError, sqlite3.Error) as exc:
@@ -251,6 +254,20 @@ def _transaction() -> Iterator[sqlite3.Connection]:
         db.close()
 
 
+def job_status(session_id: str) -> str | None:
+    """Return the owner's durable queue state, or None when no reservation exists."""
+    owner = _workspace_id()
+    try:
+        with _connect() as db:
+            row = db.execute(
+                "SELECT status FROM jobs WHERE session_id=? AND workspace_id=?",
+                (session_id, owner),
+            ).fetchone()
+            return row["status"] if row else None
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
 def prepare_job(record: dict[str, Any]) -> None:
     """Atomically reserve a bounded queue slot for a persisted session ID."""
     owner = _workspace_id()
@@ -285,9 +302,24 @@ def prepare_job(record: dict[str, Any]) -> None:
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     project_relpath = _project_relpath(record, workspace.path)
+    session_limit = record.get("max_concurrent_sessions")
+    if session_limit is not None and (type(session_limit) is not int or session_limit < 1):
+        raise CloudResearchUnavailable(
+            "Maximum concurrent sessions must be a positive whole number."
+        )
+    session_slot = int(session_limit is not None)
     now = _now()
     try:
         with _transaction() as db:
+            if session_slot:
+                active_for_project = db.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>?",
+                    (owner, record["project_id"], record["id"]),
+                ).fetchone()[0]
+                if active_for_project >= session_limit:
+                    raise CloudResearchUnavailable(
+                        "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                    )
             existing = db.execute(
                 "SELECT * FROM jobs WHERE session_id=? OR (workspace_id=? AND idempotency_key=?)",
                 (record["id"], owner, record["idempotency_key"]),
@@ -314,8 +346,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "Research queue is full; retry when capacity is available."
                         )
                     db.execute(
-                        "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=? WHERE session_id=?",
-                        (now, project_relpath, _PROCESS_EPOCH, record["id"]),
+                        "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=?,session_slot=? WHERE session_id=?",
+                        (now, project_relpath, _PROCESS_EPOCH, session_slot, record["id"]),
                     )
                 return
             user_queued = db.execute(
@@ -330,7 +362,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                 )
             # Jobs are initially queued. Claiming uses an atomic running-slot test.
             db.execute(
-                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch) VALUES(?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     record["id"],
                     owner,
@@ -341,6 +373,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     now,
                     project_relpath,
                     _PROCESS_EPOCH,
+                    session_slot,
                 ),
             )
     except sqlite3.Error as exc:

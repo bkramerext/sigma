@@ -75,6 +75,7 @@ EXPERIMENTAL_EXACT_TEXT_POOL = False
 CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
+    "max_concurrent_sessions": 1,
     "research_rounds": 3,
     "model_calls": 30,
     "session_duration_minutes": 60,
@@ -709,6 +710,7 @@ def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
     if raw["model_calls"] < 2 * raw["research_rounds"]:
         raise ProjectError("Research limits are invalid")
     result = dict(raw)
+    result.setdefault("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
     return result
 
 
@@ -730,11 +732,25 @@ def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ProjectError("Research limits are invalid")
     result = dict(raw)
+    result.setdefault("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
     return result
 
 
 def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     result = dict(raw)
+    # This is intentionally unbounded: Python integers and the wire representation
+    # accept every positive decimal integer the caller can provide.
+    concurrency = result.get("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
+    if isinstance(concurrency, str) and concurrency.isdecimal():
+        try:
+            concurrency = int(concurrency)
+        except ValueError as exc:
+            raise ProjectError(
+                "Maximum concurrent sessions must be a positive whole number"
+            ) from exc
+    if type(concurrency) is not int or concurrency < 1:
+        raise ProjectError("Maximum concurrent sessions must be a positive whole number")
+    result["max_concurrent_sessions"] = concurrency
     bounds = {
         "research_rounds": (1, 5),
         "model_calls": (2, 30),
@@ -3124,6 +3140,26 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     # can be safely picked up when an owner reconnects. Running calls are never
     # replayed automatically; _recover below records them as interrupted.
     if record["status"] == "queued" and cloud_workspaces.enabled():
+        try:
+            queue_status = cloud_research.job_status(record["id"])
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
+        if queue_status in {"queued", "running", "stopping"}:
+            return record
+        record["status"] = "paused"
+        record["updated_at"] = _now()
+        record["current_action"] = "Paused after queue recovery"
+        record["message"] = (
+            "The queued session reservation was no longer present after backend recovery. "
+            "No provider request was dispatched; resume when ready."
+        )
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") == "queued":
+                branch["status"] = "paused"
+                branch["current_action"] = record["current_action"]
+                branch["reason"] = record["message"]
+        _event(record, "interrupted", record["message"])
+        _save(record["project_path"], record)
         return record
     lock_path = _worker_lock_path(record["project_path"], record["id"])
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -3416,11 +3452,15 @@ def control_mock_session(path: str, session_id: str, action: str) -> dict[str, A
     if action == "resume":
         if record.get("status") not in {"paused", "stopped"}:
             return _public(record)
-        if any(
-            item.get("id") != session_id and item.get("status") in {"queued", "running"}
+        limits = get_limits(path)
+        active_count = sum(
+            item.get("id") != session_id and _recover(item).get("status") in {"queued", "running"}
             for item in _all(path)
-        ):
-            raise ProjectError("Another research session is already active")
+        )
+        if active_count >= limits["max_concurrent_sessions"]:
+            raise ProjectError(
+                "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+            )
         record["status"] = "queued"
         record["current_action"] = "Queued"
         record["message"] = "Simulated research resumed. No provider was called."
@@ -4181,12 +4221,11 @@ async def start_session(
                         "Idempotency key is already bound to a different research request"
                     )
                 return _public(_recover(existing))
-            if not cloud_workspaces.enabled() and any(not task.done() for task in _tasks.values()):
-                raise ProjectError("Another research worker is active. No provider call was made.")
-            active = next((r for r in records if r["status"] in {"queued", "running"}), None)
-            if active:
+            active = [_recover(r) for r in records]
+            active = [r for r in active if r["status"] in {"queued", "running"}]
+            if len(active) >= limits["max_concurrent_sessions"]:
                 raise ProjectError(
-                    "A research session is already queued or running in this project."
+                    f"This project already has {len(active)} active research session(s), its maximum concurrent sessions limit. Stop, resume, or wait for an active session to finish, or increase the limit in Project Settings → Limits."
                 )
             credential = await auth_context()
             if credential["identity"] != expected_binding:
@@ -4301,6 +4340,7 @@ async def start_session(
                 ).isoformat(),
                 "calls_used": 0,
                 "call_limit": limits["model_calls"],
+                "max_concurrent_sessions": limits["max_concurrent_sessions"],
                 "cycle_limit": limits["research_rounds"],
                 "duration_limit_minutes": limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
@@ -4597,20 +4637,17 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                 raise ProjectError(record["message"])
             record["guard_hash"] = guard
             record["guard_state_hash"] = guard_state_hash
+            current_limits = get_limits(path)
             others = [
-                _recover(item)
+                recovered
                 for item in _all(path)
-                if item.get("id") != session_id and item.get("status") in {"queued", "running"}
+                if item.get("id") != session_id
+                for recovered in [_recover(item)]
+                if recovered.get("status") in {"queued", "running"}
             ]
-            if others:
+            if len(others) >= current_limits["max_concurrent_sessions"]:
                 raise ProjectError(
-                    "Another research session is active or needs attention in this project"
-                )
-            if not cloud_workspaces.enabled() and any(
-                task_id != session_id and not task.done() for task_id, task in _tasks.items()
-            ):
-                raise ProjectError(
-                    "Another research worker is active. Wait for it to pause or finish before resuming."
+                    "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
                 )
             record["status"] = "queued"
             for branch in record.get("strategy_runs", []):

@@ -439,6 +439,50 @@ async def test_disabled_strategy_never_starts_a_run(path: Path):
     assert research_sessions.list_sessions(str(path)) == []
 
 
+async def test_project_concurrent_session_limit_is_atomic(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": 2}
+    research_sessions.save_limits(str(path), limits)
+    release = asyncio.Event()
+
+    async def parked_worker(_session_id: str, _path: str) -> None:
+        await release.wait()
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=parked_worker),
+    ):
+        attempts = await asyncio.gather(
+            *(
+                research_sessions.start_session(
+                    str(path),
+                    strategy.id,
+                    str(uuid4()),
+                    view.project.id,
+                    credential["identity"],
+                    limits,
+                )
+                for _ in range(3)
+            ),
+            return_exceptions=True,
+        )
+        started = [item for item in attempts if isinstance(item, dict)]
+        rejected = [item for item in attempts if isinstance(item, ProjectError)]
+        assert len(started) == 2 and len(rejected) == 1
+        assert "maximum concurrent sessions" in str(rejected[0]).lower()
+        stopped = await research_sessions.control_session(str(path), started[0]["id"], "stop")
+        assert stopped["status"] == "stopped"
+        after_release = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
+        )
+        workers = [research_sessions._tasks[item["id"]] for item in [*started, after_release]]
+        release.set()
+        await asyncio.gather(*workers, return_exceptions=True)
+        for item in started:
+            research_sessions._tasks.pop(item["id"], None)
+
+
 async def test_three_cycles_and_idempotency(path: Path):
     view, strategy, credential, config = await setup(path)
     before = (path / "project.json").read_bytes()
@@ -2536,6 +2580,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     view, strategy, credential, config = await setup(path)
     assert research_sessions.get_limits(str(path)) == research_sessions.DEFAULT_LIMITS
     limits = {
+        **research_sessions.DEFAULT_LIMITS,
         "research_rounds": 1,
         "model_calls": 2,
         "session_duration_minutes": 10,
@@ -2780,6 +2825,13 @@ async def test_legacy_limits_are_preserved(path: Path):
     (path / "research-sessions").mkdir(mode=0o700)
     limits_file = path / "research-sessions" / "limits.json"
     limits_file.write_text(json.dumps(legacy), encoding="utf-8")
+    legacy = {**legacy, "max_concurrent_sessions": 1}
+    limits_file.write_text(
+        json.dumps(
+            {key: value for key, value in legacy.items() if key != "max_concurrent_sessions"}
+        ),
+        encoding="utf-8",
+    )
     assert research_sessions.get_limits(str(path)) == legacy
     try:
         research_sessions.save_limits(str(path), legacy)
@@ -5870,7 +5922,7 @@ async def test_single_project_admission(path: Path):
                 str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
             )
         except ProjectError as exc:
-            assert "research worker is active" in str(exc) or "queued or running" in str(exc)
+            assert "maximum concurrent sessions" in str(exc)
         else:
             raise AssertionError("a second session was admitted for one project")
         paused = await research_sessions.control_session(str(path), started["id"], "pause")
@@ -7220,6 +7272,9 @@ def main():
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
+        asyncio.run(
+            test_project_concurrent_session_limit_is_atomic(root / "concurrency-limit.sigma")
+        )
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
         asyncio.run(
             test_legacy_worker_aggregates_usage_and_audits_inputs(root / "legacy-worker.sigma")
