@@ -428,10 +428,9 @@ def _sponsorship_eligibility_in_db(
         return 0
     if not cfg.local:
         return 1
-    # The configured local bootstrap administrator is already explicitly
-    # authorized by the administrator configuration. Treat that identity as
-    # a member for sponsorship eligibility while retaining its admin role.
-    if role == "admin" and email == _bootstrap_admin_email(db, cfg):
+    # Administrator sponsorship follows the verified administrator role,
+    # regardless of which grant or bootstrap identity conferred that role.
+    if role == "admin":
         return 1
     if _mock_enabled(cfg) and subject.startswith("mock:"):
         return 1
