@@ -7822,11 +7822,15 @@ async def _portfolio_role_call(
                 _event(record, "call.started", record["message"], role)
                 _save(path, record)
             call_record = record
+        response_received = False
+        response_usage: dict[str, int | None] | None = None
         try:
-            output, usage = await _call(
+            output, response_usage = await _call(
                 call_record, role, context, timeout_seconds, step_id=step_id
             )
+            response_received = True
             _validate_guidance_acknowledgments(human_guidance, output)
+            usage = response_usage
         except asyncio.CancelledError:
             if cloud_research.billing_enabled():
                 cloud_research.mark_call_unknown(session_id, step_id)
@@ -7941,22 +7945,67 @@ async def _portfolio_role_call(
                 timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
                 if not timeout_failure:
                     step.update(_provider_failure_fields(exc))
+                if response_received:
+                    # The provider completed and supplied a response, but a
+                    # local acknowledgment guard rejected its contents. This
+                    # is not uncertain dispatch: account for known usage and
+                    # preserve the rejection without publishing its output.
+                    step["failure_kind"] = "response_invalid"
+                    if response_usage is not None:
+                        step["token_usage"] = response_usage
+                input_tokens = (
+                    response_usage.get("input_tokens") if response_usage else None
+                )
+                output_tokens = (
+                    response_usage.get("output_tokens") if response_usage else None
+                )
+                reported_usage = (
+                    response_received
+                    and type(input_tokens) is int
+                    and type(output_tokens) is int
+                )
+                response_cost = (
+                    _estimate_cost(record["model"], response_usage)
+                    if response_received and isinstance(response_usage, dict)
+                    else None
+                )
                 if isinstance(record.get("hard_budget_ledger"), dict):
-                    if step.get("failure_kind") == "provider_limited":
+                    if response_received and reported_usage:
+                        budget_error = _settle_request_budget(record, step, response_usage)
+                        if budget_error:
+                            step["hard_budget_error"] = budget_error
+                    elif step.get("failure_kind") == "provider_limited":
                         settle_rejected(record["hard_budget_ledger"], call_id=step_id)
                     else:
                         mark_unknown(record["hard_budget_ledger"], call_id=step_id)
                 if cloud_research.billing_enabled():
-                    if step.get("failure_kind") == "provider_limited":
+                    if response_received:
+                        cloud_research.settle_call(
+                            session_id,
+                            step_id,
+                            input_tokens=input_tokens if reported_usage else None,
+                            output_tokens=output_tokens if reported_usage else None,
+                            estimated_cost_usd=response_cost,
+                        )
+                        if reported_usage:
+                            record["tokens_reserved"] = max(
+                                0, int(record.get("tokens_reserved", 0)) - token_reserve
+                            )
+                        step["attempt_status"] = (
+                            "usage_estimated" if response_cost is not None else "unknown"
+                        )
+                    elif step.get("failure_kind") == "provider_limited":
                         cloud_research.mark_call_provider_rejected(session_id, step_id)
                         step["attempt_status"] = "provider_rejected"
                     else:
                         cloud_research.mark_call_unknown(session_id, step_id)
                         step["attempt_status"] = "unknown"
-                step["token_usage_status"] = "unavailable"
+                step["token_usage_status"] = "reported" if reported_usage else "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):
                     step["provider_input_audit"]["status"] = (
-                        "provider_response_rejected"
+                        "provider_response_invalid"
+                        if response_received
+                        else "provider_response_rejected"
                         if step.get("failure_kind") == "provider_limited"
                         else "call_failed_dispatch_unknown"
                     )
@@ -7970,17 +8019,26 @@ async def _portfolio_role_call(
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
                 _record_guidance_interruption(record, step, "unacknowledged")
-                if (
-                    step.get("cost_reserve") is not None
-                    and step.get("failure_kind") == "provider_limited"
+                if step.get("cost_reserve") is not None and (
+                    step.get("failure_kind") == "provider_limited"
+                    or (response_received and response_cost is not None)
                 ):
                     record["estimated_cost_reserved_usd"] = max(
                         0.0,
                         float(record.get("estimated_cost_reserved_usd", 0.0))
                         - float(step["cost_reserve"]),
                     )
-                    record["cost_status"] = "available"
-                    record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
+                    if response_received and response_cost is not None:
+                        if record.get("cost_status") == "available":
+                            record["estimated_cost_usd"] = round(
+                                float(record.get("estimated_cost_usd", 0.0)) + response_cost,
+                                9,
+                            )
+                    else:
+                        record["cost_status"] = "available"
+                        record["estimated_cost_usd"] = float(
+                            record.get("estimated_cost_usd") or 0.0
+                        )
                 elif step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
