@@ -331,6 +331,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .project-primary-actions .project-pane-actions { gap: 6px; }
 .workspace-page .project-primary-actions .project-pane-actions .project-latex-button,
 .workspace-page .project-primary-actions .project-pane-actions .project-lean-button { margin-right: 0; }
+.workspace-page .project-primary-actions .project-pane-actions .project-latex-button { margin-right: 10px; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
 
