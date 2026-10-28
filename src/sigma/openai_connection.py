@@ -193,6 +193,7 @@ async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
             mode="chatgpt",
             status=selected["status"],
             identity=f"cloud_sponsor:{subject_hash}:" + str(selected.get("account_id", "")),
+            account_label=account.get("email") or account.get("name"),
         )
     if provider != "api_key":
         return AuthContext(token="", mode="chatgpt", status="unavailable", identity="cloud_invalid")
@@ -444,6 +445,9 @@ def inference_failure(status: str, guard: str | None = None) -> None:
 
 async def models(refresh: bool = False, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     state = await connection(refresh, context)
+    # The models API is used broadly and does not need the account identity;
+    # keep the email scoped to the connection-status surface that owns its UI.
+    public_state = {key: value for key, value in state.items() if key != "account_label"}
     verified = state["status"] == "connected"
     choices = [
         {
@@ -478,7 +482,7 @@ async def models(refresh: bool = False, context: Mapping[str, Any] | None = None
         message += " SIGMA_AI_MODEL is not a reviewed reasoning model; legacy projects use the documented Sol/High default. Saved project choices are unaffected."
     return {
         "models": choices,
-        "connection": state,
+        "connection": public_state,
         "default_model": default,
         "default_effort": "high",
         "default_verified": verified and bool(accessible),

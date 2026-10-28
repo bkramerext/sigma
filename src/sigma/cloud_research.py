@@ -98,9 +98,12 @@ def _money_ceiling(name: str, *, maximum: Decimal, message: str) -> Decimal:
 def _spend_ceiling_decimal() -> Decimal:
     from sigma import cloud_auth
 
-    if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
-        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
-    ):
+    # The mode-selection endpoint takes this snapshot before persisting the
+    # user's first sponsored choice. Eligibility, rather than the previous
+    # choice, determines whether the bounded local pilot ceiling applies.
+    if cloud_auth.local_sponsored_principal(
+        require_selected=False
+    ) is not None and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"):
         # A small invited pilot should not be stopped by a $0.25 lifetime
         # API-rate-equivalent budget. The local default is bounded per month.
         return LOCAL_PILOT_MONTHLY_SPEND_USD
@@ -245,7 +248,7 @@ def _global_spend_period() -> str:
     from sigma import cloud_auth
 
     if (
-        cloud_auth.local_sponsored_principal() is not None
+        cloud_auth.local_sponsored_principal(require_selected=False) is not None
         and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
     ):
         return "calendar_month"

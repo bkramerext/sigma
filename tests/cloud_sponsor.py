@@ -128,7 +128,13 @@ class SponsorTests(IsolatedAsyncioTestCase):
 
         from sigma import cloud_auth, cloud_workspaces
 
+        oauth_account = self.account | {
+            "email": "zetacontinuation@gmail.com",
+            "subject": "zetacontinuation-sponsor-subject",
+        }
+
         with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com"}),
             patch.object(cloud_workspaces, "enabled", return_value=True),
             patch.object(
                 cloud_auth,
@@ -154,7 +160,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             patch.object(
                 chatgpt_auth,
                 "validate_tokens",
-                AsyncMock(return_value=self.account),
+                AsyncMock(return_value=oauth_account),
             ) as validate,
         ):
             started = await chatgpt_auth.begin(sponsor=True)
@@ -174,15 +180,36 @@ class SponsorTests(IsolatedAsyncioTestCase):
         self.assertEqual(chatgpt_auth.attempt_status(started["id"])["status"], "connected")
         exchange.assert_awaited_once()
         validate.assert_awaited_once()
-        async with ai_store.sponsor_transaction() as persisted:
-            # Re-read through the store service after OAuth completion; the
-            # connection state must come from the saved sponsor record.
-            self.assertEqual(len(persisted["accounts"]), 1)
-            saved = next(iter(persisted["accounts"].values()))
-            self.assertEqual(saved["access_token"], "fixture-access")
-            self.assertEqual(saved["email"], "sponsor@example.test")
-        connected = await cloud_sponsor.sponsor_session()
-        self.assertEqual(connected["status"], "connected")
+        with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com"}):
+            async with ai_store.sponsor_transaction() as persisted:
+                # Re-read through the store service after OAuth completion; the
+                # connection state must come from the saved sponsor record.
+                self.assertEqual(len(persisted["accounts"]), 1)
+                saved = next(iter(persisted["accounts"].values()))
+                self.assertEqual(saved["access_token"], "fixture-access")
+                self.assertEqual(saved["email"], "zetacontinuation@gmail.com")
+            connected = await cloud_sponsor.sponsor_session()
+            self.assertEqual(connected["status"], "connected")
+            context = await self.sponsor_context()
+            self.assertEqual(context["status"], "connected")
+            self.assertEqual(context["account_label"], "zetacontinuation@gmail.com")
+
+            async def checked_connection(*args, **kwargs):
+                result = {
+                    "status": "connected",
+                    "checked_at": "2026-10-28T00:00:00Z",
+                    "ttl_seconds": 60,
+                }
+                openai_connection._cached = result
+                return result
+
+            with patch.object(
+                openai_connection, "_check", AsyncMock(side_effect=checked_connection)
+            ):
+                view = await openai_connection.connection(context=context)
+            self.assertEqual(view["status"], "connected")
+            self.assertEqual(view["account_label"], "zetacontinuation@gmail.com")
+            self.assertNotIn("fixture-access", repr(view))
 
     async def test_hosted_sponsor_connection_reads_saved_credentials(self):
         async with ai_store.sponsor_transaction() as state:

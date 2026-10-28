@@ -1638,10 +1638,23 @@ class CloudAuthTests(TestCase):
             )
             self.assertEqual(login.status_code, 303)
             self.client.cookies.update(login.cookies)
-            cloud_auth.set_model_access("configured-google-admin", "personal")
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["user"]["role"], "admin")
             self.assertEqual(status["user"]["email"], "zetacontinuation@gmail.com")
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+
+            # A pre-existing cookie whose legacy personal value was never
+            # deliberately selected must still resolve to default sponsorship.
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',model_access_selected=0 "
+                    "WHERE subject='configured-google-admin'"
+                )
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+
+            cloud_auth.set_model_access("configured-google-admin", "personal")
+            status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["account"]["model_access"]["mode"], "personal")
 
             async def add_selected_sponsor():
@@ -1712,6 +1725,121 @@ class CloudAuthTests(TestCase):
                     return state["accounts"]["selected-sponsor"]["access_token"]
 
             self.assertEqual(asyncio.run(saved_sponsor_token()), "existing-sponsor-token")
+
+    def test_local_admin_sponsored_mode_transition_uses_bounded_global_pilot(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
+            login = self.finish(email="zetacontinuation@gmail.com", subject="mode-transition-admin")
+            self.client.cookies.update(login.cookies)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            cloud_auth.set_model_access("mode-transition-admin", "personal")
+
+            from sigma import cloud_research
+
+            # A snapshot failure must leave the deliberate personal choice
+            # intact; the endpoint must not claim sponsorship succeeded.
+            with patch.object(
+                cloud_research,
+                "snapshot",
+                side_effect=cloud_research.CloudResearchUnavailable("fixture ledger unavailable"),
+            ):
+                failed = self.client.post(
+                    "/api/ai/mode",
+                    json={"mode": "sponsored"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(failed.status_code, 503, failed.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "personal",
+            )
+
+            selected = self.client.post(
+                "/api/ai/mode",
+                json={"mode": "sponsored"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(selected.status_code, 200, selected.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            budget = self.client.get("/api/cloud-auth/local-sponsored-allowance")
+            self.assertEqual(budget.status_code, 200, budget.text)
+            self.assertEqual(budget.json()["global_ceiling_usd"], 50.0)
+            self.assertEqual(budget.json()["global_spend_period"], "calendar_month")
+
+    def test_local_admin_connection_reports_validated_sponsor_identity(self):
+        import asyncio
+        import time
+
+        from sigma import ai_store, chatgpt_auth, openai_connection
+
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            login = self.finish(
+                email="zetacontinuation@gmail.com", subject="connection-identity-admin"
+            )
+            self.client.cookies.update(login.cookies)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+
+            async def persist_oauth_credentials():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"]["completed-oauth"] = {
+                        "client_id": "fixture-oauth-client",
+                        "email": "zetacontinuation@gmail.com",
+                        "access_token": "validated-sponsor-access-token",
+                        "refresh_token": "validated-sponsor-refresh-token",
+                        "expires_at": time.time() + 3600,
+                        "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                    }
+                    state["active"] = "completed-oauth"
+
+            asyncio.run(persist_oauth_credentials())
+
+            async def validated_catalog(*_args, **_kwargs):
+                result = {
+                    "status": "connected",
+                    "checked_at": "2026-10-28T00:00:00Z",
+                    "ttl_seconds": 60,
+                }
+                openai_connection._cached = result
+                return result
+
+            with patch.object(
+                openai_connection, "_check", AsyncMock(side_effect=validated_catalog)
+            ):
+                response = self.client.get("/api/ai/connection?refresh=true")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["status"], "connected")
+            self.assertEqual(response.json()["account_label"], "zetacontinuation@gmail.com")
+            self.assertNotIn("validated-sponsor-access-token", response.text)
+            self.assertNotIn("validated-sponsor-refresh-token", response.text)
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")

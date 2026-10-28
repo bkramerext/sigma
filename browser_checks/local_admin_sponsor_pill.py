@@ -69,7 +69,7 @@ def main() -> None:
 
 
 def exercise(origin: str) -> None:
-    selected_mode = {"value": "personal"}
+    selected_mode = {"value": "sponsored"}
     attempt_complete = {"value": False}
     active_account = {"value": "selected-sponsor"}
     selected_account_is_sponsor = {"value": True}
@@ -117,6 +117,7 @@ def exercise(origin: str) -> None:
                     "checked_at": "2026-10-28T00:00:00Z" if connected else None,
                     "ttl_seconds": 30,
                     "active_account": active_account["value"],
+                    "account_label": "zetacontinuation@gmail.com" if connected else None,
                     "sponsor_account_selected": selected_account_is_sponsor["value"],
                     "accounts": [
                         {
@@ -194,7 +195,8 @@ def exercise(origin: str) -> None:
         page.route("**/api/**", mock_api)
         page.goto(origin + "/", wait_until="domcontentloaded")
         summary = page.locator(".api-connection > summary")
-        expect(summary).to_have_attribute("aria-label", "Connect to ChatGPT")
+        expect(summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(summary.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
         posts.clear()
         with page.expect_request("**/api/ai/sponsor-auth/begin") as oauth_begin:
             summary.click()
@@ -205,9 +207,9 @@ def exercise(origin: str) -> None:
 
         attempt_complete["value"] = True
         expect(summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
-        assert any(
-            url.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for url, body in posts
-        ), posts
+        expect(summary.get_by_role("status")).to_have_text("ChatGPT Connected")
+        tooltip = page.locator("#sponsored-allowance-tooltip")
+        expect(tooltip).to_contain_text("ChatGPT Connected as zetacontinuation@gmail.com")
         expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
 
         # A sponsored member sees the disconnected state and its recovery
