@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from sigma.projects import ROOT
 
 _LOG = logging.getLogger("sigma.sponsor")
-_FIELD = re.compile(r"[a-z_]{1,48}\Z")
+_FIELD = re.compile(r"[a-z0-9_]{1,64}\Z")
 _MAX_BYTES = 64 * 1024
 LOG_NAME = "sponsor-diagnostics.log"
 

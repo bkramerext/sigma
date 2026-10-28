@@ -4376,6 +4376,11 @@ function CloudAuthGate() {
   const showSponsorWelcome = navigationEntry?.type !== 'reload'
     && (!!status?.account?.sponsorship.eligible || !!status?.account?.invitation_welcome_pending)
     && !welcomeDismissedForPage;
+  const showGuestWelcome = !!status?.enabled && !status?.authenticated
+    && window.location.pathname !== '/demo'
+    && navigationEntry?.type !== 'reload'
+    && window.sessionStorage.getItem('sigma.guestWelcomeDismissed') !== 'true'
+    && !welcomeDismissedForPage;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedIdentityAvailable={deniedIdentityAvailable} authenticated={status.authenticated} user={status.user}/>;
@@ -4383,17 +4388,25 @@ function CloudAuthGate() {
   return <CloudIdentityContext.Provider value={context}>
     <AIProvider unavailable={!status.authenticated}><App/>
     {status.authenticated && showSponsorWelcome && <InvitationWelcomeDialog
+      audience={status.account?.sponsorship.eligible ? 'sponsored' : 'invited'}
       allowance={budgetEmail === status.user?.email ? budget?.allowance_usd ?? null : null}
       allowanceUsed={budgetEmail === status.user?.email && budget ? budget.estimated_usage_usd + budget.held_usd : 0}
       allowanceLoading={budgetLoading && budgetEmail !== status.user?.email}
       onDismiss={async () => { setWelcomeDismissedForPage(true); await refresh(); }}
+    />}
+    {showGuestWelcome && <InvitationWelcomeDialog
+      audience="guest"
+      allowance={null}
+      allowanceUsed={0}
+      allowanceLoading={false}
+      onDismiss={async () => { window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true'); setWelcomeDismissedForPage(true); }}
     />}
     {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} localSponsorRepair={status.target === 'local' && !status.mock_identity} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
     </AIProvider>
   </CloudIdentityContext.Provider>;
 }
 
-function InvitationWelcomeDialog({ allowance, allowanceUsed, allowanceLoading, onDismiss }: { allowance: number | null; allowanceUsed: number; allowanceLoading: boolean; onDismiss: () => Promise<void> }) {
+function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowanceLoading, onDismiss }: { audience: 'guest' | 'invited' | 'sponsored'; allowance: number | null; allowanceUsed: number; allowanceLoading: boolean; onDismiss: () => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -4406,20 +4419,26 @@ function InvitationWelcomeDialog({ allowance, allowanceUsed, allowanceLoading, o
     if (busy) return;
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/cloud-auth/welcome', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      if (!response.ok) throw await cloudFailure(response, 'Your invitation welcome could not be saved.');
+      if (audience !== 'guest') {
+        const response = await fetch('/api/cloud-auth/welcome', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (!response.ok) throw await cloudFailure(response, 'Your invitation welcome could not be saved.');
+      }
       await onDismiss();
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
+  const heading = audience === 'guest' ? 'Welcome to SIGMA!' : 'You have been invited!';
   return <dialog id="invitation-welcome-dialog" ref={dialog} className="google-account-dialog invitation-welcome-dialog" aria-labelledby="invitation-welcome-heading" aria-describedby="invitation-welcome-phrase" onCancel={event => { event.preventDefault(); void dismiss(); }}>
-    <h2 id="invitation-welcome-heading">You have been invited!</h2>
+    <h2 id="invitation-welcome-heading">{heading}</h2>
     {allowance !== null && allowance <= 1 && <p className="invitation-welcome-allowance">{allowanceUsed > 0 ? `We added a $${allowance.toFixed(2)} allowance to your account.` : `We will start you off with a $${allowance.toFixed(2)} allowance.`}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
-    <p className="invitation-welcome-intro">Welcome to SIGMA.</p>
+    {audience === 'guest' && <p className="invitation-welcome-intro">Sign in with Google to request an invitation and save your own projects.</p>}
+    {audience === 'sponsored' && <p className="invitation-welcome-intro">SIGMA tracks your sponsored allowance as you use ChatGPT. When you’re ready, you can connect your own ChatGPT account from the Sponsored ChatGPT pill.</p>}
+    {audience === 'invited' && <p className="invitation-welcome-intro">Welcome to SIGMA.</p>}
     <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
     {error && <p role="alert">{error}</p>}
-    <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : "Let's get started"}</button>
+    {audience === 'guest' && <a className="google-text-action invitation-welcome-dismiss" href="/api/cloud-auth/login">Sign in with Google</a>}
+    <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : audience === 'guest' ? 'Continue as guest' : "Let's get started"}</button>
   </dialog>;
 }
 

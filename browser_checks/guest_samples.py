@@ -168,8 +168,28 @@ def exercise(ui_url: str, root: Path) -> None:
         page.on("response", capture)
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        # The guest landing page intentionally starts with Projects, not a welcome heading.
-        expect(page.get_by_role("heading", name="Welcome to SIGMA")).to_have_count(0)
+        welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
+        expect(welcome).to_be_visible()
+        expect(welcome).to_contain_text("Sign in with Google to request an invitation")
+        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+            "href", "/api/cloud-auth/login"
+        )
+        expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
+        welcome.get_by_role("button", name="Continue as guest").click()
+        expect(welcome).to_have_count(0)
+        page.route(
+            "**/api/test-long-error",
+            lambda route: route.fulfill(
+                status=503,
+                headers={"content-type": "application/json"},
+                body='{"error":"' + ("provider detail " * 200) + '"}',
+            ),
+        )
+        page.evaluate("fetch('/api/test-long-error')")
+        long_error_toast = page.locator(".request-toast").last
+        expect(long_error_toast).to_contain_text("unusually long error response")
+        assert len(long_error_toast.inner_text()) < 250
+        page.unroute("**/api/test-long-error")
         expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
         expect(page.get_by_role("button", name="New")).to_have_count(0)
         expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
@@ -191,6 +211,7 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
         expect(page.locator(".api-connection > summary")).to_contain_text("Connect to ChatGPT")
         expect(page.get_by_role("dialog", name="Account and model settings")).to_have_count(0)
+
         sample_group = page.locator("details.sample-type-group").filter(
             has_text="Did Jesus Use Cannabis?"
         )
@@ -200,7 +221,7 @@ def exercise(ui_url: str, root: Path) -> None:
 
         page.get_by_role("button", name="About SIGMA", exact=True).click()
         expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
-        policy = page.get_by_role("link", name="Privacy Policy")
+        policy = page.get_by_role("link", name="Privacy Notice")
         policy.scroll_into_view_if_needed()
         expect(policy).to_be_visible()
         policy.click()

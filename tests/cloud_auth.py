@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from jwt.algorithms import RSAAlgorithm
 
-from sigma import cloud_auth
+from sigma import cloud_auth, sponsor_diagnostics
 from sigma.api import app
 from sigma.projects import initialize_project
 
@@ -2170,6 +2170,7 @@ class CloudAuthTests(TestCase):
                     patch.object(
                         research_sessions, "_call", new=AsyncMock(side_effect=fake_call)
                     ) as calls,
+                    patch.object(sponsor_diagnostics, "record") as diagnostics,
                 ):
                     created = member.post(
                         "/api/projects/create",
@@ -2226,6 +2227,7 @@ class CloudAuthTests(TestCase):
                         },
                     )
                     self.assertEqual(started.status_code, 200, started.text)
+                    diagnostics.assert_called_once_with("sponsor_play", "accepted")
                     session_id = started.json()["id"]
                     saved = started.json()
                     for _ in range(500):

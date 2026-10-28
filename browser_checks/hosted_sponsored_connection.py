@@ -31,11 +31,23 @@ def dismiss_sponsor_welcome(page) -> None:
     welcome = page.locator("#invitation-welcome-dialog")
     expect(welcome).to_be_visible()
     try:
-        welcome.get_by_role("button", name="Let's get started").click(timeout=2000)
+        action = welcome.get_by_role("button", name="Let's get started")
+        if not action.count():
+            action = welcome.get_by_role("button", name="Continue as guest")
+        action.click(timeout=2000)
     except PlaywrightTimeoutError:
         if welcome.count() and welcome.is_visible():
             raise
     expect(welcome).to_have_count(0)
+
+
+def dismiss_welcome_if_present(page, timeout: int = 1000) -> None:
+    welcome = page.locator("#invitation-welcome-dialog")
+    try:
+        expect(welcome).to_be_visible(timeout=timeout)
+    except PlaywrightTimeoutError:
+        return
+    dismiss_sponsor_welcome(page)
 
 
 def main() -> None:
@@ -380,7 +392,12 @@ def exercise(origin: str) -> None:
         expect(welcome).to_be_visible()
         expect(welcome.get_by_role("heading", name="You have been invited!")).to_be_visible()
         expect(welcome).to_contain_text("We will start you off with a $0.75 allowance.")
-        expect(welcome.locator(".invitation-welcome-intro")).to_have_text("Welcome to SIGMA.")
+        expect(welcome.locator(".invitation-welcome-intro")).to_contain_text(
+            "SIGMA tracks your sponsored allowance as you use ChatGPT"
+        )
+        expect(welcome.locator(".invitation-welcome-intro")).to_contain_text(
+            "connect your own ChatGPT account"
+        )
         expect(welcome.locator(".cloud-auth-kicker")).to_have_count(0)
         expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
         phrase_style = welcome.locator("#invitation-welcome-phrase").evaluate(
@@ -485,6 +502,9 @@ def exercise(origin: str) -> None:
         # right-hand home header action stack, and still opens its dialog.
         guest_mode["value"] = True
         page.reload(wait_until="domcontentloaded")
+        guest_welcome = page.locator("#invitation-welcome-dialog")
+        if guest_welcome.count():
+            guest_welcome.get_by_role("button", name="Continue as guest").click()
         about = page.locator(".home-topline .home-about-button")
         invite = page.locator(".home-topline .home-header-actions .project-invite-me")
         expect(about).to_be_visible()
@@ -533,6 +553,7 @@ def exercise(origin: str) -> None:
         invitation_dialog.get_by_role("link", name="Privacy Notice").click()
         expect(page).to_have_url(re.compile(r"/privacy\?return_to="))
         page.locator(".privacy-close-button").click()
+        dismiss_welcome_if_present(page, timeout=10000)
         invitation_dialog = page.locator("#google-invitation-dialog")
         expect(invitation_dialog).to_be_visible()
         invitation_dialog.get_by_role("button", name="Close").click()

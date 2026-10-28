@@ -50,10 +50,16 @@ enable the hosted forced-sponsored setting. Use `./sigma start` to return to
 normal local mode.
 
 If sponsored Play is temporarily unavailable, the signed-in member's research
-is preserved. The backend reports token-free `sponsor_connection status=...`
-reasons both in the terminal and in the private, bounded
-`sponsor-diagnostics.log` file at the checkout root. Run
-`tail -n 20 sponsor-diagnostics.log` there to read the latest entries.
+is preserved. The backend reports token-free status codes in the private,
+bounded `sponsor-diagnostics.log` file at the checkout root. Run
+`tail -n 30 sponsor-diagnostics.log` there to read the latest entries. The
+`sponsor_play` event shows whether the start request was accepted or rejected;
+`sponsor_inference` records call start, provider HTTP status, completion, and
+fixed failure categories. Endpoint-specific `sponsor_sessions_api`,
+`sponsor_config_api`, `sponsor_limits_api`, and `sponsor_project_api` events
+record failed project requests, including whether the error body was unusually
+large. No prompt, response, provider message, identity, or credential is
+written to this log.
 `credential_missing` means the server has no usable sponsor session. The
 eligible local member can click the sponsored pill to start the pinned sponsor
 reconnect flow and complete ChatGPT sign-in as `zetacontinuation@gmail.com`;

@@ -4746,7 +4746,7 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
     return False
 
 
-async def _call(
+async def _call_provider(
     record: dict[str, Any],
     role: str,
     context: dict[str, Any],
@@ -4775,6 +4775,7 @@ async def _call(
         timeout_seconds if timeout_seconds is not None else float(CALL_TIMEOUT),
         _call_timeout_seconds(record),
     )
+    _sponsor_inference_diagnostic(record, "request_attempted")
     async with (
         asyncio.timeout(timeout_seconds),
         httpx.AsyncClient(
@@ -4787,10 +4788,12 @@ async def _call(
             content=_serialized_role_request(payload),
         ) as response,
     ):
+        _sponsor_inference_diagnostic(record, f"http_{response.status_code}")
         collected = bytearray()
         async for chunk in response.aiter_bytes():
             collected.extend(chunk)
             if len(collected) > MAX_RESEARCH_RESPONSE_BYTES:
+                _sponsor_inference_diagnostic(record, "response_overflow")
                 raise ProjectError("Research provider transport exceeded the 1 MB safety bound")
         body = bytes(collected)
         if response.status_code != 200:
@@ -4798,6 +4801,15 @@ async def _call(
                 error_data = json.loads(body)
             except ValueError:
                 error_data = {}
+            code = None
+            if isinstance(error_data, dict) and isinstance(error_data.get("error"), dict):
+                code = error_data["error"].get("code")
+            suffix = (
+                str(code)
+                if isinstance(code, str) and re.fullmatch(r"[a-zA-Z0-9_]{1,32}", code)
+                else "unknown"
+            )
+            _sponsor_inference_diagnostic(record, f"http_{response.status_code}_{suffix}".lower())
             failure(response.status_code, error_data, credential["mode"], "research")
         if credential["mode"] == "chatgpt":
             raw = await completed(
@@ -5041,6 +5053,56 @@ async def _call(
             )
     _validate_computation_citations(context, validated["computational_citations"])
     return validated, _usage(raw)
+
+
+def _sponsor_inference_diagnostic(record: dict[str, Any], status: str) -> None:
+    """Write fixed, token-free outcome codes for sponsored inference calls."""
+    if record.get("cloud_sponsored") is not True:
+        return
+    try:
+        from sigma.sponsor_diagnostics import record as write_diagnostic
+
+        write_diagnostic("sponsor_inference", status)
+    except (OSError, RuntimeError, ValueError, ImportError):
+        # Diagnostics must never block a research call or change its outcome.
+        return
+
+
+async def _call(
+    record: dict[str, Any],
+    role: str,
+    context: dict[str, Any],
+    timeout_seconds: float | None = None,
+    step_id: str | None = None,
+) -> tuple[dict[str, Any], dict[str, int | None] | None]:
+    _sponsor_inference_diagnostic(record, "call_started")
+    try:
+        result = await _call_provider(record, role, context, timeout_seconds, step_id)
+    except (TimeoutError, httpx.TimeoutException):
+        _sponsor_inference_diagnostic(record, "call_timeout")
+        raise
+    except Exception as exc:
+        message = str(exc).casefold()
+        if "transport exceeded the 1 mb safety bound" in message:
+            status = "response_overflow"
+        elif isinstance(exc, ResearchContextLimitError):
+            status = "context_limit"
+        elif isinstance(exc, httpx.HTTPError):
+            status = "network_error"
+        elif "account or billing identity changed" in message:
+            status = "identity_changed"
+        elif any(word in message for word in ("budget", "allowance", "cost limit", "token limit")):
+            status = "preflight_rejected"
+        elif isinstance(exc, ProjectError) or any(
+            phrase in message for phrase in ("malformed", "did not complete", "declined")
+        ):
+            status = "response_invalid"
+        else:
+            status = "call_failed"
+        _sponsor_inference_diagnostic(record, status)
+        raise
+    _sponsor_inference_diagnostic(record, "response_completed")
+    return result
 
 
 def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:

@@ -7,7 +7,14 @@ from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase, main
 from unittest.mock import AsyncMock, patch
 
-from sigma import ai_store, chatgpt_auth, cloud_sponsor, openai_connection, sponsor_diagnostics
+from sigma import (
+    ai_store,
+    chatgpt_auth,
+    cloud_sponsor,
+    openai_connection,
+    research_sessions,
+    sponsor_diagnostics,
+)
 from sigma.projects import ProjectError
 
 
@@ -144,9 +151,11 @@ class SponsorTests(IsolatedAsyncioTestCase):
             patch.object(sponsor_diagnostics._LOG, "warning") as warning,
         ):
             sponsor_diagnostics.record("sponsor_connection", "credential_missing")
+            sponsor_diagnostics.record("sponsor_play", "http_400")
             self.assertTrue(path.is_file())
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertIn("sponsor_connection status=credential_missing", path.read_text())
+            self.assertIn("sponsor_play status=http_400", path.read_text())
             self.assertNotIn(self.account["email"], path.read_text())
             self.assertNotIn(self.account["access_token"], path.read_text())
             path.write_bytes(b"x" * 65536)
@@ -160,6 +169,19 @@ class SponsorTests(IsolatedAsyncioTestCase):
             sponsor_diagnostics.record("sponsor_connection", "credential_missing")
             self.assertEqual(target.read_text(), "unchanged")
             self.assertIn("sponsor_diagnostics status=file_unavailable", str(warning.call_args))
+
+    async def test_sponsored_inference_diagnostics_record_only_fixed_status_codes(self):
+        with patch.object(sponsor_diagnostics, "record") as write_diagnostic:
+            research_sessions._sponsor_inference_diagnostic(
+                {"cloud_sponsored": False}, "call_started"
+            )
+            write_diagnostic.assert_not_called()
+            research_sessions._sponsor_inference_diagnostic(
+                {"cloud_sponsored": True}, "http_403_subscription_sharing_unsupported_capability"
+            )
+        write_diagnostic.assert_called_once_with(
+            "sponsor_inference", "http_403_subscription_sharing_unsupported_capability"
+        )
 
     async def test_designated_sponsor_is_used_when_a_personal_account_is_active(self):
         personal = dict(self.account, email="personal@example.test", subject="personal-subject")

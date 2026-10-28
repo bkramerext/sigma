@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  MAX_REQUEST_TOAST_MESSAGE_LENGTH,
   REQUEST_TOAST_EXIT_MS,
   REQUEST_TOAST_LIFETIME_MS,
   RequestToastStore,
@@ -138,9 +139,19 @@ test('adding a sixth toast immediately removes the oldest and keeps five visible
   assert.equal(clock.timers.size, 0);
 });
 
+test('long error messages are shortened before they can fill the screen', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  const toast = store.add('provider detail '.repeat(200));
+  assert.equal(toast.message.length, MAX_REQUEST_TOAST_MESSAGE_LENGTH - 1);
+  assert.ok(toast.message.endsWith('… [message shortened]'));
+});
+
 test('exit phase slides down, stack gap collapses, and reduced-motion CSS disables motion', async () => {
   const css = await readFile(new URL('./request-toast.css', import.meta.url), 'utf8');
   assert.match(css, /\.request-toast\[data-phase="exiting"\][^{]*\{[^}]*translateY\(calc\(100% \+ 10px\)\)/s);
   assert.match(css, /\.request-toast-item\[data-phase="exiting"\][^{]*\{[^}]*grid-template-rows:\s*0fr/s);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /max-height:\s*min\(70vh,\s*560px\)/);
+  assert.match(css, /max-height:\s*min\(60vh,\s*480px\)/);
 });

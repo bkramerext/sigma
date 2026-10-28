@@ -1,5 +1,6 @@
 export const REQUEST_TOAST_LIFETIME_MS = 60_000;
 export const REQUEST_TOAST_EXIT_MS = 960;
+export const MAX_REQUEST_TOAST_MESSAGE_LENGTH = 600;
 
 export class RequestToastStore {
   constructor({
@@ -24,7 +25,11 @@ export class RequestToastStore {
   }
 
   add(message) {
-    const failure = { id: ++this.nextId, message, phase: 'visible' };
+    const text = String(message ?? 'An unexpected request error occurred.');
+    const shortened = text.length > MAX_REQUEST_TOAST_MESSAGE_LENGTH
+      ? `${text.slice(0, MAX_REQUEST_TOAST_MESSAGE_LENGTH - 22).trimEnd()}… [message shortened]`
+      : text;
+    const failure = { id: ++this.nextId, message: shortened, phase: 'visible' };
     const overflow = this.failures.slice(0, Math.max(0, this.failures.length + 1 - this.maxVisible));
     for (const old of overflow) this.clearTimers(old.id);
     this.failures = [...this.failures.slice(overflow.length), failure];

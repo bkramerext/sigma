@@ -232,6 +232,41 @@ async def local_browser_only(request: Request, call_next):
     if origin and origin not in allowed_origins:
         return JSONResponse({"error": "Untrusted browser origin"}, status_code=403)
     response = await cloud_auth.middleware(request, call_next)
+    sponsored_start = request.url.path == "/api/projects/research-sessions/start"
+    if (
+        cfg.local
+        and request.url.path.startswith("/api/projects/")
+        and (response.status_code >= 400 or sponsored_start)
+    ):
+        principal = getattr(request.state, "cloud_principal", None)
+        if isinstance(principal, cloud_auth.Principal):
+            try:
+                if cloud_auth.model_access_for_subject(principal.subject) == "sponsored":
+                    from sigma.sponsor_diagnostics import record
+
+                    content_length = response.headers.get("content-length", "")
+                    large_body = content_length.isdigit() and int(content_length) > 600
+                    if sponsored_start:
+                        route = "sponsor_play"
+                    elif request.url.path.startswith("/api/projects/research-sessions"):
+                        route = "sponsor_sessions_api"
+                    elif request.url.path.endswith("/api/projects/proposals/config"):
+                        route = "sponsor_config_api"
+                    elif request.url.path.endswith("/api/projects/research-limits"):
+                        route = "sponsor_limits_api"
+                    else:
+                        route = "sponsor_project_api"
+                    outcome = (
+                        "accepted"
+                        if sponsored_start and response.status_code < 400
+                        else f"{request.method.lower()}_{response.status_code}"
+                    )
+                    if large_body and response.status_code >= 400:
+                        outcome += "_large"
+                    record(route, outcome)
+            except (OSError, RuntimeError, sqlite3.Error, ValueError, ImportError):
+                # Diagnostics never alter or delay the API response.
+                pass
     if request.url.path.startswith("/api/ai/"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"

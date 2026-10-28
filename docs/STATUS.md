@@ -7090,3 +7090,20 @@ Pyright, frontend typecheck, and production build. The local SIGMA service was
 restarted from the corrected tree, and the authenticated browser reopened the
 active Xenopus project. The saved call limit is 12. No live provider call or
 production configuration change was made.
+## Sponsored Play failure investigation and guest welcome (2026-10-27)
+
+The local account record for the tested member is eligible, sponsored, and
+marked connected. The existing `sponsor-diagnostics.log` ends at OAuth success
+and has no inference result, so the failure has not yet been localized. The
+reported oversized panel is SIGMA's request-error toast: the browser surfaces
+long API error details without identifying their source. Toasts now summarize
+oversized server errors, cap message text at 600 characters, and constrain the
+stack to 70% of viewport height.
+
+For the next run, local diagnostics record token-free `sponsor_play`,
+endpoint-specific `sponsor_*_api`, and `sponsor_inference` outcome codes. They
+exclude request/response bodies, identities, and credentials. Read the log with
+`tail -n 30 sponsor-diagnostics.log` in the checkout. The live Play cause
+remains **UNVERIFIED** until a sponsored run reaches this instrumented backend;
+no live or paid provider call was made during this investigation. Guest first
+entry now has a one-time, dismissible welcome alongside the sponsored welcome.
