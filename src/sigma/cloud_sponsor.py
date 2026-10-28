@@ -120,7 +120,7 @@ async def import_session(source: Path) -> None:
 
     if (
         not cloud_workspaces.enabled()
-        or os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER") != "chatgpt"
+        or inference_provider() != "chatgpt"
     ):
         raise ProjectError("Sponsor import requires explicit hosted ChatGPT configuration.")
     email = expected_email()
