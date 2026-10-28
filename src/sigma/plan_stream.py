@@ -51,7 +51,37 @@ KNOWN_ERRORS = {
 }
 
 
-def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
+class ChatGPTProviderRejection(ProjectError):
+    """A classified provider error with real HTTP/stream provenance.
+
+    The outer transport may be HTTP 200 even if a Responses SSE event
+    reports a failed inference. Never synthesize an HTTP 400 for that case.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        state: str,
+        code: str | None,
+        http_status: int,
+        streamed: bool,
+    ) -> None:
+        super().__init__(message)
+        self.state = state
+        self.code = code if code in KNOWN_ERRORS else None
+        self.http_status = http_status
+        self.streamed = streamed
+
+
+def failure(
+    status: int,
+    raw: Any,
+    mode: str,
+    guard: str | None = None,
+    *,
+    streamed: bool = False,
+) -> None:
     error = raw.get("error") if isinstance(raw, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
     # Direct-route admission errors can have {"detail": "..."} rather
@@ -97,12 +127,29 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
         # that look like machine metadata. Report only locally derived status
         # and response shape.
         if state == "unavailable" and message.startswith("ChatGPT request could not complete"):
-            raise ProjectError(
-                f"ChatGPT rejected the request (HTTP {status}, response shape: {shape}). "
-                "Account retained; no automatic billing fallback occurred."
+            description = (
+                f"ChatGPT returned an unclassified streamed error (HTTP transport {status}, "
+                f"response shape: {shape}). "
+                if streamed
+                else f"ChatGPT rejected the request (HTTP {status}, response shape: {shape}). "
             )
-        provider_status = f" (HTTP {status})" if state == "limited" else ""
-        raise ProjectError(f"{message}{provider_status} No strategy was saved.")
+            raise ChatGPTProviderRejection(
+                description + "Account retained; no automatic billing fallback occurred.",
+                state=state,
+                code=code if isinstance(code, str) else None,
+                http_status=status,
+                streamed=streamed,
+            )
+        # A Responses stream is admitted at the outer HTTP status and can then
+        # fail in-band; the provider error code is not a second HTTP response.
+        provider_status = f" (HTTP {status})" if not streamed and state == "limited" else ""
+        raise ChatGPTProviderRejection(
+            f"{message}{provider_status} No strategy was saved.",
+            state=state,
+            code=code if isinstance(code, str) else None,
+            http_status=status,
+            streamed=streamed,
+        )
     # Provider error bodies can contain request context or other sensitive
     # values. Surface only a small allowlist of machine fields; never echo the
     # provider message or an arbitrary code/parameter into the UI.
@@ -213,10 +260,11 @@ async def completed(
                 # plan routing codes) are classified consistently.
                 raw_error = event.get("error")
                 failure(
-                    400,
+                    response.status_code,
                     {"error": raw_error} if isinstance(raw_error, dict) else {"error": event},
                     "chatgpt",
                     guard,
+                    streamed=True,
                 )
             if kind == "response.created":
                 if response_id is not None or not isinstance(
@@ -231,7 +279,7 @@ async def completed(
                 if not isinstance(raw, dict) or raw.get("id") != response_id:
                     raise ValueError("plan_stream:response_id_mismatch")
                 if kind == "response.failed":
-                    failure(400, raw, "chatgpt", guard)
+                    failure(response.status_code, raw, "chatgpt", guard, streamed=True)
                 if kind == "response.incomplete":
                     raise ProjectError(
                         "ChatGPT returned an incomplete response. Retry explicitly; no strategy was saved."
