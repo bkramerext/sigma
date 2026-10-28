@@ -69,8 +69,14 @@ def inspect_ledger(path: Path) -> dict[str, object]:
         "global_obligations_usd": round(total / USD_UNITS, 9),
         "held_or_unknown_usd": round((amounts["reserved"] + amounts["unknown"]) / USD_UNITS, 9),
         "configured_ceiling_in_this_shell": configured or None,
-        "local_sponsored_default_ceiling_if_unset": "0.25",
-        "note": "Runtime ceiling/provider may differ from this shell. No reset performed.",
+        "local_sponsored_default_ceiling_if_unset": "50.00",
+        "local_sponsored_default_window_if_unset": "calendar_month",
+        "note": (
+            "Local sponsored pilot defaults to $50 per UTC month unless an explicit ceiling "
+            "or window is set. Global obligations here include all historical settled usage; "
+            "only the active window and unresolved holds count toward a monthly ceiling. "
+            "Runtime ceiling/provider may differ from this shell. No reset performed."
+        ),
     }
 
 
