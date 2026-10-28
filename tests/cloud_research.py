@@ -1908,6 +1908,61 @@ def main() -> None:
                 with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
                     asyncio.run(run_rejected_call())
 
+                async def run_aggregate_token_denial() -> None:
+                    """Pre-dispatch session-token denial cannot retain a hard-budget hold."""
+                    before = cloud_research.snapshot()
+                    original_save = research_sessions._save
+
+                    def save_with_tiny_token_limit(path, record):
+                        if (
+                            record.get("project_id") == live_view.project.id
+                            and record.get("status") == "queued"
+                            and record.get("calls_used") == 0
+                        ):
+                            record["total_token_limit"] = 1
+                        return original_save(path, record)
+
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(research_sessions, "_save", side_effect=save_with_tiny_token_limit),
+                        patch.object(research_sessions, "_call", new=AsyncMock()) as calls,
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            current = research_sessions.get_session(live_view.path, started["id"])
+                            if current["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("session token preflight denial never terminated")
+                        assert calls.await_count == 0
+                        assert current["status"] in {"ended", "failed"}
+                        assert current["calls_used"] == 0
+                        assert current["tokens_reserved"] == 0
+                        assert current["hard_budget_ledger"]["calls"] == []
+                        after = cloud_research.snapshot()
+                        assert after["held_usd"] == before["held_usd"]
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_aggregate_token_denial())
+
                 async def run_ambiguous_failure() -> None:
                     key = str(uuid4())
                     with (
