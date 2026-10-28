@@ -1288,10 +1288,26 @@ class ApiKeyRequest(BaseModel):
 
 
 @app.post("/api/ai/auth/begin")
-async def auth_begin(body: AuthBeginRequest):
-    if cloud_auth.config().local and body.account_id is not None:
+async def auth_begin(body: AuthBeginRequest, request: Request):
+    cfg = cloud_auth.config()
+    principal = getattr(request.state, "cloud_principal", None)
+    from sigma.cloud_sponsor import expected_email
+
+    # The designated administrator owns the shared sponsor connection.
+    # Do not let an ordinary user overwrite or impersonate that credential.
+    if cfg.enabled and not cfg.local:
+        if not isinstance(principal, cloud_auth.Principal):
+            raise HTTPException(401, "Authentication required.")
+        if principal.role == "admin" and principal.email.casefold() == expected_email():
+            from sigma.cloud_sponsor import sponsor_account_id
+
+            try:
+                account_id = await sponsor_account_id()
+            except ProjectError:
+                account_id = None  # First sponsor connection.
+            return await chatgpt_auth.begin(account_id=account_id, sponsor=True)
+    if cfg.local and body.account_id is not None:
         from sigma.ai_store import sponsor_transaction
-        from sigma.cloud_sponsor import expected_email
 
         async with sponsor_transaction() as state:
             account = state["accounts"].get(body.account_id) or {}
@@ -1300,24 +1316,39 @@ async def auth_begin(body: AuthBeginRequest):
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
 
 
+@app.get("/api/ai/auth/callback/{identifier}")
+async def hosted_chatgpt_callback(identifier: str, request: Request):
+    """Public OAuth return; validation and credential exchange stay server-side."""
+    if not cloud_workspaces.enabled():
+        raise HTTPException(404, "Hosted callback unavailable.")
+    try:
+        await chatgpt_auth.hosted_callback(identifier, request.url.query)
+    except (ProjectError, OSError, TimeoutError):
+        raise HTTPException(400, "ChatGPT sign-in attempt expired or failed.") from None
+    return Response(
+        "Return to SIGMA to continue. You can close this sign-in tab.",
+        media_type="text/plain",
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
 @app.post("/api/ai/sponsor-auth/begin")
 async def sponsor_auth_begin(request: Request):
-    """Let admins or eligible local members renew only the designated sponsor."""
+    """Allow designated hosted admin or eligible local members to renew sponsorship."""
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
-    if (
-        not cfg.local
-        or not isinstance(principal, cloud_auth.Principal)
-        or principal.subject.startswith("mock:")
-    ):
-        raise HTTPException(403, "An authenticated local account is required to renew sponsorship.")
-    if principal.role != "admin":
+    if not isinstance(principal, cloud_auth.Principal) or principal.subject.startswith("mock:"):
+        raise HTTPException(403, "Authenticated sponsor administrator required.")
+    if not cfg.local:
+        from sigma.cloud_sponsor import expected_email
+
+        if principal.role != "admin" or principal.email.casefold() != expected_email():
+            raise HTTPException(403, "Designated sponsor administrator required.")
+    elif principal.role != "admin":
         try:
             account = cloud_auth._persist_user_state(cfg, principal)
         except (OSError, RuntimeError, sqlite3.Error):
-            raise HTTPException(
-                503, "Sponsored account eligibility could not be checked."
-            ) from None
+            raise HTTPException(503, "Sponsored account eligibility could not be checked.") from None
         if (
             principal.role != "member"
             or not cloud_auth.sponsored_access_enabled()
@@ -1328,6 +1359,9 @@ async def sponsor_auth_begin(request: Request):
 
     try:
         account_id = await sponsor_account_id()
+    except ProjectError:
+        account_id = None
+    try:
         return await chatgpt_auth.begin(account_id=account_id, sponsor=True)
     except ProjectError as exc:
         from sigma.sponsor_diagnostics import record
