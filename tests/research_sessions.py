@@ -7441,12 +7441,15 @@ def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
         record, {"problem": "A bounded test"}, "investigator", None
     )
     assert reserve is not None and reserve > 0
-    assert research_sessions._call_cost_reservation(
-        {**record, "cloud_sponsored": False, "mode": "api_key"},
-        {"problem": "A bounded test"},
-        "investigator",
-        None,
-    ) is None
+    assert (
+        research_sessions._call_cost_reservation(
+            {**record, "cloud_sponsored": False, "mode": "api_key"},
+            {"problem": "A bounded test"},
+            "investigator",
+            None,
+        )
+        is None
+    )
 
     branch = {
         "strategy_title": "Tadpole mechanism",

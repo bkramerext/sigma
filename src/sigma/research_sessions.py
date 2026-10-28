@@ -2711,8 +2711,7 @@ def _call_cost_reservation(
     if isinstance(hard_ledger, dict):
         return None
     if record.get("cloud_sponsored") is True or (
-        record.get("mode") == "api_key"
-        and record.get("maximum_estimated_cost_usd") is not None
+        record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
     ):
         return _reserve_cost(record, context, role)
     return None
@@ -8241,17 +8240,14 @@ def _portfolio_reservation_failure_message(runs: list[dict[str, Any]]) -> str | 
     seen: set[str] = set()
     for branch in blocked:
         title = str(branch.get("strategy_title") or "Strategy").strip()
-        reason = " ".join(
-            str(branch.get("reason") or "Provider call reservation failed.").split()
-        )
+        reason = " ".join(str(branch.get("reason") or "Provider call reservation failed.").split())
         detail = f"{title}: {reason}"
         if detail not in seen:
             seen.add(detail)
             details.append(detail)
     return (
         "Research stopped before completing these branches because provider-call "
-        "reservation failed. "
-        + "; ".join(details)
+        "reservation failed. " + "; ".join(details)
     )
 
 
