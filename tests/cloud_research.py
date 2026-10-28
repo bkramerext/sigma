@@ -1116,6 +1116,90 @@ def test_monthly_global_budget_retains_unknown_provider_holds(
 
 
 
+def test_admin_unlimited_allowance_survives_monthly_global_renewal(
+    root: Path, ledger_root: Path
+) -> None:
+    """An admin's historical spend never creates an additional lifetime cap."""
+    from datetime import UTC, datetime, timedelta
+
+    owner = workspace(root / "admin-renewal", "b" * 32)
+    old = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "calendar_month",
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=True),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            project = initialize_project(
+                owner.path / "admin-monthly.sigma", "Admin renewal", "Check the global ceiling"
+            )
+            with cloud_research._connect() as db:
+                db.execute(
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    ("old-admin-month", owner.workspace_id, "old", "admin-old", "terminal", old, old),
+                )
+                db.execute(
+                    "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
+                    "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    ("old-admin-spend", "old-admin-month", owner.workspace_id, 0.95, "usage_estimated", 10, 5, 5, old, old),
+                )
+            summary = cloud_research.snapshot()
+            assert summary["global_remaining_usd"] == 1.00, summary
+            assert summary["remaining_usd"] == 1.00, summary
+
+            first = job(owner.workspace_id)
+            first.update(
+                project_id=project.project.id,
+                project_path=project.path,
+                maximum_estimated_cost_usd=None,
+            )
+            cloud_research.prepare_job(first)
+            assert cloud_research.claim_job(first["id"])
+            cloud_research.reserve_call(first["id"], "admin-new-month-first", 0.20, 20)
+            cloud_research.settle_call(
+                first["id"],
+                "admin-new-month-first",
+                input_tokens=10,
+                output_tokens=10,
+                estimated_cost_usd=0.20,
+            )
+            first["status"] = "ended"
+            cloud_research.sync_job(first)
+
+            second = job(owner.workspace_id)
+            second.update(
+                project_id=project.project.id,
+                project_path=project.path,
+                maximum_estimated_cost_usd=None,
+            )
+            cloud_research.prepare_job(second)
+            assert cloud_research.claim_job(second["id"])
+            cloud_research.reserve_call(second["id"], "admin-new-month-second", 0.75, 20)
+            summary = cloud_research.snapshot()
+            assert summary["global_remaining_usd"] == 0.05, summary
+            assert summary["remaining_usd"] == 0.05, summary
+            assert summary["reserved_and_estimated_usd"] == 1.90, summary
+            try:
+                cloud_research.reserve_call(second["id"], "admin-global-blocked", 0.10, 10)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "global inference-spend ceiling" in str(exc)
+            else:
+                raise AssertionError("Admin bypassed the shared global spend ceiling")
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_json_project_orphan_recovery(
     root: Path, ledger_root: Path, limits_env: dict[str, str]
 ) -> None:
@@ -2212,6 +2296,11 @@ def main() -> None:
         monthly_ledger = root / "monthly-global-ledger"
         monthly_ledger.mkdir(mode=0o700)
         test_monthly_global_budget_retains_unknown_provider_holds(root, monthly_ledger)
+        admin_monthly_ledger = root / "admin-monthly-ledger"
+        admin_monthly_ledger.mkdir(mode=0o700)
+        test_admin_unlimited_allowance_survives_monthly_global_renewal(
+            root, admin_monthly_ledger
+        )
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
