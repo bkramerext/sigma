@@ -24,9 +24,7 @@ def default_ledger() -> Path:
     if configured:
         return Path(configured).expanduser() / "cloud-research.sqlite3"
     auth = Path(
-        os.environ.get(
-            "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
-        )
+        os.environ.get("SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth"))
     ).expanduser()
     return auth / "workspaces" / "cloud-research.sqlite3"
 
@@ -46,11 +44,7 @@ def inspect_ledger(path: Path) -> dict[str, object]:
     if path.is_symlink():
         raise ValueError("Refusing symlinked ledger")
     info = path.stat()
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or info.st_mode & 0o077
-    ):
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise ValueError("Refusing a ledger with unsafe ownership or permissions")
     uri = f"file:{quote(str(path.resolve()), safe='/')}?mode=ro"
     with sqlite3.connect(uri, uri=True, timeout=5) as db:
@@ -71,13 +65,9 @@ def inspect_ledger(path: Path) -> dict[str, object]:
         "format_version": 1,
         "diagnostic": "read_only_aggregate_without_workspace_identifiers",
         "status_counts": counts,
-        "status_amounts_usd": {
-            key: round(amounts[key] / USD_UNITS, 9) for key in STATUSES
-        },
+        "status_amounts_usd": {key: round(amounts[key] / USD_UNITS, 9) for key in STATUSES},
         "global_obligations_usd": round(total / USD_UNITS, 9),
-        "held_or_unknown_usd": round(
-            (amounts["reserved"] + amounts["unknown"]) / USD_UNITS, 9
-        ),
+        "held_or_unknown_usd": round((amounts["reserved"] + amounts["unknown"]) / USD_UNITS, 9),
         "configured_ceiling_in_this_shell": configured or None,
         "local_sponsored_default_ceiling_if_unset": "0.25",
         "note": "Runtime ceiling/provider may differ from this shell. No reset performed.",
