@@ -109,6 +109,24 @@ def _spend_ceiling_decimal() -> Decimal:
     )
 
 
+def _global_ceiling_failure_message() -> str:
+    """Give local sponsored operators the missing configured-cap diagnosis.
+
+    The local default is an *internal API-rate equivalent*, not evidence of
+    actual API charges or provider availability. Never silently raise it.
+    """
+    if not cloud_workspaces.enabled() and not os.environ.get(
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", ""
+    ).strip():
+        return (
+            "The global inference-spend ceiling has been reached: local sponsored "
+            "research defaults to $0.25 API-rate equivalent across all sessions. "
+            "The operator can set SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD explicitly "
+            "before restarting SIGMA; ChatGPT provider usage caps still apply."
+        )
+    return "The global inference-spend ceiling has been reached; saved research remains available."
+
+
 def _user_spend_ceiling_decimal() -> Decimal:
     return _money_ceiling(
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD",
@@ -1028,9 +1046,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 )
             used_units = _call_amount_units(db, "")
             if used_units + amount_units > global_ceiling_units:
-                raise CloudResearchUnavailable(
-                    "The global inference-spend ceiling has been reached; saved research remains available."
-                )
+                raise CloudResearchUnavailable(_global_ceiling_failure_message())
             user_used_units = _user_call_amount_units(db, owner)
             if user_used_units + amount_units > user_ceiling_units:
                 raise CloudResearchUnavailable(
