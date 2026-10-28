@@ -283,6 +283,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .admin-authorized-table { min-width: 650px; }
 .admin-authorized-table th, .admin-authorized-table td { padding: 3px 7px; }
 .admin-authorized-table select, .admin-authorized-table input { min-height: 26px; padding: 3px 6px; }
+.admin-authorized-actions { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .admin-usage-table { min-width: 840px; margin-top: 8px; }
 .admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 8px 9px; border-bottom: 1px solid #a9654844; vertical-align: middle; }
 .admin-grants-table thead th, .admin-usage-table thead th { color: #e0b387; font-size: 10px; font-weight: 600; letter-spacing: .04em; }

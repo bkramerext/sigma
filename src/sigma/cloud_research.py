@@ -287,6 +287,17 @@ def _connect() -> sqlite3.Connection:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS allowance_windows (
+                workspace_id TEXT PRIMARY KEY,
+                reset_at TEXT NOT NULL,
+                updated_by TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS allowance_reload_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id TEXT NOT NULL,
+                reset_at TEXT NOT NULL,
+                actor_email TEXT NOT NULL
+            );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
         if "project_relpath" not in columns:
@@ -329,6 +340,46 @@ def _transaction() -> Iterator[sqlite3.Connection]:
         raise
     finally:
         db.close()
+
+
+def _user_call_amount_units(
+    db: sqlite3.Connection, workspace_id: str, status: str | None = None
+) -> int:
+    window = db.execute(
+        "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (workspace_id,)
+    ).fetchone()
+    where = "WHERE workspace_id=?"
+    parameters: list[Any] = [workspace_id]
+    if window:
+        where += " AND created_at>=?"
+        parameters.append(window["reset_at"])
+    if status:
+        where += " AND status=?"
+        parameters.append(status)
+    return _call_amount_units(db, where, tuple(parameters))
+
+
+def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str:
+    """Start a fresh per-user allowance window while preserving global cost history."""
+    if not isinstance(workspace_id, str) or len(workspace_id) != 32:
+        raise CloudResearchUnavailable("Workspace spending identity is invalid.")
+    if not isinstance(actor_email, str) or not actor_email:
+        raise CloudResearchUnavailable("Allowance reload actor is invalid.")
+    try:
+        with _transaction() as db:
+            reset_at = _now()
+            db.execute(
+                "INSERT INTO allowance_windows(workspace_id,reset_at,updated_by) VALUES(?,?,?) "
+                "ON CONFLICT(workspace_id) DO UPDATE SET reset_at=excluded.reset_at,updated_by=excluded.updated_by",
+                (workspace_id, reset_at, actor_email),
+            )
+            db.execute(
+                "INSERT INTO allowance_reload_events(workspace_id,reset_at,actor_email) VALUES(?,?,?)",
+                (workspace_id, reset_at, actor_email),
+            )
+        return reset_at
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
 
 
 def prepare_job(record: dict[str, Any]) -> None:
@@ -878,7 +929,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 raise CloudResearchUnavailable(
                     "The global inference-spend ceiling has been reached; saved research remains available."
                 )
-            user_used_units = _call_amount_units(db, "WHERE workspace_id=?", (owner,))
+            user_used_units = _user_call_amount_units(db, owner)
             if user_used_units + amount_units > user_ceiling_units:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
@@ -992,16 +1043,20 @@ def snapshot() -> dict[str, Any]:
                 "SELECT status,COUNT(*) AS count FROM jobs WHERE workspace_id=? GROUP BY status",
                 (owner,),
             ).fetchall()
-            total_units = _call_amount_units(db, "WHERE workspace_id=?", (owner,))
-            estimated_units = _call_amount_units(
-                db, "WHERE workspace_id=? AND status='usage_estimated'", (owner,)
+            total_units = _user_call_amount_units(db, owner)
+            estimated_units = _user_call_amount_units(db, owner, "usage_estimated")
+            held_units = _user_call_amount_units(db, owner, "reserved") + _user_call_amount_units(
+                db, owner, "unknown"
             )
-            held_units = _call_amount_units(
-                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (owner,)
-            )
-            unknown = db.execute(
-                "SELECT COUNT(*) FROM calls WHERE workspace_id=? AND status='unknown'", (owner,)
-            ).fetchone()[0]
+            window = db.execute(
+                "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (owner,)
+            ).fetchone()
+            unknown_query = "SELECT COUNT(*) FROM calls WHERE workspace_id=? AND status='unknown'"
+            unknown_parameters: tuple[Any, ...] = (owner,)
+            if window:
+                unknown_query += " AND created_at>=?"
+                unknown_parameters = (owner, window["reset_at"])
+            unknown = db.execute(unknown_query, unknown_parameters).fetchone()[0]
             tokens = db.execute(
                 "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?",
                 (owner,),
@@ -1032,12 +1087,21 @@ def admin_workspace_spending(
     allowance_units = _ceiling_units(Decimal(str(allowance))) if allowance is not None else None
     try:
         with _connect() as db:
-            total = _call_amount_units(db, "WHERE workspace_id=?", (workspace_id,))
-            estimated = _call_amount_units(
-                db, "WHERE workspace_id=? AND status='usage_estimated'", (workspace_id,)
+            total = _user_call_amount_units(db, workspace_id)
+            estimated = _user_call_amount_units(db, workspace_id, "usage_estimated")
+            held = _user_call_amount_units(db, workspace_id, "reserved") + _user_call_amount_units(
+                db, workspace_id, "unknown"
             )
-            held = _call_amount_units(
-                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (workspace_id,)
+            window = db.execute(
+                "SELECT reset_at FROM allowance_windows WHERE workspace_id=?", (workspace_id,)
+            ).fetchone()
+            reload_query = "SELECT 1 FROM calls WHERE workspace_id=? AND amount_usd>0"
+            reload_parameters: tuple[Any, ...] = (workspace_id,)
+            if window:
+                reload_query += " AND created_at>=?"
+                reload_parameters = (workspace_id, window["reset_at"])
+            reload_eligible = bool(
+                db.execute(reload_query + " LIMIT 1", reload_parameters).fetchone()
             )
             return {
                 "estimated_usage_usd": round(estimated / USD_UNITS, 9),
@@ -1046,6 +1110,7 @@ def admin_workspace_spending(
                 if allowance_units is not None
                 else None,
                 "reserved_and_estimated_usd": round(total / USD_UNITS, 9),
+                "reload_eligible": reload_eligible,
             }
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc

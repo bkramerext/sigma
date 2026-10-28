@@ -112,6 +112,15 @@ def exercise(origin: str) -> None:
         admin_grants = [
             {
                 "kind": "email",
+                "value": "reload@example.test",
+                "role": "member",
+                "active": 1,
+                "updated_at": 200,
+                "allowance_usd": 1.0,
+                "effective_allowance_usd": 1.0,
+            },
+            {
+                "kind": "email",
                 "value": "admin@example.test",
                 "role": "admin",
                 "active": 1,
@@ -185,6 +194,11 @@ def exercise(origin: str) -> None:
             "estimated_usage_usd": 0.21,
             "held_usd": 0,
             "remaining_usd": 0.04,
+        }
+        admin_member_spending = {
+            "reserved_and_estimated_usd": 0.4,
+            "remaining_usd": 0.6,
+            "reload_eligible": True,
         }
         posts: list[tuple[str, dict]] = []
         failures: list[str] = []
@@ -336,7 +350,27 @@ def exercise(origin: str) -> None:
                 payload = {
                     "bootstrap_admin": "admin@example.test",
                     "grants": admin_grants,
-                    "sessions": [],
+                    "sessions": [
+                        {
+                            "email": "reload@example.test",
+                            "status": "active",
+                            "role": "member",
+                            "allowance_usd": 1.0,
+                            "spending": admin_member_spending.copy(),
+                        }
+                    ],
+                }
+            elif (
+                path.endswith("/api/cloud-auth/admin/grants/reload/reload%40example.test")
+                and method == "POST"
+            ):
+                admin_member_spending.update(
+                    reserved_and_estimated_usd=0, remaining_usd=1.0, reload_eligible=False
+                )
+                payload = {
+                    "email": "reload@example.test",
+                    "allowance_usd": 1.0,
+                    "reset_at": "2026-10-27T00:00:00+00:00",
                 }
             elif path.endswith("/api/cloud-auth/admin/grants") and method == "POST":
                 entry = body.copy()
@@ -848,17 +882,59 @@ def exercise(origin: str) -> None:
         expect(page.locator(".connection-pill-message")).to_have_count(0)
 
         admin_mode["value"] = True
-        selected["mode"] = "sponsored"
+        selected["mode"] = "personal"
+        sponsorship_eligible["value"] = True
+        local_connect_succeeds["value"] = False
+        personal_signin_pending["value"] = True
+        local_sponsor_reauth["value"] = True
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
+        posts.clear()
+        with page.expect_request("**/api/ai/mode") as admin_mode_choice:
+            page.locator(".api-connection > summary").click()
+        assert admin_mode_choice.value.post_data_json == {"mode": "sponsored"}
+        admin_summary = page.locator(".api-connection > summary")
+        expect(admin_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        with page.expect_request("**/api/ai/sponsor-auth/begin"):
+            admin_summary.click()
+        assert any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
+        assert not any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
+        personal_signin_pending["value"] = False
+        local_connect_succeeds["value"] = True
+        expect(page.locator(".api-connection > summary")).to_have_attribute(
+            "aria-label", "Sponsored ChatGPT; connected"
+        )
         page.get_by_role("link", name="Administrator settings").click()
         admin_dialog = page.get_by_role("dialog", name="Administrator Settings")
-        with page.expect_request("**/api/ai/sponsor-auth/begin"):
-            admin_dialog.get_by_role("button", name="Reconnect sponsor ChatGPT").click()
+        expect(
+            admin_dialog.get_by_text("Sponsored research uses the designated ChatGPT account.")
+        ).to_have_count(0)
+        expect(admin_dialog.get_by_role("button", name="Reconnect sponsor ChatGPT")).to_have_count(
+            0
+        )
+        expect(
+            admin_dialog.locator(".admin-add-row").get_by_role("button", name="New")
+        ).to_have_class(re.compile(r"admin-remove"))
+        reload_row = admin_dialog.locator(".admin-authorized-table tbody tr").filter(
+            has_text="reload@example.test"
+        )
+        reload_action = reload_row.get_by_role("button", name="Reload", exact=True)
+        expect(reload_action).to_be_enabled()
+        with page.expect_request(
+            "**/api/cloud-auth/admin/grants/reload/reload%40example.test"
+        ) as reload_request:
+            reload_action.click()
+        assert reload_request.value.method == "POST"
+        expect(reload_row.get_by_role("button", name="Reload", exact=True)).to_have_count(0)
+        expect(admin_dialog.get_by_role("status")).to_contain_text(
+            "Restored reload@example.test's sponsored allowance to $1.00."
+        )
         expect(admin_dialog).to_be_visible()
         admin_dialog.get_by_role("button", name="Close", exact=True).click()
         admin_mode["value"] = False
+        sponsorship_eligible["value"] = True
+        local_sponsor_reauth["value"] = False
 
         sponsored_test_mode["value"] = True
         selected["mode"] = "sponsored"

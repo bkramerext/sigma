@@ -3716,7 +3716,7 @@ function App() {
 
 type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
-type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
+type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedIdentityAvailable: boolean; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
@@ -4008,18 +4008,18 @@ function InvitationRequestControls({ error, onError, onRecorded }: { error: stri
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string; request_type?: 'invitation' | 'reload' };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
-function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, localSponsorRepair, onClose, onAdd, onSave, onRevoke, onUpdateInvitation, onUpdateFeedback }: {
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, onClose, onAdd, onSave, onRevoke, onReload, onUpdateInvitation, onUpdateFeedback }: {
   bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   invitationRequests: CloudInvitationRequest[];
   feedbackRequests: CloudFeedbackRequest[];
-  error: string; busy: boolean; localSponsorRepair: boolean; onClose: () => void;
+  error: string; busy: boolean; onClose: () => void;
   onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
   onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
   onRevoke: (grant: CloudGrant) => Promise<void>;
+  onReload: (grant: CloudGrant) => Promise<void>;
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
   onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
 }) {
-  const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
   const [addOpen, setAddOpen] = useState(false);
@@ -4164,6 +4164,12 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     try { await onRevoke(grant); setConfirmRemoveKey(''); setMessage(''); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be revoked.'); }
   }
+  async function reload(grant: CloudGrant) {
+    try {
+      await onReload(grant);
+      setMessage(`Restored ${grant.value}'s sponsored allowance to ${currency(grant.effective_allowance_usd)}.`);
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Sponsored allowance could not be reloaded.'); }
+  }
   async function addInvitation(item: CloudInvitationRequest) {
     try {
       await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: null });
@@ -4202,7 +4208,6 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
-      {localSponsorRepair && <p className="cloud-access-bootstrap">Sponsored research uses the designated ChatGPT account. <button type="button" className="admin-text-action" disabled={ai.connecting} onClick={() => void ai.signIn({ sponsor: true })}>Reconnect sponsor ChatGPT</button>{ai.connecting && <span role="status"> Complete sign-in as zetacontinuation@gmail.com in the browser.</span>}{ai.error && <span role="alert"> {ai.error}</span>}</p>}
       <div className="admin-table-heading"><h3>Invitation/reload requests</h3></div>
       {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {
         return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void addInvitation(item)}>Add</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void removeInvitation(item)}>Remove</button></div></td></tr>;
@@ -4214,15 +4219,18 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
           const isBootstrap = grant.kind === 'email' && grant.value.toLowerCase() === bootstrapAdmin.toLowerCase();
+          const account = grant.kind === 'email' ? sessions.find(item => item.email.toLowerCase() === grant.value.toLowerCase()) : undefined;
+          const reloadable = !!account && grant.active === 1 && grant.role === 'member'
+            && !hasDrafts && (account.spending?.reload_eligible ?? (account.spending?.reserved_and_estimated_usd ?? 0) > 0);
           return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
             <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Removed'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td className="admin-allowance-cell"><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></td>
-            <td>{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
+            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
-        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action" aria-expanded={addOpen} onClick={() => setAddOpen(true)}>New</button></td></tr>
+        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action admin-remove" aria-expanded={addOpen} onClick={() => setAddOpen(true)}>New</button></td></tr>
       </tbody></table></div></div>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
@@ -4414,6 +4422,15 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
+  async function reloadGrantAllowance(grant: CloudGrant) {
+    if (grant.kind !== 'email' || grant.role !== 'member') throw new Error('Reload is available for member email accounts.');
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/grants/reload/${encodeURIComponent(grant.value)}`, { method: 'POST', credentials: 'same-origin' });
+      if (!response.ok) throw await cloudFailure(response, 'Sponsored allowance could not be reloaded.');
+      await loadGrants();
+    } finally { setBusy(false); }
+  }
   async function updateInvitation(item: CloudInvitationRequest, next: 'reviewed' | 'declined') {
     setBusy(true);
     try {
@@ -4483,7 +4500,7 @@ function CloudAuthGate() {
       allowanceLoading={false}
       onDismiss={async () => { window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true'); setWelcomeDismissedForPage(true); }}
     />}
-    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} localSponsorRepair={status.target === 'local' && !status.mock_identity} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
+    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onReload={reloadGrantAllowance} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
     </AIProvider>
   </CloudIdentityContext.Provider>;
 }

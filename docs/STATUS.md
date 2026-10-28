@@ -7258,6 +7258,26 @@ larger than the previous 32 KB cap, keeps every obligation, and remains within
 64 KB. The focused research-session scenarios and the full `./sigma test` both
 passed after this regression was added.
 
+### Local sponsor admin connection and allowance reload (2026-10-27)
+
+The configured local bootstrap administrator is sponsorship-eligible while
+retaining the admin role. The normal connection pill can select sponsored mode
+and renew the designated ChatGPT session; Admin Settings no longer exposes a
+separate sponsor-reconnect control. The authorized-users `New`, `Reload`, and
+`Remove` actions share the established underlined admin action style.
+
+An admin Reload action is shown only for a member email account with spend in
+its current allowance window. Reload begins a new per-user allowance window at
+the configured effective amount while preserving historical call records and
+the global spend ledger (including unresolved provider charges). The action is
+audited; a browser refresh confirms it disappears after reload until new spend
+is recorded. Reload uses `POST /api/cloud-auth/admin/grants/reload/{email}`.
+
+Verified with 60 cloud-auth tests, cloud-research ledger tests, real-Chrome
+`browser_checks/hosted_sponsored_connection.py`, and full `./sigma test` (all
+steps passed, including Ruff, Pyright, frontend typecheck, and production build).
+No live provider call or production setting was changed.
+
 ### Sponsored allowance config and sign-in return (2026-10-27)
 
 The latest user Play attempt passed prior-obligation admission (`o0` omitted),

@@ -1835,6 +1835,50 @@ class CloudAuthTests(TestCase):
         self.assertEqual(email_grant["effective_allowance_usd"], 0.5)
         self.assertEqual(email_grant["allowance_usd"], 0.5)
 
+    def test_admin_can_reload_only_one_active_member_email_allowance(self):
+        from types import SimpleNamespace
+
+        admin_login = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        grant = self.client.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "email", "value": "member@example.org", "allowance_usd": 1.25},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(grant.status_code, 200, grant.text)
+        member_context = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 12346))
+        member = member_context.__enter__()
+        self.addCleanup(member_context.__exit__, None, None, None)
+        login = self.finish("member@example.org", "member-sub", client=member)
+        member.cookies.set(cloud_auth.SESSION_COOKIE, login.cookies[cloud_auth.SESSION_COOKIE])
+        with (
+            patch(
+                "sigma.cloud_workspaces.workspace_for_subject",
+                return_value=SimpleNamespace(workspace_id="a" * 32),
+            ),
+            patch(
+                "sigma.cloud_research.admin_reload_workspace_allowance",
+                return_value="reload-time",
+            ) as reload,
+        ):
+            response = self.client.post(
+                "/api/cloud-auth/admin/grants/reload/member%40example.org",
+                headers={"Origin": ORIGIN},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json(),
+            {"email": "member@example.org", "allowance_usd": 1.25, "reset_at": "reload-time"},
+        )
+        reload.assert_called_once_with("a" * 32, "admin@example.org")
+        denied = member.post(
+            "/api/cloud-auth/admin/grants/reload/member%40example.org",
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(denied.status_code, 403)
+
     def test_role_and_allowance_updates_are_atomic_and_domain_admin_is_rejected(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
@@ -2034,6 +2078,10 @@ class CloudAuthTests(TestCase):
             admin_login = self.finish()
             self.assertEqual(admin_login.status_code, 303)
             self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            admin_status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(admin_status["account"]["access"]["role"], "admin")
+            self.assertTrue(admin_status["account"]["sponsorship"]["eligible"])
+            self.assertEqual(admin_status["account"]["model_access"]["mode"], "sponsored")
             grant = self.client.post(
                 "/api/cloud-auth/admin/grants",
                 json={

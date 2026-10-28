@@ -414,6 +414,11 @@ def _sponsorship_eligibility_in_db(
         return 0
     if not cfg.local:
         return 1
+    # The configured local bootstrap administrator is already explicitly
+    # authorized by the administrator configuration. Treat that identity as
+    # a member for sponsorship eligibility while retaining its admin role.
+    if role == "admin" and email == _bootstrap_admin_email(db, cfg):
+        return 1
     if _mock_enabled(cfg) and subject.startswith("mock:"):
         return 1
     domain = email.rsplit("@", 1)[-1]
@@ -2171,6 +2176,55 @@ def update_grant_allowance(kind: str, value: str, body: AllowanceRequest, reques
             (actor.email, "allowance", kind, normalized, _now()),
         )
     return {"kind": kind, "value": normalized, "allowance_usd": body.allowance_usd}
+
+
+@router.post("/admin/grants/reload/{value:path}")
+def reload_member_allowance(value: str, request: Request):
+    """Restore one authorized member's allowance without erasing spend history."""
+    cfg = config()
+    try:
+        normalized = _normalize_email(value)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        grant = db.execute(
+            "SELECT role,active FROM grants WHERE kind='email' AND value=?", (normalized,)
+        ).fetchone()
+        if not grant or not grant["active"] or grant["role"] != "member":
+            raise HTTPException(409, "Reload requires an active member email authorization.")
+        identities = db.execute(
+            "SELECT subject FROM identities WHERE email=? ORDER BY subject", (normalized,)
+        ).fetchall()
+        if len(identities) != 1:
+            raise HTTPException(
+                409,
+                "Reload requires exactly one signed-in account for this email authorization.",
+            )
+        subject = str(identities[0]["subject"])
+        role = _authorization_in_db(db, cfg, subject, normalized)
+        if role != "member":
+            raise HTTPException(409, "This account is not an active member.")
+        allowance = _allowance_in_db(db, normalized, _configured_default_allowance())
+        if allowance is None:
+            raise HTTPException(409, "No sponsored allowance is configured for this account.")
+    from sigma import cloud_research, cloud_workspaces
+
+    try:
+        workspace = cloud_workspaces.workspace_for_subject(subject)
+        reset_at = cloud_research.admin_reload_workspace_allowance(
+            workspace.workspace_id, actor.email
+        )
+    except cloud_research.CloudResearchUnavailable:
+        raise HTTPException(503, "The sponsored allowance could not be reloaded safely.") from None
+    except cloud_workspaces.WorkspaceUnavailable:
+        raise HTTPException(503, "The sponsored allowance could not be reloaded safely.") from None
+    with _db(cfg) as db:
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "reload", "email", normalized, _now()),
+        )
+    return {"email": normalized, "allowance_usd": allowance, "reset_at": reset_at}
 
 
 @router.put("/admin/grants/updates")
