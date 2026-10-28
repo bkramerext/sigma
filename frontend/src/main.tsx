@@ -3997,7 +3997,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       : <>
         {!canRequestInvitation && <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>}
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
-      </>
+      </>}
     {!cloud?.authenticated && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
       <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
       {deniedIdentityAvailable
