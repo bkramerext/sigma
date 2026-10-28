@@ -1435,8 +1435,7 @@ def test_hosted_deployment_forwards_global_spend_window() -> None:
         encoding="utf-8"
     )
     assert (
-        "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW: ${SIGMA_CLOUD_GLOBAL_SPEND_WINDOW:-cumulative}"
-        in compose
+        "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW: ${SIGMA_CLOUD_GLOBAL_SPEND_WINDOW:-cumulative}" in compose
     ), "The hosted backend silently ignored the approved spending-window setting."
 
 
@@ -1897,7 +1896,9 @@ def main() -> None:
                                 break
                             await asyncio.sleep(0.01)
                         else:
-                            raise AssertionError("rejected provider call never reached a saved state")
+                            raise AssertionError(
+                                "rejected provider call never reached a saved state"
+                            )
                         assert calls.await_count == 1
                         assert failed["status"] in {"ended", "failed"}, failed["message"]
                         assert failed["steps"][0]["failure_kind"] == "provider_limited"
@@ -1914,8 +1915,9 @@ def main() -> None:
                             assert call["token_reservation"] == 0
                         after = cloud_research.snapshot()
                         assert after["held_usd"] == before["held_usd"]
-                        assert after["user_reserved_or_observed_tokens"] == (
-                            before["user_reserved_or_observed_tokens"]
+                        assert (
+                            after["user_reserved_or_observed_tokens"]
+                            == (before["user_reserved_or_observed_tokens"])
                         )
 
                 with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
@@ -1947,7 +1949,9 @@ def main() -> None:
                             new=AsyncMock(return_value=model_config),
                         ),
                         patch.object(research_sessions, "execution_capabilities", return_value=[]),
-                        patch.object(research_sessions, "_save", side_effect=save_with_tiny_token_limit),
+                        patch.object(
+                            research_sessions, "_save", side_effect=save_with_tiny_token_limit
+                        ),
                         patch.object(research_sessions, "_call", new=AsyncMock()) as calls,
                     ):
                         started = await research_sessions.start_session(
@@ -2402,9 +2406,7 @@ def main() -> None:
         test_monthly_global_budget_retains_unknown_provider_holds(root, monthly_ledger)
         admin_monthly_ledger = root / "admin-monthly-ledger"
         admin_monthly_ledger.mkdir(mode=0o700)
-        test_admin_unlimited_allowance_survives_monthly_global_renewal(
-            root, admin_monthly_ledger
-        )
+        test_admin_unlimited_allowance_survives_monthly_global_renewal(root, admin_monthly_ledger)
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
