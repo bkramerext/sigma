@@ -1541,9 +1541,10 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
             "canceled",
         }:
             bucket = "interrupted / cancelled"
-        elif failure_kind == "provider_rejected" or (
+        elif failure_kind in {"provider_rejected", "provider_limited"} or (
             type(http_status) is int and 400 <= http_status < 500
         ):
+            # A successful HTTP 200 transport can carry an in-band refusal.
             bucket = "rejected"
         elif status == "failed":
             # Older records kept only a safe provider diagnostic in failure_message.
