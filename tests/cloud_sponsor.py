@@ -90,6 +90,29 @@ class SponsorTests(IsolatedAsyncioTestCase):
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
 
+    async def test_hosted_sponsor_defaults_to_chatgpt_without_api_billing(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "false",
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_OPENAI_API_KEY": "must-not-be-used",
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
+            self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
+            self.assertEqual(cloud_sponsor.expected_email(), "zetacontinuation@gmail.com")
+            with patch.object(
+                cloud_sponsor,
+                "sponsor_session",
+                AsyncMock(return_value={"status": "disconnected"}),
+            ) as sponsor:
+                context = await self.sponsor_context()
+            sponsor.assert_awaited_once()
+            self.assertEqual(context["mode"], "chatgpt")
+            self.assertEqual(context["status"], "disconnected")
+            self.assertEqual(context["token"], "")
+
     async def test_local_service_key_requires_explicit_provider_and_dedicated_secret(self):
         with (
             patch.dict(
