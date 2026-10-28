@@ -293,7 +293,8 @@ def _initialize(path: Path) -> None:
                 state_hash TEXT PRIMARY KEY,
                 nonce TEXT NOT NULL,
                 verifier TEXT NOT NULL,
-                expires_at INTEGER NOT NULL
+                expires_at INTEGER NOT NULL,
+                return_to TEXT
             );
             CREATE TABLE IF NOT EXISTS denied_access (
                 token_hash TEXT PRIMARY KEY,
@@ -353,6 +354,9 @@ def _initialize(path: Path) -> None:
             db.execute(
                 "ALTER TABLE invitation_requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'invitation' CHECK(request_type IN ('invitation','reload'))"
             )
+        flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
+        if "return_to" not in flow_columns:
+            db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
     if not existed:
         path.chmod(0o600)
 
@@ -1218,10 +1222,30 @@ def local_sponsored_allowance(request: Request):
     return {**budget, "local_preview": True, "simulated": False}
 
 
+def _safe_login_return_to(value: str) -> str | None:
+    """Allow only a project-page continuation; reject external/open redirects."""
+    from urllib.parse import parse_qs, urlencode, urlsplit
+
+    if not value or len(value) > 4096:
+        return None
+    parsed = urlsplit(value)
+    if parsed.scheme or parsed.netloc or parsed.path != "/project" or parsed.fragment:
+        return None
+    try:
+        query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=8)
+    except ValueError:
+        return None
+    paths = query.get("path", [])
+    if len(paths) != 1 or not paths[0] or len(paths[0]) > 2048:
+        return None
+    return "/project?" + urlencode({"path": paths[0]})
+
+
 @router.get("/login")
 def login(
     request: Request,
     invite: bool = False,
+    return_to: str = "",
 ):
     cfg = config()
     if not cfg.enabled:
@@ -1245,8 +1269,14 @@ def login(
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
-            "INSERT INTO flows(state_hash,nonce,verifier,expires_at) VALUES(?,?,?,?)",
-            (_hash(state), nonce, verifier, _now() + FLOW_SECONDS),
+            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to) VALUES(?,?,?,?,?)",
+            (
+                _hash(state),
+                nonce,
+                verifier,
+                _now() + FLOW_SECONDS,
+                _safe_login_return_to(return_to),
+            ),
         )
     params = {
         "client_id": cfg.client_id,
@@ -1306,7 +1336,8 @@ async def callback(
         raise HTTPException(400, "Sign-in could not be verified.")
     with _db(cfg) as db:
         flow = db.execute(
-            "SELECT nonce,verifier,expires_at FROM flows WHERE state_hash=?", (_hash(state),)
+            "SELECT nonce,verifier,expires_at,return_to FROM flows WHERE state_hash=?",
+            (_hash(state),),
         ).fetchone()
         db.execute("DELETE FROM flows WHERE state_hash=?", (_hash(state),))
     if not flow or flow["expires_at"] <= _now():
@@ -1460,7 +1491,7 @@ async def callback(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
-    response = RedirectResponse("/", status_code=303)
+    response = RedirectResponse(flow["return_to"] or "/", status_code=303)
     response.set_cookie(
         _cookie_name(SESSION_COOKIE, cfg),
         raw,

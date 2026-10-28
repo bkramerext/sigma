@@ -769,10 +769,11 @@ class CloudAuthTests(TestCase):
                     403,
                 )
 
-    def start_flow(self, client=None):
+    def start_flow(self, client=None, return_to=None):
         client = client or self.client
         cfg = cloud_auth.config()
-        response = client.get("/api/cloud-auth/login", follow_redirects=False)
+        params = {"return_to": return_to} if return_to is not None else None
+        response = client.get("/api/cloud-auth/login", params=params, follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertEqual("Secure" in response.headers["set-cookie"], not cfg.local)
         self.assertIn("HttpOnly", response.headers["set-cookie"])
@@ -876,9 +877,16 @@ class CloudAuthTests(TestCase):
             assert workspace is not None
             self.assertTrue(Path(opened.json()["path"]).is_relative_to(workspace.path))
 
-    def finish(self, email="admin@example.org", subject="google-sub-1", changes=None, client=None):
+    def finish(
+        self,
+        email="admin@example.org",
+        subject="google-sub-1",
+        changes=None,
+        client=None,
+        return_to=None,
+    ):
         client = client or self.client
-        state, flow_cookie = self.start_flow(client)
+        state, flow_cookie = self.start_flow(client, return_to=return_to)
         with cloud_auth._db(cloud_auth.config()) as db:
             nonce = db.execute(
                 "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
@@ -893,6 +901,19 @@ class CloudAuthTests(TestCase):
                 params={"state": state, "code": "fixture"},
                 follow_redirects=False,
             )
+
+    def test_signin_returns_to_safe_project_continuation(self):
+        project_return = "/project?path=%2Ftmp%2Fguest-project"
+        completed = self.finish(return_to=project_return)
+        self.assertEqual(completed.status_code, 303)
+        self.assertEqual(completed.headers["location"], project_return)
+
+        state, _ = self.start_flow(return_to="https://evil.example/steal")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            flow = db.execute(
+                "SELECT return_to FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
+            ).fetchone()
+        self.assertIsNone(flow["return_to"])
 
     def test_successful_signin_admin_invite_and_revocation(self):
         self.assertEqual(

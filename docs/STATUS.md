@@ -7189,3 +7189,24 @@ three strategies with 32 source references apiece. It asserts the snapshot is
 larger than the previous 32 KB cap, keeps every obligation, and remains within
 64 KB. The focused research-session scenarios and the full `./sigma test` both
 passed after this regression was added.
+
+### Sponsored allowance config and sign-in return (2026-10-27)
+
+The latest user Play attempt passed prior-obligation admission (`o0` omitted),
+then failed job preparation because code required a configured default
+per-user allowance even for an account with an explicit grant. Preparation now
+checks the account's effective allowance: configured account/domain amounts work
+without a fallback default; accounts using fallback still require a valid
+configured default. The $15 per-user ceiling, global ceiling and $0.25 session
+cap remain enforced.
+
+Google sign-in launched from guest Play now carries a validated project path in
+the short-lived server OAuth flow. Successful authorized sign-in returns to that
+project; denied authorization continues through the existing invitation flow.
+The welcome dialog also dismisses when its backdrop is clicked. OAuth return
+paths are limited to the local `/project?path=...` route to prevent open
+redirects. Targeted cloud/auth tests, real Chrome guest and local-sponsored
+checks, and full `./sigma test` passed. No live provider call or production
+configuration change was made. The conservative reserve may still reject a call
+under the unchanged $0.25 session cap; that remains to be observed and handled
+without weakening spend accounting.

@@ -531,6 +531,49 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_explicit_account_allowance_does_not_require_default(root: Path, ledger_root: Path) -> None:
+    """A member-specific cap works without configuring a fallback for other accounts."""
+    from sigma import cloud_auth, cloud_sponsor
+
+    member_email = "sponsored-member@example.test"
+    member = workspace(root, "9" * 32, member_email)
+    project = initialize_project(member.path / "explicit-allowance.sigma", "Explicit", "Question")
+    auth_root = root / "auth-explicit-allowance"
+    auth_root.mkdir(mode=0o700)
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_AUTH_LOCAL": "true",
+        "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:8000",
+        "SIGMA_CLOUD_AUTH_HOME": str(auth_root),
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch.object(cloud_sponsor, "inference_provider", return_value="api_key"),
+    ):
+        os.environ.pop("SIGMA_CLOUD_USER_SPEND_CEILING_USD", None)
+        cfg = cloud_auth.config()
+        assert cfg.enabled and cfg.error is None and cfg.database is not None
+        with cloud_auth._db(cfg) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
+                "VALUES('email',?,'member',1,?,0.25)",
+                (member_email, cloud_auth._now()),
+            )
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            candidate = job(member.workspace_id)
+            candidate.update(project_id=project.project.id, project_path=project.path)
+            cloud_research.prepare_job(candidate)
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
     root: Path, ledger_root: Path
 ) -> None:
@@ -1134,6 +1177,9 @@ def main() -> None:
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
         test_workspace_spend_budget(root, budget_ledger)
+        explicit_allowance_ledger = root / "explicit-allowance-ledger"
+        explicit_allowance_ledger.mkdir(mode=0o700)
+        test_explicit_account_allowance_does_not_require_default(root, explicit_allowance_ledger)
         allowance_ledger = root / "allowance-ledger"
         allowance_ledger.mkdir(mode=0o700)
         test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(

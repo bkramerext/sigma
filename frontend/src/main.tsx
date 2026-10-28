@@ -3810,6 +3810,10 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
+  const currentProjectPath = new URLSearchParams(window.location.search).get('path');
+  const projectReturn = window.location.pathname === '/project' && currentProjectPath
+    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}` })}`
+    : '/api/cloud-auth/login';
   useEffect(() => {
     if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') {
       setInvitationRecorded(true);
@@ -3822,7 +3826,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   useEffect(() => {
     const open = () => {
       document
-        .querySelector<HTMLAnchorElement>('.project-google-signin[href="/api/cloud-auth/login"]')
+        .querySelector<HTMLAnchorElement>('.project-google-signin[href^="/api/cloud-auth/login"]')
         ?.click();
     };
     const openInvitation = () => dialog.current?.showModal();
@@ -3881,7 +3885,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     {cloud?.enabled && cloud.authenticated
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip-disabled><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
-        <a className="project-google-signin" href="/api/cloud-auth/login"><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
+        <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
     <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
@@ -4448,7 +4452,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     finally { setBusy(false); }
   }
   const heading = audience === 'guest' ? 'Welcome to SIGMA!' : 'You have been invited!';
-  return <dialog id="invitation-welcome-dialog" ref={dialog} className="google-account-dialog invitation-welcome-dialog" aria-labelledby="invitation-welcome-heading" aria-describedby="invitation-welcome-phrase" onCancel={event => { event.preventDefault(); void dismiss(); }}>
+  return <dialog id="invitation-welcome-dialog" ref={dialog} className="google-account-dialog invitation-welcome-dialog" aria-labelledby="invitation-welcome-heading" aria-describedby="invitation-welcome-phrase" onClick={event => { if (event.target === event.currentTarget) void dismiss(); }} onCancel={event => { event.preventDefault(); void dismiss(); }}>
     <h2 id="invitation-welcome-heading">{heading}</h2>
     {allowance !== null && allowance <= 1 && <p className="invitation-welcome-allowance">{allowanceUsed > 0 ? `We added a $${allowance.toFixed(2)} allowance to your account.` : `We will start you off with a $${allowance.toFixed(2)} allowance.`}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}

@@ -10,6 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from playwright.sync_api import expect, sync_playwright
@@ -135,7 +136,7 @@ def exercise(ui_url: str, root: Path) -> None:
         mutation_requests: list[str] = []
         research_dispatch_requests: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
-        page.route("**/api/cloud-auth/login", lambda route: route.abort())
+        page.route("**/api/cloud-auth/login**", lambda route: route.abort())
         page.on(
             "response",
             lambda response: (
@@ -313,12 +314,13 @@ def exercise(ui_url: str, root: Path) -> None:
         play.click()
         play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
         expect(play_dialog.get_by_role("button", name="Sign in now")).to_be_visible()
-        with page.expect_request("**/api/cloud-auth/login") as sign_in_request:
+        with page.expect_request("**/api/cloud-auth/login**") as sign_in_request:
             play_dialog.get_by_role("button", name="Sign in now").click()
         expect(play_dialog).to_have_count(0)
-        assert sign_in_request.value.url.endswith("/api/cloud-auth/login"), (
-            sign_in_request.value.url
-        )
+        sign_in_url = urlsplit(sign_in_request.value.url)
+        assert sign_in_url.path == "/api/cloud-auth/login", sign_in_url
+        return_to = parse_qs(sign_in_url.query).get("return_to", [None])[0]
+        assert return_to == f"/project?path={opened_projects[-1]['path']}", return_to
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
         assert not failures, failures
@@ -327,6 +329,14 @@ def exercise(ui_url: str, root: Path) -> None:
             if (root / "saved-projects").exists()
             else True
         )
+        backdrop_context = browser.new_context(viewport={"width": 1280, "height": 850})
+        backdrop_page = backdrop_context.new_page()
+        backdrop_page.goto(ui_url, wait_until="networkidle")
+        backdrop_welcome = backdrop_page.get_by_role("dialog", name="Welcome to SIGMA!")
+        expect(backdrop_welcome).to_be_visible()
+        backdrop_page.mouse.click(2, 2)
+        expect(backdrop_welcome).to_have_count(0)
+        backdrop_context.close()
         browser.close()
 
 

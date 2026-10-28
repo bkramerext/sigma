@@ -346,7 +346,9 @@ def prepare_job(record: dict[str, Any]) -> None:
             "Cloud research requires a per-session cost limit and a model with a reviewed price."
         )
     _spend_ceiling_decimal()
-    _user_spend_ceiling_decimal()
+    # An explicit account allowance is sufficient. Require the configured
+    # default only when resolving an account that has no specific allowance.
+    _effective_user_spend_ceiling_decimal()
     _, _, per_user_queue, global_queue = _evaluation_queue_limits()
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")

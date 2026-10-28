@@ -141,3 +141,38 @@ Validation on `1fef972`:
 | 6 | User retry on instrumented local backend (running checkout SHA not confirmed); read shared diagnostics directly | “Gap removal and Gaussian binomial sums”: 12 obligations omitted; 31,118 selected JSON bytes; max text/scope/rationale/provenance fields 156/414/0/416 bytes; `post_400`, no provider dispatch | Aggregate prior-obligation volume exceeds the snapshot budget; not a sponsor-auth result. Need a lossless bounded representation or measured safe budget change |
 
 | 7 | Compare the 6:02 PM diagnostic with live backend PID and working-tree timestamp | Backend PID 79836 started 5:56:42 PM; 64 KB source change timestamp 6:04:31 PM | The retry ran old code and cannot evaluate the 64 KB fix. User has one authorized trial remaining after backend restart. |
+
+### Next sponsored retry: 2026-10-27, 6:18 PM PDT
+
+The user restarted the backend and made the authorized trial. The response changed
+to `HTTP 400 Bad Request: Cloud research is disabled until a valid default
+per-user inference allowance of at most $15 is configured.` The shared log has
+`sponsor_context status=o0_b2_t0_a0_r0_p0` followed by `sponsor_play status=post_400`;
+there is no `sponsor_inference call_started`. This means the 64 KB context gate
+was cleared and the request stopped in job preparation, before provider
+dispatch.
+
+The cause is an unconditional `_user_spend_ceiling_decimal()` call in
+`prepare_job()`. It requires a configured fallback even when the signed-in
+member already has an explicit allowance in SIGMA's account grant. The checkout
+`.env` contains no `SIGMA_CLOUD_USER_SPEND_CEILING_USD`; the user had already
+set an explicit account allowance. Job preparation now validates the effective
+account allowance: an explicit member/domain amount works without a default,
+while an account relying on the fallback still requires a valid configured
+default. Global ceilings and the per-account maximum remain enforced.
+
+The user also reported that invitation welcome should dismiss on backdrop click,
+and that signing into Google from guest Play must return to the current project.
+The welcome now dismisses on backdrop click. Google login stores only a
+validated `/project?path=...` continuation with its short-lived OAuth flow; the
+callback uses it only after authorization succeeds, and unapproved/denied flows
+retain the existing invitation path. A regression rejects external return URLs.
+
+Verification on this change: focused `tests/cloud_research.py` and
+`tests/cloud_auth.py` passed. Real Chrome guest workflow passed with outside
+click dismissal, expanded Samples persistence after returning from a project,
+and the project continuation URL. Real Chrome local sponsored limits check
+passed. Full `./sigma test` passed. No live provider call was made by the agent.
+The next user trial may reach sponsor inference. The separate conservative
+per-call reservation against the unchanged $0.25 session cap remains a known
+possible next gate; no spending guard was relaxed.

@@ -1344,9 +1344,11 @@ authentication and filesystem-backed workspace implementation.
 
 ## Gate B research execution configuration
 
-Cloud research inference is enabled only when an operator explicitly supplies
-`SIGMA_CLOUD_OPENAI_API_KEY`, `SIGMA_CLOUD_USER_SPEND_CEILING_USD`, and
-`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Initial pilot values are `$2.00` per
+Cloud research inference requires an operator-supplied
+`SIGMA_CLOUD_OPENAI_API_KEY` and `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Set
+`SIGMA_CLOUD_USER_SPEND_CEILING_USD` when authorized accounts may rely on a
+fallback allowance; it may be omitted when each authorized account has an
+explicit email or domain allowance. Initial pilot values are `$2.00` per
 verified Google subject and `$15.00` globally. The five initial invited
 accounts (including the administrator) start with `$2.00` each, leaving `$5.00`
 under the global ceiling for operator-directed testing and unresolved charges.
