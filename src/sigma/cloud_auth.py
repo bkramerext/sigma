@@ -154,6 +154,7 @@ def config() -> Config:
         secret_error = True
     origin = os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").strip().rstrip("/") or None
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
+    configured_admin_emails = os.environ.get("SIGMA_CLOUD_ADMIN_EMAILS", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
     error = "Cloud authentication secret configuration is invalid." if secret_error else None
     if (
@@ -190,6 +191,9 @@ def config() -> Config:
     if not error:
         try:
             admin_contact = _normalize_email(admin_contact) if admin_contact else None
+            if configured_admin_emails:
+                for value in configured_admin_emails.split(","):
+                    _normalize_email(value)
             path = Path(root)
             if not path.is_absolute():
                 raise ValueError
@@ -261,6 +265,10 @@ def _initialize(path: Path) -> None:
                 PRIMARY KEY(kind,value)
             );
             CREATE TABLE IF NOT EXISTS bootstrap_subject (
+                email TEXT PRIMARY KEY,
+                subject TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE IF NOT EXISTS configured_admin_subject (
                 email TEXT PRIMARY KEY,
                 subject TEXT NOT NULL UNIQUE
             );
@@ -408,6 +416,24 @@ def _authorization_in_db(
             return None
     elif bootstrap_email and email == bootstrap_email:
         db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
+        return "admin"
+    # Explicit additional admins are independent of the notification contact.
+    # Bind each verified Google email to its first observed immutable subject.
+    # A later subject mismatch must never inherit admin privileges.
+    configured = os.environ.get("SIGMA_CLOUD_ADMIN_EMAILS", "")
+    if email in {item.strip().casefold() for item in configured.split(",") if item.strip()}:
+        known = db.execute(
+            "SELECT subject FROM configured_admin_subject WHERE email=?", (email,)
+        ).fetchone()
+        if known:
+            return "admin" if known["subject"] == subject else None
+        try:
+            db.execute(
+                "INSERT INTO configured_admin_subject(email,subject) VALUES(?,?)",
+                (email, subject),
+            )
+        except sqlite3.IntegrityError:
+            return None
         return "admin"
     explicit = db.execute(
         "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
@@ -1511,7 +1537,14 @@ async def callback(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
         bootstrap_email = _bootstrap_admin_email(db, cfg)
-        bootstrap_identity = email == bootstrap_email
+        bootstrap_identity = (
+            email == bootstrap_email
+            or email in {
+                item.strip().casefold()
+                for item in os.environ.get("SIGMA_CLOUD_ADMIN_EMAILS", "").split(",")
+                if item.strip()
+            }
+        )
         domain = email.rsplit("@", 1)[1]
         explicit_invite = db.execute(
             "SELECT 1 FROM grants WHERE active=1 AND ((kind='email' AND value=?) OR (kind='domain' AND value=?)) LIMIT 1",
