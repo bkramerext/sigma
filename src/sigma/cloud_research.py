@@ -670,8 +670,11 @@ def claim_job(session_id: str) -> bool:
             job = db.execute("SELECT * FROM jobs WHERE session_id=?", (session_id,)).fetchone()
             if not job or job["workspace_id"] != owner:
                 raise CloudResearchUnavailable("Research job is unavailable.")
-            if job["status"] == "running":
-                return True
+            # A running job belongs to an already claimed worker. Returning
+            # True here lets a second worker repeat provider calls after an
+            # interrupted process while the durable status is still running.
+            # Only a queued job can be claimed; the caller must recover stale
+            # running slots under the exclusive per-session worker lock.
             if job["status"] != "queued":
                 return False
             user_running = db.execute(
