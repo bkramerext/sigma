@@ -74,7 +74,9 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def sponsor_context(self):
         return await openai_connection.sponsored_auth_context("a" * 64)
 
-    async def test_local_sponsor_requires_explicit_designated_identity(self):
+    async def test_local_sponsor_defaults_to_designated_admin_identity(self):
+        from sigma import cloud_auth
+
         with patch.dict(
             os.environ,
             {
@@ -84,8 +86,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
             },
         ):
             os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
-            with self.assertRaisesRegex(ProjectError, "Configure the explicit"):
-                cloud_sponsor.expected_email()
+            self.assertEqual(cloud_sponsor.expected_email(), cloud_auth.INVITATION_RECIPIENT)
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
 

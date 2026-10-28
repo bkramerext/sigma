@@ -1629,23 +1629,25 @@ class CloudAuthTests(TestCase):
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
-                "SIGMA_CLOUD_SPONSOR_EMAIL": "nontrivialzeeros@gmail.com",
                 "SIGMA_AUTH_HOME": str(sponsor_home),
             },
         ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
             login = self.finish(
                 email="zetacontinuation@gmail.com", subject="configured-google-admin"
             )
             self.assertEqual(login.status_code, 303)
             self.client.cookies.update(login.cookies)
+            cloud_auth.set_model_access("configured-google-admin", "personal")
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["user"]["role"], "admin")
             self.assertEqual(status["user"]["email"], "zetacontinuation@gmail.com")
+            self.assertEqual(status["account"]["model_access"]["mode"], "personal")
 
             async def add_selected_sponsor():
                 async with ai_store.sponsor_transaction() as state:
                     state["accounts"]["selected-sponsor"] = {
-                        "email": "nontrivialzeeros@gmail.com",
+                        "email": "zetacontinuation@gmail.com",
                         "access_token": "existing-sponsor-token",
                     }
                     state["active"] = "selected-sponsor"
@@ -1670,7 +1672,7 @@ class CloudAuthTests(TestCase):
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "member@example.org",
+                    "value": "nontrivialzeeros@gmail.com",
                     "role": "member",
                     "allowance_usd": 1,
                 },
@@ -1683,7 +1685,9 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             member_login = self.finish(
-                email="member@example.org", subject="sponsor-change-denied-member", client=member
+                email="nontrivialzeeros@gmail.com",
+                subject="sponsor-change-denied-member",
+                client=member,
             )
             self.assertEqual(member_login.status_code, 303)
             member.cookies.update(member_login.cookies)
@@ -1697,6 +1701,10 @@ class CloudAuthTests(TestCase):
                 "Administrator access required",
                 denied.json().get("error", denied.json().get("detail", "")),
             )
+            sponsor_route_denied = member.post(
+                "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+            )
+            self.assertEqual(sponsor_route_denied.status_code, 403, sponsor_route_denied.text)
             begin.assert_awaited_once()
 
             async def saved_sponsor_token():
@@ -2585,18 +2593,21 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
-                "SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test",
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
                 "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
                 "SIGMA_MOCK_AUTH": "0",
             },
         ):
-            admin_login = self.finish()
-            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            admin_login = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-local-admin"
+            )
+            self.client.cookies.update(admin_login.cookies)
             grant = self.client.post(
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "nontrivialzeero@gmail.com",
+                    "value": "nontrivialzeeros@gmail.com",
                     "role": "member",
                     "allowance_usd": 0.01,
                 },
@@ -2609,12 +2620,12 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             login = self.finish(
-                email="nontrivialzeero@gmail.com",
+                email="nontrivialzeeros@gmail.com",
                 subject="local-sponsored-member",
                 client=member,
             )
             self.assertEqual(login.status_code, 303)
-            member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            member.cookies.update(login.cookies)
             initial_status = member.get("/api/cloud-auth/status").json()
             self.assertTrue(initial_status["account"]["sponsorship"]["eligible"])
             self.assertEqual(initial_status["account"]["model_access"]["mode"], "sponsored")
@@ -2656,20 +2667,22 @@ class CloudAuthTests(TestCase):
                     ),
                 ) as begin,
             ):
-                member_allowed = member.post(
+                member_denied = member.post(
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
-                self.assertEqual(member_allowed.status_code, 200, member_allowed.text)
+                self.assertEqual(member_denied.status_code, 403, member_denied.text)
                 with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSORED_ENABLED": "false"}):
-                    denied = member.post(
+                    disabled_member_denied = member.post(
                         "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                     )
-                self.assertEqual(denied.status_code, 403, denied.text)
+                    self.assertEqual(
+                        disabled_member_denied.status_code, 403, disabled_member_denied.text
+                    )
                 allowed = self.client.post(
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
             self.assertEqual(allowed.status_code, 200, allowed.text)
-            self.assertEqual(begin.await_count, 2)
+            self.assertEqual(begin.await_count, 1)
             begin.assert_awaited_with(account_id="sponsor-id", sponsor=True)
 
     def test_local_personal_mode_cannot_use_or_disconnect_active_sponsor_credential(self):

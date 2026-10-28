@@ -117,7 +117,14 @@ def exercise(origin: str) -> None:
                     "ttl_seconds": 30,
                     "active_account": active_account["value"],
                     "sponsor_account_selected": selected_account_is_sponsor["value"],
-                    "accounts": [],
+                    "accounts": [
+                        {
+                            "id": active_account["value"],
+                            "label": "zetacontinuation@gmail.com"
+                            if selected_account_is_sponsor["value"]
+                            else "personal-chatgpt@example.test",
+                        }
+                    ],
                 }
             elif path.endswith(
                 ("/api/cloud-auth/local-sponsored-allowance", "/api/cloud-research/budget")
