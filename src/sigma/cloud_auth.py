@@ -1632,9 +1632,7 @@ def denied_identity(request: Request):
         # administrator email or grants change. Do not keep offering an
         # invitation when this verified identity is now eligible to sign in.
         authorized = (
-            _authorization_in_db(db, cfg, row["subject"], row["email"])
-            if row["subject"]
-            else None
+            _authorization_in_db(db, cfg, row["subject"], row["email"]) if row["subject"] else None
         )
         invitation = db.execute(
             "SELECT status FROM invitation_requests WHERE subject=?", (row["subject"],)
@@ -1725,7 +1723,9 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         if principal is None:
             raise HTTPException(401, "Sign in with Google before requesting a reload.")
         if principal.role == "admin":
-            raise HTTPException(403, "Administrators have no individual sponsorship allowance to reload.")
+            raise HTTPException(
+                403, "Administrators have no individual sponsorship allowance to reload."
+            )
         with _db(cfg) as db:
             eligible = db.execute(
                 "SELECT 1 FROM user_state WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
@@ -1747,9 +1747,7 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
             raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
         # A previously denied identity must not submit an invitation after it
         # gains authorization through the configured contact or a grant.
-        if identity["subject"] and _authorization(
-            cfg, identity["subject"], identity["email"]
-        ):
+        if identity["subject"] and _authorization(cfg, identity["subject"], identity["email"]):
             raise HTTPException(409, "This Google account is already authorized. Sign in again.")
     now = _now()
     with _db(cfg) as db:
