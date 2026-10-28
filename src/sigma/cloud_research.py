@@ -650,7 +650,10 @@ def prepare_job(record: dict[str, Any]) -> None:
                     # terminal/interrupted state intact for playback.
                     if _global_call_amount_units(db) >= global_ceiling_units:
                         raise CloudResearchUnavailable(_global_ceiling_failure_message())
-                    if not unlimited_admin and _user_call_amount_units(db, owner) >= user_ceiling_units:
+                    if (
+                        not unlimited_admin
+                        and _user_call_amount_units(db, owner) >= user_ceiling_units
+                    ):
                         raise CloudResearchUnavailable(
                             "Your cumulative cloud research allowance has been reached; saved research remains available."
                         )
