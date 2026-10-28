@@ -38,7 +38,23 @@ plan/app usage limit. Changing SIGMA's ceiling cannot override that provider
 restriction. To authorize a different local global ceiling, set
 `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` explicitly before starting SIGMA.
 The operator must approve this change; a reload of a member allowance does
-not replenish global capacity. If the operator provisions a dedicated
+not replenish global capacity. For an **explicitly approved $5 local pilot
+ceiling**, stop the local backend and launch the sponsored instance with the
+setting in the actual backend process environment:
+
+```sh
+SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=5.00 ./sigma start --sponsored
+```
+
+This retains the existing ledger (including unknown attempts), does not
+change the default for other installations, and does not choose or switch
+providers. The ceiling is an aggregate **lifetime** SIGMA estimate, not a
+per-session allowance or a promise that the provider will accept calls.
+`scripts/inspect_cloud_spend.py` displays the ceiling from its own shell;
+an unset value there does not prove the backend ignored the launch setting.
+Future session Metrics show the backend build used for the attempted work.
+
+If the operator provisions a dedicated
 SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
 
 ```bash
