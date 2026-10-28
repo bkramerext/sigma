@@ -9357,6 +9357,15 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
                     "Cloud research queue wait reached the configured session time limit."
                 )
                 record["current_action"] = "Completed · duration limit"
+                for branch in record.get("strategy_runs", []):
+                    if branch.get("status") in {"queued", "running"}:
+                        branch["status"] = "ended"
+                        branch["current_action"] = "Duration limit"
+                        branch["reason"] = record["message"]
+                if record.get("strategy_runs"):
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
                 record["updated_at"] = _now()
                 _event(record, "queue.expired", record["message"])
                 _save(path, record)
