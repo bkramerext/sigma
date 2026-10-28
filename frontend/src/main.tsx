@@ -111,11 +111,14 @@ type ResearchSession = { approved_continuations?: Record<string, { parent_strate
 
 function sessionEstimatedCostLabel(session: ResearchSession): string {
   const cost = session.estimated_cost_usd;
+  // ChatGPT tokens are not billed to the operator's API account; show the
+  // model-priced equivalent, never imply this was a paid API charge.
+  const label = session.mode === 'chatgpt' ? 'API-rate equivalent' : 'Est. cost';
   if (session.cost_status !== 'available' || typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) {
-    return 'Est. cost unavailable';
+    return `${label} unavailable`;
   }
   // Avoid reporting nonzero usage as $0.00 after rounding.
-  return cost > 0 && cost < 0.01 ? 'Est. cost <$0.01' : `Est. cost $${cost.toFixed(2)}`;
+  return cost > 0 && cost < 0.01 ? `${label} <$0.01` : `${label} $${cost.toFixed(2)}`;
 }
 
 function liveResearchSummary(session: ResearchSession): string | null {
