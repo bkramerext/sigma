@@ -30,6 +30,23 @@ MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 
 
+def test_backend_build_is_pinned_at_backend_start() -> None:
+    from sigma.build_info import build_commit
+    from sigma.server import _build_sha
+
+    build_commit.cache_clear()
+    try:
+        with patch.dict("os.environ", {"SIGMA_BUILD_COMMIT": "A" * 40}):
+            assert build_commit() == "a" * 40
+            assert _build_sha() == "a" * 7
+        # A changed environment/checkout must not relabel an already running
+        # backend's session and call evidence.
+        with patch.dict("os.environ", {"SIGMA_BUILD_COMMIT": "B" * 40}):
+            assert build_commit() == "a" * 40
+    finally:
+        build_commit.cache_clear()
+
+
 def provider_response(value):
     value = dict(value)
     if "claim" in value:
@@ -518,6 +535,7 @@ async def test_three_cycles_and_idempotency(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "build_commit", return_value="a" * 40),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -536,6 +554,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         )
         assert concurrent_duplicate["id"] == started["id"]
         assert started["session_number"] == concurrent_duplicate["session_number"] == 1
+        assert started["backend_build_commit"] == "a" * 40
         assert started["call_limit"] == 30
         assert started["cycle_limit"] == 3
         assert started["duration_limit_minutes"] == 60
@@ -546,6 +565,8 @@ async def test_three_cycles_and_idempotency(path: Path):
         )
         assert duplicate["id"] == started["id"]
 
+    assert finished["backend_build_commit"] == "a" * 40
+    assert all(step["backend_build_commit"] == "a" * 40 for step in finished["steps"])
     assert finished["status"] == "ended" and finished["calls_used"] == 6
     assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
     assert [
@@ -582,7 +603,13 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert exported["export_version"] == 2
     assert exported_session["strategy_text"] == strategy.approach
     assert exported_session["problem"] == view.project.problem
+    assert exported_session["backend_build_commit"] == "a" * 40
+    assert all(step["backend_build_commit"] == "a" * 40 for step in exported_session["steps"])
     metrics = exported_session["outcome"]["metrics"]
+    assert (
+        next(item["value"] for item in metrics["operational"] if item["label"] == "Backend build")
+        == "a" * 40
+    )
     assert metrics == finished["outcome"]["metrics"]
     assert metrics["sources"]["session_id"] == finished["id"]
     assert metrics["sources"]["step_ids"] == sorted(step["id"] for step in finished["steps"])
@@ -6671,6 +6698,16 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     metrics = loaded["outcome"]["metrics"]
     operational = {item["label"]: item["value"] for item in metrics["operational"]}
     quality = {item["label"]: item["value"] for item in metrics["research_quality"]}
+    # Historical session records must never be assigned a newer build SHA.
+    assert operational["Backend build"] == "Unknown (session build not recorded)"
+    resumed_record = deepcopy(record)
+    resumed_record["backend_build_commit"] = "1" * 40
+    resumed_record["steps"][0]["backend_build_commit"] = "2" * 40
+    resumed_metrics = research_sessions._outcome_metrics(resumed_record, loaded["outcome"])
+    resumed_build = next(
+        item["value"] for item in resumed_metrics["operational"] if item["label"] == "Backend build"
+    )
+    assert resumed_build == "Created: " + "1" * 40 + " · calls: " + "2" * 40
     assert metrics["sources"] == {
         "session_id": session_id,
         "step_ids": sorted({step["id"] for step in record["steps"]}),
@@ -7702,6 +7739,7 @@ def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
 
 
 def main():
+    test_backend_build_is_pinned_at_backend_start()
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()

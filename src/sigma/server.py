@@ -1,14 +1,11 @@
 """Consistent dotenv-aware entrypoint for a separately launched backend."""
 
 import logging
-import os
-import re
-import subprocess
 from copy import copy
-from pathlib import Path
 
 from fastapi import FastAPI
 
+from sigma.build_info import build_commit
 from sigma.local_config import load_local_config
 
 
@@ -27,22 +24,8 @@ class _BuildAccessFormatter(logging.Formatter):
 
 
 def _build_sha() -> str:
-    supplied = os.environ.get("SIGMA_BUILD_COMMIT") or os.environ.get("GITHUB_SHA")
-    if supplied and re.fullmatch(r"[0-9a-fA-F]{7,40}", supplied):
-        return supplied[:7].lower()
-    try:
-        checkout = Path(__file__).resolve().parents[2]
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=checkout,
-            capture_output=True,
-            text=True,
-            timeout=2,
-            check=True,
-        )
-        return result.stdout.strip()[:7]
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
+    """Keep access-log tags aligned with the session's process-pinned build."""
+    return build_commit()[:7]
 
 
 def _label_access_log() -> None:

@@ -22,7 +22,39 @@ ChatGPT session. For local use, SIGMA reads that account from the private
 `SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
 spend is reserved against the signed-in member's configured allowance before
 provider dispatch. Local sponsored inference selects ChatGPT when
-`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. If the operator provisions a dedicated
+`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. Local sponsored research also
+defaults to a **$0.25 lifetime global reservation ceiling** across sessions,
+independent of the displayed member allowance and Project Settings; old saved
+usage and uncertain provider calls remain counted. To inspect that ledger
+without changing or exposing account identities, run:
+
+```sh
+uv run --locked --no-sync python scripts/inspect_cloud_spend.py
+```
+
+This reports aggregate estimated, reserved, and unknown amounts. A successful
+ChatGPT plan connection can still reject inference at its separate OpenAI
+plan/app usage limit. Changing SIGMA's ceiling cannot override that provider
+restriction. To authorize a different local global ceiling, set
+`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` explicitly before starting SIGMA.
+The operator must approve this change; a reload of a member allowance does
+not replenish global capacity. For an **explicitly approved $5 local pilot
+ceiling**, stop the local backend and launch the sponsored instance with the
+setting in the actual backend process environment:
+
+```sh
+SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=5.00 ./sigma start --sponsored
+```
+
+This retains the existing ledger (including unknown attempts), does not
+change the default for other installations, and does not choose or switch
+providers. The ceiling is an aggregate **lifetime** SIGMA estimate, not a
+per-session allowance or a promise that the provider will accept calls.
+`scripts/inspect_cloud_spend.py` displays the ceiling from its own shell;
+an unset value there does not prove the backend ignored the launch setting.
+Future session Metrics show the backend build used for the attempted work.
+
+If the operator provisions a dedicated
 SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
 
 ```bash

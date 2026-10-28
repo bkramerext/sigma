@@ -649,26 +649,26 @@ print("PASS fresh-process research, Outcome and report recovery")
                     f"/api/projects/research-sessions/{session_id}", params={"path": path}
                 )
                 assert still_readable.status_code == 200, still_readable.text
+                existing_session_ids = {
+                    session["id"]
+                    for session in client.get(
+                        "/api/projects/research-sessions", params={"path": path}
+                    ).json()["sessions"]
+                }
                 exhausted_start = client.post(
                     "/api/projects/research-sessions/start",
                     json={**start_body, "idempotency_key": str(uuid4())},
                 )
-                assert exhausted_start.status_code == 200, exhausted_start.text
-                exhausted_id = exhausted_start.json()["id"]
-                for _ in range(500):
-                    exhausted_status = client.get(
-                        f"/api/projects/research-sessions/{exhausted_id}",
-                        params={"path": path},
-                    )
-                    if exhausted_status.json()["status"] in {"ended", "failed", "paused"}:
-                        break
-                    time.sleep(0.01)
-                else:
-                    raise AssertionError(
-                        "exhausted sponsored session did not reach a terminal state"
-                    )
+                assert exhausted_start.status_code == 400, exhausted_start.text
+                assert "global inference-spend ceiling" in exhausted_start.json()["error"]
                 assert len(provider_calls) == 12
-                assert exhausted_status.json()["steps"][0]["attempt_status"] == "not_dispatched"
+                # Reject a hopeless start before creating any session record.
+                assert {
+                    session["id"]
+                    for session in client.get(
+                        "/api/projects/research-sessions", params={"path": path}
+                    ).json()["sessions"]
+                } == existing_session_ids
 
     print(
         "PASS authenticated HTTP sponsored inference through a deterministic fake OpenAI provider, including no personal account, budget exhaustion, uncertain failure holds, idempotency, and cross-workspace isolation"
