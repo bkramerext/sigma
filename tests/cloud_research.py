@@ -716,6 +716,20 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                         record["id"], f"at-global-{extra_number}", amount, 100
                     )
                     assert cloud_research.snapshot()["held_usd"] == amount
+                    if extra_number == 11:
+                        # The final call consumes the global ceiling. A further
+                        # provider reservation must fail before any dispatch,
+                        # with a precise and actionable funding shortfall.
+                        try:
+                            cloud_research.reserve_call(
+                                record["id"], "blocked-after-global-ceiling", 0.01, 1
+                            )
+                        except cloud_research.CloudResearchUnavailable as exc:
+                            assert "Remaining global capacity: $0.0000" in str(exc)
+                            assert "next call requires $0.0100" in str(exc)
+                            assert "No provider call was made." in str(exc)
+                        else:
+                            raise AssertionError("A provider call bypassed the global ceiling")
                     # The reservation stays in the ledger, but should not
                     # occupy a live concurrency slot after the test job ends.
                     record["status"] = "ended"
