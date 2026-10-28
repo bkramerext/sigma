@@ -830,7 +830,7 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void }) {
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void }) {
   const cloud = useCloudIdentity();
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
@@ -860,11 +860,14 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
   useEffect(() => {
     const revealRunningSession = () => {
       const running = sessions.find(item => item.status === 'running');
-      if (running) revealSession(running.id);
+      if (running) {
+        onRevealNewSession();
+        revealSession(running.id, true);
+      }
     };
     window.addEventListener('sigma-reveal-running-session', revealRunningSession);
     return () => window.removeEventListener('sigma-reveal-running-session', revealRunningSession);
-  }, [sessions]);
+  }, [sessions, onRevealNewSession]);
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -978,7 +981,8 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
       await load(next.id);
-      revealSession(next.id);
+      if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
+      revealSession(next.id, next.status === 'running' || next.status === 'queued');
     } catch (cause) { setConfirmStart(false); await load().catch(() => {}); setError(errorMessage(cause)); }
     finally { submittingStart.current = false; setBusy(false); }
   }
@@ -1000,10 +1004,10 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     void control('resume', target);
   }
 
-  function revealSession(id: string) {
+  function revealSession(id: string, collapsePrevious = false) {
     setExpanded(true);
     window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    setExpandedSessionIds(current => new Set(current).add(id));
+    setExpandedSessionIds(current => collapsePrevious ? new Set([id]) : new Set(current).add(id));
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
       row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1079,8 +1083,9 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     const revealId = initialRevealSessionId.current;
     if (!revealId || activeSession?.id !== revealId) return;
     initialRevealSessionId.current = null;
-    revealSession(revealId);
-  }, [activeSession?.id]);
+    onRevealNewSession();
+    revealSession(revealId, true);
+  }, [activeSession?.id, onRevealNewSession]);
 
   const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
@@ -1105,7 +1110,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
                   {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError || (!!activeSession && activeSession.id !== item.id)} onClick={() => requestResume(item)}>Resume</button>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
-                  {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                  {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts?</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {(item.status === 'paused' || item.status === 'stopped') && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
@@ -3477,6 +3482,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   function cancel() { setEditing(false); exitMode('new-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }
   function expandStrategies() { setStrategiesExpanded(true); window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true'); }
+  const collapseProjectAndStrategies = useCallback(() => {
+    setProjectExpanded(false);
+    setStrategiesExpanded(false);
+    window.localStorage.setItem(`sigma.projectPane:${path}`, 'false');
+    window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'false');
+  }, [path]);
   function startNewStrategy() {
     if (!enterMode('new-strategy')) return;
     expandStrategies(); setManualDraft(undefined); setEditing(true);
@@ -3686,7 +3697,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
       setView(next);
       setAnnouncement('Advanced Outcome enabled.');
-    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning}/>
+    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} onRunningChange={setResearchRunning} onRevealNewSession={collapseProjectAndStrategies}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}

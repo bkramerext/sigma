@@ -5381,6 +5381,56 @@ async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     assert all(strategy_id == second.id for strategy_id, _ in roles if strategy_id != first.id)
 
 
+async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path):
+    view, first, credential, config = await setup(path)
+    credential["mode"] = "chatgpt"
+    second = create_strategy(
+        path, "Independent approach", "Use a different derivation."
+    ).project.strategies[-1]
+    provider_calls = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        provider_calls.append(context["strategy"]["id"])
+        return httpx.Response(
+            429,
+            json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert len(provider_calls) == 1
+    assert provider_calls == [first.id]
+    assert "ChatGPT rejected a request because its plan or app usage limit was reached" in finished[
+        "message"
+    ]
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    limited = next(step for step in finished["steps"] if step["status"] == "failed")
+    assert limited["failure_kind"] == "provider_limited"
+    assert limited["provider_http_status"] == 429
+
+
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(

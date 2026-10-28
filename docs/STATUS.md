@@ -7503,6 +7503,18 @@ existing hosted integration, so hosted personal-account switching is blocked
 and unchanged; no authorization requirement was bypassed. No live or paid
 provider calls were made.
 
+Follow-up from local Session 6: its first sponsored provider call received an
+explicit ChatGPT plan/app usage-limit rejection. SIGMA had retained the full
+write-ahead reservation as unknown, then attempted the remaining strategies,
+which were reported as cumulative sponsored allowance failures. Known HTTP 429
+or explicit ChatGPT usage-limit responses now settle as zero-usage rejected
+attempts, release the held spend/token reservation, stop remaining strategy
+dispatch, and report the provider limit without switching billing sources.
+The session remove confirmation also no longer says that other strategies and
+sessions will remain. Regression coverage was added; verification is deferred
+for local testing. This cannot clear the designated ChatGPT account's own usage
+cap, so a new session can proceed only after that provider limit permits use.
+
 ## Sponsored account initial connection (2026-10-28)
 
 Eligible accounts now start with SIGMA sponsorship selected until the user

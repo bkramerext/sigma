@@ -1114,6 +1114,27 @@ def mark_call_not_dispatched(session_id: str, call_id: str) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
+def mark_call_provider_rejected(session_id: str, call_id: str) -> None:
+    """Release reservations after an explicit provider rejection (HTTP 429).
+
+    A received quota rejection is not an unknown in-flight attempt: the provider
+    rejected it before inference, so it must not consume the user's allowance.
+    Keep the call row as an auditable zero-cost usage estimate.
+    """
+    owner = _workspace_id()
+    try:
+        with _transaction() as db:
+            row = db.execute("SELECT * FROM calls WHERE call_id=?", (call_id,)).fetchone()
+            if not row or row["session_id"] != session_id or row["workspace_id"] != owner:
+                raise CloudResearchUnavailable("Provider attempt is unavailable.")
+            db.execute(
+                "UPDATE calls SET amount_usd=0,status='usage_estimated',token_reservation=0,input_tokens=NULL,output_tokens=NULL,updated_at=? WHERE call_id=?",
+                (_now(), call_id),
+            )
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
 def snapshot() -> dict[str, Any]:
     """Return only the current principal's job, token, and spending summary."""
     owner = _workspace_id()

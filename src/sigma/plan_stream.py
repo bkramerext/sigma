@@ -101,7 +101,8 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
                 f"ChatGPT rejected the request (HTTP {status}, response shape: {shape}). "
                 "Account retained; no automatic billing fallback occurred."
             )
-        raise ProjectError(f"{message} No strategy was saved.")
+        provider_status = f" (HTTP {status})" if state == "limited" else ""
+        raise ProjectError(f"{message}{provider_status} No strategy was saved.")
     # Provider error bodies can contain request context or other sensitive
     # values. Surface only a small allowlist of machine fields; never echo the
     # provider message or an arbitrary code/parameter into the UI.
