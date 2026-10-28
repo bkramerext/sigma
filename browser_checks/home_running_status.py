@@ -40,6 +40,8 @@ with sync_playwright() as playwright:
             "project_id": project_id,
             "project_path": str(project_path.resolve()),
             "status": "running",
+            "estimated_cost_usd": 0.14372,
+            "cost_status": "available",
             "session_number": 1,
             "strategy_id": project["project"]["strategies"][0]["id"],
             "strategy_ids": [project["project"]["strategies"][0]["id"]],
@@ -138,6 +140,17 @@ with sync_playwright() as playwright:
         )
         running_status = page.locator(".session-running.session-status")
         expect(running_status).to_contain_text("running")
+        expect(page.locator(".session-progress-inline")).to_contain_text(
+            "Est. cost $0.14"
+        )
+        fixture["cost_status"] = "unavailable"
+        fixture["estimated_cost_usd"] = None
+        page.reload()
+        expect(page.locator(".session-progress-inline")).to_contain_text(
+            "Est. cost unavailable"
+        )
+        fixture["cost_status"] = "available"
+        fixture["estimated_cost_usd"] = 0.14372
         assert running_status.locator("i").evaluate(
             "element => element === element.parentElement.lastElementChild"
         )
