@@ -352,7 +352,9 @@ def _project_relpath(record: dict[str, Any], owner_path: Path) -> str:
     try:
         root = owner_path.resolve(strict=True)
         project = Path(value).resolve(strict=True)
-        if not project.is_dir() or not project.is_relative_to(root):
+        if not project.is_relative_to(root) or not (
+            project.is_dir() or (project.suffix == ".json" and project.is_file())
+        ):
             return ""
         return project.relative_to(root).as_posix()
     except (OSError, RuntimeError, ValueError):
@@ -965,17 +967,21 @@ def reconcile_orphaned_jobs() -> list[str]:
             continue
         try:
             project = lexical_project.resolve(strict=True)
-            if not project.is_dir() or not project.is_relative_to(root):
+            if not project.is_relative_to(root):
                 continue
-            project_document = project / "project.json"
-            session_directory = project / "research-sessions"
-            if (
-                project_document.is_symlink()
-                or not project_document.is_file()
-                or session_directory.is_symlink()
-                or not session_directory.is_dir()
-            ):
-                continue
+            bundle_project = project.suffix == ".json" and project.is_file()
+            if not bundle_project:
+                if not project.is_dir():
+                    continue
+                project_document = project / "project.json"
+                session_directory = project / "research-sessions"
+                if (
+                    project_document.is_symlink()
+                    or not project_document.is_file()
+                    or session_directory.is_symlink()
+                    or not session_directory.is_dir()
+                ):
+                    continue
             try:
                 project_view = inspect_project(str(project))
             except ProjectError:
@@ -988,9 +994,19 @@ def reconcile_orphaned_jobs() -> list[str]:
             from sigma import research_sessions
 
             with research_sessions._project_manager_lock(str(project)):
-                session_record = session_directory / f"{session_id}.json"
-                if session_record.exists() or session_record.is_symlink():
-                    continue
+                if bundle_project:
+                    # A single-file project stores sessions as JSON bundle
+                    # members. Read under the same admission lock as _save so
+                    # missing members are proof of an unpublished request.
+                    from sigma.project_bundle import read_bundle
+
+                    members = read_bundle(str(project))["files"]
+                    if f"research-sessions/{session_id}.json" in members:
+                        continue
+                else:
+                    session_record = session_directory / f"{session_id}.json"
+                    if session_record.exists() or session_record.is_symlink():
+                        continue
                 with _transaction() as db:
                     current = db.execute(
                         "SELECT workspace_id,status,project_id,project_relpath,process_epoch FROM jobs WHERE session_id=?",
