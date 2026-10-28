@@ -7629,6 +7629,25 @@ and no merge or deployment occurred. This initial validation did not reproduce
 the pill's local-admin click path; see the refined correction below. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
 
+## PR #297 sponsored-member disconnected pill correction (2026-10-28)
+
+The local disconnected sponsor state now distinguishes verified admins from
+sponsored members. Admins retain the sponsor reconnect action; a sponsored
+member sees “Sponsored ChatGPT unavailable,” gets administrator reconnection
+guidance, and the pill is disabled. Its handler also returns before either
+sponsor or personal OAuth can start. Genuine personal and admin sponsor routes
+remain available.
+
+`browser_checks/local_admin_sponsor_pill.py` now covers the sponsored member
+state in Chromium and asserts that clicking the pill makes no auth-begin
+request, between the admin sponsor completion and personal-account checks.
+Frontend typecheck, two focused cloud-auth tests, scoped Ruff check/format,
+Chromium `browser_checks/local_admin_sponsor_pill.py`, and `git diff --check`
+passed at implementation commit `77cb5d94834758940a882764a665f2ebecb20582`.
+Real provider connectivity and live OAuth remain unverified. No paid calls,
+CI wait, merge, or deployment occurred. See
+[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
+
 ## PR #297 prior local admin sponsor pill correction (superseded, 2026-10-28)
 
 The prior correction incorrectly required an explicit local sponsor setting
