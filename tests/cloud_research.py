@@ -1419,7 +1419,8 @@ def main() -> None:
                     }
                 )
                 research_sessions._tasks.pop(interrupted["id"], None)
-                cloud_research.prepare_job(interrupted)
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    cloud_research.prepare_job(interrupted)
                 assert cloud_research.claim_job(interrupted["id"])
                 interrupted["status"] = "running"
                 research_sessions._save(view.path, interrupted)
