@@ -1,3 +1,10 @@
+## Backend access log build SHA (2026-10-28)
+
+Uvicorn access entries now append `build=<seven-character SHA>`. The backend
+uses the configured build commit when supplied, or the checkout HEAD for a
+local launch. A local restart is needed to see the new format. Verification
+has not been run yet so the updated commit is available for local testing.
+
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 
 Added **Maximum concurrent sessions** to Project Settings → Limits. The
