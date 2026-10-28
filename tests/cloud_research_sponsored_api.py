@@ -303,9 +303,9 @@ def main(mode: str = "api_key") -> None:
                 )
                 assert data["live_inference_verified"] is False
                 assert data["preflight_ready"] is (mode == "api_key")
-                assert (
-                    "customer_api_key_provider_not_selected" in data["blockers"]
-                ) is (mode == "chatgpt")
+                assert ("customer_api_key_provider_not_selected" in data["blockers"]) is (
+                    mode == "chatgpt"
+                )
                 assert "fake-server-credential" not in readiness.text
                 assert "fake-plan-credential" not in readiness.text
                 assert "admin@example.test" not in readiness.text
