@@ -206,29 +206,36 @@ async def cloud_research_readiness(request: Request):
 
     provider = inference_provider()
     enabled = cloud_auth.sponsored_access_enabled()
+    budget: dict[str, Any] = {}
     try:
         budget = cloud_research.snapshot()
-    except cloud_research.CloudResearchUnavailable as exc:
-        raise HTTPException(503, "Sponsored research ledger is unavailable.") from exc
+    except (cloud_research.CloudResearchUnavailable, sqlite3.Error, OSError, RuntimeError):
+        # A misconfigured or unavailable spend ledger is itself a readiness
+        # blocker. Operators still need this endpoint most when it fails.
+        pass
     # A catalog check does not incur an inference call or reserve any funds.
-    credential = await sponsored_auth_context()
     provider_status = "unconfigured"
-    if credential.get("token") and credential.get("status") == "connected":
-        try:
+    provider_token_present = False
+    try:
+        credential = await sponsored_auth_context()
+        provider_token_present = bool(credential.get("token"))
+        if provider_token_present and credential.get("status") == "connected":
             state = await connection(refresh=True, context=credential)
             provider_status = str(state.get("status", "unavailable"))
-        except (OSError, RuntimeError, ValueError):
-            provider_status = "unavailable"
+    except (ProjectError, OSError, RuntimeError, ValueError):
+        provider_status = "unavailable"
     blockers: list[str] = []
     if not enabled:
         blockers.append("sponsorship_disabled")
     if provider != "api_key":
         blockers.append("customer_api_key_provider_not_selected")
-    if not credential.get("token"):
+    if not provider_token_present:
         blockers.append("sponsored_provider_credential_missing")
     elif provider_status != "connected":
         blockers.append("provider_connection_unavailable")
-    if float(budget.get("global_remaining_usd", 0)) <= 0:
+    if not budget:
+        blockers.append("shared_spending_policy_unavailable")
+    elif float(budget.get("global_remaining_usd", 0)) <= 0:
         blockers.append("shared_inference_budget_exhausted")
     return JSONResponse(
         {
@@ -237,10 +244,10 @@ async def cloud_research_readiness(request: Request):
             "provider": provider,
             "provider_status": provider_status,
             "sponsorship_enabled": enabled,
-            "global_ceiling_usd": budget["global_ceiling_usd"],
-            "global_remaining_usd": budget["global_remaining_usd"],
-            "global_spend_period": budget["global_spend_period"],
-            "global_reset_at": budget["global_reset_at"],
+            "global_ceiling_usd": budget.get("global_ceiling_usd"),
+            "global_remaining_usd": budget.get("global_remaining_usd"),
+            "global_spend_period": budget.get("global_spend_period"),
+            "global_reset_at": budget.get("global_reset_at"),
             "blockers": blockers,
             "backend_build_commit": build_commit(),
         },
