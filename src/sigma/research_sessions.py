@@ -3303,9 +3303,10 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         record["current_step"] = None
         record["current_steps"] = []
         for branch in record.get("strategy_runs", []):
-            if branch.get("status") == "running":
+            if branch.get("status") in {"queued", "running"}:
                 branch["status"] = "paused"
                 branch["current_action"] = "Interrupted after backend restart"
+                branch["reason"] = record["message"]
         record["current_action"] = "Paused after backend restart"
         if (record.get("mode") == "api_key" or record.get("cloud_sponsored") is True) and any(
             step.get("failure_kind") == "interrupted" for step in record.get("steps", [])
@@ -9227,6 +9228,32 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
         try:
             if cloud_research.claim_job(session_id):
                 return True
+            ledger_status = cloud_research.job_status(session_id)
+            if ledger_status != "queued":
+                # The worker holds the exclusive project worker lock. No other
+                # process can legitimately own a running slot for this session.
+                # A stale slot must not strand the UI in "queued" until timeout.
+                if ledger_status in {"running", "stopping"}:
+                    cloud_research.recover_job(session_id)
+                async with _session_state_lock(session_id):
+                    record = _read(path, session_id)
+                    if record["status"] != "queued":
+                        return False
+                    record["status"] = "paused"
+                    record["updated_at"] = _now()
+                    record["current_action"] = "Paused after worker recovery"
+                    record["message"] = (
+                        "The saved session's worker reservation is no longer runnable. "
+                        "Its saved research is intact; resume to create a new worker reservation."
+                    )
+                    for branch in record.get("strategy_runs", []):
+                        if branch.get("status") == "queued":
+                            branch["status"] = "paused"
+                            branch["current_action"] = record["current_action"]
+                            branch["reason"] = record["message"]
+                    _event(record, "interrupted", record["message"])
+                    _save(path, record)
+                return False
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
         if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
