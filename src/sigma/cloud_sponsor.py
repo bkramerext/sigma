@@ -118,11 +118,8 @@ async def import_session(source: Path) -> None:
     """
     from sigma import cloud_workspaces
 
-    if (
-        not cloud_workspaces.enabled()
-        or inference_provider() != "chatgpt"
-    ):
-        raise ProjectError("Sponsor import requires explicit hosted ChatGPT configuration.")
+    if not cloud_workspaces.enabled() or inference_provider() != "chatgpt":
+        raise ProjectError("Sponsor import requires hosted ChatGPT sponsorship.")
     email = expected_email()
     if not source.is_absolute():
         raise ProjectError("Use an absolute path to the protected credential file.")
