@@ -7465,3 +7465,8 @@ to one sentence. Limit inputs now share a compact width that fits eight-digit
 values. The local sponsored-limits browser assertion follows the revised copy.
 The duration unit selector is narrower and has added right padding for its
 chevron.
+
+## Project settings Research tab sizing (2026-10-28)
+
+Narrowed the Difficulty and Thinking level controls in the edit dialog and
+shortened the Research tab introduction.
