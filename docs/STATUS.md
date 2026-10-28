@@ -7541,10 +7541,13 @@ optional project cost cap was unset and no per-call estimate was passed to the
 global sponsored allowance ledger. Sponsored calls now reserve their reviewed
 model estimate against SIGMA's global allowance even when no project cap is
 configured. Reservation failures are surfaced with their actual reason instead
-of the generic shared-call-budget message.
+of the generic shared-call-budget message. Sponsored portfolio calls are
+serialized within a session so concurrent sibling reservations do not consume
+the available allowance while a call is still in flight.
 
-`tests/research_sessions.py` and scoped Ruff check/format passed. `./sigma test`
-was run and stopped with unrelated failures in `tests/cloud_personal.py` (the
+`tests/research_sessions.py` and scoped Ruff check/format passed at the final
+implementation SHA. `./sigma test` was run and stopped with unrelated failures
+in `tests/cloud_personal.py` (the
 fixture expected an unavailable personal account) and a pre-existing import
 ordering issue in `src/sigma/api.py`; Pyright and frontend typecheck passed, and
 the frontend build was skipped after those failures. No provider calls were
