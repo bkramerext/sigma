@@ -6695,6 +6695,16 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     metrics = loaded["outcome"]["metrics"]
     operational = {item["label"]: item["value"] for item in metrics["operational"]}
     quality = {item["label"]: item["value"] for item in metrics["research_quality"]}
+    # Historical session records must never be assigned a newer build SHA.
+    assert operational["Backend build"] == "Unknown (session build not recorded)"
+    record["backend_build_commit"] = "1" * 40
+    record["steps"][0]["backend_build_commit"] = "2" * 40
+    resumed_metrics = research_sessions._outcome_metrics(record, loaded["outcome"])
+    resumed_build = next(
+        item["value"] for item in resumed_metrics["operational"]
+        if item["label"] == "Backend build"
+    )
+    assert resumed_build == "Created: " + "1" * 40 + " · calls: " + "2" * 40
     assert metrics["sources"] == {
         "session_id": session_id,
         "step_ids": sorted({step["id"] for step in record["steps"]}),
