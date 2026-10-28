@@ -331,6 +331,27 @@ async def checks(root):
             reset_connection()
             await rejection(generate_proposal(str(path)))
             assert (path / "project.json").read_bytes() == before
+        # A plan bridge can return HTTP 200 and then emit a structured error
+        # in its SSE envelope. Classify the nested error exactly like the
+        # equivalent non-streaming provider response, without reflecting its
+        # message or changing the selected account.
+        fixture.stream_override = (
+            b'data: {"type":"response.created","sequence_number":0,'
+            b'"response":{"id":"resp-fixture","status":"in_progress"}}\n\n'
+            b'data: {"type":"error","sequence_number":1,"error":'
+            b'{"code":"subscription_sharing_unsupported_capability",'
+            b'"message":"private account detail"}}\n\n'
+        )
+        reset_connection()
+        try:
+            await generate_proposal(str(path))
+        except ProjectError as exc:
+            assert "does not support the requested model/structured-output/reasoning capability" in str(exc)
+            assert "private account detail" not in str(exc)
+        else:
+            raise AssertionError("Structured SSE provider error was accepted")
+        assert (await connection.connection())["status"] == "forbidden"
+        assert (await auth.preferences())["mode"] == "chatgpt"
         fixture.stream_override = None
         for status, code, expected in (
             (429, "subscription_sharing_usage_limit_exceeded", "limited"),

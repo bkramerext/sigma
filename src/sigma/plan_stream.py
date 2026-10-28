@@ -205,6 +205,18 @@ async def completed(
             declared = [line[6:].strip() for line in block.split("\n") if line.startswith("event:")]
             if declared and declared != [kind]:
                 raise ValueError(f"plan_stream:declared_event({declared}!=[{kind}])")
+            if kind == "error":
+                # Responses SSE errors wrap the provider error in an `error`
+                # event envelope. Normalize it to the JSON error shape used
+                # by the non-streaming path so safe codes (including ChatGPT
+                # plan routing codes) are classified consistently.
+                raw_error = event.get("error")
+                failure(
+                    400,
+                    {"error": raw_error} if isinstance(raw_error, dict) else {"error": event},
+                    "chatgpt",
+                    guard,
+                )
             if kind == "response.created":
                 if response_id is not None or not isinstance(
                     event.get("response", {}).get("id"), str
@@ -228,8 +240,6 @@ async def completed(
                         "ChatGPT declined or did not complete this proposal; no strategy was saved."
                     )
                 terminal = raw
-            elif kind == "error":
-                failure(400, {"error": event}, "chatgpt", guard)
             elif kind == "response.output_text.delta":
                 if not isinstance(event.get("delta"), str):
                     raise ValueError("plan_stream:delta_not_str")
