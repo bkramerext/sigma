@@ -2146,7 +2146,7 @@ def list_grants():
         for subject, email in identities.items():
             role = _authorization_in_db(db, cfg, subject, email)
             current = active.get(subject)
-            allowance = _allowance_in_db(db, email, default) if role else None
+            allowance = _allowance_in_db(db, email, default) if role and role != "admin" else None
             users.append(
                 {
                     "email": email,
@@ -2172,7 +2172,9 @@ def list_grants():
     users.sort(key=lambda account: str(account["email"]))
     for grant in grants:
         grant["effective_allowance_usd"] = (
-            grant["allowance_usd"]
+            None
+            if grant["role"] == "admin"
+            else grant["allowance_usd"]
             if grant["allowance_usd"] is not None
             else _configured_default_allowance()
         )
