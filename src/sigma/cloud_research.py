@@ -121,6 +121,22 @@ def _effective_user_spend_ceiling_decimal() -> Decimal:
     from sigma import cloud_auth
 
     workspace = _ledger_workspace()
+    # Admins have no per-account sponsorship allowance. The operator's
+    # global ceiling still bounds every provider call, including admin calls.
+    if workspace is not None and workspace.email:
+        cfg = cloud_auth.config()
+        with cloud_auth._db(cfg) as db:
+            state = db.execute(
+                "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
+                (workspace.workspace_id,),
+            ).fetchone()
+        if (
+            state is not None
+            and state["role"] == "admin"
+            and state["access_active"]
+            and state["email"] == workspace.email
+        ):
+            return _spend_ceiling_decimal()
     try:
         default = _user_spend_ceiling_decimal()
     except CloudResearchUnavailable:
