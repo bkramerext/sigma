@@ -74,7 +74,9 @@ class ChatGPTProviderRejection(ProjectError):
         self.http_status = http_status
         self.streamed = streamed
         # Only local parser event types are stored, never untrusted provider text.
-        self.stream_event = stream_event if streamed and stream_event in {"error", "response.failed"} else None
+        self.stream_event = (
+            stream_event if streamed and stream_event in {"error", "response.failed"} else None
+        )
 
 
 def failure(
