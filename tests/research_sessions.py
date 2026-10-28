@@ -5422,9 +5422,10 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(path: Path):
     assert finished["status"] == "ended"
     assert len(provider_calls) == 1
     assert provider_calls == [first.id]
-    assert "ChatGPT rejected a request because its plan or app usage limit was reached" in finished[
-        "message"
-    ]
+    assert (
+        "ChatGPT rejected a request because its plan or app usage limit was reached"
+        in finished["message"]
+    )
     assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"

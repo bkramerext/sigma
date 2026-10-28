@@ -346,7 +346,10 @@ async def checks(root):
         try:
             await generate_proposal(str(path))
         except ProjectError as exc:
-            assert "does not support the requested model/structured-output/reasoning capability" in str(exc)
+            assert (
+                "does not support the requested model/structured-output/reasoning capability"
+                in str(exc)
+            )
             assert "private account detail" not in str(exc)
         else:
             raise AssertionError("Structured SSE provider error was accepted")

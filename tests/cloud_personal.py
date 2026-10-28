@@ -50,6 +50,10 @@ class HostedPersonalIsolationTests(TestCase):
         self.b = cloud_auth.Principal("google-subject-B", "b@example.test", "member")
         cloud_auth._persist_user_state(self.cfg, self.a)
         cloud_auth._persist_user_state(self.cfg, self.b)
+        # Exercise hosted personal isolation after an explicit choice. Eligible
+        # accounts now begin in sponsored mode until the user selects personal.
+        cloud_auth.set_model_access(self.a.subject, "personal")
+        cloud_auth.set_model_access(self.b.subject, "personal")
 
     def _restore_env(self):
         for key, value in self.old_env.items():

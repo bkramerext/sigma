@@ -36,8 +36,8 @@ from sigma.research_budget import (
     mark_unknown,
     new_ledger,
     reserve_before_dispatch,
-    settle_rejected,
     settle_after_response,
+    settle_rejected,
 )
 from sigma.research_epistemics import (
     argument_availability,
@@ -7913,7 +7913,9 @@ async def _portfolio_role_call(
                         if other is not branch and other.get("status") in {"queued", "running"}:
                             other["status"] = "ended"
                             other["current_action"] = "Provider usage limit"
-                            other["reason"] = "Not started because ChatGPT rejected a request at its usage limit."
+                            other["reason"] = (
+                                "Not started because ChatGPT rejected a request at its usage limit."
+                            )
                     _event(record, "provider.usage_limit", record["message"], role)
                 if (
                     role == "skeptic"

@@ -13,7 +13,12 @@ while `1/2 the people in this room` expresses a fraction. It explicitly keeps
 ordinary slash-separated words out of math delimiters and LaTeX fractions.
 The conversion still preserves the source and uses the existing structured
 response path. Offline request assertions cover both API-key and ChatGPT-plan
-payloads; live model quality remains unverified.
+payloads; live model quality remains unverified. `tests/text_views.py` passed
+after the prompt change. The full `./sigma test` ran through the Python and
+frontend suites but failed at an outdated hosted-personal fixture expectation,
+two Ruff import-order findings, and three Ruff formatting findings. The
+fixture now explicitly selects personal mode before testing it, and those
+Ruff findings have been corrected; full verification is pending rerun.
 
 ## Issue #286 — Maximum concurrent sessions (2026-10-27)
 

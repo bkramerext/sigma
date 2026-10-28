@@ -788,8 +788,8 @@ def import_project_bundle(body: ImportBundleRequest):
         rename_bundle_project,
     )
     from sigma.projects import (
-        _project_name,
         _occupied_titles,
+        _project_name,
         _title_key,
         _title_registry_lock,
         projects_root,
