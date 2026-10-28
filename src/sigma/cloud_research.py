@@ -24,7 +24,7 @@ from sigma.projects import ProjectError, inspect_project
 
 _PROCESS_EPOCH = uuid4().hex
 USD_UNITS = 1_000_000_000
-MAX_USER_SPEND_USD = Decimal("100.00")
+MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("1000.00")
 MAX_PROJECT_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
@@ -113,7 +113,7 @@ def _user_spend_ceiling_decimal() -> Decimal:
     return _money_ceiling(
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD",
         maximum=MAX_USER_SPEND_USD,
-        message="Cloud research is disabled until a valid default per-user inference allowance of at most $100 is configured.",
+        message="Cloud research is disabled until a valid default per-user inference allowance of at most $15 is configured.",
     )
 
 
