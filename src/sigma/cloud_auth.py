@@ -401,9 +401,22 @@ def _authorization(cfg: Config, subject: str, email: str) -> str | None:
 def _authorization_in_db(
     db: sqlite3.Connection, cfg: Config, subject: str, email: str
 ) -> str | None:
-    # The configured admin contact is an administrator even after a different
-    # bootstrap identity was bound. Pin each contact email to its first
-    # verified Google subject to prevent subject substitution.
+    # Evaluate the original, subject-bound bootstrap identity first. Changing
+    # the administrator contact must not revoke an established administrator.
+    bootstrap_email = _bootstrap_admin_email(db, cfg)
+    bound = db.execute(
+        "SELECT subject FROM bootstrap_subject WHERE email=?", (bootstrap_email,)
+    ).fetchone()
+    if bound:
+        if bound["subject"] == subject and email == bootstrap_email:
+            return "admin"
+        if email == bootstrap_email:
+            return None
+    elif bootstrap_email and email == bootstrap_email:
+        db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
+        return "admin"
+    # A subsequently configured contact is also an administrator. Pin the
+    # verified subject so a different Google identity cannot claim that email.
     if cfg.admin_contact_email and email == cfg.admin_contact_email:
         contact = db.execute(
             "SELECT subject FROM contact_admin_subject WHERE email=?", (email,)
@@ -417,18 +430,6 @@ def _authorization_in_db(
             )
         except sqlite3.IntegrityError:
             return None
-        return "admin"
-    bootstrap_email = _bootstrap_admin_email(db, cfg)
-    bound = db.execute(
-        "SELECT subject FROM bootstrap_subject WHERE email=?", (bootstrap_email,)
-    ).fetchone()
-    if bound:
-        if bound["subject"] == subject and email == bootstrap_email:
-            return "admin"
-        if email == bootstrap_email:
-            return None
-    elif bootstrap_email and email == bootstrap_email:
-        db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
         return "admin"
     explicit = db.execute(
         "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
