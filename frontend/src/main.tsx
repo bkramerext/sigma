@@ -3914,6 +3914,9 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
+      // Signing out is not a first visit. Keep the post-logout guest view
+      // quiet for this tab instead of presenting its introductory welcome.
+      window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
       if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
       window.location.assign(destination);
     } catch (cause) {

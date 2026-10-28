@@ -440,8 +440,12 @@ def exercise(ui_url: str, root: Path) -> None:
             route.fulfill(status=204)
 
         page.route("**/api/cloud-auth/logout", sign_out)
+        # This member context did not previously show a guest welcome. Signing
+        # out should not make the same tab look like a first-time guest visit.
+        page.evaluate("sessionStorage.removeItem('sigma.guestWelcomeDismissed')")
         page.get_by_role("button", name="Sign out of Google").click()
         expect(page).to_have_url(re.compile(r"/project\?path="))
+        expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
         expect(
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible()

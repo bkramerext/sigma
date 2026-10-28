@@ -8,6 +8,11 @@ $0.21 estimated usage displays $0.04 remaining. The browser acceptance and
 `./sigma test` passed. No provider calls or production configuration changes
 occurred.
 
+Signing out now marks the guest welcome as already seen for the current tab, so
+leaving an authenticated session does not trigger a first-visit greeting. Real
+Chrome guest acceptance clears the prior guest-dismissal marker before sign-out
+and verifies the dialog remains absent afterward.
+
 ## Guest Play continuation and project sign-out (2026-10-27)
 
 Google sign-in from the guest Play prompt now carries the project into the
