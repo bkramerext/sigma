@@ -40,7 +40,7 @@ def main() -> None:
             if argv[:1] == ["install"]:
                 Path(argv[-1]).write_bytes(Path(argv[-2]).read_bytes())
                 return subprocess.CompletedProcess(argv, 0, "", "")
-            if argv[:2] == ["python3", str(checkout / "deploy/release_image.py")]:
+            if argv[:1] == ["python3"] and Path(argv[1]).name == "release_image.py":
                 if argv[2] == "build":
                     source_sha_at_build = argv[-1]
                     image_sha_at_build = argv[-1]
@@ -53,6 +53,8 @@ def main() -> None:
                     return subprocess.CompletedProcess(argv, 0, "", "")
                 if operation in {"fetch", "cat-file"}:
                     return subprocess.CompletedProcess(argv, 0, "", "")
+                if operation == "show":
+                    return subprocess.CompletedProcess(argv, 0, "# candidate builder\n", "")
                 if operation == "rev-parse":
                     return subprocess.CompletedProcess(argv, 0, checked_out_sha, "")
                 if operation == "checkout":

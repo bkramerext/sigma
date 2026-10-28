@@ -109,6 +109,8 @@ def main() -> None:
                 return subprocess.CompletedProcess(argv, 0, "", "")
             if argv[:4] == ["git", "-C", str(repo), "cat-file"]:
                 return subprocess.CompletedProcess(argv, 0, "", "")
+            if argv[:4] == ["git", "-C", str(repo), "show"]:
+                return subprocess.CompletedProcess(argv, 0, "# candidate image builder\n", "")
             if argv[:4] == ["git", "-C", str(repo), "rev-parse"]:
                 return subprocess.CompletedProcess(argv, 0, OLD, "")
             if argv[-3:] in (
@@ -158,10 +160,18 @@ def main() -> None:
         build_index = next(
             index
             for index, argv in enumerate(calls)
-            if argv[:2] == ["python3", str(repo / "deploy/release_image.py")]
+            if argv[0] == "python3"
+            and Path(argv[1]).name == "release_image.py"
             and argv[2:] == ["build", str(repo), NEW]
         )
         assert build_index >= 0
+        assert calls[build_index - 1] == [
+            "git",
+            "-C",
+            str(repo),
+            "show",
+            f"{NEW}:deploy/release_image.py",
+        ]
 
         print(
             "GCE release automation idempotency, missing config, startup rollback, and state preservation passed."

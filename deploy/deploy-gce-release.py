@@ -210,16 +210,22 @@ class Deployment:
         candidate_checkout_changed = False
         release_pin_changed = False
         try:
-            _call(
+            # The active checkout may predate the selected release builder. Run
+            # the image builder from the requested commit so build arguments
+            # and provenance checks match the exact source being deployed.
+            builder = _call(
                 self.runner,
-                [
-                    "python3",
-                    str(self.repository / "deploy/release_image.py"),
-                    "build",
-                    str(self.repository),
-                    sha,
-                ],
+                ["git", "-C", str(self.repository), "show", f"{sha}:deploy/release_image.py"],
             )
+            if not builder:
+                raise DeployFailure("selected release image builder is empty")
+            with tempfile.TemporaryDirectory(prefix="sigma-release-builder-") as directory:
+                builder_path = Path(directory) / "release_image.py"
+                builder_path.write_text(builder, encoding="utf-8")
+                _call(
+                    self.runner,
+                    ["python3", str(builder_path), "build", str(self.repository), sha],
+                )
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True

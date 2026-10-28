@@ -41,7 +41,7 @@ def main() -> None:
             if argv[:1] == ["install"]:
                 Path(argv[-1]).write_bytes(Path(argv[-2]).read_bytes())
                 return subprocess.CompletedProcess(argv, 0, "", "")
-            if argv[:2] == ["python3", str(checkout / "deploy/release_image.py")]:
+            if argv[:1] == ["python3"] and Path(argv[1]).name == "release_image.py":
                 if argv[2] == "build":
                     return subprocess.CompletedProcess(argv, 17, "", "fixture failure")
                 return subprocess.CompletedProcess(argv, 0, "fixture", "")
@@ -54,6 +54,8 @@ def main() -> None:
                     return subprocess.CompletedProcess(argv, 0, old_sha, "")
                 if argv[3] in {"fetch", "cat-file"}:
                     return subprocess.CompletedProcess(argv, 0, "", "")
+                if argv[3] == "show":
+                    return subprocess.CompletedProcess(argv, 0, "# candidate builder\n", "")
             raise AssertionError(f"unexpected release command: {argv}")
 
         deployment = module.Deployment(checkout, deploy_env, root / "preflight.py", runner, False)
@@ -70,7 +72,8 @@ def main() -> None:
         assert not any(command[:4] == ["git", "-C", str(checkout), "checkout"] for command in calls)
         assert (
             sum(
-                command[:2] == ["python3", str(checkout / "deploy/release_image.py")]
+                command[:1] == ["python3"]
+                and Path(command[1]).name == "release_image.py"
                 and command[2] == "build"
                 for command in calls
             )
