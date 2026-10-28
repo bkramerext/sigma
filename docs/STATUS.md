@@ -1,3 +1,66 @@
+## Issue #286 — Maximum concurrent sessions (2026-10-27)
+
+Added **Maximum concurrent sessions** to Project Settings → Limits. The
+application default is 1. Users can enter any positive decimal integer without
+an application-defined maximum; the API carries the value as decimal text so
+JavaScript number precision does not truncate it. Legacy projects inherit 1,
+and the saved setting remains in the project limits bundle and each new
+session's admission snapshot.
+
+Admission and resume count queued/running sessions for that project while
+holding the existing cross-process project manager lock. The hosted reservation
+ledger also checks the per-project count inside its SQLite write transaction.
+For pre-upgrade rows, it verifies a matching saved session record and project ID
+before counting a legacy row or assigning its slot marker. Legacy rows with an
+empty project path are resolved against the current project's record; standalone
+inference rows without a research-session record remain outside this limit.
+Other projects are no longer blocked by a local active-session check. Raising
+the value admits new sessions immediately; lowering it leaves current sessions
+alone and blocks additional admission while the count is at or above the new
+limit. Completed, failed, stopped, and paused sessions do not consume slots.
+Local stale work is recovered before counting. A hosted queued session without
+a durable queue reservation is paused with a no-dispatch explanation; running
+provider calls retain the existing unknown-completion safeguards and are never
+automatically replayed.
+
+Verification: `tests/research_sessions.py` passed concurrent start admission
+and capacity reuse after stop; `tests/project_settings.py` passed default,
+invalid input, sibling-project isolation, numeric API input, and 100 digit
+decimal save/load; `tests/project_bundle.py` passed JSON bundle round-trip with
+an 80 digit setting; `tests/cloud_research.py`, `tests/cloud_auth.py`, and
+`tests/sage_execution.py` passed hosted admission, interrupted recovery, and
+the updated per-project scope. Real Chrome
+`browser_checks/issue286_concurrent_sessions.py` passed default-1, zero
+rejection, 80 digit save/reopen, and narrow viewport checks using an isolated
+local fixture. The full `./sigma test` passed every step, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. Vite emitted the
+existing advisory for the 519 kB main JavaScript chunk. No paid or live
+provider calls, OAuth, or production changes occurred.
+
+PR #287 review follow-up: `tests/cloud_research.py` now models an active
+pre-migration session row with `session_slot=0` and an empty legacy project path,
+then verifies it blocks a second session after upgrade. The complete
+`./sigma test` passed again after this correction.
+
+PR #287 integration with Green's merged sponsored-access and invitation work:
+the SQLite per-project admission check and legacy migration remain intact beside
+the allowance-window functions, and hosted queued-session recovery checks the
+durable sponsor ledger. The single-worker guard was removed from local session
+admission so the configured limit applies per project. `./sigma test` passed on
+the combined tree. Real Chrome passed
+`browser_checks/issue286_concurrent_sessions.py`,
+`browser_checks/hosted_sponsored_connection.py`, `browser_checks/guest_samples.py`,
+and `browser_checks/issue279_invite_me.py` using local fixtures; no provider
+inference or production changes occurred. The #279 browser check now dismisses
+the new first-visit welcome and verifies the current identity-pill stack.
+
+The browser-exercised sample copy was exported with SIGMA's complete project
+export service; exact bytes and source/session manifest are in
+[`docs/evaluations/issue_286/exports`](evaluations/issue_286/exports/README.md).
+Implementation branch: `blue/issue-286-concurrent-sessions`; [PR #287](https://github.com/bkramerext/sigma/pull/287)
+is open for independent review. See the
+[`messages/issue_286_blue_r4r.md`](../messages/issue_286_blue_r4r.md) handoff.
+
 ## Sponsored welcome shows current remaining balance (2026-10-27)
 
 Regular local members now start a fresh ChatGPT account authorization from the

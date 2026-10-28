@@ -667,6 +667,13 @@ def main() -> None:
                     "evidence/source.txt": b"source evidence",
                 },
             )
+            from sigma.research_sessions import DEFAULT_LIMITS, get_limits, save_limits
+
+            saved_limits = {
+                **DEFAULT_LIMITS,
+                "max_concurrent_sessions": 10**80,
+            }
+            save_limits(str(created.path), saved_limits)
             assert {
                 "project.json",
                 f"research-sessions/{session_id}.json",
@@ -685,6 +692,7 @@ def main() -> None:
             assert exported["version"] == 1
             imported_path = root / "copy.json"
             import_bundle(exported, imported_path)
+            assert get_limits(str(imported_path)) == saved_limits
             assert read_file(imported_path, "project.json") == read_file(
                 created.path, "project.json"
             )

@@ -264,9 +264,77 @@ def test_orphaned_job_reconciliation(
                 item["id"] = str(uuid4())
                 item["idempotency_key"] = str(uuid4())
                 item["status"] = status
+                item["max_concurrent_sessions"] = 3
                 item["steps"] = []
                 item["events"] = []
                 return item
+
+            # Existing databases migrate the new column to zero. An active
+            # legacy job with a saved session record must still consume a slot.
+            legacy = derived_job("queued")
+            legacy["max_concurrent_sessions"] = 1
+            cloud_research.prepare_job(legacy)
+            research_sessions._save(project.path, legacy)
+            db = cloud_research._connect()
+            db.execute(
+                "UPDATE jobs SET session_slot=0,project_relpath='' WHERE session_id=?",
+                (legacy["id"],),
+            )
+            db.close()
+            after_upgrade = derived_job("queued")
+            after_upgrade["max_concurrent_sessions"] = 1
+            try:
+                cloud_research.prepare_job(after_upgrade)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "maximum concurrent sessions" in str(exc).lower()
+            else:
+                raise AssertionError("an active pre-migration job did not consume a project slot")
+            db = cloud_research._connect()
+            assert (
+                db.execute(
+                    "SELECT 1 FROM jobs WHERE session_id=?", (after_upgrade["id"],)
+                ).fetchone()
+                is None
+            )
+            db.execute("DELETE FROM jobs WHERE session_id=?", (legacy["id"],))
+            db.close()
+            (Path(project.path) / "research-sessions" / f"{legacy['id']}.json").unlink()
+
+            slot_one = derived_job("queued")
+            slot_one["max_concurrent_sessions"] = 1
+            cloud_research.prepare_job(slot_one)
+            slot_two = derived_job("queued")
+            slot_two["max_concurrent_sessions"] = 1
+            try:
+                cloud_research.prepare_job(slot_two)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "maximum concurrent sessions" in str(exc).lower()
+            else:
+                raise AssertionError("hosted reservation exceeded the project's session limit")
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='paused' WHERE session_id=?", (slot_one["id"],))
+            db.close()
+            cloud_research.prepare_job(slot_two)
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='terminal' WHERE session_id=?", (slot_two["id"],))
+            db.close()
+            slot_three = derived_job("queued")
+            slot_three["max_concurrent_sessions"] = 1
+            cloud_research.prepare_job(slot_three)
+            db = cloud_research._connect()
+            db.execute(
+                "UPDATE jobs SET status='interrupted' WHERE session_id=?", (slot_three["id"],)
+            )
+            db.close()
+            slot_four = derived_job("queued")
+            slot_four["max_concurrent_sessions"] = 1
+            cloud_research.prepare_job(slot_four)
+            db = cloud_research._connect()
+            db.execute(
+                "DELETE FROM jobs WHERE session_id IN (?,?,?,?)",
+                (slot_one["id"], slot_two["id"], slot_three["id"], slot_four["id"]),
+            )
+            db.close()
 
             valid = derived_job("queued")
             cloud_research.prepare_job(valid)
@@ -702,6 +770,7 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert sponsored["model_calls"] == 2 and sponsored["research_rounds"] == 1
     project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
     limits = {
+        **research_sessions.DEFAULT_LIMITS,
         "research_rounds": 5,
         "model_calls": 30,
         "session_duration_minutes": 60,

@@ -272,6 +272,7 @@ def _connect() -> sqlite3.Connection:
                 updated_at TEXT NOT NULL,
                 project_relpath TEXT NOT NULL DEFAULT '',
                 process_epoch TEXT NOT NULL DEFAULT '',
+                session_slot INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(workspace_id, idempotency_key)
             );
             CREATE INDEX IF NOT EXISTS jobs_workspace_status ON jobs(workspace_id, status);
@@ -304,6 +305,8 @@ def _connect() -> sqlite3.Connection:
             db.execute("ALTER TABLE jobs ADD COLUMN project_relpath TEXT NOT NULL DEFAULT ''")
         if "process_epoch" not in columns:
             db.execute("ALTER TABLE jobs ADD COLUMN process_epoch TEXT NOT NULL DEFAULT ''")
+        if "session_slot" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN session_slot INTEGER NOT NULL DEFAULT 0")
         os.chmod(path, 0o600)
         return db
     except (OSError, sqlite3.Error) as exc:
@@ -340,6 +343,56 @@ def _transaction() -> Iterator[sqlite3.Connection]:
         raise
     finally:
         db.close()
+
+
+def job_status(session_id: str) -> str | None:
+    """Return the owner's durable queue state, or None when no reservation exists."""
+    owner = _workspace_id()
+    try:
+        with _connect() as db:
+            row = db.execute(
+                "SELECT status FROM jobs WHERE session_id=? AND workspace_id=?",
+                (session_id, owner),
+            ).fetchone()
+            return row["status"] if row else None
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def _legacy_session_status(project_path: str, project_id: str, session_id: str) -> str | None:
+    """Distinguish pre-migration session jobs from standalone inference rows."""
+    from sigma import research_sessions
+    from sigma.projects import ProjectError
+
+    project = Path(project_path)
+    member = f"research-sessions/{session_id}.json"
+    try:
+        if project.suffix == ".json":
+            from sigma.project_bundle import read_bundle
+
+            if member not in read_bundle(project_path)["files"]:
+                return None
+        else:
+            directory = project / "research-sessions"
+            target = directory / f"{session_id}.json"
+            if not target.exists() and not target.is_symlink():
+                return None
+            if directory.is_symlink() or target.is_symlink() or not target.is_file():
+                raise CloudResearchUnavailable(
+                    "An existing hosted session record cannot be inspected safely."
+                )
+        saved = research_sessions._read(project_path, session_id)
+    except CloudResearchUnavailable:
+        raise
+    except (OSError, ValueError, ProjectError) as exc:
+        raise CloudResearchUnavailable(
+            "An existing hosted session record cannot be inspected safely."
+        ) from exc
+    if saved.get("id") != session_id or saved.get("project_id") != project_id:
+        raise CloudResearchUnavailable(
+            "An existing hosted session record does not match its ledger row."
+        )
+    return saved.get("status")
 
 
 def _user_call_amount_units(
@@ -425,9 +478,52 @@ def prepare_job(record: dict[str, Any]) -> None:
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
     project_relpath = _project_relpath(record, workspace.path)
+    session_limit = record.get("max_concurrent_sessions")
+    if session_limit is not None and (type(session_limit) is not int or session_limit < 1):
+        raise CloudResearchUnavailable(
+            "Maximum concurrent sessions must be a positive whole number."
+        )
+    session_slot = int(session_limit is not None)
     now = _now()
     try:
         with _transaction() as db:
+            if session_slot:
+                legacy_rows = db.execute(
+                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? AND (project_relpath=? OR project_relpath='') AND session_slot=0 AND status IN ('queued','running','stopping') AND session_id<>?",
+                    (owner, record["project_id"], project_relpath, record["id"]),
+                ).fetchall()
+                for legacy in legacy_rows:
+                    saved_status = _legacy_session_status(
+                        record["project_path"], record["project_id"], legacy["session_id"]
+                    )
+                    if saved_status is None:
+                        # Standalone inference uses the same ledger but has no
+                        # research-session record and consumes no project slot.
+                        continue
+                    if saved_status in {"stopped", "failed", "ended", "completed"}:
+                        db.execute(
+                            "UPDATE jobs SET status='terminal',session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
+                            (project_relpath, now, legacy["session_id"], owner),
+                        )
+                    elif saved_status in {"paused", "interrupted"}:
+                        db.execute(
+                            "UPDATE jobs SET status=?,session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
+                            (saved_status, project_relpath, now, legacy["session_id"], owner),
+                        )
+                    else:
+                        # Unknown or active states fail closed as occupied slots.
+                        db.execute(
+                            "UPDATE jobs SET session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
+                            (project_relpath, now, legacy["session_id"], owner),
+                        )
+                active_for_project = db.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>?",
+                    (owner, record["project_id"], record["id"]),
+                ).fetchone()[0]
+                if active_for_project >= session_limit:
+                    raise CloudResearchUnavailable(
+                        "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                    )
             existing = db.execute(
                 "SELECT * FROM jobs WHERE session_id=? OR (workspace_id=? AND idempotency_key=?)",
                 (record["id"], owner, record["idempotency_key"]),
@@ -454,8 +550,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "Research queue is full; retry when capacity is available."
                         )
                     db.execute(
-                        "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=? WHERE session_id=?",
-                        (now, project_relpath, _PROCESS_EPOCH, record["id"]),
+                        "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=?,session_slot=? WHERE session_id=?",
+                        (now, project_relpath, _PROCESS_EPOCH, session_slot, record["id"]),
                     )
                 return
             user_queued = db.execute(
@@ -470,7 +566,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                 )
             # Jobs are initially queued. Claiming uses an atomic running-slot test.
             db.execute(
-                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch) VALUES(?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     record["id"],
                     owner,
@@ -481,6 +577,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     now,
                     project_relpath,
                     _PROCESS_EPOCH,
+                    session_slot,
                 ),
             )
     except sqlite3.Error as exc:

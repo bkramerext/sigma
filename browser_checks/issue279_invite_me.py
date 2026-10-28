@@ -55,6 +55,10 @@ with sync_playwright() as playwright:
     )
     page.goto(BASE_URL, wait_until="networkidle")
     expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+    welcome = page.locator("#invitation-welcome-dialog")
+    if welcome.count() and welcome.is_visible():
+        welcome.get_by_role("button", name="Let's get started").click()
+        expect(welcome).to_have_count(0)
     invite_pill = page.get_by_role("button", name="Invite me!")
     invite_pill.click()
     guest_invite_dialog = page.get_by_role("dialog", name="Request an invitation")
@@ -179,6 +183,12 @@ with sync_playwright() as playwright:
         ),
     )
     member_page.route(
+        "**/api/cloud-auth/welcome",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json", body='{"seen":true}'
+        ),
+    )
+    member_page.route(
         "**/api/cloud-auth/invitation-request",
         lambda route: (
             reload_posts.append(route.request.post_data_json)
@@ -190,6 +200,10 @@ with sync_playwright() as playwright:
         ),
     )
     member_page.goto(BASE_URL, wait_until="networkidle")
+    member_welcome = member_page.locator("#invitation-welcome-dialog")
+    if member_welcome.count() and member_welcome.is_visible():
+        member_welcome.get_by_role("button", name="Let's get started").click()
+        expect(member_welcome).to_have_count(0)
     expect(member_page.get_by_role("button", name="Invite me!")).to_have_count(0)
     expect(member_page.get_by_role("button", name="Sign out of Google")).to_be_visible()
     expect(member_page.get_by_role("button", name="Reload me!")).to_have_count(0)
@@ -197,7 +211,7 @@ with sync_playwright() as playwright:
     member_page.evaluate("window.dispatchEvent(new Event('focus'))")
     reload_button = member_page.get_by_role("button", name="Reload me!")
     expect(reload_button).to_be_visible()
-    expect(reload_button.locator("xpath=..")).to_have_class("home-header-actions")
+    expect(reload_button.locator("xpath=..")).to_have_class("identity-pill-stack")
     reload_button.click()
     expect(member_page.get_by_text("Reload requested", exact=True)).to_be_visible()
     assert reload_posts == [{"request_type": "reload"}]

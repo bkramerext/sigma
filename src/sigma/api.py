@@ -365,6 +365,7 @@ class ResearchLimitsRequest(OpenRequest):
     output_tokens_per_call: int = Field(ge=256, le=20000)
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
     maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)
+    max_concurrent_sessions: int | str = "1"
 
 
 class PaperGenerateRequest(OpenRequest):
@@ -522,12 +523,13 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
 
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
-    return research_sessions.get_limits(path)
+    limits = research_sessions.get_limits(path)
+    return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
 
 
 @app.put("/api/projects/research-limits")
 def research_limits_update(body: ResearchLimitsRequest):
-    return research_sessions.save_limits(
+    limits = research_sessions.save_limits(
         body.path,
         {
             "research_rounds": body.research_rounds,
@@ -536,8 +538,10 @@ def research_limits_update(body: ResearchLimitsRequest):
             "output_tokens_per_call": body.output_tokens_per_call,
             "maximum_estimated_cost_usd": body.maximum_estimated_cost_usd,
             "maximum_input_tokens_per_session": body.maximum_input_tokens_per_session,
+            "max_concurrent_sessions": body.max_concurrent_sessions,
         },
     )
+    return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
 
 
 @app.get("/api/projects/current-understanding")
