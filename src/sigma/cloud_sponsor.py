@@ -38,7 +38,9 @@ def inference_provider() -> str:
         # Local sponsored access defaults to the designated ChatGPT session.
         # A service API key is used only when the operator selects it explicitly.
         return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
-    return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+    # Sponsorship is backed by the designated ChatGPT account unless the
+    # operator explicitly opts into separately billed API-key inference.
+    return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
 
 
 def expected_email() -> str:
