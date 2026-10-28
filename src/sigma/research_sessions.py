@@ -3247,21 +3247,6 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             _event(record, "interrupted", record["message"])
             _save(record["project_path"], record)
             return record
-        record["status"] = "paused"
-        record["updated_at"] = _now()
-        record["current_action"] = "Paused after queue recovery"
-        record["message"] = (
-            "The queued session reservation was no longer present after backend recovery. "
-            "No provider request was dispatched; resume when ready."
-        )
-        for branch in record.get("strategy_runs", []):
-            if branch.get("status") == "queued":
-                branch["status"] = "paused"
-                branch["current_action"] = record["current_action"]
-                branch["reason"] = record["message"]
-        _event(record, "interrupted", record["message"])
-        _save(record["project_path"], record)
-        return record
     lock_path = _worker_lock_path(record["project_path"], record["id"])
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
