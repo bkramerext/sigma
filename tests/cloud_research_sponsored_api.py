@@ -649,6 +649,12 @@ print("PASS fresh-process research, Outcome and report recovery")
                     f"/api/projects/research-sessions/{session_id}", params={"path": path}
                 )
                 assert still_readable.status_code == 200, still_readable.text
+                existing_session_ids = {
+                    session["id"]
+                    for session in client.get(
+                        "/api/projects/research-sessions", params={"path": path}
+                    ).json()["sessions"]
+                }
                 exhausted_start = client.post(
                     "/api/projects/research-sessions/start",
                     json={**start_body, "idempotency_key": str(uuid4())},
@@ -657,12 +663,12 @@ print("PASS fresh-process research, Outcome and report recovery")
                 assert "global inference-spend ceiling" in exhausted_start.json()["error"]
                 assert len(provider_calls) == 12
                 # Reject a hopeless start before creating any session record.
-                assert all(
-                    session["id"] == session_id
+                assert {
+                    session["id"]
                     for session in client.get(
                         "/api/projects/research-sessions", params={"path": path}
                     ).json()["sessions"]
-                )
+                } == existing_session_ids
 
     print(
         "PASS authenticated HTTP sponsored inference through a deterministic fake OpenAI provider, including no personal account, budget exhaustion, uncertain failure holds, idempotency, and cross-workspace isolation"
