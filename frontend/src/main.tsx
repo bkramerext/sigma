@@ -2924,6 +2924,8 @@ type CloudResearchBudget = {
   reserved_and_estimated_usd: number;
   remaining_usd: number;
   global_remaining_usd?: number;
+  global_spend_period?: 'cumulative' | 'calendar_month';
+  global_reset_at?: string | null;
   unknown_provider_attempts: number;
 };
 
