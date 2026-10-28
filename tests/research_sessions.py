@@ -5458,6 +5458,10 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
     assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
+    metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert "1 rejected" in metrics["Model calls by status"]
     assert "subscription_sharing_usage_limit_exceeded" in limited["failure_message"]
     assert "separate from SIGMA's sponsored-dollar allowance" in limited["failure_message"]
     if streamed:
