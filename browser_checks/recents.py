@@ -304,6 +304,18 @@ with sync_playwright() as playwright:
     row = second_copy.locator("xpath=../../..")
     row_before = row.bounding_box()
     remove = row.get_by_role("button", name=re.compile("Remove .* from Recent Projects"))
+    remove.evaluate("element => element.scrollIntoView({block: 'end'})")
+    remove.hover()
+    tooltip = page.get_by_role("tooltip")
+    expect(tooltip).to_have_text("Remove from Recent Projects; keep all research")
+    tooltip_box = tooltip.bounding_box()
+    viewport = page.evaluate("({width: innerWidth, height: innerHeight})")
+    assert (
+        tooltip_box
+        and 0 <= tooltip_box["y"]
+        and tooltip_box["y"] + tooltip_box["height"] <= viewport["height"]
+    )
+    assert tooltip_box["x"] >= 0 and tooltip_box["x"] + tooltip_box["width"] <= viewport["width"]
     remove.click()
     confirmation = row.get_by_role(
         "group", name="Confirm remove Nonconsecutive Subset Sums Modulo 3 v2"

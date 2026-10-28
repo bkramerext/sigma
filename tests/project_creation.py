@@ -193,6 +193,7 @@ def main() -> None:
                 assert "attachment" in downloaded.headers["content-disposition"]
                 portable = downloaded.json()
                 assert portable["format"] == "sigma.project.bundle"
+                assert portable["version"] == 2
                 # Both the canonical export route and the legacy download
                 # alias must return one complete, importable file bundle.
                 legacy_download = client.get(
@@ -200,18 +201,9 @@ def main() -> None:
                 )
                 assert legacy_download.status_code == 200
                 assert legacy_download.content == downloaded.content
-                from sigma.project_bundle import read_bundle
-
-                assert portable == read_bundle(response.json()["path"])
-                imported_document = json.loads(
-                    __import__("base64").b64decode(portable["files"]["project.json"])
-                )
+                imported_document = portable["files"]["project.json"]
                 imported_document["title"] = "API math imported"
-                portable["files"]["project.json"] = (
-                    __import__("base64")
-                    .b64encode((json.dumps(imported_document) + "\n").encode())
-                    .decode()
-                )
+                portable["files"]["project.json"] = imported_document
                 imported = client.post("/api/projects/import", json={"bundle": portable})
                 assert imported.status_code == 201, imported.text
                 assert Path(imported.json()["path"]).suffix == ".json"

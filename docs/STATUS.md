@@ -7418,3 +7418,16 @@ space between the intro and disclosures is now just the intro's 8px bottom gap.
 The export option now reads “Project file”; its hover text says it can be
 imported into a different SIGMA account. `git diff --check` passed; no browser
 or automated checks were run.
+
+## Readable project export and viewport-safe remove tooltip (2026-10-28)
+
+Portable project exports now use bundle version 2: JSON members are embedded
+as JSON, UTF-8 members as text, and only binary or invalid-UTF-8 content is
+Base64 encoded. Import still accepts version 1 and stores projects in the
+existing internal format. Operational `.lock` files are omitted because they
+are regenerated locally. The Recent Projects Remove tooltip now uses the
+viewport-positioned tooltip.
+
+Focused checks passed: project bundle, project creation/import API, project
+reports, and Ruff on the changed Python and browser-check files. The real
+browser recents check and full `./sigma test` suite were not run.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from copy import deepcopy
 from pathlib import Path
@@ -556,11 +557,11 @@ def main() -> None:
         audit_before = export_project_view(str(path))
         with TestClient(app) as client:
             # Legacy directory projects must export as complete, importable JSON bundles.
-            from sigma.project_bundle import snapshot
+            from sigma.project_bundle import encode
 
             downloaded = client.get("/api/projects/download", params={"path": str(path)})
             assert downloaded.status_code == 200, downloaded.text
-            assert downloaded.json() == snapshot(path)
+            assert downloaded.json() == json.loads(encode(path))
             assert "application/json" in downloaded.headers["content-type"]
             for output_format, mime in (
                 ("txt", "text/plain"),

@@ -780,9 +780,7 @@ class ImportBundleRequest(BaseModel):
 @app.post("/api/projects/import", status_code=201)
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
-    import base64
-
-    from sigma.project_bundle import BundleError, import_bundle
+    from sigma.project_bundle import BundleError, bundle_project_document, import_bundle
     from sigma.projects import (
         _project_name,
         _require_available_title,
@@ -791,7 +789,7 @@ def import_project_bundle(body: ImportBundleRequest):
     )
 
     try:
-        document = json.loads(base64.b64decode(body.bundle["files"]["project.json"], validate=True))
+        document = bundle_project_document(body.bundle)
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
