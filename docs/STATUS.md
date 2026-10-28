@@ -7627,3 +7627,23 @@ provider availability remain unverified; the test uses mocked code exchange
 and token validation. No product defect was found, no paid calls were made,
 and no merge or deployment occurred. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
+
+## PR #297 admin sponsor pill follow-up (2026-10-28)
+
+The human reproduced the local admin pill posting the selected sponsor ChatGPT
+account to `/api/ai/auth/begin` and receiving the “Use Admin Settings” 403. The
+route now recognizes a selected sponsor credential and permits its OAuth
+renewal only for a verified Google admin, independent of the Google and
+ChatGPT email values. OAuth begins after the sponsor-store transaction closes;
+the first regression run exposed and fixed a nested transaction wait.
+
+The focused `tests/cloud_auth.py` regression submits the actual endpoint payload
+under local auth as Google admin `zetacontinuation@gmail.com` with selected
+sponsor `nontrivialzeeros@gmail.com`; it passed with HTTP 200 and sponsor OAuth
+selected. `tests/cloud_sponsor.py` passed all 18 tests, including OAuth callback
+exchange, credential persistence, and connected status. Scoped Ruff check and
+format plus `git diff --check` passed at implementation commit
+`3498c234c20bf52a5afd246330bcc41665fa29e3`. Live OAuth/provider use and browser
+exercise remain unverified (Playwright is unavailable). No paid calls, merge,
+or deployment occurred. Updated handoff:
+[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
