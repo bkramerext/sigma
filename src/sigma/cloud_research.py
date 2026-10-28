@@ -588,6 +588,19 @@ def prepare_job(record: dict[str, Any]) -> None:
                         "Research request identity conflicts with a saved job."
                     )
                 if existing["status"] in {"paused", "interrupted", "terminal"}:
+                    # Resuming a saved session must not silently queue work
+                    # when its funding is already exhausted. Keep the saved
+                    # terminal/interrupted state intact for playback.
+                    if _call_amount_units(db, "") >= global_ceiling_units:
+                        raise CloudResearchUnavailable(_global_ceiling_failure_message())
+                    if _user_call_amount_units(db, owner) >= user_ceiling_units:
+                        raise CloudResearchUnavailable(
+                            "Your cumulative cloud research allowance has been reached; saved research remains available."
+                        )
+                    if _user_call_tokens(db, owner) >= token_budget:
+                        raise CloudResearchUnavailable(
+                            "The per-user research token budget has been reached."
+                        )
                     per_user = db.execute(
                         "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
                         (owner,),
