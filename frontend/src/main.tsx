@@ -3891,6 +3891,12 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
+  // The denied-identity cookie proves Google verified an account, but SIGMA
+  // did not authorize it. Signed-out guests and already-invited accounts
+  // must never see an invitation action.
+  const canRequestInvitation = !!cloud?.enabled && !cloud.authenticated
+    && deniedIdentityAvailable && cloud.deniedInvitationStatus === null
+    && !invitationRecorded;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
     ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
@@ -3902,15 +3908,16 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }, [cloud?.deniedInvitationStatus]);
   useEffect(() => {
     const inviteIntent = new URLSearchParams(window.location.search).get('invite') === '1';
-    if (deniedIdentityAvailable && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
-  }, [deniedIdentityAvailable]);
+    if (canRequestInvitation && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
+    if (!canRequestInvitation && dialog.current?.open) dialog.current.close();
+  }, [canRequestInvitation]);
   useEffect(() => {
     const open = () => {
       document
         .querySelector<HTMLAnchorElement>('.project-google-signin[href^="/api/cloud-auth/login"]')
         ?.click();
     };
-    const openInvitation = () => { if (!cloud?.authenticated) dialog.current?.showModal(); };
+    const openInvitation = () => { if (canRequestInvitation) dialog.current?.showModal(); };
     window.addEventListener('sigma-open-google-signin', open);
     window.addEventListener('sigma-open-invitation', openInvitation);
     const params = new URLSearchParams(window.location.search);
@@ -3924,7 +3931,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       window.removeEventListener('sigma-open-google-signin', open);
       window.removeEventListener('sigma-open-invitation', openInvitation);
     };
-  }, [cloud?.authenticated]);
+  }, [canRequestInvitation]);
   useEffect(() => {
     if (!deniedIdentityAvailable || new URLSearchParams(window.location.search).get('invite') !== '1') return;
     let cancelled = false;
@@ -3988,9 +3995,9 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     {cloud?.enabled && cloud.authenticated
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
-        <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
-        {cloud?.enabled && !invitationRecorded && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
-      </>}
+        {!canRequestInvitation && <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>}
+        {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
+      </>
     {!cloud?.authenticated && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
       <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
       {deniedIdentityAvailable
@@ -4011,17 +4018,15 @@ function HomeInvitationAction() {
   const cloud = useCloudIdentity();
   const [recorded, setRecorded] = useState(false);
   useEffect(() => {
-    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') setRecorded(true);
-  }, [cloud?.deniedInvitationStatus]);
-  useEffect(() => {
-    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') setRecorded(true);
+    if (cloud?.deniedInvitationStatus !== null && cloud?.deniedInvitationStatus !== undefined) setRecorded(true);
   }, [cloud?.deniedInvitationStatus]);
   useEffect(() => {
     const onRecorded = () => setRecorded(true);
     window.addEventListener('sigma-invitation-recorded', onRecorded);
     return () => window.removeEventListener('sigma-invitation-recorded', onRecorded);
   }, []);
-  if (!cloud?.enabled || cloud.authenticated || recorded) return null;
+  if (!cloud?.enabled || cloud.authenticated || !cloud.deniedIdentityAvailable
+    || cloud.deniedInvitationStatus !== null || recorded) return null;
   return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}>Invite me!</button>;
 }
 
