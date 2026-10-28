@@ -7401,3 +7401,9 @@ The Saved tab tooltip now clarifies that local mode uses one shared project
 list. Hosted guests retain the sign-in tooltip, and hosted signed-in accounts
 retain the regular saved-project tooltip. `git diff --check` passed; no browser
 or automated checks were run.
+
+## Samples copy tooltip (2026-10-28)
+
+The Samples tab tooltip now explains that selecting a sample creates a project
+copy and leaves the original sample unchanged. `git diff --check` passed; no
+browser or automated checks were run.
