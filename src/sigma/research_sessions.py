@@ -7654,6 +7654,15 @@ async def _portfolio_role_call(
                 + (0 if isinstance(hard_ledger, dict) else token_reserve)
                 > int(record.get("total_token_limit", 0))
             ):
+                if isinstance(hard_ledger, dict):
+                    # The hard ledger was reserved above, but this session's
+                    # independent aggregate-token guard refused the call.
+                    # Neither durable admission nor the session's token
+                    # counter may retain a pre-dispatch reservation.
+                    cancel_before_dispatch(hard_ledger, call_id=step_id)
+                    record["tokens_reserved"] = max(
+                        0, int(record.get("tokens_reserved", 0)) - token_reserve
+                    )
                 branch["status"] = "ended"
                 branch["reason"] = (
                     "The bounded session token budget cannot reserve another provider call."
