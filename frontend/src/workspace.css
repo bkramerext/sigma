@@ -20,6 +20,8 @@
   color: var(--workspace-text);
 }
 .workspace-page .site-header {
+  position: relative;
+  z-index: 2;
   flex: 0 0 auto;
   min-height: 88px;
   padding: 20px 32px;

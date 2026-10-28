@@ -123,6 +123,12 @@ with sync_playwright() as playwright:
         assert recent_panel.locator(".home-runnable-state").count() == 0
 
         project_button.click()
+        header_stacking = page.evaluate("""() => {
+          const header = document.querySelector('.workspace-page > .site-header');
+          const pane = document.querySelector('.workspace-layout');
+          return [Number(getComputedStyle(header).zIndex), Number(getComputedStyle(pane).zIndex)];
+        }""")
+        assert header_stacking[0] > header_stacking[1], header_stacking
         project_running_dot = page.locator(".project-header-title .research-running-indicator")
         expect(project_running_dot).to_be_visible(timeout=10_000)
         assert (
