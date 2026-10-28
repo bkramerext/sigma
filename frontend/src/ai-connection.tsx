@@ -206,6 +206,7 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
       if (!popup) setHandoff(url.href);
       if (popup) popup.location.replace(url.href);
       const deadline = Date.now() + 305000;
+      let popupClosedDeadline: number | null = null;
       while (!controller.signal.aborted && Date.now() < deadline) {
         const response = await fetch(`/api/ai/auth/attempt/${encodeURIComponent(data.id)}`, { signal: controller.signal });
         const state = await response.json(); if (!response.ok) throw new Error(state.error ?? 'Sign-in session lost. Retry.');
@@ -215,8 +216,14 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
           retryAttempt.current = state.retryable ? { id: data.id, accountId: options.accountId } : null;
           setError(state.message); return false;
         }
-        if (popup?.closed) { controller.abort(); return false; }
-        await new Promise<void>(resolve => { const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve(); }; const timer = window.setTimeout(done, 500); controller.signal.addEventListener('abort', done, { once: true }); });
+        if (popup?.closed) {
+          popupClosedDeadline ??= Date.now() + 10000;
+          if (Date.now() >= popupClosedDeadline) {
+            setError('ChatGPT sign-in was closed before SIGMA confirmed the connection. Retry sign-in.');
+            controller.abort(); return false;
+          }
+        }
+        await new Promise<void>(resolve => { const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', done); resolve(); }; const timer = window.setTimeout(done, popupClosedDeadline === null ? 500 : 250); controller.signal.addEventListener('abort', done, { once: true }); });
       }
       return false;
     } catch (error) { if (!controller.signal.aborted) setError(message(error)); return false; }
@@ -278,7 +285,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
-    : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+    : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+  const connectionTooltip = connected && !sponsoredPill
+    ? `${ai.info?.account_label ? `ChatGPT connected as ${ai.info.account_label}. ` : 'ChatGPT is connected. '}Click to return to sponsorship.`
+    : undefined;
   const allowanceDescription = !cloudFunding?.authorized
     ? 'Sign in to view your sponsored allowance.'
     : cloudFunding.loading
@@ -333,7 +343,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     return zeroAllowanceAction ?? null;
   }
   return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
-    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip-disabled={projectHeader ? '' : undefined} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={connectionTooltip} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void cloudFunding.selectConnection?.('sponsored'); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Sponsored allowance details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip-disabled onClick={event => { event.stopPropagation(); event.preventDefault(); if (localSponsorNeedsReconnect) void connect(); else setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorTooltip}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>
