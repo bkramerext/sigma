@@ -7425,15 +7425,17 @@ Portable project exports now use bundle version 2: JSON members are embedded
 as JSON, UTF-8 members as text, and only binary or invalid-UTF-8 content is
 Base64 encoded. Import still accepts version 1 and stores projects in the
 existing internal format. Operational `.lock` files are omitted because they
-are regenerated locally. The Recent Projects Remove tooltip now uses the
+are regenerated locally. The Saved Projects Remove tooltip now uses the
 viewport-positioned tooltip.
 
 Focused checks passed: project bundle, project creation/import API, project
 reports, and Ruff on the changed Python and browser-check files. The real
 browser recents check and full `./sigma test` suite were not run.
 
-The Recent Projects removal confirmation also flips above its trigger near the
-bottom of the viewport. The browser check asserts both the tooltip and
-confirmation stay within the viewport. The frontend TypeScript and production
-build passed; the browser check remains unrun because the local API server was
-unavailable.
+The Saved Projects removal confirmation flips above its Remove row near the
+bottom of the viewport, staying adjacent to its trigger. Confirm and Cancel
+retain the underlined text-action style and use the standard yellow action
+color. The browser check asserts the tooltip and
+confirmation stay within the viewport and the confirmation stays close to its
+trigger. The frontend TypeScript and production build passed; the browser check
+remains unrun because the local API server was unavailable.
