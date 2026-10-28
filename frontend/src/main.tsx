@@ -1234,7 +1234,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
       <div className="settings-body">
         <fieldset className="export-type-options" disabled={busy}>
           <legend>Report type</legend>
-          {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Complete project file (importable)</label>}
+          {!demo && <label title="Can be imported into a different SIGMA account." data-tooltip="Can be imported into a different SIGMA account."><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Project file</label>}
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
         </fieldset>
