@@ -4009,6 +4009,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
           : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); dialog.current?.close(); }}/>
         : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
+      {deniedIdentityAvailable && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>}
   </>;
