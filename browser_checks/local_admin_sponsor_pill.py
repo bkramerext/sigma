@@ -73,6 +73,7 @@ def exercise(origin: str) -> None:
     attempt_complete = {"value": False}
     active_account = {"value": "selected-sponsor"}
     selected_account_is_sponsor = {"value": True}
+    current_user = {"email": "zetacontinuation@gmail.com", "role": "admin"}
     posts: list[tuple[str, dict]] = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
@@ -92,10 +93,10 @@ def exercise(origin: str) -> None:
                     "enabled": True,
                     "ready": True,
                     "authenticated": True,
-                    "user": {"email": "zetacontinuation@gmail.com", "role": "admin"},
+                    "user": current_user.copy(),
                     "account": {
-                        "identity": {"email": "zetacontinuation@gmail.com", "verified": True},
-                        "access": {"status": "invited", "role": "admin"},
+                        "identity": {"email": current_user["email"], "verified": True},
+                        "access": {"status": "invited", "role": current_user["role"]},
                         "workspace": {"available": True, "id": "local-admin"},
                         "model_access": {
                             "mode": selected_mode["value"],
@@ -209,8 +210,28 @@ def exercise(origin: str) -> None:
         ), posts
         expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
 
+        # A sponsored member sees the disconnected state and its recovery
+        # guidance, but neither pill action can initiate shared sponsor OAuth.
+        current_user.update(email="nontrivialzeeros@gmail.com", role="member")
+        selected_mode["value"] = "sponsored"
+        attempt_complete["value"] = False
+        selected_account_is_sponsor["value"] = False
+        page.reload(wait_until="domcontentloaded")
+        member_summary = page.locator(".api-connection > summary")
+        expect(member_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; unavailable")
+        expect(member_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT unavailable")
+        posts.clear()
+        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
+            "A SIGMA administrator must reconnect the sponsor account"
+        )
+        member_summary.click()
+        assert not any(
+            url.endswith(("/api/ai/sponsor-auth/begin", "/api/ai/auth/begin")) for url, _ in posts
+        ), posts
+
         # A genuinely personal account remains on the personal endpoint and
         # keeps personal mode after sign-in.
+        current_user.update(email="zetacontinuation@gmail.com", role="admin")
         selected_mode["value"] = "personal"
         attempt_complete["value"] = False
         active_account["value"] = "personal-registration"

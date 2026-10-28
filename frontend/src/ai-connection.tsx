@@ -263,13 +263,15 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored';
   const adminSponsored = sponsoredSelected && !!cloudFunding?.sponsorshipUnlimited;
   const sponsoredPill = !!hosted || (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
-  const localSponsorNeedsReconnect = cloudFunding?.target === 'local'
+  const localSponsorDisconnected = cloudFunding?.target === 'local'
     && !simulatedSponsored
     && !!cloudFunding.authorized
     && !!cloudFunding.sponsorshipEligible
     && sponsoredSelected
     && ai.info?.mode === 'chatgpt'
     && ['reauth_required', 'disconnected', 'unauthorized', 'plan_not_permitted'].includes(ai.info.status);
+  const localSponsorNeedsReconnect = localSponsorDisconnected && !!cloudFunding?.sponsorshipUnlimited;
+  const localMemberSponsorUnavailable = localSponsorDisconnected && !cloudFunding?.sponsorshipUnlimited;
   const localAdminSponsorNeedsReconnect = cloudFunding?.target === 'local'
     && !!cloudFunding.sponsorshipUnlimited
     && !!ai.info?.sponsor_account_selected
@@ -282,13 +284,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const connected = (hosted ? hostedConnected : simulatedSponsored
     ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
     : status === 'connected') && !googleRequired;
-  const disabled = (!hosted && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
+  const disabled = (!hosted && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection || localMemberSponsorUnavailable;
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
   const visibleLabel = sponsoredPill
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
+      : localMemberSponsorUnavailable ? 'Sponsored ChatGPT unavailable'
       : hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = connected && !sponsoredPill
@@ -321,8 +324,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
             : cloudFunding.budget
               ? `Sponsored: $${cloudFunding.budget.remaining_usd.toFixed(2)} of $${cloudFunding.budget.allowance_usd.toFixed(2)} left.${globalFundingDetail}${providerWarning}`
               : 'Sponsored allowance unavailable.';
-  const sponsorTooltip = `${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
-  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : ''}`;
+  const sponsorTooltip = `${localSponsorNeedsReconnect ? 'Click to reconnect SIGMA-sponsored ChatGPT. Sign in as zetacontinuation@gmail.com. ' : localMemberSponsorUnavailable ? 'SIGMA-sponsored ChatGPT is unavailable. A SIGMA administrator must reconnect the sponsor account. ' : forcedSponsored ? 'Sponsored mode is required for this account. ' : !hosted && !simulatedSponsored && sponsoredSelected ? 'Click to switch to your own ChatGPT account. ' : ''}${allowanceDescription}`;
+  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode is required' : ''}${connected ? '; connected' : localMemberSponsorUnavailable ? '; unavailable' : ''}`;
   const allowanceText = !sponsoredSelected
     ? 'Personal'
     : globalFundingExhausted
@@ -335,7 +338,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       ? `${cloudFunding.budget.remaining_usd.toFixed(2)}`
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
   async function connect() {
-    if (ai.connecting || ai.transitioning) return;
+    if (ai.connecting || ai.transitioning || localMemberSponsorUnavailable) return;
     try {
       if (hosted) {
         if (forcedSponsored && sponsoredSelected) return;
