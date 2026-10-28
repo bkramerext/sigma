@@ -417,6 +417,11 @@ def exercise(origin: str) -> None:
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         page.goto(origin + "/?fresh-entry=1", wait_until="domcontentloaded")
         fresh_welcome = page.locator("#invitation-welcome-dialog")
+        expect(fresh_welcome).to_be_visible()
+        expect(fresh_welcome).to_contain_text(
+            "You have $0.04 remaining in your sponsored allowance."
+        )
+        fresh_welcome.get_by_role("button", name="Let's get started").click()
         expect(fresh_welcome).to_have_count(0)
         page.goto(origin + "/not-found", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
@@ -817,6 +822,7 @@ def exercise(origin: str) -> None:
         sponsored_test_mode["value"] = True
         selected["mode"] = "sponsored"
         page.goto(origin + "/", wait_until="domcontentloaded")
+        expect(page.locator("#invitation-welcome-dialog")).to_be_visible()
         dismiss_sponsor_welcome(page)
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary.locator(".sponsored-allowance-inline")).to_have_text("$0.75")

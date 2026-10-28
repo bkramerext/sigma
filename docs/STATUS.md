@@ -33,10 +33,11 @@ parameter on SIGMA's validated OAuth return path and carries it through the
 guest-to-member workspace copy. The frontend waits until the signed-in project
 can start a session, then opens its standard confirmation without auto-running.
 The auth gate no longer rewrites signed-out project URLs to Home, so project
-sign-out stays on the copied guest project. Welcome dialogs now depend only on
-the persisted one-time invitation welcome flag; existing eligible accounts,
-including administrators, do not see it again. Real-Chrome checks cover a
-non-sponsored member's Play return, project sign-out, and no repeated/admin
+sign-out stays on the copied guest project. One-time invitation welcomes
+depend on the persisted pending flag. Sponsored non-admin accounts also see
+their sponsored welcome on a fresh app entry, but not on reload; administrators
+are excluded. Real-Chrome checks cover a non-sponsored member's Play return,
+project sign-out, sponsored welcome on fresh entry but not reload, and no admin
 welcome. `./sigma test` and both focused real-Chrome checks passed.
 
 ## Guest Play sign-in and invitation pill alignment (2026-10-27)
