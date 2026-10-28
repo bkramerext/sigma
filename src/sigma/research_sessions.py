@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sigma import cloud_research, cloud_workspaces
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
-from sigma.plan_stream import completed, failure
+from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
@@ -2433,6 +2433,24 @@ def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
 
 def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     """Persist bounded response classification without storing provider bodies."""
+    if isinstance(exc, ChatGPTProviderRejection):
+        kind = (
+            "provider_limited"
+            if exc.state == "limited"
+            else "provider_rejected"
+            if exc.state in {"unauthorized", "forbidden", "plan_not_permitted"}
+            else "provider_error"
+        )
+        # HTTP 200 can contain an SSE response.failed. Preserve the *actual*
+        # transport status and in-band error category as separate fields.
+        fields: dict[str, Any] = {
+            "failure_kind": kind,
+            "provider_http_status": exc.http_status,
+            "provider_response_channel": "stream" if exc.streamed else "http",
+        }
+        if exc.code is not None:
+            fields["provider_error_code"] = exc.code
+        return fields
     message = str(exc)
     match = re.search(r"HTTP\s+(\d{3})", message)
     if match is None:
@@ -5144,6 +5162,14 @@ async def _call(
             status = "context_limit"
         elif isinstance(exc, httpx.HTTPError):
             status = "network_error"
+        elif isinstance(exc, ChatGPTProviderRejection):
+            status = (
+                "provider_plan_or_app_limited"
+                if exc.state == "limited"
+                else "provider_stream_rejected"
+                if exc.streamed
+                else "provider_http_rejected"
+            )
         elif "account or billing identity changed" in message:
             status = "identity_changed"
         elif any(word in message for word in ("budget", "allowance", "cost limit", "token limit")):
