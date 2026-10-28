@@ -229,7 +229,9 @@ async def begin(
         endpoints = await discovery()
         from sigma import cloud_workspaces
 
-        attempt = Attempt(account_id=account_id, sponsor=sponsor, hosted=cloud_workspaces.enabled())
+        attempt = Attempt(
+            account_id=account_id, sponsor=sponsor, hosted=cloud_workspaces.enabled()
+        )
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
             if (
@@ -258,7 +260,11 @@ async def begin(
             from sigma.cloud_auth import config
 
             origin = config().origin
-            if not origin or urlsplit(origin).scheme != "https" or urlsplit(origin).path not in ("", "/"):
+            if (
+                not origin
+                or urlsplit(origin).scheme != "https"
+                or urlsplit(origin).path not in ("", "/")
+            ):
                 raise ProjectError("Hosted ChatGPT callback requires a configured HTTPS public origin.")
             attempt.redirect_uri = origin.rstrip("/") + "/api/ai/auth/callback/" + attempt.id
         else:
@@ -378,7 +384,12 @@ async def callback(
             query = parse_qs(parsed.query, strict_parsing=True)
             if (
                 method != "GET"
-                or parsed.path != ("/api/ai/auth/callback/" + attempt.id if attempt.hosted else "/auth/callback")
+                or parsed.path
+                != (
+                    "/api/ai/auth/callback/" + attempt.id
+                    if attempt.hosted
+                    else "/auth/callback"
+                )
                 or parsed.netloc
                 or parsed.scheme
                 or headers.get("host") != urlsplit(attempt.redirect_uri).netloc
@@ -415,7 +426,9 @@ async def callback(
                 code = query.get("code", [""])[0]
                 if not 1 <= len(code) <= 4000:
                     raise ValueError()
-                async with transaction_at(sponsor_directory() if attempt.sponsor else directory()) as state:
+                async with transaction_at(
+                    sponsor_directory() if attempt.sponsor else directory()
+                ) as state:
                     previous = (
                         state["accounts"].get(attempt.account_id) if attempt.account_id else None
                     )
@@ -441,6 +454,13 @@ async def callback(
                     record = await validate_tokens(
                         raw, client_id, attempt.nonce, previous, state["ext_agent_host_id"]
                     )
+                    if attempt.sponsor:
+                        from sigma.cloud_sponsor import expected_email
+
+                        if record["email"].casefold() != expected_email():
+                            raise AuthFailure(
+                                "failed", "ChatGPT sponsor identity does not match designated administrator."
+                            )
                     # Same issued client must remain bound to its verified subject.
                     existing = next(
                         (
@@ -682,7 +702,11 @@ async def hosted_callback(identifier: str, query: str) -> None:
     if query:
         target += "?" + query
     host = urlsplit(attempt.redirect_uri).netloc
-    reader, writer = await asyncio.open_connection("127.0.0.1", attempt.server.sockets[0].getsockname()[1])
+    if attempt.server is None:
+        raise ProjectError("Sign-in callback listener is unavailable.")
+    reader, writer = await asyncio.open_connection(
+        "127.0.0.1", attempt.server.sockets[0].getsockname()[1]
+    )
     try:
         writer.write(f"GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n".encode("ascii"))
         await writer.drain()
