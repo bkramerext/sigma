@@ -237,6 +237,7 @@ async def auth_context() -> AuthContext:
     from sigma import cloud_auth
 
     local_principal = cloud_auth.local_sponsored_principal(require_selected=False)
+    local_google_principal = cloud_auth.current_principal()
     if (
         local_principal is not None
         and cloud_auth.model_access_for_subject(local_principal.subject) == "sponsored"
@@ -254,7 +255,7 @@ async def auth_context() -> AuthContext:
             identity="api_key",
         )
     account = selected.get("account") or {}
-    if cloud_auth.config().local:
+    if cloud_auth.config().local and local_google_principal is None:
         from sigma.cloud_sponsor import expected_email
 
         try:

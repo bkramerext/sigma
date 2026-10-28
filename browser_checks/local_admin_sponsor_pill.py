@@ -1,4 +1,4 @@
-"""Browser regression for a local Google admin reconnecting the sponsor account."""
+"""Browser regression for personal/sponsored ChatGPT pill transitions."""
 
 from __future__ import annotations
 
@@ -69,12 +69,14 @@ def main() -> None:
 
 
 def exercise(origin: str) -> None:
-    selected_mode = {"value": "sponsored"}
+    selected_mode = {"value": "personal"}
     attempt_complete = {"value": False}
-    active_account = {"value": "selected-sponsor"}
-    selected_account_is_sponsor = {"value": True}
+    attempt_failure = {"value": False}
     current_user = {"email": "zetacontinuation@gmail.com", "role": "admin"}
+    sponsor_connected = {"value": True}
+    google_authenticated = {"value": True}
     posts: list[tuple[str, dict]] = []
+    connected = {"value": False}
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
@@ -86,21 +88,20 @@ def exercise(origin: str) -> None:
             body = request.post_data_json if request.post_data else {}
             if method == "POST":
                 posts.append((path, body))
-            payload: object = {}
             if path.endswith("/api/cloud-auth/status"):
-                payload = {
+                payload: object = {
                     "target": "local",
                     "enabled": True,
                     "ready": True,
-                    "authenticated": True,
-                    "user": current_user.copy(),
+                    "authenticated": google_authenticated["value"],
+                    "user": current_user.copy() if google_authenticated["value"] else None,
                     "account": {
                         "identity": {"email": current_user["email"], "verified": True},
                         "access": {"status": "invited", "role": current_user["role"]},
                         "workspace": {"available": True, "id": "local-admin"},
                         "model_access": {
                             "mode": selected_mode["value"],
-                            "connection": "disconnected",
+                            "connection": "connected" if connected["value"] else "disconnected",
                         },
                         "sponsorship": {"eligible": True, "forced": False},
                         "invitation_welcome_pending": False,
@@ -108,72 +109,71 @@ def exercise(origin: str) -> None:
                     "admin_contact_email": "zetacontinuation@gmail.com",
                 }
             elif path.endswith("/api/ai/connection"):
-                connected = attempt_complete["value"]
+                is_sponsored = selected_mode["value"] == "sponsored"
+                provider_connected = (
+                    sponsor_connected["value"] if is_sponsored else connected["value"]
+                )
                 payload = {
                     "mode": "chatgpt",
-                    "status": "connected" if connected else "disconnected",
-                    "label": "Connected" if connected else "Connect to ChatGPT",
+                    "status": "connected" if provider_connected else "disconnected",
+                    "label": "Connected" if provider_connected else "Connect to ChatGPT",
                     "guidance": "",
-                    "checked_at": "2026-10-28T00:00:00Z" if connected else None,
+                    "checked_at": "2026-10-28T00:00:00Z" if provider_connected else None,
                     "ttl_seconds": 30,
-                    "active_account": active_account["value"],
-                    "account_label": "zetacontinuation@gmail.com" if connected else None,
-                    "sponsor_account_selected": selected_account_is_sponsor["value"],
+                    "active_account": "personal-z-registration"
+                    if not is_sponsored
+                    else "sponsor-registration",
+                    "account_label": "zetacontinuation@gmail.com" if provider_connected else None,
+                    "sponsor_account_selected": is_sponsored,
                     "accounts": [
-                        {
-                            "id": active_account["value"],
-                            "label": "zetacontinuation@gmail.com"
-                            if selected_account_is_sponsor["value"]
-                            else "personal-chatgpt@example.test",
-                        }
+                        {"id": "personal-z-registration", "label": "zetacontinuation@gmail.com"}
                     ],
                 }
             elif path.endswith(
                 ("/api/cloud-auth/local-sponsored-allowance", "/api/cloud-research/budget")
             ):
+                remaining = 0.37 if current_user["role"] == "member" else 10
                 payload = {
-                    "allowance_usd": 10,
+                    "allowance_usd": remaining,
                     "estimated_usage_usd": 0,
                     "held_usd": 0,
-                    "remaining_usd": 10,
+                    "remaining_usd": remaining,
                     "global_remaining_usd": 50,
                     "unknown_provider_attempts": 0,
                 }
             elif path.endswith("/api/cloud-research/connection"):
                 payload = {
                     "mode": "sponsored",
-                    "status": "connected" if attempt_complete["value"] else "disconnected",
+                    "status": "connected" if sponsor_connected["value"] else "unavailable",
                     "label": "Sponsored ChatGPT",
                     "guidance": "",
                     "checked_at": "2026-10-28T00:00:00Z",
+                    "account_label": "zetacontinuation@gmail.com",
+                }
+            elif path.endswith("/api/ai/auth/begin") and method == "POST":
+                payload = {
+                    "id": "personal-attempt",
+                    "authorization_url": "/api/ai/auth/open/personal-attempt",
                 }
             elif path.endswith("/api/ai/sponsor-auth/begin") and method == "POST":
                 payload = {
                     "id": "sponsor-attempt",
                     "authorization_url": "/api/ai/auth/open/sponsor-attempt",
                 }
-            elif path.endswith("/api/ai/auth/begin") and method == "POST":
-                if body.get("account_id") == "selected-sponsor":
-                    route.fulfill(
-                        status=403,
-                        content_type="application/json",
-                        body=json.dumps(
-                            {"error": "Use Admin Settings to renew the sponsor account."}
-                        ),
-                    )
-                    return
-                payload = {
-                    "id": "personal-attempt",
-                    "authorization_url": "/api/ai/auth/open/personal-attempt",
-                }
-            elif path.endswith(
-                ("/api/ai/auth/attempt/sponsor-attempt", "/api/ai/auth/attempt/personal-attempt")
-            ):
-                payload = {
-                    "status": "connected" if attempt_complete["value"] else "connecting",
-                    "retryable": False,
-                    "message": "",
-                }
+            elif path.endswith("/api/ai/auth/attempt/personal-attempt"):
+                payload = (
+                    {
+                        "status": "failed",
+                        "retryable": False,
+                        "message": "Simulated OAuth cancellation.",
+                    }
+                    if attempt_failure["value"]
+                    else {
+                        "status": "connected" if attempt_complete["value"] else "connecting",
+                        "retryable": False,
+                        "message": "",
+                    }
+                )
             elif path.endswith("/api/ai/mode") and method == "POST":
                 selected_mode["value"] = body["mode"]
                 payload = {
@@ -183,86 +183,121 @@ def exercise(origin: str) -> None:
                     "guidance": "",
                     "checked_at": "2026-10-28T00:00:00Z",
                     "ttl_seconds": 30,
-                    "active_account": active_account["value"],
+                    "active_account": "personal-z-registration",
                     "accounts": [],
                 }
+            elif path.endswith("/api/ai/disconnect") and method == "POST":
+                connected["value"] = False
+                payload = {"status": "disconnected"}
             elif path.endswith(("/api/projects/recent", "/api/projects/samples")):
                 payload = {"projects": []}
             elif path.endswith("/api/ui-instance"):
                 payload = {"instance": "local-admin-sponsor-pill"}
+            elif path.endswith("/api/cloud-auth/logout") and method == "POST":
+                google_authenticated["value"] = False
+                payload = {"logged_out": True}
+            else:
+                payload = {}
             route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
 
         page.route("**/api/**", mock_api)
         page.goto(origin + "/", wait_until="domcontentloaded")
-        summary = page.locator(".api-connection > summary")
-        expect(summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
-        expect(summary.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
+        google_pill = page.locator(".identity-pill-stack .project-google-signin").first
+        expect(google_pill).to_have_text("Sign out of Google")
+        expect(google_pill).to_have_attribute("aria-label", "Sign out of Google")
+        pill = page.locator(".api-connection > summary")
+
+        # Existing Google session, persistent personal selection, and a saved
+        # Z personal registration. The same provider email owns sponsor creds.
+        expect(pill.get_by_role("status")).to_have_text("Connect to ChatGPT")
+        expect(pill).to_have_attribute("aria-label", "Connect to ChatGPT")
+        expect(pill).not_to_contain_text("Unlimited")
+        assert pill.get_attribute("data-tooltip") in (None, "")
         posts.clear()
-        with page.expect_request("**/api/ai/sponsor-auth/begin") as oauth_begin:
-            summary.click()
-        assert oauth_begin.value.method == "POST"
-        assert oauth_begin.value.post_data_json == {"enable_plan": False}
-        assert any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
-        assert not any(url.endswith("/api/ai/auth/begin") for url, _ in posts), posts
-
-        attempt_complete["value"] = True
-        expect(summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
-        expect(summary.get_by_role("status")).to_have_text("ChatGPT Connected")
-        tooltip = page.locator("#sponsored-allowance-tooltip")
-        expect(tooltip).to_contain_text("ChatGPT Connected as zetacontinuation@gmail.com")
-        expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
-
-        # The API fixture deliberately supplies the sponsor identity even for
-        # this member; neither the UI label nor tooltip may reveal it.
-        current_user.update(email="nontrivialzeeros@gmail.com", role="member")
-        selected_mode["value"] = "sponsored"
-        attempt_complete["value"] = True
-        selected_account_is_sponsor["value"] = False
-        page.reload(wait_until="domcontentloaded")
-        member_summary = page.locator(".api-connection > summary")
-        expect(member_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
-        expect(member_summary).not_to_contain_text("zetacontinuation@gmail.com")
-        member_tooltip = page.locator("#sponsored-allowance-tooltip")
-        expect(member_tooltip).not_to_contain_text("zetacontinuation@gmail.com")
-        expect(member_tooltip).not_to_contain_text("ChatGPT Connected as")
-
-        # When the shared sponsor is disconnected, the member gets a recovery
-        # notice but neither sponsor nor personal OAuth starts from this pill.
-        attempt_complete["value"] = False
-        page.reload(wait_until="domcontentloaded")
-        member_summary = page.locator(".api-connection > summary")
-        expect(member_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; unavailable")
-        expect(member_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT unavailable")
-        posts.clear()
-        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
-            "A SIGMA administrator must reconnect the sponsor account"
-        )
-        member_summary.click()
-        assert not any(
-            url.endswith(("/api/ai/sponsor-auth/begin", "/api/ai/auth/begin")) for url, _ in posts
-        ), posts
-
-        # A genuinely personal account remains on the personal endpoint and
-        # keeps personal mode after sign-in.
-        current_user.update(email="zetacontinuation@gmail.com", role="admin")
-        selected_mode["value"] = "personal"
-        attempt_complete["value"] = False
-        active_account["value"] = "personal-registration"
-        selected_account_is_sponsor["value"] = False
-        page.reload(wait_until="domcontentloaded")
-        summary = page.locator(".api-connection > summary")
-        expect(summary).to_have_attribute("aria-label", "Connect to ChatGPT")
-        posts.clear()
-        with page.expect_request("**/api/ai/auth/begin") as personal_begin:
-            summary.click()
-        assert personal_begin.value.method == "POST"
-        assert personal_begin.value.post_data_json["account_id"] == "personal-registration"
+        with page.expect_request("**/api/ai/auth/begin") as begin:
+            pill.click()
+        assert begin.value.method == "POST"
+        assert begin.value.post_data_json == {
+            "account_id": "personal-z-registration",
+            "enable_plan": False,
+        }
         assert not any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
         attempt_complete["value"] = True
-        expect(summary).to_have_attribute("aria-label", "ChatGPT connected")
+        connected["value"] = True
+        expect(pill.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
+        expect(pill).to_have_attribute("aria-label", "Disconnect from ChatGPT")
+        expect(pill).not_to_contain_text("Unlimited")
+        assert pill.get_attribute("data-tooltip") == "Connected as zetacontinuation@gmail.com."
         assert not any(
             url.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for url, body in posts
         ), posts
+
+        # Disconnect affects the personal registration and intentionally
+        # returns this user to sponsorship.
+        posts.clear()
+        pill.click()
+        expect(pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        assert selected_mode["value"] == "sponsored", posts
+        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
+        assert any(
+            url.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for url, body in posts
+        ), posts
+        tip = page.locator("#sponsored-allowance-tooltip")
+        expect(tip).to_contain_text("Sponsor Connected · zetacontinuation@gmail.com · Unlimited")
+        expect(tip).to_contain_text("Click to connect your own ChatGPT account.")
+        assert len(tip.inner_text()) < 150
+        page.locator(".sponsored-allowance-trigger").hover()
+        expect(tip).to_be_visible()
+
+        # A sponsored member sees only their allowance and provider state.
+        # Even if an upstream fixture includes a sponsor label, no member UI
+        # text, tooltip, or accessibility label exposes it.
+        current_user.update(email="nontrivialzeeros@gmail.com", role="member")
+        selected_mode["value"] = "sponsored"
+        sponsor_connected["value"] = False
+        page.reload(wait_until="domcontentloaded")
+        member_pill = page.locator(".api-connection > summary")
+        expect(member_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(member_pill.locator(".sponsored-allowance-inline")).to_have_text("0.37")
+        expect(member_pill).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        member_tip = page.locator("#sponsored-allowance-tooltip")
+        expect(member_tip).to_contain_text("$0.37 remaining · Unavailable")
+        expect(member_tip).to_contain_text("Click to connect your own ChatGPT account.")
+        expect(member_tip).not_to_contain_text("zetacontinuation@gmail.com")
+        page.locator(".sponsored-allowance-trigger").hover()
+        expect(member_tip).to_be_visible()
+        posts.clear()
+        attempt_complete["value"] = True
+        with page.expect_request("**/api/ai/auth/begin") as member_personal_begin:
+            member_pill.click()
+        connected["value"] = True
+        assert member_personal_begin.value.post_data_json == {"enable_plan": False}
+        assert not any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
+        expect(member_pill.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
+        expect(member_pill).not_to_contain_text("0.37")
+        expect(member_pill).not_to_contain_text("Unlimited")
+
+        # Failed/cancelled OAuth keeps the current funding mode and surfaces
+        # recovery feedback instead of silently switching billing.
+        member_pill.click()
+        expect(member_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        assert selected_mode["value"] == "sponsored"
+        posts.clear()
+        attempt_complete["value"] = False
+        attempt_failure["value"] = True
+        with page.expect_request("**/api/ai/auth/begin"):
+            member_pill.click()
+        expect(page.locator(".connection-pill-message[role=alert]")).to_have_text(
+            "Simulated OAuth cancellation."
+        )
+        expect(member_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        assert selected_mode["value"] == "sponsored"
+        assert not any(url.endswith("/api/ai/mode") for url, _ in posts), posts
+        assert not any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
+        google_pill.click()
+        expect(page.locator(".identity-pill-stack .project-google-signin").first).to_have_text(
+            "Sign in with Google"
+        )
         browser.close()
 
 

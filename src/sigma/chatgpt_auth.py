@@ -10,6 +10,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
@@ -183,6 +184,7 @@ class Attempt:
     account_id: str | None = None
     sponsor: bool = False
     hosted: bool = False
+    store_directory: Path | None = None
     client_id: str = "dynamic_agent_client"
     redirect_uri: str = ""
     status: str = "connecting"
@@ -230,7 +232,10 @@ async def begin(
         from sigma import cloud_workspaces
 
         attempt = Attempt(
-            account_id=account_id, sponsor=sponsor, hosted=cloud_workspaces.enabled()
+            account_id=account_id,
+            sponsor=sponsor,
+            hosted=cloud_workspaces.enabled(),
+            store_directory=sponsor_directory() if sponsor else directory(),
         )
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
@@ -245,7 +250,8 @@ async def begin(
                     "Previous sign-in can no longer be retried. Start a new sign-in."
                 )
             attempt.client_id = failed.retry_client_id
-        async with transaction_at(sponsor_directory() if sponsor else directory()) as state:
+        assert attempt.store_directory is not None
+        async with transaction_at(attempt.store_directory) as state:
             previous = state["accounts"].get(account_id) if account_id else None
             if account_id and not previous:
                 raise ProjectError("Saved account was not found. Choose Connect another account.")
@@ -265,7 +271,9 @@ async def begin(
                 or urlsplit(origin).scheme != "https"
                 or urlsplit(origin).path not in ("", "/")
             ):
-                raise ProjectError("Hosted ChatGPT callback requires a configured HTTPS public origin.")
+                raise ProjectError(
+                    "Hosted ChatGPT callback requires a configured HTTPS public origin."
+                )
             attempt.redirect_uri = origin.rstrip("/") + "/api/ai/auth/callback/" + attempt.id
         else:
             attempt.redirect_uri = f"http://127.0.0.1:{port}/auth/callback"
@@ -385,11 +393,7 @@ async def callback(
             if (
                 method != "GET"
                 or parsed.path
-                != (
-                    "/api/ai/auth/callback/" + attempt.id
-                    if attempt.hosted
-                    else "/auth/callback"
-                )
+                != ("/api/ai/auth/callback/" + attempt.id if attempt.hosted else "/auth/callback")
                 or parsed.netloc
                 or parsed.scheme
                 or headers.get("host") != urlsplit(attempt.redirect_uri).netloc
@@ -426,9 +430,10 @@ async def callback(
                 code = query.get("code", [""])[0]
                 if not 1 <= len(code) <= 4000:
                     raise ValueError()
-                async with transaction_at(
+                store = attempt.store_directory or (
                     sponsor_directory() if attempt.sponsor else directory()
-                ) as state:
+                )
+                async with transaction_at(store) as state:
                     previous = (
                         state["accounts"].get(attempt.account_id) if attempt.account_id else None
                     )
@@ -459,7 +464,8 @@ async def callback(
 
                         if record["email"].casefold() != expected_email():
                             raise AuthFailure(
-                                "failed", "ChatGPT sponsor identity does not match designated administrator."
+                                "failed",
+                                "ChatGPT sponsor identity does not match designated administrator.",
                             )
                     # Same issued client must remain bound to its verified subject.
                     existing = next(

@@ -1303,55 +1303,10 @@ class ApiKeyRequest(BaseModel):
 
 
 @app.post("/api/ai/auth/begin")
-async def auth_begin(body: AuthBeginRequest, request: Request):
-    cfg = cloud_auth.config()
-    principal = getattr(request.state, "cloud_principal", None)
-    from sigma.cloud_sponsor import expected_email
-
-    # The designated administrator owns the shared sponsor connection.
-    # Do not let an ordinary user overwrite or impersonate that credential.
-    if cfg.enabled and not cfg.local:
-        if not isinstance(principal, cloud_auth.Principal):
-            raise HTTPException(401, "Authentication required.")
-        if principal.role != "admin":
-            raise HTTPException(403, "Administrator access required.")
-        if principal.role == "admin":
-            from sigma.cloud_sponsor import sponsor_account_id
-
-            try:
-                account_id = await sponsor_account_id()
-            except ProjectError:
-                account_id = None  # First sponsor connection.
-            return await chatgpt_auth.begin(account_id=account_id, sponsor=True)
-    if cfg.local and body.account_id is not None:
-        from sigma.ai_store import sponsor_transaction
-
-        try:
-            designated_sponsor_email = expected_email()
-        except ProjectError:
-            designated_sponsor_email = None
-        if designated_sponsor_email:
-            async with sponsor_transaction() as state:
-                account = state["accounts"].get(body.account_id) or {}
-                is_sponsor_account = account.get("email", "").casefold() == designated_sponsor_email
-        else:
-            is_sponsor_account = False
-        if is_sponsor_account:
-            # The pill can submit its currently selected ChatGPT account
-            # through auth/begin. A matching sponsor credential must use
-            # the isolated sponsor store, but authorization comes from the
-            # verified Google admin role, never from either email address.
-            if not isinstance(principal, cloud_auth.Principal) or principal.role != "admin":
-                raise HTTPException(
-                    403, "Administrator access required to renew the sponsor account."
-                )
-            from sigma.cloud_sponsor import sponsor_account_id
-
-            try:
-                sponsor_id = await sponsor_account_id()
-            except ProjectError:
-                sponsor_id = None
-            return await chatgpt_auth.begin(account_id=sponsor_id, sponsor=True)
+async def auth_begin(body: AuthBeginRequest):
+    # This route always operates on the authenticated user's personal store.
+    # Sponsor maintenance has its own admin-only endpoint; email equality does
+    # not change credential ownership or OAuth intent.
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
 
 
@@ -1479,7 +1434,7 @@ async def auth_mode(body: AuthModeRequest, request: Request):
 
 @app.post("/api/ai/disconnect")
 async def auth_disconnect():
-    if cloud_auth.config().local:
+    if cloud_auth.config().local and cloud_auth.current_principal() is None:
         from sigma.ai_store import sponsor_transaction
         from sigma.cloud_sponsor import expected_email
 

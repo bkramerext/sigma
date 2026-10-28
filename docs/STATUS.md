@@ -1,3 +1,35 @@
+## PR #297 — personal and sponsor credential ownership follow-up (2026-10-28)
+
+Local Google-authenticated ChatGPT registrations now use a credential directory
+derived from the verified Google subject. The shared ChatGPT sponsor continues
+to use its independent SIGMA-owned directory. `/api/ai/auth/begin` always means
+personal authorization; sponsor renewal remains on the administrator-only
+`/api/ai/sponsor-auth/begin` route. Matching the ChatGPT email no longer routes
+authorization or credential use between those stores. Personal disconnect
+removes only the current Google user's credentials.
+
+The pill now has three primary ChatGPT states: **Sponsored ChatGPT**,
+**Disconnect from ChatGPT**, and **Connect to ChatGPT**. Connected personal
+mode exposes only the personal account email in its concise tooltip and no
+allowance. Sponsored mode shows the user's allowance; admins may see sponsor
+connection identity, while member UI/API responses omit it. The sponsored pill
+offers the concise personal-connection action. Failed authorization leaves the
+funding mode unchanged.
+
+Focused verification passed: the existing-cookie Z API sequence including
+simulated OAuth callback, token validation, persisted same-email personal
+credential, switch to sponsor credentials, personal disconnect, and sponsor
+credential preservation; Z/B unlimited and N metered allowance checks; the
+focused sponsor API regressions; 19 `cloud_sponsor.py` tests; Chromium pill
+transitions, exact visible states, hover/accessibility content, member sponsor
+identity privacy, personal OAuth routing, and failed-OAuth recovery; scoped
+Ruff, Pyright, and frontend TypeScript checks. A new TestClient reloaded the
+same persisted cookie/state; a separate operating-system process restart and
+live provider OAuth are unverified. Hosted personal ChatGPT OAuth remains
+unverified. The seven live session-playback acceptance cases remain reserved
+for the next round. No paid calls, full CI wait, merge, or deployment occurred.
+See [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the
