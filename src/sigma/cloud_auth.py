@@ -1724,6 +1724,8 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         principal = resolve_session(raw_session)
         if principal is None:
             raise HTTPException(401, "Sign in with Google before requesting a reload.")
+        if principal.role == "admin":
+            raise HTTPException(403, "Administrators have no individual sponsorship allowance to reload.")
         with _db(cfg) as db:
             eligible = db.execute(
                 "SELECT 1 FROM user_state WHERE subject=? AND access_active=1 AND sponsorship_eligible=1",
