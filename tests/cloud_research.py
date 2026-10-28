@@ -1445,8 +1445,13 @@ def main() -> None:
 
         # Concurrent owners race for one global execution slot. SQLite's
         # BEGIN IMMEDIATE transaction must admit exactly one claimant.
+        # Prior tests can exhaust the intentionally tiny token allowance;
+        # the race tests execution slots rather than token exhaustion.
         with (
-            patch.dict(os.environ, settings, clear=False),
+            patch.dict(
+                os.environ, {**settings, "SIGMA_CLOUD_USER_TOKEN_BUDGET": "100000000"},
+                clear=False,
+            ),
             patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
         ):
             # Clear prior slots to isolate this race while retaining spend history.
