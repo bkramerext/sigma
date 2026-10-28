@@ -121,9 +121,10 @@ def _global_ceiling_failure_message() -> str:
     ):
         return (
             "The global inference-spend ceiling has been reached: local sponsored "
-            "research defaults to $0.25 API-rate equivalent across all sessions. "
-            "The operator can set SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD explicitly "
-            "before restarting SIGMA; ChatGPT provider usage caps still apply."
+            "research defaults to $0.25 cumulative API-rate equivalent across sessions. "
+            "Inspect outstanding ledger obligations with scripts/inspect_cloud_spend.py. "
+            "Only an explicitly configured SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD changes "
+            "this ceiling after restarting SIGMA; saved accounting is preserved."
         )
     return "The global inference-spend ceiling has been reached; saved research remains available."
 
