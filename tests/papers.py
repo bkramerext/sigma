@@ -128,6 +128,31 @@ def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
             raise AssertionError("Non-success provider responses must fail without retry")
 
 
+def test_chatgpt_schema_rejection_is_actionable_and_redacted() -> None:
+    try:
+        failure(
+            400,
+            {
+                "error": {
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "SECRET research and access token must not leak",
+                }
+            },
+            "chatgpt",
+        )
+    except ProjectError as exc:
+        message = str(exc)
+        assert "structured-output schema" in message
+        assert "invalid_json_schema" in message
+        assert "HTTP 400" in message
+        assert "account remains connected" in message
+        assert "SECRET" not in message
+        assert "access token" not in message
+    else:
+        raise AssertionError("Strict-schema rejection must be reported")
+
+
 def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
     requests: list[dict] = []
 
@@ -1305,6 +1330,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
+    test_chatgpt_schema_rejection_is_actionable_and_redacted()
     test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once()
     test_strict_paper_schemas_require_all_properties()
     test_long_tex_compiler_source_bound_is_configurable()
