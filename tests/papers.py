@@ -2670,6 +2670,158 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert after["provider_calls_attempted"] == 0
 
 
+def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -> None:
+    """A lost one-call result may be billable; never replay it silently."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "one-shot-uncertain.sigma"
+        view = initialize_project(path, "One-call recovery", "Explain the recorded research.")
+        snapshot = papers._snapshot(str(path))[1]
+        account = {"mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": account["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        calls = 0
+        reject = True
+
+        async def provider(context, _account, settings, *_args):
+            nonlocal calls
+            calls += 1
+            if reject:
+                raise ProjectError("Fixture provider interrupted after request dispatch")
+            project_ref = next(
+                item["id"] for item in context["sources"] if item["kind"] == "project"
+            )
+            return draft(project_ref), settings["model"]
+
+        async def check() -> None:
+            nonlocal reject
+            with (
+                patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=account)),
+                patch.object(
+                    papers,
+                    "configuration",
+                    new=lambda **_kw: asyncio.sleep(0, result=config),
+                ),
+                patch.object(papers, "_provider", new=provider),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                try:
+                    await papers.generate(str(path), account["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "interrupted" in str(exc)
+                else:
+                    raise AssertionError("The first provider attempt should fail")
+                checkpoint = papers._load_work(str(path))
+                assert checkpoint is not None
+                assert checkpoint["kind"] == "one_shot"
+                assert checkpoint["provider_calls"] == 1
+                assert checkpoint["provider_calls_total"] == 1
+                assert checkpoint["one_shot_draft"] is None
+
+                preflight = papers.preflight(
+                    str(path),
+                    expected_project_id=view.project.id,
+                    expected_binding=account["identity"],
+                    mode=account["mode"],
+                    model=config["model"],
+                    reasoning_effort=config["reasoning_effort"],
+                )
+                assert preflight["resume_available"] is False
+                assert preflight["checkpoint_can_restart"] is True
+                try:
+                    await papers.generate(str(path), account["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "Start over explicitly" in str(exc)
+                else:
+                    raise AssertionError("An uncertain paid request must not replay")
+                assert calls == 1
+
+                reset = await papers.restart_work(
+                    str(path),
+                    view.project.id,
+                    account["identity"],
+                    snapshot,
+                    confirmed=True,
+                    force_long_form=False,
+                )
+                assert reset["provider_calls_attempted"] == 0
+                assert calls == 1  # Starting over makes no provider request.
+                reject = False
+                result = await papers.generate(
+                    str(path), account["identity"], view.project.id
+                )
+                assert calls == 2
+                record = papers.get_paper(str(path), result["paper_id"])
+                assert record["generation"]["provider_calls_attempted"] == 1
+                assert record["generation"]["provider_calls_prior_runs"] == 1
+                assert record["generation"]["provider_calls_lifetime_total"] == 2
+                assert papers._load_work(str(path)) is None
+
+        asyncio.run(check())
+
+
+def test_structured_index_retains_session_narrative_and_original_question() -> None:
+    """Unusual saved summaries must not trigger serial AI field extraction."""
+    problem = "Find an upper bound and construction for line arrangements."
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "narrative-fixture",
+        "sources": [
+            {
+                "kind": "project",
+                "id": "project:narrative-fixture",
+                "data": {
+                    "title": "Line arrangements",
+                    "problem": problem,
+                    "difficulty": "hard",
+                    "investigation_type": "mathematical",
+                },
+            },
+            {
+                "kind": "session",
+                "id": "session:first",
+                "data": {
+                    "summary": (
+                        "A candidate proof derives a recurrence by counting line segments "
+                        "and leaves a convexity obligation open."
+                    )
+                },
+            },
+            {
+                "kind": "session",
+                "id": "session:second",
+                "data": {
+                    "summary": (
+                        "A skeptical follow-up identifies an unsupported crossing claim "
+                        "and does not establish a proof."
+                    )
+                },
+            },
+        ],
+    }
+    notes, omissions = papers._structured_evidence_index(package)
+    assert notes
+    assert not omissions
+    assert {ref for note in notes for ref in note.evidence_refs} == {
+        "project:narrative-fixture",
+        "session:first",
+        "session:second",
+    }
+    descriptions = " ".join(item.statement for item in notes)
+    assert "candidate proof" in descriptions
+    assert "unsupported crossing claim" in descriptions
+    plan = papers._long_plan_input(
+        package["sources"][0]["data"],
+        [note.model_dump() for note in notes],
+        len(package["sources"]),
+        0,
+    )
+    assert plan["project_question"] == problem
+
+
 def test_long_paper_planning_timeout_is_stage_specific() -> None:
     """All paper inference stages receive at least five minutes."""
     assert papers.CALL_SECONDS == 300
@@ -2710,6 +2862,8 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 
 def main() -> None:
+    test_one_shot_provider_failure_requires_explicit_reset_without_rebilling()
+    test_structured_index_retains_session_narrative_and_original_question()
     test_easy_paper_start_over_escapes_repeated_paid_planning()
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
