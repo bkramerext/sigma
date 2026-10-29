@@ -5,9 +5,9 @@
 - Branch: `green/issue-301-live-logging`
 - Base: `main` at `26628d549dbe11aad0c9f612633c08964ae9eb90`
 - Implementation commit: `9cd147d1895d96997709a4149431aec4f207fe0b`
-- Final HEAD: pending handoff commit
-- PR: pending branch push / creation
-- State: Ready for Review after PR creation; not merged.
+- Final implementation HEAD: `9cd147d1895d96997709a4149431aec4f207fe0b` (the following commit records this handoff).
+- PR: [#324](https://github.com/bkramerext/sigma/pull/324)
+- State: Ready for Review; not merged.
 
 ## Architecture and files
 
