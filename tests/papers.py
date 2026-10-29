@@ -2603,7 +2603,7 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
         identity = "chatgpt:fixture"
         credential = {"identity": identity, "mode": "chatgpt", "token": "fixture"}
         config = {"available": True, "model": "gpt-fixture", "reasoning_effort": "high"}
-        binding = papers.hashlib.sha256(("chatgpt\\0" + identity).encode()).hexdigest()
+        binding = papers.hashlib.sha256(("chatgpt\0" + identity).encode()).hexdigest()
         checkpoint = papers._new_work(
             snapshot_hash, view.project.id, binding, "gpt-fixture", "high"
         )
@@ -2629,9 +2629,12 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             ),
         ):
             before = papers.preflight(
-                str(path), expected_project_id=view.project.id,
-                expected_binding=identity, mode="chatgpt",
-                model="gpt-fixture", reasoning_effort="high",
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=identity,
+                mode="chatgpt",
+                model="gpt-fixture",
+                reasoning_effort="high",
             )
             assert before["resume_available"] is True
             assert before["long_form"] is True
@@ -2639,8 +2642,12 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
 
             reset = asyncio.run(
                 papers.restart_work(
-                    str(path), view.project.id, identity,
-                    snapshot_hash, confirmed=True, force_long_form=False,
+                    str(path),
+                    view.project.id,
+                    identity,
+                    snapshot_hash,
+                    confirmed=True,
+                    force_long_form=False,
                 )
             )
             assert reset["provider_calls_attempted"] == 0
@@ -2651,9 +2658,12 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert len(saved["prior_runs"]) == 1
             assert saved["prior_runs"][0]["provider_calls_attempted"] == 2
             after = papers.preflight(
-                str(path), expected_project_id=view.project.id,
-                expected_binding=identity, mode="chatgpt",
-                model="gpt-fixture", reasoning_effort="high",
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=identity,
+                mode="chatgpt",
+                model="gpt-fixture",
+                reasoning_effort="high",
             )
             assert after["long_form"] is False
             assert after["maximum_provider_calls"] == 1
