@@ -2411,7 +2411,11 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
             {
                 "id": "project:easy-fixture",
                 "kind": "project",
-                "data": {"id": "easy-fixture", "difficulty": "easy", "investigation_type": "mathematical"},
+                "data": {
+                    "id": "easy-fixture",
+                    "difficulty": "easy",
+                    "investigation_type": "mathematical",
+                },
             },
             {
                 "id": "session:one",
@@ -2421,7 +2425,9 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
         ],
     }
     snapshot_bytes = len(papers._json(package))
-    assert papers.MAX_ONE_SHOT_CONTEXT_BYTES < snapshot_bytes < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
+    assert (
+        papers.MAX_ONE_SHOT_CONTEXT_BYTES < snapshot_bytes < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
+    )
     assert papers._paper_long_form(package) is False
     assert papers._paper_long_form(package, force_long_form=True) is True
 
@@ -2436,9 +2442,10 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
     )
     existing["plan"] = {"already_paid": True}
     assert papers._paper_long_form(package, existing=existing) is True
-    assert papers._paper_long_form(
-        package, existing={**existing, "snapshot_sha256": "0" * 64}
-    ) is False
+    assert (
+        papers._paper_long_form(package, existing={**existing, "snapshot_sha256": "0" * 64})
+        is False
+    )
 
     package["sources"].append(
         {"id": "session:two", "kind": "session", "data": {"outcome": "An independent run."}}
