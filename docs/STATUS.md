@@ -1,3 +1,22 @@
+## Issue #328 — live paper-generation progress (2026-10-29)
+
+Paper generation now persists and streams actual pipeline stages, real evidence
+batch/section counts where known, elapsed time, and active/failed/cancelled/
+interrupted/complete state. Refreshing or reconnecting reads the saved
+checkpoint; retry resumes from saved work. The dialog includes a Cancel
+generation control. The read-only progress endpoint is scoped by the existing
+guest workspace rules.
+
+Verification on `blue/issue-328-paper-progress`, based on current main
+`0253b2a3dcdb0542e365c00e480156c05f3132af`: focused `tests/papers.py`, all 72
+`tests/cloud_auth.py` cases, Ruff, formatting, Pyright, frontend typecheck, and
+`./sigma test` passed. Real Chrome acceptance against a local deterministic
+provider fixture passed one-shot progress, cancellation/retry, actual long-form
+evidence batching, reload recovery, PDF completion, and saved-version links.
+No paid provider calls were made. Screenshots are in
+`docs/evaluations/issue_328/`. Human UI review is pending; PR #323 integration
+is still a sequencing dependency, so #328 is not opened as a PR yet.
+
 ## PR #325 — documentation accuracy and onboarding verification (2026-10-29)
 
 README setup and local Google-auth claims were checked against `./sigma`,

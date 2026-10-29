@@ -234,6 +234,9 @@
 .project-settings-dialog.ai-paper-dialog .ai-paper-open-tab input { width: auto; margin: 0; accent-color: #d9a66c; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-open-tab { color: #b9c4cf; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-status { margin: 0; font-size: 14px; line-height: 1.5; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-progress { display: grid; gap: 2px; padding: 8px 10px; border-left: 2px solid var(--accent, #72a7b8); background: rgba(255,255,255,.035); }
+.project-settings-dialog.ai-paper-dialog .ai-paper-progress strong { color: #e4edf1; font-weight: 600; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-progress span { color: #b8c4cb; }
 .ai-paper-preview { border-top: 1px solid #35404a; padding-top: 16px; color: #e6e0d7; line-height: 1.6; }
 .ai-paper-preview h3 { margin: 0 0 12px; color: #f0cfaa; font: 600 23px/1.25 Georgia, serif; }
 .ai-paper-preview h4 { margin: 20px 0 8px; color: #e4bd8b; font: 600 17px/1.35 Georgia, serif; }

@@ -1299,7 +1299,30 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 }
 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
+type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'validation' | 'compile' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+
+function paperProgressOperation(progress: PaperProgress): string {
+  const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
+  const milestone = progress.activity_state === 'milestone';
+  switch (progress.stage) {
+    case 'snapshot': return 'Preparing research evidence';
+    case 'writing': return 'Writing the paper';
+    case 'evidence': return `${milestone ? 'Evidence extracted' : 'Extracting evidence'}${count}`;
+    case 'consolidation': return 'Consolidating findings';
+    case 'planning': return milestone ? 'Paper plan ready' : 'Planning the paper';
+    case 'sections': return `${milestone ? 'Section written' : 'Writing sections'}${count}`;
+    case 'validation': return milestone ? 'Paper validated' : 'Validating the paper';
+    case 'compile': return 'Compiling PDF';
+    case 'complete': return 'Complete';
+  }
+}
+
+function paperElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return minutes ? `${minutes}m ${remaining}s` : `${remaining}s`;
+}
 
 function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
   const ai = useAI();
@@ -1314,6 +1337,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
+  const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1324,11 +1348,14 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     setLoading(true);
     try {
       const query = new URLSearchParams({ path });
-      const [listResponse, configResponse] = await Promise.all([
+      const [listResponse, configResponse, progressResponse] = await Promise.all([
         fetch(`/api/projects/papers?${query}`, { cache: 'no-store' }),
         fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store' }),
+        fetch(`/api/projects/papers/progress?${query}`, { cache: 'no-store' }),
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
+      const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
+      setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
       if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); }
@@ -1354,6 +1381,19 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setLoading(false); }
   }
+  useEffect(() => {
+    if (paperProgress?.status !== 'active') return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+        const body = await response.json();
+        if (!stopped && response.ok) setPaperProgress(body.progress ?? null);
+      } catch { /* Keep the last saved operation visible until connectivity returns. */ }
+    };
+    const timer = window.setInterval(() => void poll(), 1000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [path, paperProgress?.status]);
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
@@ -1444,12 +1484,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           }
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
-            setPhase(event.stage === 'compile' ? 'Compiling PDF…'
-              : event.stage === 'snapshot' ? (preflight.draft_recovery_available
-                ? 'Reusing the validated draft from the previous attempt…'
-                : 'Preparing research evidence…')
-              : 'Writing paper…');
+            const nextProgress = { ...event, status: event.state === 'complete' ? 'complete' : 'active', activity_state: event.state } as PaperProgress;
+            setPaperProgress(nextProgress);
+            setPhase(`${paperProgressOperation(nextProgress)} · Elapsed ${paperElapsed(nextProgress.elapsed_seconds)}`);
           }
+          if (event.type === 'heartbeat' && event.progress) setPaperProgress(event.progress as PaperProgress);
         }
         if (done) break;
       }
@@ -1459,8 +1498,8 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     } catch (cause) {
       if (controller.signal.aborted) {
         const message = requestDispatched
-          ? 'Generation was interrupted. Provider completion or usage may be unknown. Check Saved versions and your provider usage before trying again.'
-          : 'Generation was interrupted before a provider request was started.';
+          ? 'Generation cancelled. Provider completion or usage may be unknown. Check Saved versions and your provider usage before trying again.'
+          : 'Generation cancelled before a provider request was started.';
         setError(message);
       }
       else reportRequestFailure(errorMessage(cause));
@@ -1486,8 +1525,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
       </div>}
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating paper…' : papers.length ? 'Generate new version' : 'Generate paper'}</button></div>
-      {busy && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating paper…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
+      {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>Saved work is available; retry to continue where possible.</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}

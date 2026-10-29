@@ -11,7 +11,7 @@ import stat
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 from uuid import uuid4
 
 import httpx
@@ -45,9 +45,39 @@ MAX_CHATGPT_STREAM_BYTES = 4_000_000
 MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
+PaperProgressStage = Literal[
+    "snapshot",
+    "writing",
+    "evidence",
+    "consolidation",
+    "planning",
+    "sections",
+    "validation",
+    "compile",
+    "complete",
+]
+PaperProgressState = Literal["active", "milestone", "failed", "cancelled", "complete"]
+
+
+class PaperProgressEvent(TypedDict):
+    type: Literal["progress"]
+    state: PaperProgressState
+    stage: PaperProgressStage
+    current: int | None
+    total: int | None
+    started_at: str
+    elapsed_seconds: int
+
+
+PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
+PaperStageCallback = Callable[
+    [PaperProgressStage, int | None, int | None, Literal["active", "milestone", "complete"]],
+    Awaitable[None],
+]
 CALL_SECONDS = 120
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
+_active_progress: dict[str, dict[str, Any]] = {}
 _CITATION_LIKE = re.compile(
     r"\[[0-9]{1,3}\]|\b(?:doi\s*:|arxiv\s*:|https?://)|\([A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+20[0-9]{2}[a-z]?\)"
 )
@@ -695,6 +725,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "reduction_output",
         "evidence_indexed",
         "one_shot_draft",
+        "progress",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
@@ -813,6 +844,59 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Long-paper checkpoint reduction cursor is invalid")
     if "evidence_indexed" in value and type(value["evidence_indexed"]) is not bool:
         raise ProjectError("Long-paper checkpoint index status is invalid")
+    progress_state = value.get("progress")
+    if progress_state is not None:
+        if (
+            not isinstance(progress_state, dict)
+            or set(progress_state)
+            != {
+                "run_id",
+                "status",
+                "stage",
+                "current",
+                "total",
+                "started_at",
+                "updated_at",
+                "elapsed_seconds",
+            }
+            or not isinstance(progress_state.get("run_id"), str)
+            or not re.fullmatch(r"[0-9a-f]{32}", progress_state["run_id"])
+            or progress_state.get("status") not in {"running", "failed", "cancelled", "complete"}
+            or progress_state.get("stage")
+            not in {
+                "snapshot",
+                "writing",
+                "evidence",
+                "consolidation",
+                "planning",
+                "sections",
+                "validation",
+                "compile",
+                "complete",
+            }
+            or type(progress_state.get("elapsed_seconds")) is not int
+            or progress_state["elapsed_seconds"] < 0
+        ):
+            raise ProjectError("Paper progress checkpoint is invalid")
+        for key in ("current", "total"):
+            count = progress_state.get(key)
+            if count is not None and (type(count) is not int or count < 1):
+                raise ProjectError("Paper progress count is invalid")
+        if (progress_state.get("current") is None) != (progress_state.get("total") is None):
+            raise ProjectError("Paper progress count is incomplete")
+        if (
+            progress_state.get("current") is not None
+            and progress_state["current"] > progress_state["total"]
+        ):
+            raise ProjectError("Paper progress count exceeds its actual total")
+        for key in ("started_at", "updated_at"):
+            timestamp = progress_state.get(key)
+            if not isinstance(timestamp, str):
+                raise ProjectError("Paper progress timestamp is invalid")
+            try:
+                datetime.fromisoformat(timestamp)
+            except ValueError as exc:
+                raise ProjectError("Paper progress timestamp is invalid") from exc
     return value
 
 
@@ -838,6 +922,62 @@ def _clear_work(path: str) -> None:
     if file.is_symlink():
         raise ProjectError("Long-paper checkpoint is unsafe")
     file.unlink(missing_ok=True)
+
+
+def progress_status(path: str) -> dict[str, Any] | None:
+    """Return only persisted stage metadata; never expose prompts or provider content."""
+    key = str(project_path(path).resolve())
+    active = _active_progress.get(key)
+    work = _load_work(path)
+    saved = work.get("progress") if work is not None else None
+    state = active or saved
+    if state is None:
+        return None
+    running_here = bool(active and active.get("run_id") == state.get("run_id"))
+    status = state["status"]
+    if status == "running":
+        status = "active" if running_here else "interrupted"
+    elapsed = int(state["elapsed_seconds"])
+    if running_here:
+        updated_at = datetime.fromisoformat(state["updated_at"])
+        elapsed += max(0, int((datetime.now(UTC) - updated_at).total_seconds()))
+    return {
+        "status": status,
+        "stage": state["stage"],
+        "current": state["current"],
+        "total": state["total"],
+        "started_at": state["started_at"],
+        "elapsed_seconds": elapsed,
+    }
+
+
+def finish_progress(path: str, status: Literal["failed", "cancelled"]) -> None:
+    """Freeze the latest checkpointed progress when generation exits abnormally."""
+    key = str(project_path(path).resolve())
+    active = _active_progress.get(key)
+    work = _load_work(path)
+    saved = work.get("progress") if work is not None else None
+    state = active or saved
+    if state is None:
+        return
+    now = _now()
+    elapsed = int(state["elapsed_seconds"])
+    if active and active.get("run_id") == state.get("run_id"):
+        elapsed += max(
+            0,
+            int((datetime.now(UTC) - datetime.fromisoformat(state["updated_at"])).total_seconds()),
+        )
+    frozen = {
+        **state,
+        "status": status,
+        "elapsed_seconds": elapsed,
+        "updated_at": now,
+    }
+    if work is not None:
+        work["progress"] = frozen
+        _save_work(path, work)
+    if active and active.get("run_id") == state.get("run_id"):
+        _active_progress.pop(key, None)
 
 
 def _new_work(
@@ -1674,7 +1814,7 @@ async def _generate_long_draft(
     config: dict[str, Any],
     state: dict[str, Any],
     save_state: Callable[[dict[str, Any]], None],
-    progress: Callable[[str, int, int], Awaitable[None]] | None = None,
+    progress: PaperStageCallback | None = None,
     project_id: str | None = None,
     project_path_value: str | None = None,
 ) -> tuple[PaperDraft, int, int]:
@@ -1714,6 +1854,8 @@ distinct whenever merging would obscure differences between sessions or experime
         start_batch = int(state.get("next_batch", 0))
         for batch_index in range(start_batch, len(batches)):
             batch = batches[batch_index]
+            if progress:
+                await progress("evidence", batch_index + 1, len(batches), "active")
             before_provider_call(MAX_LONG_PAPER_SECTIONS + 1 + 32)
             result, _ = await _provider_structured(
                 batch,
@@ -1785,7 +1927,7 @@ distinct whenever merging would obscure differences between sessions or experime
             )
             save_state(state)
             if progress:
-                await progress("evidence", batch_index + 1, len(batches))
+                await progress("evidence", batch_index + 1, len(batches), "milestone")
 
     # Reduce the extracted index hierarchically when it would exceed the planner's input bound.
     reduce_instructions = """Consolidate these evidence-index notes into at most three concise notes.
@@ -1821,6 +1963,8 @@ that occur in the input. Do not add scientific claims or outside citations."""
         ]
         for group_index in range(int(state.get("reduction_next_group", 0)), len(groups)):
             group = groups[group_index]
+            if progress:
+                await progress("consolidation", None, None, "active")
             before_provider_call(MAX_LONG_PAPER_SECTIONS + 1)
             reduced, _ = await _provider_structured(
                 [item.model_dump() for item in group],
@@ -1857,8 +2001,8 @@ that occur in the input. Do not add scientific claims or outside citations."""
                 }
             )
             save_state(state)
-        if progress:
-            await progress("index", calls, MAX_LONG_PAPER_CALLS - MAX_LONG_PAPER_SECTIONS - 1)
+            if progress:
+                await progress("consolidation", None, None, "milestone")
         if len(next_notes) >= len(round_notes):
             raise ProjectError("Evidence index could not be reduced within the planner input bound")
         notes = next_notes
@@ -1919,6 +2063,8 @@ into a result. Return the complete plan JSON matching the schema."""
     if state.get("plan"):
         long_plan = LongPaperPlan.model_validate(state["plan"])
     else:
+        if progress:
+            await progress("planning", None, None, "active")
         before_provider_call(MAX_LONG_PAPER_SECTIONS)
         plan, _ = await _provider_structured(
             plan_input,
@@ -1934,8 +2080,8 @@ into a result. Return the complete plan JSON matching the schema."""
         long_plan = LongPaperPlan.model_validate(plan)
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
         save_state(state)
-    if progress:
-        await progress("outline", 1, 1)
+        if progress:
+            await progress("planning", None, None, "milestone")
     if len(long_plan.sections) > MAX_LONG_PAPER_SECTIONS:
         raise ProjectError("Paper outline exceeded the supported section count")
     claim_ids = {claim.id for claim in long_plan.claims}
@@ -1970,9 +2116,9 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
                     claim_ids=section.claim_ids,
                 )
             )
-            if progress:
-                await progress("sections", section_number, len(long_plan.sections))
             continue
+        if progress:
+            await progress("sections", section_number, len(long_plan.sections), "active")
         relevant = [
             note.model_dump()
             for note in notes
@@ -2017,7 +2163,7 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
         state["provider_calls"] = calls
         save_state(state)
         if progress:
-            await progress("sections", section_number, len(long_plan.sections))
+            await progress("sections", section_number, len(long_plan.sections), "milestone")
         if calls > MAX_LONG_PAPER_CALLS:
             raise ProjectError("Long-paper generation exceeded its bounded provider-call budget")
 
@@ -2074,17 +2220,75 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
     return draft, calls, len(batches)
 
 
-async def generate(
+async def _generate_impl(
     path: str,
     expected_binding: str | None = None,
     expected_project_id: str | None = None,
-    progress: Callable[[str, int, int], Awaitable[None]] | None = None,
+    progress: PaperProgressCallback | None = None,
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
 ) -> dict[str, Any]:
     if _gate.locked():
         raise ProjectError("A paper generation is already active; wait or cancel it")
     async with _gate:
+        project_key = str(project_path(path).resolve())
+        run_id = uuid4().hex
+        started_at = _now()
+        elapsed_before = 0
+        work: dict[str, Any] = {}
+
+        async def report(
+            stage: PaperProgressStage,
+            current: int | None,
+            total: int | None,
+            state: Literal["active", "milestone", "complete"] = "active",
+        ) -> None:
+            now = _now()
+            elapsed = elapsed_before + max(
+                0, int((datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds())
+            )
+            saved_progress: dict[str, Any] = {
+                "run_id": run_id,
+                "status": "complete" if state == "complete" else "running",
+                "stage": stage,
+                "current": current,
+                "total": total,
+                "started_at": started_at,
+                "updated_at": now,
+                "elapsed_seconds": elapsed,
+            }
+            _active_progress[project_key] = saved_progress
+            if work:
+                work["progress"] = saved_progress
+                _save_work(path, work)
+            if progress:
+                await progress(
+                    {
+                        "type": "progress",
+                        "state": state,
+                        "stage": stage,
+                        "current": current,
+                        "total": total,
+                        "started_at": started_at,
+                        "elapsed_seconds": elapsed,
+                    }
+                )
+
+        task = asyncio.current_task()
+        if task is not None:
+
+            def clear_active(completed_task: asyncio.Task[Any]) -> None:
+                if completed_task.cancelled():
+                    finish_progress(path, "cancelled")
+                elif completed_task.exception() is not None:
+                    finish_progress(path, "failed")
+                active = _active_progress.get(project_key)
+                if active and active.get("run_id") == run_id:
+                    _active_progress.pop(project_key, None)
+
+            task.add_done_callback(clear_active)
+
+        await report("snapshot", None, None)
         view = inspect_project(path)
         if expected_project_id and view.project.id != expected_project_id:
             raise ProjectError("Project identity changed; reopen and retry")
@@ -2099,13 +2303,16 @@ async def generate(
             raise PaperSnapshotConflict(
                 "Research changed after paper preflight. Review the updated snapshot and start again."
             )
-        if progress:
-            await progress("snapshot", 1, 1)
-        work: dict[str, Any] = {}
+        await report("snapshot", None, None, "milestone")
         binding_fingerprint = hashlib.sha256(
             (initial_auth["mode"] + "\0" + initial_auth["identity"]).encode()
         ).hexdigest()
         checkpoint = _load_work(path)
+        if checkpoint is not None:
+            previous_progress = checkpoint.get("progress")
+            if previous_progress is not None:
+                elapsed_before = int(previous_progress["elapsed_seconds"])
+            work = checkpoint
         long_form = len(_json(package)) > MAX_ONE_SHOT_CONTEXT_BYTES or force_long_form
         expected_kind = "long_form" if long_form else "one_shot"
         compatible = checkpoint is not None and not any(
@@ -2123,6 +2330,7 @@ async def generate(
             raise ProjectError(
                 "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
             )
+        one_shot_validation_started = False
         if not long_form:
             if checkpoint is not None and checkpoint.get("one_shot_draft") is not None:
                 draft = PaperDraft.model_validate(checkpoint["one_shot_draft"])
@@ -2130,18 +2338,33 @@ async def generate(
                 work = checkpoint
                 provider_calls = int(work.get("provider_calls", 1))
             else:
+                if checkpoint is None:
+                    work = _new_work(
+                        snapshot_hash,
+                        view.project.id,
+                        binding_fingerprint,
+                        config["model"],
+                        config["reasoning_effort"],
+                        kind="one_shot",
+                    )
+                work["progress"] = {
+                    "run_id": run_id,
+                    "status": "running",
+                    "stage": "snapshot",
+                    "current": None,
+                    "total": None,
+                    "started_at": started_at,
+                    "updated_at": _now(),
+                    "elapsed_seconds": elapsed_before,
+                }
+                _save_work(path, work)
+                await report("writing", None, None)
                 draft, model = await _provider(package, initial_auth, config, view.project.id, path)
                 # Cache only drafts that pass the evidence-integrity checks, so
                 # a compiler retry cannot reuse an invalid result.
+                await report("validation", None, None)
                 _validate(draft, package)
-                work = checkpoint or _new_work(
-                    snapshot_hash,
-                    view.project.id,
-                    binding_fingerprint,
-                    config["model"],
-                    config["reasoning_effort"],
-                    kind="one_shot",
-                )
+                one_shot_validation_started = True
                 work["provider_calls"] = int(work.get("provider_calls", 0)) + 1
                 work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 work["one_shot_draft"] = draft.model_dump()
@@ -2158,20 +2381,20 @@ async def generate(
                     config["reasoning_effort"],
                 )
                 _save_work(path, work)
-            else:
-                work = checkpoint
             draft, provider_calls, evidence_batch_count = await _generate_long_draft(
                 package,
                 initial_auth,
                 config,
                 work,
                 lambda state: _save_work(path, state),
-                progress,
+                report,
                 view.project.id,
                 path,
             )
             model = config["model"]
             long_form = True
+        if not one_shot_validation_started:
+            await report("validation", None, None)
         material_omissions = (
             _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
         )
@@ -2179,6 +2402,7 @@ async def generate(
             draft = _apply_omission_limits(draft, material_omissions)
         validation_warnings = _validate(draft, package)
         obligation_reconciliation = _reconcile_obligations(draft, package)
+        await report("validation", None, None, "milestone")
         final_auth = await auth_context()
         latest = inspect_project(path)
         if (
@@ -2226,6 +2450,14 @@ async def generate(
                     if work
                     else provider_calls
                 ),
+                "progress_run_id": run_id,
+                "generation_elapsed_seconds": int(
+                    elapsed_before
+                    + max(
+                        0,
+                        (datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds(),
+                    )
+                ),
                 "long_form": long_form,
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
@@ -2272,8 +2504,7 @@ async def generate(
                 else None,
                 material_omissions=material_omissions,
             )
-            if progress:
-                await progress("compile", 1, 1)
+            await report("compile", None, None)
             pdf = await asyncio.to_thread(
                 _compile_pdf,
                 tex,
@@ -2286,7 +2517,12 @@ async def generate(
         # Keep the exact source that produced this version's PDF alongside the
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
         record["tex_source"] = tex
+        record["generation"]["generation_elapsed_seconds"] = int(
+            elapsed_before
+            + max(0, (datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds())
+        )
         _save(path, record, pdf)
+        await report("complete", None, None, "complete")
         try:
             _clear_work(path)
         except OSError:
@@ -2304,6 +2540,37 @@ async def generate(
                 "generation",
             )
         } | {"title": draft.title}
+
+
+async def generate(
+    path: str,
+    expected_binding: str | None = None,
+    expected_project_id: str | None = None,
+    progress: PaperProgressCallback | None = None,
+    force_long_form: bool = False,
+    expected_snapshot_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Run one generation task so activity cleanup is independent of its caller."""
+    task = asyncio.create_task(
+        _generate_impl(
+            path,
+            expected_binding,
+            expected_project_id,
+            progress,
+            force_long_form,
+            expected_snapshot_sha256,
+        )
+    )
+    try:
+        return await task
+    except asyncio.CancelledError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        finish_progress(path, "cancelled")
+        raise
+    except Exception:
+        finish_progress(path, "failed")
+        raise
 
 
 def preflight(

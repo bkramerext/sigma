@@ -214,10 +214,17 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         }
         provider_calls = 0
         compile_calls = 0
+        provider_started = asyncio.Event()
+        allow_provider = asyncio.Event()
+        first_events: list[papers.PaperProgressEvent] = []
+        retry_events: list[papers.PaperProgressEvent] = []
 
         async def fake_provider(context, *_args):
             nonlocal provider_calls
             provider_calls += 1
+            if provider_calls == 1:
+                provider_started.set()
+                await allow_provider.wait()
             project_source = next(
                 source["id"] for source in context["sources"] if source["kind"] == "project"
             )
@@ -238,12 +245,38 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
             patch.object(papers, "_provider", new=fake_provider),
             patch.object(papers, "_compile_pdf", new=fail_compile_once),
         ):
-            try:
-                asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
-            except ProjectError as exc:
-                assert "fixture compiler unavailable" in str(exc)
-            else:
-                raise AssertionError("The injected compile failure must be surfaced")
+
+            async def first_attempt() -> None:
+                async def collect(event: papers.PaperProgressEvent) -> None:
+                    first_events.append(event)
+
+                task = asyncio.create_task(
+                    papers.generate(
+                        str(path), credential["identity"], view.project.id, progress=collect
+                    )
+                )
+                await asyncio.wait_for(provider_started.wait(), timeout=2)
+                live = papers.progress_status(str(path))
+                assert live is not None and live["status"] == "active", live
+                assert live["stage"] == "writing", live
+                checkpoint = papers._load_work(str(path))
+                assert checkpoint is not None
+                assert checkpoint["progress"]["stage"] == "writing"
+                await asyncio.sleep(1.05)
+                live = papers.progress_status(str(path))
+                assert live is not None and live["elapsed_seconds"] >= 1, live
+                allow_provider.set()
+                try:
+                    await task
+                except ProjectError as exc:
+                    assert "fixture compiler unavailable" in str(exc)
+                else:
+                    raise AssertionError("The injected compile failure must be surfaced")
+
+            asyncio.run(first_attempt())
+            failed_progress = papers.progress_status(str(path))
+            assert failed_progress is not None and failed_progress["status"] == "failed"
+            assert failed_progress["stage"] == "compile"
 
             checkpoint = papers._load_work(str(path))
             assert checkpoint is not None and checkpoint["kind"] == "one_shot"
@@ -262,9 +295,16 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
             with patch.object(
                 papers, "_provider", side_effect=AssertionError("cached draft must be reused")
             ):
-                result = asyncio.run(
-                    papers.generate(str(path), credential["identity"], view.project.id)
-                )
+
+                async def resume() -> dict:
+                    async def collect(event: papers.PaperProgressEvent) -> None:
+                        retry_events.append(event)
+
+                    return await papers.generate(
+                        str(path), credential["identity"], view.project.id, progress=collect
+                    )
+
+                result = asyncio.run(resume())
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
@@ -273,6 +313,14 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert saved["generation"]["provider_calls_lifetime_total"] == 1
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
+        assert [event["stage"] for event in first_events if event["state"] == "active"] == [
+            "snapshot",
+            "writing",
+            "validation",
+            "compile",
+        ]
+        assert retry_events[-1]["stage"] == "complete" and retry_events[-1]["state"] == "complete"
+        assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
 
 
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
@@ -392,12 +440,34 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 force_long_form,
                 expected_snapshot_sha256,
             ):
-                await progress("evidence", 1, 2)
+                await progress(
+                    {
+                        "type": "progress",
+                        "state": "milestone",
+                        "stage": "evidence",
+                        "current": 1,
+                        "total": 2,
+                        "started_at": "2026-01-01T00:00:00+00:00",
+                        "elapsed_seconds": 1,
+                    }
+                )
+                await asyncio.sleep(1.1)
                 assert force_long_form is False
                 assert len(expected_snapshot_sha256) == 64
                 return {"paper_id": "fixture-paper"}
 
-            with patch.object(papers, "generate", new=fake_generate):
+            heartbeat = {
+                "status": "active",
+                "stage": "evidence",
+                "current": 1,
+                "total": 2,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "elapsed_seconds": 2,
+            }
+            with (
+                patch.object(papers, "generate", new=fake_generate),
+                patch.object(papers, "progress_status", return_value=heartbeat),
+            ):
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=app), base_url="http://testserver"
                 ) as client:
@@ -413,6 +483,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/event-stream")
             assert '"stage":"evidence"' in response.text
+            assert '"current":1' in response.text and '"total":2' in response.text
+            assert '"type":"heartbeat"' in response.text
+            assert '"elapsed_seconds":2' in response.text
             assert '"type": "complete"' in response.text or '"type":"complete"' in response.text
 
             async def stale_preflight(*_args, **_kwargs):
@@ -436,6 +509,42 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 '"provider_calls_attempted": 0' in response.text
                 or '"provider_calls_attempted":0' in response.text
             )
+
+    asyncio.run(check())
+
+
+def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
+    async def check() -> None:
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "interrupted.sigma"
+            view = initialize_project(path, "Interrupted paper", "Recover saved paper progress")
+            state = papers._new_work("a" * 64, view.project.id, "b" * 64, "gpt-fixture", "high")
+            state["progress"] = {
+                "run_id": "c" * 32,
+                "status": "running",
+                "stage": "sections",
+                "current": 2,
+                "total": 4,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:45+00:00",
+                "elapsed_seconds": 45,
+            }
+            papers._save_work(str(path), state)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+            ) as client:
+                response = await client.get(
+                    "/api/projects/papers/progress", params={"path": str(path)}
+                )
+            assert response.status_code == 200, response.text
+            assert response.json()["progress"] == {
+                "status": "interrupted",
+                "stage": "sections",
+                "current": 2,
+                "total": 4,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "elapsed_seconds": 45,
+            }
 
     asyncio.run(check())
 
@@ -464,6 +573,7 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
         config = {"model": "gpt-fixture"}
         reductions = 0
         cancel_second_reduction = True
+        stage_events: list[tuple[str, int | None, int | None, str]] = []
         batch_count = len(papers._evidence_batches(package))
         assert batch_count == 1
 
@@ -564,6 +674,9 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
 
         saved = []
 
+        async def record_progress(stage, current, total, state) -> None:
+            stage_events.append((stage, current, total, state))
+
         async def run():
             return await papers._generate_long_draft(
                 package,
@@ -571,6 +684,7 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
                 config,
                 state,
                 lambda current: saved.append(json.loads(papers._json(current))),
+                record_progress,
             )
 
         with (
@@ -609,6 +723,13 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
         )
         assert len(draft_result.sections) == 2
         assert saved
+        evidence = [item for item in stage_events if item[0] == "evidence"]
+        assert evidence == [("evidence", 1, 1, "active"), ("evidence", 1, 1, "milestone")]
+        sections = [item for item in stage_events if item[0] == "sections"]
+        assert [item[1:3] for item in sections if item[3] == "active"] == [(1, 2), (2, 2)]
+        assert any(item[0] == "planning" and item[3] == "active" for item in stage_events)
+        assert any(item[0] == "consolidation" and item[3] == "active" for item in stage_events)
+        assert all(item[0] != "index" for item in stage_events)
 
     asyncio.run(check())
 
@@ -957,6 +1078,7 @@ def main() -> None:
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
+    test_paper_progress_endpoint_recovers_interrupted_checkpoint()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"

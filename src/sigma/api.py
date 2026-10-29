@@ -483,6 +483,11 @@ def papers_preflight_view(
     )
 
 
+@app.get("/api/projects/papers/progress")
+def papers_progress_view(path: str):
+    return {"progress": papers.progress_status(path)}
+
+
 @app.post("/api/projects/papers/restart")
 async def papers_restart_view(body: PaperRestartRequest):
     return await papers.restart_work(
@@ -552,10 +557,8 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     async def stream():
         updates: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
-        async def progress(stage: str, completed: int, total: int) -> None:
-            await updates.put(
-                {"type": "progress", "stage": stage, "completed": completed, "total": total}
-            )
+        async def progress(event: papers.PaperProgressEvent) -> None:
+            await updates.put(dict(event))
 
         task = asyncio.create_task(
             papers.generate(
@@ -568,11 +571,21 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             )
         )
         try:
-            while not task.done():
+            while not task.done() or not updates.empty():
                 try:
                     update = await asyncio.wait_for(updates.get(), timeout=1)
                 except TimeoutError:
-                    yield ": paper generation is active\n\n"
+                    current = papers.progress_status(body.path)
+                    if current is None:
+                        yield ": paper generation is active\n\n"
+                    else:
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {"type": "heartbeat", "progress": current}, separators=(",", ":")
+                            )
+                            + "\n\n"
+                        )
                     continue
                 yield "data: " + json.dumps(update, separators=(",", ":")) + "\n\n"
             result = await task
@@ -587,6 +600,10 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             if not task.done():
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            if task.cancelled():
+                papers.finish_progress(body.path, "cancelled")
+            elif task.exception() is not None:
+                papers.finish_progress(body.path, "failed")
 
     return StreamingResponse(
         stream(),

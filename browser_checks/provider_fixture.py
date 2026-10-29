@@ -22,6 +22,21 @@ from sigma.api import app
 # projects are immutable repository source data that the UI must still list.
 samples.SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 
+# Optional test-only origin normalization lets real-browser acceptance use a
+# separate Vite port while preserving the local API's production origin guard.
+fixture_origin = os.environ.get("SIGMA_PAPER_PROGRESS_FIXTURE_ORIGIN", "").strip()
+if fixture_origin:
+
+    @app.middleware("http")
+    async def normalize_fixture_origin(request, call_next):
+        headers = [
+            (key, b"http://127.0.0.1:5173" if key == b"origin" else value)
+            for key, value in request.scope["headers"]
+        ]
+        request.scope["headers"] = headers
+        return await call_next(request)
+
+
 __all__ = ["app"]
 real_client = httpx.AsyncClient
 
@@ -43,6 +58,15 @@ async def handler(request):
     body = json.loads(request.content)
     context = json.loads(body["input"])
     schema_name = body["text"]["format"]["name"]
+    progress_delay = float(os.environ.get("SIGMA_PAPER_PROGRESS_FIXTURE_DELAY", "0"))
+    if progress_delay > 0 and schema_name in {
+        "sigma_paper_evidence_batch",
+        "sigma_paper_evidence_reduction",
+        "sigma_long_paper_plan",
+        "sigma_long_paper_section",
+        "sigma_research_paper",
+    }:
+        await asyncio.sleep(min(progress_delay, 5))
     if schema_name in {
         "sigma_paper_evidence_batch",
         "sigma_paper_evidence_reduction",

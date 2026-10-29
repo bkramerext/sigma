@@ -787,6 +787,7 @@ _GUEST_PROJECT_READ_PATHS = {
     "/api/projects/research-executions",
     "/api/projects/papers",
     "/api/projects/papers/preflight",
+    "/api/projects/papers/progress",
     "/api/projects/proposals/config",
     "/api/projects/text",
     "/api/projects/recent",
