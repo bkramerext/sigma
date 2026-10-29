@@ -721,12 +721,15 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "reduction_output",
         "evidence_indexed",
         "one_shot_draft",
+        "explicit_restart_pending",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
     value.setdefault("kind", "long_form")
     value.setdefault("one_shot_draft", None)
+    if type(value.get("explicit_restart_pending", False)) is not bool:
+        raise ProjectError("Long-paper checkpoint restart state is invalid")
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
     value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
