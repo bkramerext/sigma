@@ -927,11 +927,12 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
                     str(path),
                     project_view.project.id,
                     credential["identity"],
-                    papers._snapshot(str(path))[1],
+                    "0" * 64,  # Preflight hash can be stale after evidence changes.
                     True,
                 )
             )
             assert restarted["provider_calls_previous_runs"] == papers.MAX_LONG_PAPER_CALLS
+            assert papers._load_work(str(path))["snapshot_sha256"] == papers._snapshot(str(path))[1]
             reset_preflight = papers.preflight(
                 str(path),
                 force_long_form=True,
