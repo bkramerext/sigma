@@ -933,6 +933,13 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
             )
             assert restarted["provider_calls_previous_runs"] == papers.MAX_LONG_PAPER_CALLS
             assert papers._load_work(str(path))["snapshot_sha256"] == papers._snapshot(str(path))[1]
+            # Simulate evidence/settings drifting immediately after Start over.
+            # Preflight must not re-open the restart dialog; generation must
+            # rebind the explicitly reset, zero-call checkpoint instead.
+            pending = papers._load_work(str(path))
+            assert pending["explicit_restart_pending"] is True
+            pending["snapshot_sha256"] = "f" * 64
+            papers._save_work(str(path), pending)
             reset_preflight = papers.preflight(
                 str(path),
                 force_long_form=True,
@@ -944,6 +951,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
             )
             assert reset_preflight["resume_available"] is True
             assert reset_preflight["provider_calls_attempted"] == 0
+            assert reset_preflight["checkpoint_matches_snapshot"] is False
             assert reset_preflight["provider_calls_previous_runs"] == papers.MAX_LONG_PAPER_CALLS
             calls_at_restart = provider_calls
             compile_attempts = 0
