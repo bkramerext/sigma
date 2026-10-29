@@ -2402,8 +2402,146 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         )
 
 
+def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
+    """An easy one-session paper uses one full-evidence call past the 100 KB cliff."""
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "easy-fixture",
+        "sources": [
+            {
+                "id": "project:easy-fixture",
+                "kind": "project",
+                "data": {"id": "easy-fixture", "difficulty": "easy", "investigation_type": "mathematical"},
+            },
+            {
+                "id": "session:one",
+                "kind": "session",
+                "data": {"outcome": {"argument": "A proof candidate. " * 6_500}},
+            },
+        ],
+    }
+    snapshot_bytes = len(papers._json(package))
+    assert papers.MAX_ONE_SHOT_CONTEXT_BYTES < snapshot_bytes < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
+    assert papers._paper_long_form(package) is False
+    assert papers._paper_long_form(package, force_long_form=True) is True
+
+    # An earlier, compatible long-form attempt retains its checkpoint. The
+    # optimization must never abandon paid outline or section work.
+    existing = papers._new_work(
+        papers.hashlib.sha256(papers._json(package)).hexdigest(),
+        "easy-fixture",
+        "a" * 64,
+        "fixture-model",
+        "high",
+    )
+    existing["plan"] = {"already_paid": True}
+    assert papers._paper_long_form(package, existing=existing) is True
+    assert papers._paper_long_form(
+        package, existing={**existing, "snapshot_sha256": "0" * 64}
+    ) is False
+
+    package["sources"].append(
+        {"id": "session:two", "kind": "session", "data": {"outcome": "An independent run."}}
+    )
+    assert papers._paper_long_form(package) is True
+    package["sources"].pop()
+    package["sources"][0]["data"]["difficulty"] = "hard"
+    assert papers._paper_long_form(package) is True
+    package["sources"][0]["data"]["difficulty"] = "easy"
+    package["sources"][1]["data"]["outcome"]["argument"] *= 2
+    assert papers._paper_long_form(package) is True
+
+
+def test_invalid_planning_claim_reference_is_recoverable() -> None:
+    """A paid invalid outline must not poison Continue or silently lose evidence."""
+    package, valid_plan = fast_package()
+    invalid_section = valid_plan.sections[0].model_copy(update={"claim_ids": ["C999"]})
+    invalid_plan = valid_plan.model_copy(
+        update={"sections": [invalid_section, *valid_plan.sections[1:]]}
+    )
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    planning_calls = 0
+    failing = True
+    saves: list[dict[str, Any]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal planning_calls
+        if schema_name == "sigma_long_paper_plan":
+            planning_calls += 1
+            return (invalid_plan if failing else valid_plan), "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved section {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def attempt():
+        with patch.object(papers, "_provider_structured", new=provider):
+            return await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda value: saves.append(copy.deepcopy(value)),
+                structured_fast_path=True,
+            )
+
+    try:
+        asyncio.run(attempt())
+    except ProjectError as exc:
+        assert "unknown claim" in str(exc)
+        assert "invalid outline was not saved" in str(exc)
+    else:
+        raise AssertionError("Unknown planning claim should be rejected before publishing")
+    assert planning_calls == 1
+    assert "plan" not in state
+    assert state["evidence_indexed"] is True
+    assert state["provider_calls"] == 1
+    assert state["provider_calls_total"] == 1
+    assert all(not item.get("plan") for item in saves)
+
+    failing = False
+    generated, calls, batches = asyncio.run(attempt())
+    assert planning_calls == 2
+    assert len(generated.sections) == len(valid_plan.sections)
+    assert batches == 0
+    assert calls == 2 + len(valid_plan.sections)
+    assert state["provider_calls_total"] == calls
+
+    # Older versions saved invalid outlines. An explicit Continue repairs
+    # the outline while retaining evidence and previous usage accounting.
+    old = papers._new_work("c" * 64, "fast-fixture", "d" * 64, "fixture-model", "high")
+    old.update(
+        {
+            "plan": invalid_plan.model_dump(),
+            "evidence_indexed": True,
+            "evidence_strategy": "structured_v1",
+            "evidence_notes": state["evidence_notes"],
+            "provider_calls": 1,
+            "provider_calls_total": 1,
+        }
+    )
+
+    async def resume_old():
+        with patch.object(papers, "_provider_structured", new=provider):
+            return await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                old,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+
+    _, old_calls, old_batches = asyncio.run(resume_old())
+    assert old_batches == 0
+    assert old_calls == 2 + len(valid_plan.sections)
+    assert old["provider_calls_total"] == old_calls
+    assert old["plan"]["sections"][0]["claim_ids"] == valid_plan.sections[0].claim_ids
+
+
 def test_long_paper_planning_timeout_is_stage_specific() -> None:
-    """Only the complex planning call receives the longer provider allowance."""
+    """All paper inference stages receive at least five minutes."""
+    assert papers.CALL_SECONDS == 300
     assert papers._long_paper_call_timeout("sigma_long_paper_plan") == 300
     assert papers._long_paper_call_timeout("sigma_long_paper_section") == papers.CALL_SECONDS
     assert papers._long_paper_call_timeout("sigma_paper_evidence_batch") == papers.CALL_SECONDS
@@ -2441,6 +2579,8 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 
 def main() -> None:
+    test_easy_paper_avoids_unnecessary_long_form_calls()
+    test_invalid_planning_claim_reference_is_recoverable()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
@@ -2481,9 +2621,10 @@ def main() -> None:
         async def aiter_bytes(self):
             yield self.content
 
+    assert papers.MAX_CHATGPT_STREAM_BYTES == 16_000_000
     large_event = (
         b'data: {"type":"response.created","sequence_number":0,"response":{"id":"r"},"padding":"'
-        + b"x" * 1_100_000
+        + b"x" * 4_100_000
         + b'"}\n\n'
         + b'data: {"type":"response.completed","sequence_number":1,"response":{"id":"r","status":"completed","output":[]}}\n\n'
     )
