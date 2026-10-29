@@ -379,3 +379,56 @@ That shifted attention toward invitations, allowances, clear account states, con
 There was still a temptation to keep adding one more fix before showing SIGMA to anyone. We made one deliberate choice not to do that.
 
 SIGMA was substantially closer to a demonstration I could put in someone's hands. The next test wasn't another merge. It was whether the deployed experience lived up to what we'd built.
+
+
+## Day 8 — October 28, 2026
+
+**Theme: The Reality Test** — Finding out what works when someone actually uses SIGMA.
+
+Day 7 ended with SIGMA looking almost ready for an outside user. Day 8 was spent discovering the distance between having the pieces and having them work together.
+
+I wanted to get through a straightforward sequence: sign in with Google, request an invitation, approve it as an administrator, and run a small sponsored research session. We had built each part. But the live sequence was still finding problems that automated tests hadn't caught.
+
+### The sign-in that wasn't
+
+The first failure was almost comical. The Google sign-in control was there, but the Welcome dialog covered it. Green added a way to sign in from the dialog, then verified the control itself in Chromium.
+
+That solved one problem and revealed another. Clicking the pill took me to a local API page that said **“Cloud authentication is not ready”** instead of Google's account chooser. The browser test had proved that a link navigated to the expected endpoint. It hadn't proved that the real application could complete the next step.
+
+Once we got farther into the account flow, a signed-in Google user who wasn't a member or administrator had no **Invite Me!** control. That was exactly the person the invitation feature was supposed to serve. We sent Green back to the actual identity and eligibility rules rather than declaring success on the strength of another mocked test.
+
+We also tested product feedback from a signed-in account and anonymously. Both submissions appeared in the administrator's table. That was a genuine success. But the signed-in email appeared under the feedback message while the Contact column still said “Not provided.” We decided to call that column **Google account** and give it enough room to display the address properly.
+
+These weren't obscure failures. They were things a first-time user would notice immediately.
+
+### Making research understandable—and runnable
+
+We continued improving the research experience itself. A session can explore several strategies, with Investigators proposing ideas and Skeptics challenging them over multiple turns. The first version of the About diagram described those mechanics in terms that made sense to the system, but not necessarily to a person seeing SIGMA for the first time. We reworked the explanation so the concepts emerged naturally and the exploration space was easier to grasp.
+
+We also examined why a session could take many minutes. A few visible exchanges can conceal multiple provider calls, scheduling decisions, persistence steps, and budget checks. Waiting longer is acceptable if it buys better research, but we didn't yet have evidence that it did.
+
+Red improved the session lifecycle and created a deterministic happy-path exercise around the Maximum Regions Formed by Lines problem. The work included fairer scheduling, clearer limits, and more realistic browser coverage. PR #317 passed verification and was merged. It was meaningful progress toward playable sessions, though a scripted exchange still wasn't a demonstration of live mathematical research quality.
+
+### The bigger question
+
+A story about Timothy Gowers using ChatGPT to produce original additive-combinatorics mathematics brought the original ambition back into focus. If a standalone model can make a discovery from a plain problem statement, SIGMA ought to be at least as capable. Its orchestration should help, not interfere.
+
+That gave us a sharper scientific question. Breaking research into Investigator and Skeptic turns might improve it by catching errors and exploring alternatives. But it might also interrupt a line of reasoning that would have succeeded if the model had simply been allowed to think. We connected a new advanced mathematics sample to the planned blind comparison of SIGMA against a standalone model, including the possibility that SIGMA could lose.
+
+Then we deliberately put that evaluation aside. We weren't ready to distinguish a failure of mathematical reasoning from a failure of sign-in, scheduling, context management, or spending controls.
+
+### Learning to break SIGMA on purpose
+
+Instead, we opened a whole-system reliability effort. The idea was to give a Codex worker more than a checklist: a repeatable process for stressing SIGMA, watching what happens, preserving evidence, finding root causes, fixing defects, and running the same scenarios again.
+
+It would cover authentication, permissions, research execution, concurrency, cost accounting, persistence, exports, provider failures, browser behavior, and recovery. It would also deliberately combine them. A session cancelled during a budget reservation while another session starts is more revealing than two isolated green tests.
+
+We wanted better observability, not just more assertions. And we wanted longer stress runs to be available without making every routine CI cycle painfully slow.
+
+### Day 8 retrospective
+
+Day 8 didn't end with the smooth first-user demonstration I had hoped for. Green's sign-in and invitation work was still being corrected, and the complete sponsored Easy session remained unverified.
+
+But the day changed how I thought about readiness. The standard wasn't whether a feature existed or whether a test passed. It was whether the application behaved correctly when a person used it, whether failures could be understood, and whether the system could recover without losing work or miscounting money.
+
+The ambition to do serious research hadn't diminished. We had simply become more precise about what needed to be trustworthy before we asked SIGMA to attempt it.
