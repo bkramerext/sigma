@@ -1568,8 +1568,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint ai-paper-model"><strong>{model || 'Loading…'}</strong> · Thinking: <strong>{effort || 'Loading…'}</strong></p>
       <p className="settings-hint"><strong>Experimental.</strong> Review AI-generated results. Generation may use provider allowance.</p>
       {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
-        <p>Research or AI settings changed. Clear unfinished work before generating again; saved papers and research remain.</p>
-        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Clear outdated paper work</button>
+        <p>{checkpointMismatch.incomplete_one_shot
+          ? 'The last writing attempt did not save a draft. Start over to generate again.'
+          : 'Research or AI settings changed. Start over to generate again.'} Saved research and papers remain.</p>
+        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>{checkpointMismatch.incomplete_one_shot ? 'Start over' : 'Clear outdated paper work'}</button>
       </div>}
       <div className="ai-paper-controls">{!busy && <>
         <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>
