@@ -1019,7 +1019,7 @@
 .workspace-page .session-summary .session-title-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; min-width: 0; }
 .workspace-page .session-summary .session-title-line > .session-row-disclosure { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 7px; width: auto; max-width: 100%; padding: 2px 0; }
 .workspace-page .session-summary .session-title-line > .session-row-disclosure .session-row-title { min-width: 0; overflow-wrap: anywhere; }
-.workspace-page .session-summary .session-heading-actions { position: relative; display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; align-items: baseline; justify-items: initial; gap: 8px 12px; min-width: 0; }
+.workspace-page .session-summary .session-heading-actions { position: relative; display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-items: initial; gap: 8px 12px; min-width: 0; }
 .workspace-page .session-summary .session-heading-actions .session-remove-link { flex: 0 0 auto; margin: 0; padding: 1px 0; }
 .workspace-page .session-summary > .session-status,
 .workspace-page .session-summary > .session-outcome-inline,
@@ -1083,3 +1083,9 @@
 }
 
 .workspace-page .session-heading-actions .session-log-open-link:hover { color: #ffe1ad; background: transparent; border-color: transparent; box-shadow: none; }
+
+/* Center session actions on the same visual axis as the session label. */
+.workspace-page .session-summary .session-title-line { align-items: center; }
+.workspace-page .session-summary .session-heading-actions > .session-mini-process-control,
+.workspace-page .session-summary .session-heading-actions > .session-log-open-link,
+.workspace-page .session-summary .session-heading-actions > .session-remove-link { align-self: center; }
