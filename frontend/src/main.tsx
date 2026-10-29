@@ -1355,6 +1355,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [legacyCheckpoint, setLegacyCheckpoint] = useState<any>(null);
   const [singleCallRestart, setSingleCallRestart] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1387,7 +1388,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setSingleCallRestart(null); setRestartableCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setSingleCallRestart(null); setRestartableCheckpoint(null); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -1481,6 +1482,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setLegacyCheckpoint(null);
       setSingleCallRestart(null);
       setRestartableCheckpoint(null);
+      setResetConfirm(false);
       setContinuationAvailable(false);
       setResumeDetails(null);
       setPaperProgress(null);
@@ -1599,8 +1601,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       </div>}
       <div className="ai-paper-controls">{!busy && <>
         <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>
-        {continuationAvailable && restartableCheckpoint && !checkpointMismatch && <button type="button" className="text-view-link" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>}
+        {continuationAvailable && restartableCheckpoint && !checkpointMismatch && <button type="button" className="text-view-link" disabled={loading || !binding} onClick={() => setResetConfirm(true)}>Start over</button>}
       </>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
+      {resetConfirm && !busy && restartableCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Confirm starting paper over">
+        <p>Start over discards the unfinished paper outline, sections and evidence preparation for this attempt. Your original research, already saved papers, and recorded AI-call usage are retained. It makes no AI request. You'll choose Generate separately when ready.</p>
+        <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm Start over</button>
+        <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Keep unfinished work</button>
+      </div>}
       {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningRetry
         ? 'The last planning response did not produce a saved outline. Retry paper planning makes another AI request and may repeat the failure. Start over clears unfinished paper work without making an AI call; choose Generate afterward to start fresh. Research, saved versions and provider-call accounting are preserved.'
         : resumeDetails?.draft_recovery_available
