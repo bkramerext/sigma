@@ -3332,12 +3332,18 @@ def preflight(
     calls_remaining = (
         0
         if one_shot_draft_available and resume_available
-        else max(0, MAX_LONG_PAPER_CALLS - work_state.get("provider_calls", 0))
+        else max(
+            0,
+            (maximum_calls if fast_preflight else MAX_LONG_PAPER_CALLS)
+            - work_state.get("provider_calls", 0),
+        )
         if resume_available
         else maximum_calls
     )
     maximum_output_tokens = calls_remaining * 12_000 if mode == "api_key" else None
     maximum_structured_input_bytes = (
+        (MAX_LONG_PAPER_OUTLINE_CALLS + FAST_MAX_SECTIONS) * 3 * 220_000
+        if fast_preflight else
         sum(_evidence_input_limit(batch) for batch in batches)
         + MAX_LONG_PAPER_REDUCTION_CALLS * MAX_PROVIDER_INPUT_BYTES
         + (MAX_LONG_PAPER_OUTLINE_CALLS + MAX_LONG_PAPER_SECTIONS) * 220_000
@@ -3374,7 +3380,7 @@ def preflight(
             maximum_restart_calls * 12_000 if mode == "api_key" else None
         ),
         "maximum_structured_input_bytes": maximum_structured_input_bytes,
-        "max_evidence_batches": MAX_EVIDENCE_BATCHES,
+        "max_evidence_batches": 0 if fast_preflight else MAX_EVIDENCE_BATCHES,
         "max_sections": MAX_LONG_PAPER_SECTIONS,
         "checkpoint_exists": work is not None,
         "checkpoint_matches_snapshot": same_project_and_snapshot,
