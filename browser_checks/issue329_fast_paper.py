@@ -132,6 +132,11 @@ with sync_playwright() as playwright:
     )
     expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled()
     dialog.get_by_role("button", name="Start over", exact=True).click()
+    expect(dialog.get_by_role("button", name="Keep unfinished work", exact=True)).to_be_enabled()
+    dialog.get_by_role("button", name="Keep unfinished work", exact=True).click()
+    expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled()
+    dialog.get_by_role("button", name="Start over", exact=True).click()
+    dialog.get_by_role("button", name="Confirm Start over", exact=True).click()
     expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_enabled(
         timeout=20_000
     )
