@@ -107,9 +107,7 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled(
         timeout=10_000
     )
-    expect(dialog.locator(".ai-paper-progress")).to_contain_text(
-        "Total active time across attempts"
-    )
+    expect(dialog.locator(".ai-paper-progress")).to_contain_text("Generation failed")
     expect(dialog.get_by_role("button", name="Start over", exact=True)).to_be_enabled()
     expect(dialog).to_contain_text("Retry makes another AI request")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
