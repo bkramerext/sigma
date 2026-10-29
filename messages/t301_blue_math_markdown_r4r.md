@@ -41,6 +41,24 @@
   regression. The test checks exact KaTeX annotations and rendered literal text;
   updated screenshots are included below.
 
+## Research Outcome browser acceptance correction
+
+The original failure was a real recognition defect, not an outdated count. The
+saved RH conclusion used Greek-leading equations and Unicode relations
+(`≠`, `≥`, `≤`), including chained inequalities and function expressions; the
+local `=` matcher used an ASCII word boundary and did not recognize these forms.
+It also left bracketed denominator notation as a slash, while the parenthesized
+form `s/(s−1)` was previously normalized with a malformed closing delimiter.
+
+The renderer now recognizes tight Unicode inequality spans and Greek-leading
+equations, permits contextual real-part conditions such as `Re(s)>0`, and
+converts bracketed and parenthesized denominators into valid fractions. The
+existing deterministic and browser checks still verify ordinary assignments,
+`let x = value`, prices, escaped delimiters, and code remain literal. The
+`browser_checks/t47_conclusion.py` Chrome test additionally checks exact KaTeX
+annotations for the meromorphic equation, inequality, and bracketed fraction,
+along with its minimum span/fraction counts and absence of KaTeX errors.
+
 ## Example
 
 Input sent through the application's existing conversion route:
@@ -90,6 +108,10 @@ Latest correction verification:
   passed in real Chrome, checking 25 fixture KaTeX spans and seven raw math
   spans plus literal assignment/currency/code preservation; screenshots were
   recaptured.
+- `uv run --with playwright python browser_checks/t47_conclusion.py` — passed
+  in real Chrome. The saved research outcome rendered at least eight KaTeX
+  spans, at least two fractions, required powers/subscripts, and no KaTeX
+  errors, without provider calls.
 - `npm run typecheck && npm run build` — passed; Vite emitted its existing
   large chunk advisory.
 - `./sigma test` — passed all steps, including Ruff, formatting, Pyright,
@@ -122,7 +144,7 @@ Latest correction verification:
   provider calls were made.
 - **UNMET:** None known.
 
-**Final tested implementation HEAD:** `2a24e58c4675531bd515d1476ce44b4847a3f9a1`.
+**Final tested implementation HEAD:** `3770b37029b398280947d5da3f36e9f65eb3e75d`.
 All code, fixture and evidence changes were tested at this commit; the handoff
 update is a documentation-only commit on top. **Provider calls/cost:** zero.
 
