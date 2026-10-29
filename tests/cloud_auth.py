@@ -1281,12 +1281,27 @@ class CloudAuthTests(TestCase):
         self.assertEqual(
             self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"], []
         )
-        self.assertEqual(
-            visitor.post("/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}).json()[
-                "duplicate"
-            ],
-            True,
-        )
+        # A reviewed request is closed. Since the grant was subsequently
+        # revoked, this uninvited identity can submit a fresh request; that
+        # fresh request is then deduplicated while it is open.
+        with patch.object(cloud_auth, "_deliver_invitation") as redeliver:
+            resubmitted = visitor.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+            self.assertEqual(resubmitted.status_code, 200, resubmitted.text)
+            self.assertEqual(resubmitted.json(), {"status": "notified", "duplicate": False})
+            requests = self.client.get("/api/cloud-auth/admin/invitation-requests").json()[
+                "requests"
+            ]
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(requests[0]["email"], "visitor@example.org")
+            self.assertEqual(requests[0]["status"], "notified")
+            self.assertTrue(
+                visitor.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+                ).json()["duplicate"]
+            )
+            redeliver.assert_called_once()
         self.assertEqual(deliver.call_count, 1)
 
     def test_invited_user_welcome_is_persisted_once_and_scoped_to_identity(self):
@@ -1505,11 +1520,31 @@ class CloudAuthTests(TestCase):
             headers={"Origin": ORIGIN},
         )
         self.assertEqual(updated.status_code, 200)
+        removed = self.client.delete(
+            f"/api/cloud-auth/admin/feedback/{row['id']}", headers={"Origin": ORIGIN}
+        )
+        self.assertEqual(removed.status_code, 200)
+        self.assertEqual(removed.json(), {"removed": True})
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/feedback").json()["feedback"], [])
+        with cloud_auth._db(cloud_auth.config()) as db:
+            audit = db.execute(
+                "SELECT actor,action,kind,value FROM audit WHERE action='feedback_removed'"
+            ).fetchone()
+        self.assertEqual(
+            tuple(audit),
+            ("admin@example.org", "feedback_removed", "feedback", row["id"]),
+        )
         self.assertEqual(
             visitor.put(
                 f"/api/cloud-auth/admin/feedback/{row['id']}",
                 json={"status": "closed"},
                 headers={"Origin": ORIGIN},
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            visitor.delete(
+                f"/api/cloud-auth/admin/feedback/{row['id']}", headers={"Origin": ORIGIN}
             ).status_code,
             401,
         )
@@ -1591,6 +1626,13 @@ class CloudAuthTests(TestCase):
             member.put(
                 f"/api/cloud-auth/admin/feedback/{submitted.json()['id']}",
                 json={"status": "closed"},
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            member.delete(
+                f"/api/cloud-auth/admin/feedback/{submitted.json()['id']}",
                 headers={"Origin": ORIGIN},
             ).status_code,
             403,

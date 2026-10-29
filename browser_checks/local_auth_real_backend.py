@@ -14,6 +14,7 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
+from http.cookies import SimpleCookie
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
@@ -28,6 +29,7 @@ Z = "zetacontinuation@gmail.com"
 N = "nontrivialzeeros@gmail.com"
 UNINVITED = "new-user@example.org"
 UNINVITED_OTHER = "another-new-user@example.org"
+RETURNING = "returning-member@example.org"
 
 
 def free_port() -> int:
@@ -99,6 +101,7 @@ def seed_state(auth_home: Path, credential_home: Path) -> dict[str, str]:
         for email, guest_subject in (
             (UNINVITED, "google-subject-uninvited"),
             (UNINVITED_OTHER, "google-subject-uninvited-other"),
+            (RETURNING, "google-subject-returning"),
         ):
             guest_cookie = secrets.token_urlsafe(32)
             db.execute(
@@ -110,6 +113,39 @@ def seed_state(auth_home: Path, credential_home: Path) -> dict[str, str]:
                 (cloud_auth._hash(guest_cookie), guest_subject, email, cloud_auth._now() + 3600),
             )
             session_cookies[email] = guest_cookie
+        returning_subject = "google-subject-returning"
+        db.execute(
+            "INSERT OR REPLACE INTO grants(kind,value,role,active,updated_at) VALUES('email',?,'member',0,?)",
+            (RETURNING, cloud_auth._now()),
+        )
+        db.execute(
+            "INSERT OR REPLACE INTO user_state(subject,email,role,access_active,workspace_id,sponsorship_eligible,model_access,updated_at) VALUES(?,?,'member',0,NULL,0,'personal',?)",
+            (returning_subject, RETURNING, cloud_auth._now()),
+        )
+        db.execute(
+            "INSERT OR REPLACE INTO invitation_requests(subject,email,requested_at,status,request_type) VALUES(?,?,?,'reviewed','invitation')",
+            (returning_subject, RETURNING, cloud_auth._now() - 3600),
+        )
+        db.execute(
+            "INSERT INTO feedback_requests(id,subject,account_email,contact_email,message,submitted_at,status) VALUES(?,?,?,?,?,?,'new')",
+            (
+                "f" * 32,
+                "google-subject-n",
+                N,
+                "contact-provided@example.org",
+                "Signed-in feedback fixture message",
+                cloud_auth._now() - 20,
+            ),
+        )
+        db.execute(
+            "INSERT INTO feedback_requests(id,subject,account_email,contact_email,message,submitted_at,status) VALUES(?,NULL,NULL,?,?,?,'new')",
+            (
+                "a" * 32,
+                "anonymous-contact@example.org",
+                "Anonymous feedback fixture message",
+                cloud_auth._now() - 10,
+            ),
+        )
 
     account_template = {
         "client_id": "fixture-chatgpt-client",
@@ -198,6 +234,13 @@ def main() -> None:
         # Keep fixture database/config initialization in this process, then let
         # the API run in a separate process against the same durable files.
         cookies = seed_state(auth_db, credential_home)
+        session_subjects = {
+            cookies[N]: "google-subject-n",
+            cookies[UNINVITED]: "google-subject-uninvited",
+            cookies[UNINVITED_OTHER]: "google-subject-uninvited-other",
+            cookies[RETURNING]: "google-subject-returning",
+        }
+        email_by_cookie = {cookie: email for email, cookie in cookies.items()}
         frontend = subprocess.Popen(
             [
                 str(ROOT / "frontend/node_modules/.bin/vite"),
@@ -313,10 +356,13 @@ def main() -> None:
                     from sigma import cloud_auth
 
                     request_type = request_body.get("request_type", "invitation")
+                    request_cookies = SimpleCookie(route.request.headers.get("cookie", ""))
+                    session_cookie = request_cookies.get("sigma_session")
+                    assert session_cookie is not None
                     subject = (
                         "google-subject-n"
                         if request_type == "reload"
-                        else "google-subject-uninvited"
+                        else session_subjects[session_cookie.value]
                     )
                     cfg = cloud_auth.config()
                     with cloud_auth._db(cfg) as db:
@@ -324,7 +370,9 @@ def main() -> None:
                             "SELECT status,email,request_type FROM invitation_requests WHERE subject=?",
                             (subject,),
                         ).fetchone()
-                        expected_email = N if request_type == "reload" else UNINVITED
+                        expected_email = (
+                            N if request_type == "reload" else email_by_cookie[session_cookie.value]
+                        )
                         assert row is not None and row["email"] == expected_email, row
                         assert row["request_type"] == request_type, row
                         db.execute(
@@ -624,6 +672,28 @@ def main() -> None:
                 expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
                 assert invitation_posts == [{"request_type": "reload"}, {}], invitation_posts
 
+                # A historical reviewed request does not suppress a fresh
+                # request after its member grant has been revoked.
+                login_cookie(RETURNING)
+                page.reload(wait_until="domcontentloaded")
+                returning_status = page.evaluate(
+                    "async () => (await (await fetch('/api/cloud-auth/status')).json())"
+                )
+                assert returning_status["user"] == {"email": RETURNING, "role": "guest"}, (
+                    returning_status
+                )
+                assert returning_status["account"]["invitation_status"] == "reviewed", (
+                    returning_status
+                )
+                expect(page.get_by_role("button", name="Invite me!")).to_be_visible()
+                page.get_by_role("button", name="Invite me!").click()
+                returning_dialog = page.get_by_role("dialog", name="Request an invitation")
+                returning_dialog.get_by_role("button", name="Invite me").click()
+                expect(returning_dialog.locator('[role="status"]')).to_contain_text(
+                    "Your invitation request is recorded and awaiting administrator review."
+                )
+                assert invitation_posts == [{"request_type": "reload"}, {}, {}], invitation_posts
+
                 # Exercise authenticated guest workspace ownership through the
                 # real API subprocess. The browser keeps the first guest cookie
                 # while its verified Google session changes to a second guest.
@@ -796,6 +866,36 @@ def main() -> None:
                     "row", name=re.compile(re.escape(UNINVITED))
                 )
                 expect(invitation_row).to_be_visible()
+                returning_row = admin.locator(".admin-invitation-table").get_by_role(
+                    "row", name=re.compile(re.escape(RETURNING))
+                )
+                expect(returning_row).to_be_visible()
+                feedback_table = admin.locator(".admin-feedback-table")
+                expect(feedback_table.locator("thead")).to_contain_text("Google account")
+                expect(feedback_table.locator("thead")).not_to_contain_text("Contact")
+                signed_feedback = feedback_table.locator("tbody tr").filter(
+                    has_text="Signed-in feedback fixture message"
+                )
+                expect(signed_feedback.locator("td").nth(0)).to_have_text(N)
+                expect(signed_feedback.locator("th")).not_to_contain_text("Signed-in account")
+                expect(signed_feedback).not_to_contain_text("contact-provided@example.org")
+                anonymous_feedback = feedback_table.locator("tbody tr").filter(
+                    has_text="Anonymous feedback fixture message"
+                )
+                expect(anonymous_feedback.locator("td").nth(0)).to_have_text("Not signed in")
+                anonymous_feedback.get_by_role("button", name="Remove").click()
+                expect(
+                    feedback_table.locator("tbody tr").filter(
+                        has_text="Anonymous feedback fixture message"
+                    )
+                ).to_have_count(0)
+                remaining_feedback = page.evaluate(
+                    "async () => (await (await fetch('/api/cloud-auth/admin/feedback')).json()).feedback"
+                )
+                assert all(
+                    row["message"] != "Anonymous feedback fixture message"
+                    for row in remaining_feedback
+                ), remaining_feedback
                 invitation_row.get_by_role("button", name="Add").click()
                 expect(
                     admin.locator(".admin-invitation-table").get_by_role(
@@ -849,9 +949,28 @@ def main() -> None:
                     approved_status
                 )
                 expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
+                login_cookie(Z)
+                page.reload(wait_until="domcontentloaded")
+                page.get_by_role("button", name="About").click()
+                about = page.get_by_role("dialog", name="About SIGMA")
+                feedback = about.locator(".about-feedback-disclosure")
+                feedback.locator("summary").click()
+                feedback_button = feedback.get_by_role("button", name="Send Feedback")
+                feedback.locator("textarea").fill("Check the action button presentation.")
+                expect(feedback_button).to_be_enabled()
+                action_style = feedback_button.evaluate(
+                    "e => { const s=getComputedStyle(e); const r=e.getBoundingClientRect(); const t=e.closest('form').querySelector('textarea').getBoundingClientRect(); return {background:s.backgroundColor,color:s.color,decoration:s.textDecorationLine,left:r.left,textareaLeft:t.left,top:r.top,textareaBottom:t.bottom}; }"
+                )
+                assert action_style["background"] in {"rgba(0, 0, 0, 0)", "transparent"}, (
+                    action_style
+                )
+                assert action_style["decoration"] == "underline", action_style
+                assert action_style["color"] == "rgb(227, 180, 133)", action_style
+                assert abs(action_style["left"] - action_style["textareaLeft"]) < 1, action_style
+                assert action_style["top"] >= action_style["textareaBottom"], action_style
                 browser.close()
             print(
-                "PASS local Chromium ↔ real SIGMA API: Google pill and welcome-dialog sign-in redirects, guest invitation and Reload me! admin visibility, member approval, cache headers, and cross-identity project/session/artifact isolation"
+                "PASS local Chromium ↔ real SIGMA API: Google sign-in, new and reviewed-request reapplication, invitation/reload admin actions, member approval, feedback identity/removal/action styling, cache headers, and cross-identity workspace isolation"
             )
         finally:
             if api is not None and api.poll() is None:

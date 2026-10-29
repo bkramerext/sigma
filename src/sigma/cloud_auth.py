@@ -2000,6 +2000,11 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
                     (identity["email"], now, subject),
                 )
                 existing = None
+            elif existing["status"] in {"reviewed", "declined"}:
+                # A closed request must not permanently block a user who has
+                # since lost access. Active members are rejected above; a
+                # guest may submit a fresh request for administrator review.
+                existing = None
             else:
                 return {"status": existing["status"], "duplicate": True}
         if existing and body.request_type == "reload":
@@ -2217,6 +2222,23 @@ def update_feedback(feedback_id: str, body: FeedbackStatusUpdate, request: Reque
             (actor.email, "feedback_" + body.status, "feedback", feedback_id, _now()),
         )
     return {"status": body.status}
+
+
+@router.delete("/admin/feedback/{feedback_id}")
+def remove_feedback(feedback_id: str, request: Request):
+    cfg = config()
+    if not re.fullmatch(r"[0-9a-f]{32}", feedback_id):
+        raise HTTPException(404, "Feedback not found.")
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        result = db.execute("DELETE FROM feedback_requests WHERE id=?", (feedback_id,))
+        if not result.rowcount:
+            raise HTTPException(404, "Feedback not found.")
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "feedback_removed", "feedback", feedback_id, _now()),
+        )
+    return {"removed": True}
 
 
 @router.post("/logout")

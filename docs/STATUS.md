@@ -7825,3 +7825,33 @@ Real Chrome clicked the sign-in link from the local first-visit dialog and
 reached `accounts.google.com` (“Sign in - Google Accounts”); this verified the
 real configured redirect and chooser page, not completion of Google OAuth or
 callback. No paid provider calls were made. `git diff --check` passed.
+
+## PR #297 invitation reapplication and feedback UI correction (2026-10-28)
+
+Persisted local auth data for N showed a `reviewed` invitation request and a
+member grant with `active=0`. The audit has an earlier grant/review action and
+a later admin revoke action. There was no pending request and N had no active
+membership. The UI hid Invite me for any non-null invitation status, while the
+API returned a duplicate for reviewed/declined rows, leaving this revoked
+guest unable to reapply. The UI now suppresses the action only for open
+requests (`pending`, `sending`, `notified`); a guest can reopen a reviewed or
+declined request. The API persists that as a fresh request and continues to
+deduplicate it while open. Server authorization still rejects active members.
+
+Feedback now has a left-aligned, underlined yellow action button directly below
+the message editor, with no background. The admin table labels the identity
+column **Google account**, gives it more width, displays the verified account
+email or **Not signed in**, and removes the duplicate email under the message.
+**Remove** now deletes a feedback row and records an audit action; **Close**
+retains the row with closed status, and **Mark reviewed** retains it with
+reviewed status.
+
+Verification passed: full `./sigma test`; 72 cloud-auth tests; frontend
+typecheck; Ruff check/format; and real-Chrome
+`browser_checks/local_auth_real_backend.py`. Chrome used a real local API and
+durable fixture database to verify the reviewed-but-revoked guest sees Invite
+me, resubmits, and appears in admin requests; it also verified signed-in and
+anonymous feedback identity display, submission button style/position, and
+Remove deleting the row. No live Google callback or paid provider call was
+made. The graph-present Python sandbox case skipped because its image is
+unavailable.

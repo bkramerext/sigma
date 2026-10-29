@@ -59,6 +59,9 @@
 .home-page .about-feedback-form textarea, .home-page .about-feedback-form input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 9px 10px; border: 1px solid #59636e; border-radius: 4px; background: #080f17; color: #e5ebf0; font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-feedback-form textarea { resize: vertical; }
 .home-page .about-feedback-form :focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.home-page .about-feedback-form .about-feedback-send { justify-self: start; width: fit-content; min-height: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #e3b485; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+.home-page .about-feedback-form .about-feedback-send:hover:not(:disabled) { background: transparent; box-shadow: none; color: #f4d0a2; }
+.home-page .about-feedback-form .about-feedback-send:disabled { background: transparent; color: #929da5; opacity: .75; cursor: not-allowed; }
 .home-page .about-feedback-form p, .home-page .about-privacy-link { margin: 0; font-size: 11px; line-height: 1.55; }
 .home-page .about-feedback-form a, .home-page .about-privacy-link a { color: #e0aa8b; text-underline-offset: 3px; }
 .home-page .about-feedback-form [role="alert"] { color: #f1aaa0; }

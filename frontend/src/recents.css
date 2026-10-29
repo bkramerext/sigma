@@ -126,7 +126,7 @@
 .cloud-secondary-button:disabled { opacity: .55; cursor: default; }
 .cloud-auth-footnote { margin-top: 23px; font-size: 12px; }
 .admin-feedback-table .admin-feedback-message { min-width: 250px; max-width: 460px; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
-.admin-feedback-table .admin-feedback-message small { display: block; margin-top: 6px; color: #aeb9c4; font-weight: 400; }
+.admin-feedback-table .admin-feedback-account { min-width: 220px; overflow-wrap: anywhere; }
 .admin-feedback-table td { vertical-align: top; }
 .privacy-notice-card { box-sizing: border-box; }
 @media (max-width: 560px) { .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } }
