@@ -111,7 +111,7 @@ with sync_playwright() as playwright:
         "Total active time across attempts"
     )
     expect(dialog.get_by_role("button", name="Start over", exact=True)).to_be_enabled()
-    expect(dialog).to_contain_text("may repeat the failure")
+    expect(dialog).to_contain_text("Retry makes another AI request")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     dialog.get_by_role("button", name="Retry paper planning", exact=True).click()
     expect(dialog.locator(".saved-paper-card").first).to_be_visible(timeout=60_000)
