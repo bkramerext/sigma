@@ -57,6 +57,37 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
     )
 
 
+def test_paper_provider_schema_requires_all_nested_fields() -> None:
+    """Raw Pydantic default_factory fields must not make strict JSON invalid."""
+    for model in (
+        papers.PaperDraft,
+        papers.EvidenceBatchResult,
+        papers.LongPaperPlan,
+        papers.LongSectionDraft,
+    ):
+        schema = papers._paper_response_schema(model)
+
+        def check(node):
+            if isinstance(node, list):
+                for item in node:
+                    check(item)
+            elif isinstance(node, dict):
+                assert "default" not in node
+                if node.get("type") == "object":
+                    assert node.get("additionalProperties") is False
+                    assert node.get("required") == list(node.get("properties", {}))
+                for child in node.values():
+                    check(child)
+
+        check(schema)
+    raw = papers.EvidenceBatchResult.model_json_schema()
+    assert "covered_field_refs" not in raw["required"]
+    assert "omitted_fields" not in raw["required"]
+    normalized = papers._paper_response_schema(papers.EvidenceBatchResult)
+    assert "covered_field_refs" in normalized["required"]
+    assert "omitted_fields" in normalized["required"]
+
+
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "resp-paper"}},
@@ -164,7 +195,7 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
                     {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
                     instructions="fixture instructions",
                     schema_name="fixture_long_paper_stage",
-                    response_model=papers.PaperDraft,
+                    response_model=papers.EvidenceBatchResult,
                 ),
             ]
             for call in calls:
@@ -188,6 +219,9 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         assert request["text"]["format"]["type"] == "json_schema"
         assert request["text"]["format"]["strict"] is True
         assert request["text"]["format"]["schema"]
+    schema = requests[1]["text"]["format"]["schema"]
+    assert "covered_field_refs" in schema["required"]
+    assert "omitted_fields" in schema["required"]
 
 
 def test_long_tex_compiler_source_bound_is_configurable() -> None:
