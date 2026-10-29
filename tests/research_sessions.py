@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import time
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
@@ -6606,12 +6607,14 @@ async def test_remove_terminal_and_monotonic_number(path: Path):
         assert finished["session_number"] == 1 and finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "mixed"
         try:
-            research_sessions.remove_session(str(path), first["id"], "stale-revision")
+            await research_sessions.remove_session(str(path), first["id"], "stale-revision")
         except ProjectError as exc:
             assert "changed" in str(exc).lower()
         else:
             raise AssertionError("stale session removal was accepted")
-        removed = research_sessions.remove_session(str(path), first["id"], finished["updated_at"])
+        removed = await research_sessions.remove_session(
+            str(path), first["id"], finished["updated_at"]
+        )
         assert removed == {"removed": True, "id": first["id"], "session_number": 1}
         assert research_sessions.list_sessions(str(path)) == []
         assert (path / "project.json").exists()
@@ -6667,6 +6670,112 @@ async def test_single_project_admission(path: Path):
         assert next_session["status"] == "queued"
         await research_sessions.control_session(str(path), next_session["id"], "stop")
         assert research_sessions.get_session(str(path), started["id"])["status"] == "paused"
+
+
+async def test_remove_running_session_cancels_execution_and_releases_slot(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+
+    async def handler(_request) -> httpx.Response:
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("blocked provider handler unexpectedly returned")
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        active = research_sessions.get_session(str(path), started["id"])
+        removed = await research_sessions.remove_session(
+            str(path), started["id"], active["updated_at"]
+        )
+        assert removed["id"] == started["id"]
+        assert research_sessions._tasks.get(started["id"]) is None
+        assert research_sessions.list_sessions(str(path)) == []
+        second = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        assert second["status"] == "queued"
+        await research_sessions.control_session(str(path), second["id"], "stop")
+
+
+async def test_remove_racing_with_completion_is_idempotently_terminal(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered, release = asyncio.Event(), asyncio.Event()
+    outputs = [investigation(1), skeptic(1, "stop", "no_progress")]
+    outputs[-1]["remaining_obligations"] = []
+    outputs[-1]["next_question"] = ""
+
+    async def handler(_request) -> httpx.Response:
+        entered.set()
+        await release.wait()
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        active = research_sessions.get_session(str(path), started["id"])
+        deletion = asyncio.create_task(
+            research_sessions.remove_session(str(path), started["id"], active["updated_at"])
+        )
+        release.set()
+        removed = await asyncio.wait_for(deletion, 3)
+        assert removed["id"] == started["id"]
+        assert research_sessions.list_sessions(str(path)) == []
+        assert started["id"] not in research_sessions._tasks
+
+
+async def test_project_deletion_stops_all_active_sessions_first(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+
+    async def handler(_request) -> httpx.Response:
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("blocked provider handler unexpectedly returned")
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        stopped = await research_sessions.stop_project_sessions(str(path))
+        assert stopped == [started["id"]]
+        assert research_sessions.get_session(str(path), started["id"])["status"] == "stopped"
+        assert research_sessions._tasks.get(started["id"]) is None
+        assert not research_sessions.has_active_session(str(path))
+        shutil.rmtree(path)
+        assert not path.exists()
 
 
 async def test_response_transport_and_parsed_bounds(path: Path):
@@ -8194,6 +8303,21 @@ def main():
         )
         asyncio.run(test_legacy_limits_are_preserved(root / "legacy-limits.sigma"))
         asyncio.run(test_single_project_admission(root / "single-session.sigma"))
+        asyncio.run(
+            test_remove_running_session_cancels_execution_and_releases_slot(
+                root / "remove-running.sigma"
+            )
+        )
+        asyncio.run(
+            test_remove_racing_with_completion_is_idempotently_terminal(
+                root / "remove-completion-race.sigma"
+            )
+        )
+        asyncio.run(
+            test_project_deletion_stops_all_active_sessions_first(
+                root / "project-delete-active.sigma"
+            )
+        )
         asyncio.run(test_response_transport_and_parsed_bounds(root / "parsed.sigma"))
         asyncio.run(test_changed_bindings_pause_before_provider(root / "binding.sigma"))
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))

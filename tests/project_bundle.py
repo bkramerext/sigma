@@ -1,5 +1,6 @@
 """Executable round-trip and rejection checks for project bundles."""
 
+import asyncio
 import base64
 import json
 import tempfile
@@ -356,7 +357,6 @@ def main() -> None:
             )
             # Exercise the public asynchronous reservation/dispatch/finalize path
             # without requiring a Docker daemon or invoking untrusted code.
-            import asyncio
             from types import SimpleNamespace
 
             from sigma.python_sandbox import execute_research_code
@@ -732,7 +732,9 @@ def main() -> None:
                 assert any(
                     item["id"] == lifecycle_id for item in read_session_snapshot(created.path)[0]
                 )
-            removed = remove_session(created.path, lifecycle_id, lifecycle["updated_at"])
+            removed = asyncio.run(
+                remove_session(created.path, lifecycle_id, lifecycle["updated_at"])
+            )
             assert removed["removed"] and removed["session_number"] == 28
             assert f"research-sessions/{lifecycle_id}.json" not in list_files(created.path)
             assert _allocate_session_number(created.path, []) == 28
@@ -741,7 +743,7 @@ def main() -> None:
             lifecycle["status"] = "paused"
             _save(created.path, lifecycle)
             try:
-                remove_session(created.path, lifecycle_id, lifecycle["updated_at"])
+                asyncio.run(remove_session(created.path, lifecycle_id, lifecycle["updated_at"]))
             except ProjectError:
                 pass
             else:
@@ -749,7 +751,7 @@ def main() -> None:
             lifecycle["status"] = "completed"
             _save(created.path, lifecycle)
             try:
-                remove_session(created.path, lifecycle_id, "stale-timestamp")
+                asyncio.run(remove_session(created.path, lifecycle_id, "stale-timestamp"))
             except ProjectError:
                 pass
             else:

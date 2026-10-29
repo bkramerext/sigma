@@ -1,3 +1,28 @@
+## Issue #310 — cancellation-aware session removal (2026-10-28)
+
+Removing a queued, running, or paused research session now requests execution
+cancellation and awaits the owning task's cleanup before deleting its saved
+record. The session remains counted as active until the task exits, so another
+session cannot reuse its project slot during cancellation. The delete action is
+available from every session row and asks for confirmation that active work and
+its saved artifacts will be removed. A project-wide stop helper gives project
+deletion code a way to stop and await all active sessions before removing data.
+
+Regression scenarios cover removal while the provider call is in flight,
+removal racing with normal completion, slot reuse after cancellation, and
+stopping all active sessions before deleting the project directory. `./sigma
+test` passed for the final implementation, including Ruff, formatting, Pyright,
+frontend typecheck, and production build; the build reports the existing large
+main JavaScript chunk advisory. The focused research-session suite and targeted
+Ruff/Pyright/frontend typecheck also passed. All provider requests were
+deterministic mocked fixtures; no live or paid calls were made. Real Chrome
+verification was not run: the available browser server is serving a different
+checkout, and the required local UI ports are already occupied.
+
+The worktree branch is based on current `origin/main`. Open PR #297 also changes
+the session service, API, and session UI, so this issue branch needs integration
+review against that PR before merging.
+
 ## Issue #306 and happy-path reliability (#302) (2026-10-28)
 
 Research limits now say **Research rounds** and **Maximum agent turns**. A round

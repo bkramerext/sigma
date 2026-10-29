@@ -648,8 +648,8 @@ async def research_intervention_view(session_id: str, body: ResearchIntervention
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")
-def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
-    return research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
+async def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
+    return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
 
 
 @app.get("/api/research-tools")
