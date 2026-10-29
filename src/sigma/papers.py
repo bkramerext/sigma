@@ -1582,6 +1582,56 @@ def _research_integrity_records(package: dict[str, Any]) -> list[dict[str, Any]]
     return records
 
 
+def _section_original_excerpts(
+    records: list[dict[str, Any]],
+    source_refs: set[str],
+    purpose: str,
+    byte_limit: int,
+) -> list[dict[str, Any]]:
+    """Retrieve bounded fragments of ORIGINAL saved research for section prose.
+
+    The structured index directs retrieval; this does not replace the complete
+    immutable evidence snapshot. Any truncated record is explicitly marked.
+    """
+    if byte_limit < 1_000:
+        return []
+    query = {
+        word for word in re.findall(r"[a-z]{5,}", purpose.casefold())
+        if word not in {"research", "section", "evidence", "describe", "explain"}
+    }
+    eligible: list[tuple[int, int, dict[str, Any]]] = []
+    for index, record in enumerate(records):
+        if record.get("source_ref") not in source_refs:
+            continue
+        field = str(record.get("field", ""))
+        text = json.dumps(record.get("content"), ensure_ascii=False)
+        terms = set(re.findall(r"[a-z]{5,}", (field + " " + text[:1000]).casefold()))
+        relevance = len(query.intersection(terms))
+        priority = 10 if any(term in field.casefold() for term in (
+            "proof", "reasoning", "argument", "objection", "negative", "contradict",
+            "failed", "conclusion", "obligation", "result",
+        )) else 0
+        eligible.append((priority + relevance, index, record))
+    eligible.sort(key=lambda item: (-item[0], item[1]))
+    result: list[dict[str, Any]] = []
+    used = 2
+    for _score, _index, record in eligible:
+        content = json.dumps(record.get("content"), ensure_ascii=False)
+        excerpted = len(content) > 9_000
+        candidate = {
+            "source_ref": record["source_ref"],
+            "field": record["field"],
+            "content_excerpt": content[:9_000],
+            "truncated": excerpted,
+        }
+        encoded = len(_json(candidate)) + (1 if result else 0)
+        if used + encoded > byte_limit:
+            continue
+        result.append(candidate)
+        used += encoded
+    return result
+
+
 def _long_paper_integrity_records(
     package: dict[str, Any], state: dict[str, Any]
 ) -> list[dict[str, Any]]:
@@ -2548,7 +2598,7 @@ that occur in the input. Do not add scientific claims or outside citations."""
         + """
 
 You are planning a long-form paper, not writing its full section prose. The evidence index is a
-bounded, source-linked extraction from every field in the complete frozen snapshot. Draft the
+bounded, source-linked selection from saved research, not an exhaustive semantic review. Draft the
 title, abstract, framing, methods, claim register, limitations, obligations, conclusions, and a
 substantive section outline. Assign each section exact evidence_refs from the index and claim_ids
 from your claim register. Do not treat the index as proof of exhaustive semantic review; preserve
@@ -2561,6 +2611,11 @@ Return the complete plan JSON matching the schema."""
     )
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
     plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
+    if fast_path:
+        plan_input["index_origin"] = "deterministic_selection_from_structured_research"
+        plan_input["indexed_fragments_not_selected"] = len(
+            state.get("omitted_evidence", [])
+        )
     if state.get("plan"):
         long_plan = LongPaperPlan.model_validate(state["plan"])
     else:
@@ -2603,6 +2658,7 @@ results, and study limitations. Do not invent data, analyses, experiments, citat
 Return enough paragraphs to explain the evidence and reasoning in full, not a short summary. Use
 plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or document markup."""
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
+    original_records = _research_integrity_records(package) if fast_path else []
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
@@ -2629,6 +2685,14 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             "section_plan": section.model_dump(),
             "evidence_notes": relevant,
         }
+        if fast_path:
+            headroom = max(0, min(60_000, 214_000 - len(_json(section_input))))
+            section_input["original_research_excerpts"] = _section_original_excerpts(
+                original_records,
+                set(section.evidence_refs),
+                section.heading + " " + section.purpose,
+                headroom,
+            )
         body, _ = await call_with_safe_retry(
             section_input,
             reserve=len(long_plan.sections) - len(saved_sections) - 1,
