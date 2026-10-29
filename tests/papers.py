@@ -121,14 +121,23 @@ def test_chatgpt_schema_rejection_has_safe_diagnostics() -> None:
     with patch("sigma.plan_stream.inference_failure"):
         for error, expected in (
             (
-                {"code": "invalid_json_schema", "param": "text.format.schema",
-                 "message": "private evidence contents"},
-                ("structured-output schema", "code=invalid_json_schema",
-                 "param=text.format.schema"),
+                {
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "private evidence contents",
+                },
+                (
+                    "structured-output schema",
+                    "code=invalid_json_schema",
+                    "param=text.format.schema",
+                ),
             ),
             (
-                {"code": "unsafe_private_value", "param": "private field",
-                 "message": "another private evidence fragment"},
+                {
+                    "code": "unsafe_private_value",
+                    "param": "private field",
+                    "message": "another private evidence fragment",
+                },
                 ("response shape: responses-error",),
             ),
         ):
