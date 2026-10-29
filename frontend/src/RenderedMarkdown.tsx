@@ -38,6 +38,8 @@ function mathSource(value: string): string {
     .replace(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*\/\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/gu, '\\frac{$1}{$2}')
     .replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/gu, '\\frac{$1}{$2}')
     .replace(/_\(([^()]+)\)/gu, '_{$1}')
+    .replace(/([\p{L}\d)]+)\s*\/\s*\[([^\[\]\n]+)\]/gu, '\\frac{$1}{$2}')
+    .replace(/([\p{L}\d)]+)\s*\/\s*\(([^()\n]+)\)/gu, '\\frac{$1}{$2}')
     .replace(/([\p{L}\d)]+)\s*\/\s*([\p{L}\d(][^\s,;.!?)]*)/gu, (_match, numerator: string, denominator: string) => {
       const cleanDenominator = denominator.replace(/[.,;:!?]+$/u, '');
       return `\\frac{${numerator}}{${cleanDenominator}}`;
@@ -69,15 +71,20 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
   });
   add(/\([a-zA-Zα-ωΑ-Ω\d+−*^²³\s]{1,50}\)\s*\/\s*\([a-zA-Zα-ωΑ-Ω\d+−*^²³\s]{1,50}\)/gu, 5, () => true);
 
+  // Unicode inequalities are unambiguous math cues. Keep the candidate tight
+  // around the relation so surrounding research prose remains outside math.
+  add(/[\p{L}\p{N}α-ωΑ-Ω{}()[\]|+−\-*/^_∫∞]+(?:\s*[+−*/±]\s*[\p{L}\p{N}α-ωΑ-Ω{}()[\]|+−\-*/^_∫∞]+)*\s*(?:≠|≤|≥|≈)\s*[\p{L}\p{N}α-ωΑ-Ω{}()[\]|+−\-*/^_∫∞]+(?:\s*[+−*/±]\s*[\p{L}\p{N}α-ωΑ-Ω{}()[\]|+−\-*/^_∫∞]+)*/gu, 7, () => true);
+
   // A local equation is a mathematical span even when ordinary prose follows it.
-  add(/\b(?:[a-zα-ω]|[A-Z])(?:_[a-zA-Zα-ωΑ-Ω\d{}+-]+)?(?:\([^()\s]{1,24}\))?\s*=\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+(?:\s*[=+−*/±]\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+)*/gu, 6, match => {
+  add(/(?<![\p{L}\p{N}_])(?:[a-zα-ωΑ-Ω]|[A-Z])(?:_[a-zA-Zα-ωΑ-Ω\d{}+-]+)?(?:\([^()\s]{1,24}\))?\s*(?:=|≠|≤|≥|≈|<|>)\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]|∞∫\-]+(?:\s*(?:=|≠|≤|≥|≈|<|>|[+−*/±])\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]|∞∫\-]+)*/gu, 6, match => {
     const expression = match[0].trim().replace(/[.,;:!?]+$/u, '');
-    const equalsAt = expression.indexOf('=');
-    const right = expression.slice(equalsAt + 1).trim();
+    const relation = expression.match(/(?:=|≠|≤|≥|≈|<|>)/u);
+    if (!relation || relation.index === undefined) return false;
+    const right = expression.slice(relation.index + relation[0].length).trim();
     if (!/[\p{L}\d]/u.test(right)) return false;
     const boundary = Math.max(text.lastIndexOf('.', match.index), text.lastIndexOf('!', match.index), text.lastIndexOf('?', match.index), text.lastIndexOf(';', match.index), 0);
     const precedingSentence = text.slice(Math.max(boundary, match.index - 100), match.index).toLowerCase();
-    const hasMathematicalCue = /\b(?:equation|root|roots|sequence|term|variable|function|probability|fraction|ratio|solution|solve|formula|identity|satisf(?:y|ies)|denote|defined|obtain|substitute|calculate|compute|evaluate|algebraic|mathematical)\b/u.test(precedingSentence);
+    const hasMathematicalCue = /\b(?:equation|root|roots|sequence|term|variable|function|probability|fraction|ratio|solution|solve|formula|identity|satisf(?:y|ies)|denote|defined|obtain|substitute|calculate|compute|evaluate|algebraic|mathematical|meromorphic|continuation|half-plane)\b/u.test(precedingSentence);
     const hasFormulaStructure = /[+−\-*/^_{}²³√±×÷<>≤≥≠≈∑∫]/u.test(right);
     if (!hasFormulaStructure && !hasMathematicalCue) return false;
     // Trim a natural-language continuation after a mathematical expression.

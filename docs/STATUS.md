@@ -30,6 +30,13 @@ fixture and bare math are
 [markdown-render-raw-math.png](evaluations/t301/markdown-render-raw-math.png).
 The shared fixture and reproduction notes are in
 [T301 evidence](evaluations/t301/README.md).
+The real-Chrome `browser_checks/t47_conclusion.py` regression also passes: Greek
+equations, Unicode inequalities, meromorphic expressions and bracketed
+fractions in a saved Research Outcome produce the expected KaTeX spans without
+KaTeX errors. Its failure was traced to the former ASCII-only equation start
+and slash-only fraction normalization; both were corrected in the existing
+renderer. The full T47 check also covered desktop/mobile presentation and
+ordinary prose preservation without provider calls.
 `./sigma test` passed every step, including Ruff, formatting, Pyright, frontend
 typecheck, and production build. Vite emitted its existing advisory for a
 JavaScript chunk above 500 kB. The final run is archived at

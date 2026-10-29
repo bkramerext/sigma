@@ -418,8 +418,26 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(finding).to_be_visible()
                 expect(finding).to_have_text("Preliminary finding")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
-                assert conclusion.locator(".outcome-markdown .katex").count() >= 8
-                assert conclusion.locator(".outcome-markdown .katex mfrac").count() >= 2
+                math_nodes = conclusion.locator(".outcome-markdown .katex")
+                annotations = math_nodes.evaluate_all(
+                    'nodes => nodes.map(node => node.querySelector("annotation")?.textContent || "")'
+                )
+                assert math_nodes.count() >= 8, (
+                    f"Expected at least eight mathematical spans, got {math_nodes.count()}: "
+                    f"{annotations}"
+                )
+                fraction_count = conclusion.locator(".outcome-markdown .katex mfrac").count()
+                assert fraction_count >= 2, (
+                    f"Expected two rendered fractions, got {fraction_count}: {annotations}"
+                )
+                assert any(
+                    "\\zeta(s)" in value and "\\frac{s}{s-1}" in value for value in annotations
+                ), annotations
+                assert any("\\ne0" in value for value in annotations), annotations
+                assert any("\\sigma\\ge1" in value for value in annotations), annotations
+                assert any("\\frac{1}{256(4T+9)^4(2T+4)}" in value for value in annotations), (
+                    annotations
+                )
                 assert conclusion.locator(".outcome-markdown .katex msup").count() >= 1
                 assert conclusion.locator(".outcome-markdown .katex msub").count() >= 1
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
