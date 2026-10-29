@@ -39,10 +39,7 @@ DRAFT = {
 
 
 def reset():
-    connection._identity = ""
-    connection._cached = None
-    connection._known = set()
-    connection._pending = None
+    connection.clear_cache_for_tests()
 
 
 def client_factory(handler):
@@ -86,10 +83,10 @@ async def checks():
         await connection.connection()
         await connection.connection(refresh=True)
         assert len(calls) == 1  # cooldown also bounds retry spam.
-        connection._at -= connection.TTL + 1
+        next(iter(connection._credential_states.values())).checked_at -= connection.TTL + 1
         await connection.models()
         assert len(calls) == 2
-        connection._at -= 4
+        next(iter(connection._credential_states.values())).checked_at -= 4
         await connection.connection(refresh=True)
         assert len(calls) == 3
     print(
@@ -293,6 +290,100 @@ def main():
         ),
     ):
         asyncio.run(checks())
+        asyncio.run(credential_isolation_checks())
+
+
+async def credential_isolation_checks():
+    reset()
+    z = {
+        "token": "z-personal-secret",
+        "mode": "chatgpt",
+        "status": "connected",
+        "identity": "cloud_personal:Z",
+    }
+    b = {
+        "token": "b-personal-secret",
+        "mode": "chatgpt",
+        "status": "connected",
+        "identity": "cloud_personal:B",
+    }
+    started = {"z": asyncio.Event(), "b": asyncio.Event()}
+    release = {"z": asyncio.Event(), "b": asyncio.Event()}
+    calls = []
+
+    async def check(token, mode):
+        who = "z" if token.startswith("z-") else "b"
+        calls.append(who)
+        started[who].set()
+        await release[who].wait()
+        if who == "b":
+            return connection._CatalogResult(
+                {"status": "limited", "checked_at": "b", "ttl_seconds": connection.TTL}
+            )
+        return connection._CatalogResult(
+            {"status": "connected", "checked_at": "z", "ttl_seconds": connection.TTL},
+            {"gpt-6.1-sol"},
+            {"gpt-6.1-sol": "Z private catalog"},
+            ["gpt-6.1-sol"],
+        )
+
+    with patch.object(connection, "_check", side_effect=check):
+        z_task = asyncio.create_task(connection.models(context=z))
+        b_task = asyncio.create_task(connection.models(context=b))
+        await asyncio.gather(started["z"].wait(), started["b"].wait())
+        # An inference failure is scoped to Z's credential and cannot stop B's check.
+        z_guard = __import__("hashlib").sha256(("chatgpt" + z["token"]).encode()).hexdigest()
+        connection.inference_failure("unavailable", z_guard)
+        release["b"].set()
+        b_result = await b_task
+        release["z"].set()
+        z_result = await z_task
+        assert calls == ["z", "b"] or calls == ["b", "z"]
+        assert b_result["connection"]["status"] == "limited"
+        assert z_result["connection"]["status"] == "unavailable"
+        # Z's late catalog check cannot overwrite its newer inference failure;
+        # B's independently failed result and Z's failure remain isolated.
+        b2 = await connection.connection(context=b)
+        assert b2["status"] == "limited"
+        z_cached = connection._credential_states[z_guard].result
+        assert z_cached is not None and z_cached["status"] == "unavailable"
+
+    reset()
+    sponsor = {
+        "token": "shared-sponsor-token",
+        "mode": "chatgpt",
+        "status": "connected",
+        "identity": "cloud_sponsor:Z",
+    }
+    count = 0
+    gate = asyncio.Event()
+
+    async def sponsor_check(token, mode):
+        nonlocal count
+        count += 1
+        await gate.wait()
+        return connection._CatalogResult(
+            {"status": "connected", "checked_at": "s", "ttl_seconds": connection.TTL},
+            {"gpt-6-luna"},
+            {"gpt-6-luna": "Sponsor catalog"},
+            ["gpt-6-luna"],
+        )
+
+    with patch.object(connection, "_check", side_effect=sponsor_check):
+        first = asyncio.create_task(connection.models(context=sponsor))
+        second = asyncio.create_task(connection.models(context=sponsor))
+        await asyncio.sleep(0)
+        gate.set()
+        one, two = await asyncio.gather(first, second)
+        assert count == 1
+        assert one["connection"]["status"] == two["connection"]["status"] == "connected"
+        assert (
+            next(model for model in one["models"] if model["id"] == "gpt-6-luna")["label"]
+            == "Sponsor catalog"
+        )
+    print(
+        "PASS per-credential provider checks, failure/catalog isolation and shared sponsor coalescing"
+    )
 
 
 if __name__ == "__main__":

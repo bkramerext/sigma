@@ -7113,7 +7113,9 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
         "cached_input_tokens": None,
         "output_tokens": 2,
     }
-    assert research_sessions._estimate_cost(MODEL, missing_cached) is None
+    # Missing cached-token metadata is priced conservatively as all uncached,
+    # so known provider usage does not create an indefinite cost hold.
+    assert research_sessions._estimate_cost(MODEL, missing_cached) == 0.000034
 
     uncached_metadata = research_sessions._outcome_metrics(
         {
@@ -7142,7 +7144,7 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     assert uncached_ops["Tokens · input / output / cached / total"] == (
         "7 / 2 / — (0/1 calls include cached-token metadata) / 9"
     )
-    assert "unavailable" in uncached_ops["Estimated monetary cost"]
+    assert "$0.000034 estimated" in uncached_ops["Estimated monetary cost"]
 
     unlinked_execution = research_sessions._outcome_metrics(
         {
@@ -8096,8 +8098,34 @@ def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
         assert research_sessions._portfolio_call_concurrency() == 3
 
 
+def test_project_cost_denial_reports_affordable_first_call() -> None:
+    from sigma.research_budget import new_ledger, reserve_before_dispatch
+
+    ledger = new_ledger(
+        call_limit=2,
+        input_token_limit=100_000,
+        output_tokens_per_call=4_000,
+        cost_limit_usd=0.05,
+        input_price_per_million=2.5,
+        output_price_per_million=10.0,
+    )
+    try:
+        reserve_before_dispatch(ledger, call_id=str(uuid4()), request_body=b"{}")
+    except BudgetExceeded as exc:
+        message = str(exc)
+        assert "reserved cost limit would be exceeded" in message
+        assert "$0.0605" in message
+        assert "$0.0500" in message
+        assert "No provider call was dispatched" in message
+        assert "Project Settings" in message
+    else:
+        raise AssertionError("A $0.05 session cap funded a $0.0605 provider reserve")
+    assert ledger["calls"] == []
+
+
 def main():
     test_backend_build_is_pinned_at_backend_start()
+    test_project_cost_denial_reports_affordable_first_call()
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()

@@ -403,7 +403,6 @@ def main() -> None:
                 assert proposal_configuration.json()["binding"] == credential["identity"]
                 dispatched_before_missing = provider_calls
                 os.environ.pop("SIGMA_CLOUD_OPENAI_API_KEY")
-                openai_connection._identity = ""
                 missing_credential = client.post(
                     "/api/projects/proposals",
                     json={"path": path, "expected_project_id": project_id},
@@ -411,7 +410,6 @@ def main() -> None:
                 assert missing_credential.status_code != 200, missing_credential.text
                 assert provider_calls == dispatched_before_missing
                 os.environ["SIGMA_CLOUD_OPENAI_API_KEY"] = "fake-server-credential"
-                openai_connection._identity = ""
 
                 # Text conversion goes through the same sponsored reservation
                 # path while preserving its source revision checks.

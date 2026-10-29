@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -10,6 +13,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 import httpx
 import jwt
@@ -787,6 +791,41 @@ class CloudAuthTests(TestCase):
         flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
         return query["state"][0], response.cookies[flow_cookie]
 
+    def test_google_login_reports_missing_local_oauth_settings_before_redirect(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "GOOGLE_OIDC_CLIENT_ID": "",
+                "GOOGLE_OIDC_CLIENT_SECRET": "",
+            },
+        ):
+            response = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("GOOGLE_OIDC_CLIENT_ID", response.json()["detail"])
+        self.assertIn("GOOGLE_OIDC_CLIENT_SECRET", response.json()["detail"])
+
+    def test_guest_cookie_is_bound_to_one_verified_subject(self):
+        from sigma import cloud_workspaces
+
+        token_value = uuid4().hex * 2
+        owner = cloud_workspaces.guest_workspace(
+            token_value, create=True, subject="verified-google-subject-a"
+        )
+        self.assertIsNotNone(owner)
+        assert owner is not None
+        same_owner = cloud_workspaces.guest_workspace(
+            token_value, subject="verified-google-subject-a"
+        )
+        self.assertEqual(same_owner, owner)
+        self.assertIsNone(
+            cloud_workspaces.guest_workspace(token_value, subject="verified-google-subject-b")
+        )
+        # A signed-out browser can continue its temporary guest page; signing
+        # in as another Google identity will be checked against the binding.
+        self.assertEqual(cloud_workspaces.guest_workspace(token_value), owner)
+
     def test_guest_sample_projects_use_temporary_workspace_without_recents(self):
         from sigma import cloud_workspaces
 
@@ -956,6 +995,36 @@ class CloudAuthTests(TestCase):
                 follow_redirects=False,
             )
 
+    def seed_personal_plan_authorization(
+        self,
+        subject: str,
+        email: str | None = None,
+        *,
+        record_authorization: bool = True,
+    ) -> None:
+        """Fixture for tests whose setup assumes completed personal OAuth."""
+        from sigma import ai_store, chatgpt_auth
+
+        directory = ai_store.personal_directory_for_subject(subject)
+        path = directory / "credentials.json"
+        state = ai_store.read(path)
+        state["accounts"] = {
+            "fixture-personal": {
+                "subject": "chatgpt-subject-" + subject,
+                "client_id": "fixture-chatgpt-client",
+                "email": email or f"personal-{subject}@example.org",
+                "access_token": "fixture-personal-access-token-" + os.urandom(8).hex(),
+                "refresh_token": "fixture-personal-refresh-token-" + subject,
+                "expires_at": time.time() + 3600,
+                "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                "plan_authorized": True,
+            }
+        }
+        state["active"], state["mode"] = "fixture-personal", "chatgpt"
+        ai_store.write(path, state)
+        if record_authorization:
+            cloud_auth.record_personal_authorization(subject)
+
     def test_signin_returns_to_safe_project_continuation(self):
         project_return = "/project?path=%2Ftmp%2Fguest-project&resume_play=1"
         completed = self.finish(return_to=project_return)
@@ -1110,7 +1179,9 @@ class CloudAuthTests(TestCase):
             ).status_code,
             422,
         )
-        self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 403)
+        # The admin-only sponsor handoff route accepts this URL shape, but an
+        # unknown identifier cannot resolve to an OAuth authorization URL.
+        self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 400)
         self.assertEqual(TestClient(app).get("/api/ai/models").status_code, 401)
 
     def test_session_persists_across_client_restart_and_logout_revokes_it(self):
@@ -1210,12 +1281,27 @@ class CloudAuthTests(TestCase):
         self.assertEqual(
             self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"], []
         )
-        self.assertEqual(
-            visitor.post("/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}).json()[
-                "duplicate"
-            ],
-            True,
-        )
+        # A reviewed request is closed. Since the grant was subsequently
+        # revoked, this uninvited identity can submit a fresh request; that
+        # fresh request is then deduplicated while it is open.
+        with patch.object(cloud_auth, "_deliver_invitation") as redeliver:
+            resubmitted = visitor.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+            self.assertEqual(resubmitted.status_code, 200, resubmitted.text)
+            self.assertEqual(resubmitted.json(), {"status": "notified", "duplicate": False})
+            requests = self.client.get("/api/cloud-auth/admin/invitation-requests").json()[
+                "requests"
+            ]
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(requests[0]["email"], "visitor@example.org")
+            self.assertEqual(requests[0]["status"], "notified")
+            self.assertTrue(
+                visitor.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+                ).json()["duplicate"]
+            )
+            redeliver.assert_called_once()
         self.assertEqual(deliver.call_count, 1)
 
     def test_invited_user_welcome_is_persisted_once_and_scoped_to_identity(self):
@@ -1312,19 +1398,23 @@ class CloudAuthTests(TestCase):
         self.assertEqual(pending, 0)
         self.assertEqual(explicit, 0)
 
-    def test_invitation_request_fails_closed_when_notification_unconfigured(self):
+    def test_invitation_request_succeeds_when_notification_delivery_fails(self):
         denied = self.finish(email="visitor@example.org", subject="request-retry")
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
         with patch.object(
             cloud_auth, "_deliver_invitation", side_effect=RuntimeError("not configured")
         ):
-            failed = self.client.post(
+            accepted = self.client.post(
                 "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
             )
-        self.assertEqual(failed.status_code, 503)
-        self.assertEqual(
-            failed.json()["detail"], "Your request could not be sent. Please try again later."
-        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json(), {"status": "pending", "duplicate": False})
+        with cloud_auth._db(cloud_auth.config()) as db:
+            saved = db.execute(
+                "SELECT status,notification_error FROM invitation_requests WHERE subject='request-retry'"
+            ).fetchone()
+        self.assertEqual(saved["status"], "pending")
+        self.assertEqual(saved["notification_error"], "delivery failed")
         self.assertEqual(denied.headers["location"], "/?access=denied")
 
     def test_invitation_notification_uses_authenticated_sender_and_fixed_recipient(self):
@@ -1434,11 +1524,31 @@ class CloudAuthTests(TestCase):
             headers={"Origin": ORIGIN},
         )
         self.assertEqual(updated.status_code, 200)
+        removed = self.client.delete(
+            f"/api/cloud-auth/admin/feedback/{row['id']}", headers={"Origin": ORIGIN}
+        )
+        self.assertEqual(removed.status_code, 200)
+        self.assertEqual(removed.json(), {"removed": True})
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/feedback").json()["feedback"], [])
+        with cloud_auth._db(cloud_auth.config()) as db:
+            audit = db.execute(
+                "SELECT actor,action,kind,value FROM audit WHERE action='feedback_removed'"
+            ).fetchone()
+        self.assertEqual(
+            tuple(audit),
+            ("admin@example.org", "feedback_removed", "feedback", row["id"]),
+        )
         self.assertEqual(
             visitor.put(
                 f"/api/cloud-auth/admin/feedback/{row['id']}",
                 json={"status": "closed"},
                 headers={"Origin": ORIGIN},
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            visitor.delete(
+                f"/api/cloud-auth/admin/feedback/{row['id']}", headers={"Origin": ORIGIN}
             ).status_code,
             401,
         )
@@ -1524,6 +1634,13 @@ class CloudAuthTests(TestCase):
             ).status_code,
             403,
         )
+        self.assertEqual(
+            member.delete(
+                f"/api/cloud-auth/admin/feedback/{submitted.json()['id']}",
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            403,
+        )
 
     def test_changing_contact_preserves_bound_admin_and_authorizes_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
@@ -1581,26 +1698,30 @@ class CloudAuthTests(TestCase):
             first = self.finish(email="admin@example.org", subject="initial-google-subject")
             self.assertIn("sigma_session", first.cookies)
             self.client.cookies.clear()
-            initially_denied = self.finish(
+            initially_uninvited = self.finish(
                 email="zetacontinuation@gmail.com", subject="configured-google-subject"
             )
-            self.assertEqual(initially_denied.headers["location"], "/?access=denied")
-            self.assertIn("sigma_denied", initially_denied.cookies)
-            self.client.cookies.set("sigma_denied", initially_denied.cookies["sigma_denied"])
+            self.assertEqual(initially_uninvited.headers["location"], "/")
+            self.assertIn("sigma_session", initially_uninvited.cookies)
+            self.client.cookies.set("sigma_session", initially_uninvited.cookies["sigma_session"])
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
             os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
-            # A stale denied page must offer Google sign-in again, never an
-            # invitation, once the account is authorized.
-            recovered = self.client.get("/api/cloud-auth/denied")
-            self.assertEqual(recovered.json(), {"identity_available": False, "retry_signin": True})
+            # The verified identity becomes an administrator as soon as the
+            # configured contact changes; guest status does not pin its role.
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "admin"
+            )
             self.assertEqual(
                 self.client.post(
                     "/api/cloud-auth/invitation-request",
                     json={},
                     headers={"Origin": "http://127.0.0.1:5173"},
                 ).status_code,
-                409,
+                401,
             )
-            # Retain the previous denial cookie just as the browser does.
+            # A fresh chooser flow continues to complete normally.
             allowed = self.finish(
                 email="zetacontinuation@gmail.com", subject="configured-google-subject"
             )
@@ -1617,6 +1738,1219 @@ class CloudAuthTests(TestCase):
             self.assertFalse(account["account"]["invitation_welcome_pending"])
             self.assertEqual(account["admin_contact_email"], "zetacontinuation@gmail.com")
             self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
+
+    def test_local_uninvited_google_user_requests_invitation_and_becomes_member(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
+            },
+        ):
+            admin_login = self.finish(email="admin@example.org", subject="onboard-admin")
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            guest_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 12346)
+            )
+            guest = guest_context.__enter__()
+            self.addCleanup(guest_context.__exit__, None, None, None)
+            signed_in = self.finish(
+                email="new-member@example.org", subject="onboard-member", client=guest
+            )
+            self.assertEqual(signed_in.status_code, 303)
+            self.assertEqual(signed_in.headers["location"], "/")
+            guest.cookies.set("sigma_session", signed_in.cookies["sigma_session"])
+            status = guest.get("/api/cloud-auth/status").json()
+            self.assertTrue(status["authenticated"])
+            self.assertEqual(status["user"], {"email": "new-member@example.org", "role": "guest"})
+            self.assertEqual(status["account"]["access"]["status"], "uninvited")
+            self.assertFalse(status["account"]["sponsorship"]["eligible"])
+            self.assertEqual(guest.get("/api/projects/recent").status_code, 200)
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/research-sessions/start",
+                    headers={"Origin": local_origin},
+                    json={},
+                ).status_code,
+                403,
+            )
+            with patch.object(cloud_auth, "_deliver_invitation") as deliver:
+                requested = guest.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                )
+                self.assertEqual(requested.status_code, 200, requested.text)
+                self.assertEqual(requested.json()["status"], "notified")
+                self.assertTrue(
+                    guest.post(
+                        "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                    ).json()["duplicate"]
+                )
+                deliver.assert_called_once()
+            admin_restart = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 12347)
+            )
+            self.addCleanup(admin_restart.close)
+            admin_restart.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            queue = admin_restart.get("/api/cloud-auth/admin/invitation-requests").json()[
+                "requests"
+            ]
+            self.assertEqual(queue[0]["email"], "new-member@example.org")
+            approved = admin_restart.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "new-member@example.org",
+                    "role": "member",
+                    "allowance_usd": 0.75,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(approved.status_code, 200, approved.text)
+            # The existing guest session becomes an authorized member without
+            # another OAuth callback. Its first member status read must still
+            # queue the one-time welcome dialog.
+            promoted = guest.get("/api/cloud-auth/status").json()
+            self.assertEqual(
+                promoted["user"], {"email": "new-member@example.org", "role": "member"}
+            )
+            self.assertTrue(promoted["account"]["invitation_welcome_pending"])
+            dismissed = guest.post("/api/cloud-auth/welcome", headers={"Origin": local_origin})
+            self.assertEqual(dismissed.status_code, 200, dismissed.text)
+            signed_in_again = self.finish(
+                email="new-member@example.org", subject="onboard-member", client=guest
+            )
+            self.assertEqual(signed_in_again.status_code, 303)
+            guest.cookies.set("sigma_session", signed_in_again.cookies["sigma_session"])
+            member = guest.get("/api/cloud-auth/status").json()
+            self.assertEqual(member["user"]["role"], "member")
+            self.assertFalse(member["account"]["invitation_welcome_pending"])
+            self.assertTrue(member["account"]["sponsorship"]["eligible"])
+            self.assertIsNone(member["account"].get("invitation_status"))
+            allowance = guest.get("/api/cloud-auth/local-sponsored-allowance")
+            self.assertEqual(allowance.status_code, 200, allowance.text)
+            self.assertEqual(allowance.json()["allowance_usd"], 0.75)
+
+    def test_guest_project_api_allowlist_denies_every_other_registered_operation(self):
+        local_origin = "http://127.0.0.1:5173"
+        projects_root = Path(self.temp.name) / "projects"
+        workspaces_root = Path(self.temp.name) / "workspaces"
+        projects_root.mkdir()
+        workspaces_root.mkdir()
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
+                "SIGMA_PROJECTS_ROOT": str(projects_root),
+                "SIGMA_CLOUD_WORKSPACES_ROOT": str(workspaces_root),
+            },
+        ):
+            admin_login = self.finish(email="admin@example.org", subject="route-admin")
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            member_project = self.client.post(
+                "/api/projects/create",
+                json={
+                    "title": f"Private route audit project {time.time_ns()}",
+                    "problem": "A private member project used to check guest scoping.",
+                    "research_mode": "default",
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(member_project.status_code, 201, member_project.text)
+            member_path = member_project.json()["path"]
+            member_project_before = self.client.get(
+                "/api/projects/inspect", params={"path": member_path}
+            ).json()
+
+            guest_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 12348)
+            )
+            guest = guest_context.__enter__()
+            self.addCleanup(guest_context.__exit__, None, None, None)
+            guest_login = self.finish(
+                email="route-guest@example.org", subject="route-guest", client=guest
+            )
+            guest.cookies.set("sigma_session", guest_login.cookies["sigma_session"])
+            catalog = guest.get("/api/projects/samples")
+            self.assertEqual(catalog.status_code, 200, catalog.text)
+            sample_id = catalog.json()["projects"][0]["id"]
+            copied = guest.post(
+                "/api/projects/samples/open",
+                json={"sample_id": sample_id},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(copied.status_code, 200, copied.text)
+            guest_path = copied.json()["path"]
+            self.assertEqual(
+                guest.get("/api/projects/inspect", params={"path": guest_path}).status_code, 200
+            )
+            from sigma import cloud_workspaces, project_bundle
+
+            guest_workspace = cloud_workspaces.guest_workspace(
+                guest.cookies.get(
+                    cloud_auth._cookie_name(cloud_auth.GUEST_COOKIE, cloud_auth.config())
+                ),
+                subject="route-guest",
+            )
+            self.assertIsNotNone(guest_workspace)
+            assert guest_workspace is not None
+            self.assertTrue(Path(guest_path).is_relative_to(guest_workspace.path))
+
+            def write_project_member(relative: str, contents: bytes) -> None:
+                project = Path(guest_path)
+                if project.is_dir():
+                    target = project / relative
+                    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    target.write_bytes(contents)
+                else:
+                    project_bundle.write_file(guest_path, relative, contents)
+
+            # Populate valid owner-scoped session/execution artifacts in the
+            # guest's own project bundle so the allowlisted read handlers are
+            # exercised successfully, not just inferred from the middleware.
+            project_id = copied.json()["project"]["id"]
+            session_id = str(uuid4())
+            session = {
+                "id": session_id,
+                "project_path": str(Path(guest_path).resolve()),
+                "project_id": project_id,
+                "session_number": 1,
+                "status": "ended",
+                "message": "isolated fixture session",
+                "steps": [],
+            }
+            write_project_member(
+                f"research-sessions/{session_id}.json", json.dumps(session).encode()
+            )
+            execution_id = str(uuid4())
+            artifact_bytes = b"guest-owned artifact"
+            execution = {
+                "id": execution_id,
+                "project_id": project_id,
+                "status": "completed",
+                "created_at": cloud_auth._now(),
+                "artifacts": [
+                    {
+                        "filename": "owned.txt",
+                        "media_type": "text/plain",
+                        "size_bytes": len(artifact_bytes),
+                        "sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+                    }
+                ],
+            }
+            write_project_member(
+                f"research-executions/{execution_id}.json", json.dumps(execution).encode()
+            )
+            write_project_member(
+                f"research-executions/{execution_id}.artifacts/owned.txt", artifact_bytes
+            )
+            project_read = guest.get("/api/projects/inspect", params={"path": guest_path})
+            self.assertEqual(project_read.status_code, 200, project_read.text)
+            session_read = guest.get(
+                f"/api/projects/research-sessions/{session_id}", params={"path": guest_path}
+            )
+            self.assertEqual(session_read.status_code, 200, session_read.text)
+            artifact_read = guest.get(
+                f"/api/projects/research-executions/{execution_id}/artifacts/owned.txt",
+                params={"path": guest_path},
+            )
+            self.assertEqual(artifact_read.status_code, 200, artifact_read.text)
+            self.assertEqual(artifact_read.content, artifact_bytes)
+            for response in (project_read, session_read, artifact_read):
+                self.assertEqual(response.headers.get("cache-control"), "no-store")
+                self.assertEqual(response.headers.get("referrer-policy"), "no-referrer")
+                self.assertEqual(response.headers.get("x-content-type-options"), "nosniff")
+                self.assertEqual(
+                    response.headers.get("content-security-policy"), "frame-ancestors 'none'"
+                )
+            for route in (
+                "events",
+                "research-limits",
+                "current-understanding",
+                "research-sessions",
+                "research-executions",
+                "papers",
+                "papers/preflight",
+                "proposals/config",
+                "text",
+                "recent",
+            ):
+                response = guest.get(
+                    f"/api/projects/{route}",
+                    params={"path": guest_path, "scope": "project"},
+                )
+                self.assertEqual(response.status_code, 200, (route, response.text))
+
+            paper_id = uuid4().hex
+            pdf_bytes = b"%PDF-1.4 guest fixture"
+            paper_record = {
+                "paper_id": paper_id,
+                "project_id": project_id,
+                "created_at": cloud_auth._now(),
+                "snapshot_sha256": "0" * 64,
+                "validation_warnings": [],
+                "generation": {},
+                "draft": {
+                    "title": "Guest-owned paper",
+                    "abstract": "Fixture abstract.",
+                    "problem_framing": [],
+                    "methods": [],
+                    "sections": [],
+                    "claims": [],
+                    "limitations": [],
+                    "open_obligations": [],
+                    "conclusions": [],
+                },
+                "tex_source": r"\documentclass{article}",
+                "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+                "pdf_size_bytes": len(pdf_bytes),
+            }
+            paper_prefix = "papers" if Path(guest_path).is_dir() else "artifacts/papers"
+            write_project_member(
+                f"{paper_prefix}/{paper_id}.json", json.dumps(paper_record).encode()
+            )
+            write_project_member(f"{paper_prefix}/{paper_id}.pdf", pdf_bytes)
+            paper_reads = (
+                guest.get("/api/projects/papers", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}/pdf", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}/txt", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}/tex", params={"path": guest_path}),
+            )
+            self.assertTrue(
+                all(response.status_code == 200 for response in paper_reads),
+                [(response.status_code, response.text[:160]) for response in paper_reads],
+            )
+            self.assertEqual(paper_reads[2].content, pdf_bytes)
+            self.assertIn("Guest-owned paper", paper_reads[3].text)
+            self.assertIn(r"\documentclass{article}", paper_reads[4].text)
+            self.assertTrue(
+                all(response.headers.get("cache-control") == "no-store" for response in paper_reads)
+            )
+            self.assertEqual(
+                guest.get("/api/projects/strategies", params={"path": guest_path}).status_code,
+                200,
+            )
+            from sigma import research_sessions
+
+            with patch.object(
+                research_sessions,
+                "ensure_queued_workers",
+                side_effect=AssertionError("guest read attempted queued provider work"),
+            ):
+                sessions = guest.get("/api/projects/research-sessions", params={"path": guest_path})
+            self.assertEqual(sessions.status_code, 200, sessions.text)
+            with patch(
+                "sigma.proposals.models",
+                side_effect=AssertionError("guest config attempted provider discovery"),
+            ):
+                config = guest.get("/api/projects/proposals/config", params={"path": guest_path})
+            self.assertEqual(config.status_code, 200, config.text)
+            self.assertFalse(config.json()["available"])
+
+            # Direct API requests to member-owned paths are scoped to the
+            # guest workspace and return the same not-found response as absent
+            # guest data. This avoids leaking whether member data exists.
+            for route in (
+                "inspect",
+                "strategies",
+                "events",
+                "research-limits",
+                "research-sessions",
+                "current-understanding",
+                "research-executions",
+                "papers",
+                "papers/preflight",
+            ):
+                response = guest.get(f"/api/projects/{route}", params={"path": member_path})
+                self.assertEqual(response.status_code, 404, (route, response.text))
+            text_response = guest.get(
+                "/api/projects/text", params={"path": member_path, "scope": "conclusions"}
+            )
+            self.assertEqual(text_response.status_code, 404, text_response.text)
+            for route in (
+                "research-sessions/audit-probe",
+                "research-executions/audit-probe",
+                "research-executions/audit-probe/artifacts/audit-probe",
+                "papers/audit-probe",
+                "papers/audit-probe/pdf",
+                "papers/audit-probe/txt",
+                "papers/audit-probe/tex",
+            ):
+                response = guest.get(f"/api/projects/{route}", params={"path": member_path})
+                self.assertIn(response.status_code, {400, 404}, (route, response.text))
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/open",
+                    json={"path": member_path},
+                    headers={"Origin": local_origin},
+                ).status_code,
+                404,
+            )
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/update",
+                    json={"path": member_path, "title": "Overwritten"},
+                    headers={"Origin": local_origin},
+                ).status_code,
+                403,
+            )
+            for route in (
+                "/api/projects/audit",
+                "/api/projects/export",
+                "/api/projects/download",
+                "/api/projects/export/report",
+            ):
+                self.assertEqual(
+                    guest.get(route, params={"path": guest_path}).status_code,
+                    403,
+                    route,
+                )
+            member_project_after = self.client.get(
+                "/api/projects/inspect", params={"path": member_path}
+            ).json()
+            self.assertEqual(member_project_after, member_project_before)
+
+            # The route inventory is an enforcement test: future project
+            # endpoints are denied unless their exact method/path is added to
+            # the reviewed guest-safe allowlist.
+            protected_count = 0
+            allowed_routes = set()
+            for route in app.routes:
+                route_path = getattr(route, "path", "")
+                if not route_path.startswith("/api/projects/"):
+                    continue
+                for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
+                    concrete_path = re.sub(r"\{[^}]+\}", "audit-probe", route_path)
+                    if cloud_auth._guest_project_route_allowed(method, concrete_path):
+                        allowed_routes.add((method, route_path))
+                        continue
+                    response = guest.request(
+                        method,
+                        concrete_path,
+                        params={"path": member_path},
+                        json={} if method in {"POST", "PUT", "PATCH", "DELETE"} else None,
+                        headers={"Origin": local_origin},
+                    )
+                    self.assertEqual(
+                        response.status_code,
+                        403,
+                        (method, route_path, response.status_code, response.text),
+                    )
+                    protected_count += 1
+            self.assertGreater(protected_count, 30)
+            expected_guest_routes = {
+                ("GET", path)
+                for path in cloud_auth._GUEST_PROJECT_READ_PATHS | {"/api/projects/samples"}
+            } | {
+                ("GET", "/api/projects/research-sessions/{session_id}"),
+                ("GET", "/api/projects/research-executions/{execution_id}"),
+                (
+                    "GET",
+                    "/api/projects/research-executions/{execution_id}/artifacts/{filename}",
+                ),
+                ("GET", "/api/projects/papers/{paper_id}"),
+                ("GET", "/api/projects/papers/{paper_id}/pdf"),
+                ("GET", "/api/projects/papers/{paper_id}/txt"),
+                ("GET", "/api/projects/papers/{paper_id}/tex"),
+                ("POST", "/api/projects/samples/open"),
+                ("POST", "/api/projects/open"),
+                ("POST", "/api/projects/close"),
+            }
+            self.assertEqual(allowed_routes, expected_guest_routes)
+            self.assertEqual(
+                guest.get("/api/cloud-auth/local-sponsored-allowance").status_code, 403
+            )
+            self.assertEqual(guest.get("/api/ai/connection").status_code, 403)
+            for admin_route in (
+                "/api/cloud-auth/admin/invitation-requests",
+                "/api/cloud-auth/admin/grants",
+                "/api/cloud-auth/admin/feedback",
+            ):
+                self.assertEqual(guest.get(admin_route).status_code, 403, admin_route)
+
+    def test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth(self):
+        from sigma import ai_store
+
+        local_origin = "http://127.0.0.1:5173"
+        sponsor_home = Path(self.temp.name) / "sponsor-auth"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(sponsor_home),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            login = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-google-admin"
+            )
+            self.assertEqual(login.status_code, 303)
+            self.client.cookies.update(login.cookies)
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["user"]["role"], "admin")
+            self.assertEqual(status["user"]["email"], "zetacontinuation@gmail.com")
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+
+            # A pre-existing cookie whose legacy personal value was never
+            # deliberately selected must still resolve to default sponsorship.
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',model_access_selected=0 "
+                    "WHERE subject='configured-google-admin'"
+                )
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
+
+            self.seed_personal_plan_authorization("configured-google-admin")
+            cloud_auth.set_model_access("configured-google-admin", "personal")
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["account"]["model_access"]["mode"], "personal")
+
+            async def add_selected_sponsor():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"]["selected-sponsor"] = {
+                        "email": "zetacontinuation@gmail.com",
+                        "access_token": "existing-sponsor-token",
+                    }
+                    state["active"] = "selected-sponsor"
+
+            import asyncio
+
+            asyncio.run(add_selected_sponsor())
+            with patch(
+                "sigma.api.chatgpt_auth.begin",
+                new=AsyncMock(return_value={"id": "sponsor-attempt"}),
+            ) as begin:
+                response = self.client.post(
+                    "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["id"], "sponsor-attempt")
+            begin.assert_awaited_once_with(account_id="selected-sponsor", sponsor=True)
+
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "nontrivialzeeros@gmail.com",
+                    "role": "member",
+                    "allowance_usd": 1,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23457)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            member_login = self.finish(
+                email="nontrivialzeeros@gmail.com",
+                subject="sponsor-change-denied-member",
+                client=member,
+            )
+            self.assertEqual(member_login.status_code, 303)
+            member.cookies.update(member_login.cookies)
+            with patch(
+                "sigma.api.chatgpt_auth.begin",
+                new=AsyncMock(return_value={"id": "member-personal-attempt"}),
+            ) as member_begin:
+                personal = member.post(
+                    "/api/ai/auth/begin", json={}, headers={"Origin": local_origin}
+                )
+                sponsor_route_denied = member.post(
+                    "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(personal.status_code, 200, personal.text)
+            member_begin.assert_awaited_once_with(None, False, None)
+            self.assertEqual(sponsor_route_denied.status_code, 403, sponsor_route_denied.text)
+
+            async def saved_sponsor_token():
+                async with ai_store.sponsor_transaction() as state:
+                    return state["accounts"]["selected-sponsor"]["access_token"]
+
+            self.assertEqual(asyncio.run(saved_sponsor_token()), "existing-sponsor-token")
+
+    def test_local_admin_sponsored_mode_transition_uses_bounded_global_pilot(self):
+        from sigma import ai_store, chatgpt_auth
+
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
+            login = self.finish(email="zetacontinuation@gmail.com", subject="mode-transition-admin")
+            self.client.cookies.update(login.cookies)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            with patch(
+                "sigma.api.chatgpt_auth.discovery",
+                AsyncMock(
+                    return_value={"authorization_endpoint": "https://auth.openai.com/authorize"}
+                ),
+            ):
+                started = self.client.post(
+                    "/api/ai/auth/begin", json={}, headers={"Origin": local_origin}
+                )
+                self.assertEqual(started.status_code, 200, started.text)
+                cancelled = self.client.post(
+                    f"/api/ai/auth/cancel/{started.json()['id']}",
+                    json={},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(cancelled.status_code, 200, cancelled.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            headers = {"Origin": local_origin}
+            fabricated = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(fabricated.status_code, 403, fabricated.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',model_access_selected=1 "
+                    "WHERE subject='mode-transition-admin'"
+                )
+            legacy_selected = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(legacy_selected.status_code, 403, legacy_selected.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "personal",
+                "legacy preference remains truthful without becoming authorization proof",
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='sponsored',model_access_selected=0 "
+                    "WHERE subject='mode-transition-admin'"
+                )
+            self.seed_personal_plan_authorization(
+                "mode-transition-admin", record_authorization=False
+            )
+            credential_path = (
+                ai_store.personal_directory_for_subject("mode-transition-admin")
+                / "credentials.json"
+            )
+            credential_state = ai_store.read(credential_path)
+            credential = credential_state["accounts"]["fixture-personal"]
+            credential["scopes"] = ["resource.invoke"]
+            credential["plan_authorized"] = False
+            ai_store.write(credential_path, credential_state)
+            missing_plan_scope = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(missing_plan_scope.status_code, 403, missing_plan_scope.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            credential["scopes"] = list(chatgpt_auth.PLAN_SCOPES)
+            credential["plan_authorized"] = True
+            ai_store.write(credential_path, credential_state)
+            cloud_auth.record_personal_authorization("mode-transition-admin")
+            switched_personal = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(switched_personal.status_code, 200, switched_personal.text)
+
+            from sigma import cloud_research
+
+            # Funding mode selection remains possible even when allowance
+            # inspection is unavailable; Play admission checks the ledger.
+            with patch.object(
+                cloud_research,
+                "snapshot",
+                side_effect=cloud_research.CloudResearchUnavailable("fixture ledger unavailable"),
+            ) as snapshot:
+                selected = self.client.post(
+                    "/api/ai/mode",
+                    json={"mode": "sponsored"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(selected.status_code, 200, selected.text)
+            snapshot.assert_not_called()
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+
+            selected = self.client.post(
+                "/api/ai/mode",
+                json={"mode": "sponsored"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(selected.status_code, 200, selected.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            budget = self.client.get("/api/cloud-auth/local-sponsored-allowance")
+            self.assertEqual(budget.status_code, 200, budget.text)
+            self.assertEqual(budget.json()["global_ceiling_usd"], 50.0)
+            self.assertEqual(budget.json()["global_spend_period"], "calendar_month")
+
+    def test_local_admin_connection_reports_validated_sponsor_identity(self):
+        import asyncio
+        import time
+
+        from sigma import ai_store, chatgpt_auth, openai_connection
+
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            login = self.finish(
+                email="zetacontinuation@gmail.com", subject="connection-identity-admin"
+            )
+            self.client.cookies.update(login.cookies)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+
+            async def persist_oauth_credentials():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"]["completed-oauth"] = {
+                        "client_id": "fixture-oauth-client",
+                        "email": "zetacontinuation@gmail.com",
+                        "access_token": "validated-sponsor-access-token",
+                        "refresh_token": "validated-sponsor-refresh-token",
+                        "expires_at": time.time() + 3600,
+                        "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                    }
+                    state["active"] = "completed-oauth"
+
+            asyncio.run(persist_oauth_credentials())
+
+            async def validated_catalog(*_args, **_kwargs):
+                result = {
+                    "status": "connected",
+                    "checked_at": "2026-10-28T00:00:00Z",
+                    "ttl_seconds": 60,
+                }
+                return result
+
+            with patch.object(
+                openai_connection, "_check", AsyncMock(side_effect=validated_catalog)
+            ):
+                response = self.client.get("/api/ai/connection?refresh=true")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["status"], "connected")
+            self.assertEqual(response.json()["account_label"], "zetacontinuation@gmail.com")
+            self.assertNotIn("validated-sponsor-access-token", response.text)
+            self.assertNotIn("validated-sponsor-refresh-token", response.text)
+
+            grant = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "email",
+                    "value": "nontrivialzeeros@gmail.com",
+                    "role": "member",
+                    "allowance_usd": 1,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(grant.status_code, 200, grant.text)
+            member_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23458)
+            )
+            member = member_context.__enter__()
+            self.addCleanup(member_context.__exit__, None, None, None)
+            member_login = self.finish(
+                email="nontrivialzeeros@gmail.com",
+                subject="sponsor-identity-hidden-member",
+                client=member,
+            )
+            self.assertEqual(member_login.status_code, 303)
+            member.cookies.update(member_login.cookies)
+            self.assertEqual(
+                member.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            with patch.object(
+                openai_connection, "_check", AsyncMock(side_effect=validated_catalog)
+            ):
+                member_response = member.get("/api/ai/connection?refresh=true")
+                mode_response = member.post(
+                    "/api/ai/mode",
+                    json={"mode": "sponsored"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(member_response.status_code, 200, member_response.text)
+            self.assertEqual(member_response.json()["status"], "connected")
+            self.assertNotIn("account_label", member_response.json())
+            self.assertNotIn("zetacontinuation@gmail.com", member_response.text)
+            self.assertEqual(mode_response.status_code, 200, mode_response.text)
+            self.assertNotIn("zetacontinuation@gmail.com", mode_response.text)
+
+    def test_personal_disconnect_cannot_cancel_other_users_or_sponsor_oauth_attempts(self):
+        from sigma import chatgpt_auth
+
+        local_origin = "http://127.0.0.1:5173"
+        b_client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 23461))
+        self.addCleanup(b_client.close)
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_AUTH_HOME": str(Path(self.temp.name) / "auth-db"),
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "auth-home"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,'admin',1,?)",
+                    ("brian.kramer.personal@gmail.com", cloud_auth._now()),
+                )
+            z_login = self.finish(email="zetacontinuation@gmail.com", subject="attempt-owner-z")
+            b_login = self.finish(
+                email="brian.kramer.personal@gmail.com",
+                subject="attempt-owner-b",
+                client=b_client,
+            )
+            self.assertEqual(z_login.status_code, 303)
+            self.assertEqual(b_login.status_code, 303)
+            self.client.cookies.update(z_login.cookies)
+            b_client.cookies.update(b_login.cookies)
+            headers = {"Origin": local_origin}
+            endpoint = "https://auth.openai.com/authorize"
+            with patch.object(
+                chatgpt_auth,
+                "discovery",
+                AsyncMock(return_value={"authorization_endpoint": endpoint}),
+            ):
+                z_personal = self.client.post("/api/ai/auth/begin", json={}, headers=headers)
+                self.assertEqual(z_personal.status_code, 200, z_personal.text)
+                z_sponsor = self.client.post("/api/ai/sponsor-auth/begin", json={}, headers=headers)
+                self.assertEqual(z_sponsor.status_code, 200, z_sponsor.text)
+                personal_id = z_personal.json()["id"]
+                sponsor_id = z_sponsor.json()["id"]
+
+                # B disconnects B's own personal store while both Z flows are
+                # pending. Neither pending flow may be cancelled as a side effect.
+                disconnected = b_client.post("/api/ai/disconnect", json={}, headers=headers)
+                self.assertEqual(disconnected.status_code, 200, disconnected.text)
+                for attempt_id in (personal_id, sponsor_id):
+                    self.assertEqual(
+                        self.client.get(f"/api/ai/auth/attempt/{attempt_id}").json()["status"],
+                        "connecting",
+                    )
+                    self.assertEqual(
+                        b_client.get(f"/api/ai/auth/attempt/{attempt_id}").status_code, 400
+                    )
+                    self.assertEqual(
+                        b_client.post(
+                            f"/api/ai/auth/cancel/{attempt_id}", json={}, headers=headers
+                        ).status_code,
+                        400,
+                    )
+
+                # A failed attempt can be retried only by its owner, against
+                # the same personal/sponsor store in which it began.
+                for attempt_id in (personal_id, sponsor_id):
+                    attempt = chatgpt_auth._attempts[attempt_id]
+                    chatgpt_auth.finish(attempt, "failed", "Fixture failure.")
+                    attempt.retry_client_id = "fixture-client"
+                    self.assertEqual(
+                        b_client.post(
+                            "/api/ai/auth/begin",
+                            json={"retry_attempt_id": attempt_id},
+                            headers=headers,
+                        ).status_code,
+                        400,
+                    )
+                self.assertEqual(
+                    self.client.post(
+                        "/api/ai/auth/begin",
+                        json={"retry_attempt_id": sponsor_id},
+                        headers=headers,
+                    ).status_code,
+                    400,
+                    "a personal OAuth retry must not consume a sponsor-store attempt ID",
+                )
+
+    def test_local_existing_cookie_keeps_same_email_personal_and_sponsor_credentials_separate(self):
+        import asyncio
+        import time
+        from urllib.parse import parse_qs, urlencode, urlsplit
+
+        from sigma import ai_store, chatgpt_auth, openai_connection
+
+        local_origin = "http://127.0.0.1:5173"
+        sponsor_token = "shared-sponsor-access"
+        personal_token = "z-personal-access"
+        observed_tokens: list[str] = []
+
+        async def checked_catalog(access_token, mode="chatgpt"):
+            observed_tokens.append(access_token)
+            return {
+                "status": "connected",
+                "checked_at": "2026-10-28T00:00:00Z",
+                "ttl_seconds": 60,
+            }
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "sponsor-auth"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            login = self.finish(
+                email="zetacontinuation@gmail.com", subject="same-email-personal-owner"
+            )
+            self.assertEqual(login.status_code, 303)
+            self.client.cookies.update(login.cookies)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+
+            async def seed_shared_sponsor():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"]["shared-sponsor"] = {
+                        "client_id": "oaiapp_fixture",
+                        "subject": "same-chatgpt-subject",
+                        "email": "zetacontinuation@gmail.com",
+                        "access_token": sponsor_token,
+                        "refresh_token": "shared-sponsor-refresh",
+                        "expires_at": time.time() + 3600,
+                        "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                    }
+                    state["active"] = "shared-sponsor"
+
+            asyncio.run(seed_shared_sponsor())
+            rejected_before_oauth = self.client.post(
+                "/api/ai/mode",
+                json={"mode": "personal"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(rejected_before_oauth.status_code, 403, rejected_before_oauth.text)
+            cookie_name = cloud_auth._cookie_name(cloud_auth.SESSION_COOKIE, cloud_auth.config())
+            cookie = self.client.cookies.get(cookie_name)
+
+            # Reopen a fresh client using the existing cookie and durable auth
+            # home; sponsored default survives before OAuth succeeds.
+            restart_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 23459)
+            )
+            restarted = restart_context.__enter__()
+            self.addCleanup(restart_context.__exit__, None, None, None)
+            restarted.cookies.set(cookie_name, cookie)
+            status = restarted.get("/api/cloud-auth/status")
+            self.assertEqual(status.status_code, 200, status.text)
+            self.assertEqual(status.json()["account"]["model_access"]["mode"], "sponsored")
+            with patch.object(
+                openai_connection,
+                "_check",
+                AsyncMock(side_effect=checked_catalog),
+            ):
+                initial_connection = restarted.get("/api/ai/connection")
+            self.assertEqual(initial_connection.status_code, 200, initial_connection.text)
+            self.assertEqual(initial_connection.json()["status"], "connected")
+            self.assertEqual(
+                initial_connection.json().get("account_label"), "zetacontinuation@gmail.com"
+            )
+            self.assertIn(sponsor_token, observed_tokens)
+
+            token_record = {
+                "client_id": "oaiapp_fixture",
+                "subject": "same-chatgpt-subject",
+                "email": "zetacontinuation@gmail.com",
+                "name": "Z Personal",
+                "access_token": personal_token,
+                "refresh_token": "z-personal-refresh",
+                "expires_at": time.time() + 3600,
+                "scopes": list(chatgpt_auth.PLAN_SCOPES),
+            }
+            with (
+                patch.object(
+                    chatgpt_auth,
+                    "discovery",
+                    AsyncMock(
+                        return_value={"authorization_endpoint": "https://auth.openai.com/authorize"}
+                    ),
+                ),
+                patch.object(
+                    chatgpt_auth,
+                    "http",
+                    AsyncMock(return_value=(200, {"access_token": "exchanged-code"})),
+                ) as exchange,
+                patch.object(
+                    chatgpt_auth, "validate_tokens", AsyncMock(return_value=token_record)
+                ) as validate,
+            ):
+                started = restarted.post(
+                    "/api/ai/auth/begin", json={}, headers={"Origin": local_origin}
+                )
+                self.assertEqual(started.status_code, 200, started.text)
+                attempt_id = started.json()["id"]
+                open_url = restarted.get(f"/api/ai/auth/open/{attempt_id}", follow_redirects=False)
+                self.assertEqual(open_url.status_code, 307, open_url.text)
+                authorization_url = urlsplit(open_url.headers["location"])
+                self.assertEqual(authorization_url.hostname, "auth.openai.com")
+                authorization = parse_qs(authorization_url.query)
+                redirect_uri = urlsplit(authorization["redirect_uri"][0])
+                callback_query = urlencode(
+                    {
+                        "state": authorization["state"][0],
+                        "code": "fixture-oauth-code",
+                        "client_id": "oaiapp_fixture",
+                    }
+                )
+
+                async def complete_loopback_oauth():
+                    port = redirect_uri.port
+                    assert port is not None
+                    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+                    writer.write(
+                        (
+                            f"GET {redirect_uri.path}?{callback_query} HTTP/1.1\r\n"
+                            f"Host: {redirect_uri.netloc}\r\n\r\n"
+                        ).encode()
+                    )
+                    await writer.drain()
+                    response = await reader.read(4096)
+                    writer.close()
+                    await writer.wait_closed()
+                    return response
+
+                callback_response = asyncio.run(complete_loopback_oauth())
+                self.assertIn(b"HTTP/1.1 200 OK", callback_response)
+                exchange.assert_awaited_once()
+                validate.assert_awaited_once()
+            oauth_status = restarted.get(f"/api/ai/auth/attempt/{attempt_id}")
+            for _ in range(100):
+                oauth_status = restarted.get(f"/api/ai/auth/attempt/{attempt_id}")
+                if oauth_status.json()["status"] != "connecting":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(oauth_status.json()["status"], "connected")
+            self.assertEqual(
+                restarted.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+                "successful OAuth alone must not switch funding mode",
+            )
+
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                personal_mode = restarted.post(
+                    "/api/ai/mode", json={"mode": "personal"}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(personal_mode.status_code, 200, personal_mode.text)
+            self.assertEqual(
+                restarted.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "personal",
+            )
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                personal = restarted.get("/api/ai/connection?refresh=true")
+            self.assertEqual(personal.status_code, 200, personal.text)
+            self.assertEqual(personal.json()["status"], "connected")
+            self.assertEqual(personal.json()["account_label"], "zetacontinuation@gmail.com")
+            self.assertEqual(observed_tokens[-1], personal_token)
+            personal_account_id = personal.json()["active_account"]
+            reauthorize = restarted.post(
+                "/api/ai/auth/begin",
+                json={"account_id": personal_account_id},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(reauthorize.status_code, 200, reauthorize.text)
+            restarted.post(
+                f"/api/ai/auth/cancel/{reauthorize.json()['id']}",
+                json={},
+                headers={"Origin": local_origin},
+            )
+
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                sponsored_mode = restarted.post(
+                    "/api/ai/mode",
+                    json={"mode": "sponsored"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(sponsored_mode.status_code, 200, sponsored_mode.text)
+            self.assertEqual(
+                restarted.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                sponsor_connection = restarted.get("/api/ai/connection?refresh=true")
+            self.assertEqual(sponsor_connection.status_code, 200, sponsor_connection.text)
+            self.assertEqual(sponsor_connection.json()["status"], "connected")
+            self.assertEqual(
+                sponsor_connection.json()["account_label"], "zetacontinuation@gmail.com"
+            )
+            self.assertIn(sponsor_token, observed_tokens)
+
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                personal_mode = restarted.post(
+                    "/api/ai/mode", json={"mode": "personal"}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(personal_mode.status_code, 200, personal_mode.text)
+            with (
+                patch.object(
+                    chatgpt_auth,
+                    "discovery",
+                    AsyncMock(
+                        return_value={"revocation_endpoint": "https://auth.openai.com/revoke"}
+                    ),
+                ),
+                patch.object(chatgpt_auth, "http", AsyncMock(return_value=(200, {}))) as revoke,
+            ):
+                disconnected = restarted.post(
+                    "/api/ai/disconnect", json={}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(disconnected.status_code, 200, disconnected.text)
+            self.assertTrue(revoke.await_count <= 1)
+            disconnected_personal = restarted.get("/api/ai/connection?refresh=true")
+            self.assertIn(
+                disconnected_personal.json()["status"], {"reauth_required", "disconnected"}
+            )
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                returned_to_sponsor = restarted.post(
+                    "/api/ai/mode",
+                    json={"mode": "sponsored"},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(returned_to_sponsor.status_code, 200, returned_to_sponsor.text)
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                sponsor_after_personal_disconnect = restarted.get("/api/ai/connection?refresh=true")
+            self.assertEqual(sponsor_after_personal_disconnect.json()["status"], "connected")
+            self.assertIn(sponsor_token, observed_tokens)
+
+            async def sponsor_store_token():
+                async with ai_store.sponsor_transaction() as state:
+                    return state["accounts"]["shared-sponsor"]["access_token"]
+
+            self.assertEqual(asyncio.run(sponsor_store_token()), sponsor_token)
+
+    def test_local_z_and_b_admins_have_unlimited_and_n_has_metered_sponsorship(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "allowance-sponsor-auth"),
+            },
+        ):
+            z_login = self.finish(email="zetacontinuation@gmail.com", subject="allowance-z-admin")
+            self.client.cookies.update(z_login.cookies)
+            for email, role, allowance in (
+                ("brian.kramer.personal@gmail.com", "admin", None),
+                ("nontrivialzeeros@gmail.com", "member", 0.05),
+            ):
+                response = self.client.post(
+                    "/api/cloud-auth/admin/grants",
+                    json={
+                        "kind": "email",
+                        "value": email,
+                        "role": role,
+                        "allowance_usd": allowance,
+                    },
+                    headers={"Origin": local_origin},
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "admin"
+            )
+            z_budget = self.client.get("/api/cloud-auth/local-sponsored-allowance")
+            self.assertEqual(z_budget.status_code, 200, z_budget.text)
+            self.assertEqual(z_budget.json()["allowance_usd"], 15.0)
+
+            for email, subject, expected_role, expected_allowance in (
+                ("brian.kramer.personal@gmail.com", "allowance-b-admin", "admin", 15.0),
+                ("nontrivialzeeros@gmail.com", "allowance-n-member", "member", 0.05),
+            ):
+                context = TestClient(
+                    app,
+                    base_url="http://127.0.0.1",
+                    client=("127.0.0.1", 23460 if expected_role == "admin" else 23461),
+                )
+                client = context.__enter__()
+                self.addCleanup(context.__exit__, None, None, None)
+                login = self.finish(email=email, subject=subject, client=client)
+                self.assertEqual(login.status_code, 303)
+                client.cookies.update(login.cookies)
+                status = client.get("/api/cloud-auth/status")
+                self.assertEqual(status.json()["user"]["role"], expected_role)
+                self.assertEqual(status.json()["account"]["model_access"]["mode"], "sponsored")
+                budget = client.get("/api/cloud-auth/local-sponsored-allowance")
+                self.assertEqual(budget.status_code, 200, budget.text)
+                self.assertEqual(budget.json()["allowance_usd"], expected_allowance)
+
+                if expected_role == "admin":
+                    # A new Google identity can only select personal after its
+                    # own isolated registration has plan permission.
+                    unconnected = client.post(
+                        "/api/ai/mode",
+                        json={"mode": "personal"},
+                        headers={"Origin": local_origin},
+                    )
+                    self.assertEqual(unconnected.status_code, 403, unconnected.text)
+                    self.assertEqual(
+                        client.get("/api/cloud-auth/status").json()["account"]["model_access"][
+                            "mode"
+                        ],
+                        "sponsored",
+                    )
+                    self.seed_personal_plan_authorization(subject, "zetacontinuation@gmail.com")
+                    with patch(
+                        "sigma.openai_connection._check",
+                        new=AsyncMock(
+                            return_value={
+                                "status": "connected",
+                                "checked_at": "fixture",
+                                "ttl_seconds": 60,
+                            }
+                        ),
+                    ):
+                        personal = client.post(
+                            "/api/ai/mode",
+                            json={"mode": "personal"},
+                            headers={"Origin": local_origin},
+                        )
+                        self.assertEqual(personal.status_code, 200, personal.text)
+                        connection = client.get("/api/ai/connection")
+                    self.assertEqual(connection.json()["status"], "connected")
+                    self.assertEqual(
+                        connection.json().get("account_label"), "zetacontinuation@gmail.com"
+                    )
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
@@ -1740,6 +3074,90 @@ class CloudAuthTests(TestCase):
             response.json()["error"],
             "AI provider authorization is unavailable in cloud mode.",
         )
+
+    def test_hosted_default_and_explicit_sponsored_selection_match_provider_routing(self):
+        import asyncio
+
+        from sigma import ai_store, chatgpt_auth, openai_connection
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "false",
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "admin@example.org",
+                "SIGMA_CLOUD_CHATGPT_AUTH_HOME": str(Path(self.temp.name) / "hosted-sponsor"),
+            },
+        ):
+            signed_in = self.finish()
+            self.client.cookies.set(
+                cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+            )
+            initial = self.client.get("/api/cloud-auth/status")
+            self.assertEqual(initial.status_code, 200, initial.text)
+            self.assertEqual(initial.json()["account"]["model_access"]["mode"], "sponsored")
+
+            account = {
+                "client_id": "fixture-chatgpt-client",
+                "subject": "hosted-sponsor-subject",
+                "email": "admin@example.org",
+                "issuer": chatgpt_auth.ISSUER,
+                "access_token": "hosted-sponsor-token",
+                "refresh_token": "hosted-sponsor-refresh",
+                "id_token": "hosted-sponsor-id",
+                "token_type": "Bearer",
+                "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                "expires_at": time.time() + 3600,
+            }
+
+            async def save_sponsor():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"] = {"hosted-sponsor": account}
+                    state["active"] = "hosted-sponsor"
+
+            asyncio.run(save_sponsor())
+            provider_keys = []
+
+            async def validated_provider(key, mode):
+                provider_keys.append((key, mode))
+                return openai_connection._CatalogResult(
+                    {"status": "connected", "checked_at": "fixture", "ttl_seconds": 60},
+                    set(),
+                    {},
+                    [],
+                )
+
+            with patch.object(openai_connection, "_check", side_effect=validated_provider):
+                first = self.client.get("/api/ai/connection?refresh=true")
+                self.assertEqual(first.status_code, 200, first.text)
+                self.assertEqual(first.json()["status"], "connected")
+                self.assertEqual(provider_keys[-1], ("hosted-sponsor-token", "chatgpt"))
+
+                personal = self.client.post(
+                    "/api/ai/mode", json={"mode": "personal"}, headers={"Origin": ORIGIN}
+                )
+                self.assertEqual(personal.status_code, 403, personal.text)
+                self.assertEqual(
+                    self.client.get("/api/cloud-auth/status").json()["account"]["model_access"][
+                        "mode"
+                    ],
+                    "sponsored",
+                )
+                self.assertEqual(
+                    len(provider_keys), 1, "personal mode must not borrow sponsor credentials"
+                )
+
+                sponsored = self.client.post(
+                    "/api/ai/mode", json={"mode": "sponsored"}, headers={"Origin": ORIGIN}
+                )
+                self.assertEqual(sponsored.status_code, 200, sponsored.text)
+                self.assertEqual(sponsored.json()["status"], "connected")
+                self.assertEqual(provider_keys[-1], ("hosted-sponsor-token", "chatgpt"))
+                self.assertEqual(
+                    self.client.get("/api/cloud-auth/status").json()["account"]["model_access"][
+                        "mode"
+                    ],
+                    "sponsored",
+                )
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
@@ -2130,8 +3548,12 @@ class CloudAuthTests(TestCase):
                 client=member_client,
             )
             self.assertEqual(denied.status_code, 303)
-            self.assertIn("access=denied", denied.headers["location"])
-            self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+            self.assertEqual(denied.headers["location"], "/")
+            self.assertIn("sigma_session", denied.cookies)
+            member_client.cookies.set("sigma_session", denied.cookies["sigma_session"])
+            guest_status = member_client.get("/api/cloud-auth/status").json()
+            self.assertEqual(guest_status["user"]["role"], "guest")
+            self.assertFalse(guest_status["account"]["sponsorship"]["eligible"])
             grant = admin.post(
                 "/api/cloud-auth/admin/grants",
                 json={"kind": "email", "value": "nontrivialzeeros@gmail.com", "role": "member"},
@@ -2321,6 +3743,7 @@ class CloudAuthTests(TestCase):
                 # A selected personal funding source must fail closed on a
                 # temporary provider outage instead of silently spending the
                 # sponsor allowance.
+                self.seed_personal_plan_authorization("local-service-key-member")
                 cloud_auth.set_model_access("local-service-key-member", "personal")
                 with patch.object(
                     openai_connection.chatgpt_auth,
@@ -2498,17 +3921,21 @@ class CloudAuthTests(TestCase):
             {
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
                 "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
                 "SIGMA_MOCK_AUTH": "0",
             },
         ):
-            admin_login = self.finish()
-            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            admin_login = self.finish(
+                email="zetacontinuation@gmail.com", subject="configured-local-admin"
+            )
+            self.client.cookies.update(admin_login.cookies)
             grant = self.client.post(
                 "/api/cloud-auth/admin/grants",
                 json={
                     "kind": "email",
-                    "value": "nontrivialzeero@gmail.com",
+                    "value": "nontrivialzeeros@gmail.com",
                     "role": "member",
                     "allowance_usd": 0.01,
                 },
@@ -2521,18 +3948,25 @@ class CloudAuthTests(TestCase):
             member = member_context.__enter__()
             self.addCleanup(member_context.__exit__, None, None, None)
             login = self.finish(
-                email="nontrivialzeero@gmail.com",
+                email="nontrivialzeeros@gmail.com",
                 subject="local-sponsored-member",
                 client=member,
             )
             self.assertEqual(login.status_code, 303)
-            member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            member.cookies.update(login.cookies)
             initial_status = member.get("/api/cloud-auth/status").json()
             self.assertTrue(initial_status["account"]["sponsorship"]["eligible"])
             self.assertEqual(initial_status["account"]["model_access"]["mode"], "sponsored")
             # Once the user explicitly selects personal mode, later status
             # refreshes must preserve that choice.
-            cloud_auth.set_model_access("local-sponsored-member", "personal")
+            self.seed_personal_plan_authorization("local-sponsored-member")
+            with patch(
+                "sigma.openai_connection._check",
+                new=AsyncMock(
+                    return_value={"status": "connected", "checked_at": "fixture", "ttl_seconds": 60}
+                ),
+            ):
+                cloud_auth.set_model_access("local-sponsored-member", "personal")
             with (
                 patch(
                     "sigma.openai_connection.chatgpt_auth.session",
@@ -2568,20 +4002,22 @@ class CloudAuthTests(TestCase):
                     ),
                 ) as begin,
             ):
-                member_allowed = member.post(
+                member_denied = member.post(
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
-                self.assertEqual(member_allowed.status_code, 200, member_allowed.text)
+                self.assertEqual(member_denied.status_code, 403, member_denied.text)
                 with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSORED_ENABLED": "false"}):
-                    denied = member.post(
+                    disabled_member_denied = member.post(
                         "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                     )
-                self.assertEqual(denied.status_code, 403, denied.text)
+                    self.assertEqual(
+                        disabled_member_denied.status_code, 403, disabled_member_denied.text
+                    )
                 allowed = self.client.post(
                     "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
                 )
             self.assertEqual(allowed.status_code, 200, allowed.text)
-            self.assertEqual(begin.await_count, 2)
+            self.assertEqual(begin.await_count, 1)
             begin.assert_awaited_with(account_id="sponsor-id", sponsor=True)
 
     def test_local_personal_mode_cannot_use_or_disconnect_active_sponsor_credential(self):
@@ -2624,6 +4060,7 @@ class CloudAuthTests(TestCase):
                 client=member,
             )
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            self.seed_personal_plan_authorization("local-sponsored-member")
             cloud_auth.set_model_access("local-sponsored-member", "personal")
 
             async def seed():
@@ -2644,11 +4081,13 @@ class CloudAuthTests(TestCase):
             asyncio.run(seed())
             with patch(
                 "sigma.openai_connection._check",
-                new=AsyncMock(side_effect=AssertionError("sponsor token reached personal catalog")),
+                new=AsyncMock(
+                    return_value={"status": "connected", "checked_at": "fixture", "ttl_seconds": 60}
+                ),
             ):
                 connection = member.get("/api/ai/connection")
             self.assertEqual(connection.status_code, 200, connection.text)
-            self.assertEqual(connection.json()["status"], "disconnected")
+            self.assertEqual(connection.json()["status"], "connected")
             self.assertNotIn("fixture-sponsor-token", connection.text)
 
             renew = member.post(
@@ -2656,13 +4095,19 @@ class CloudAuthTests(TestCase):
                 json={"account_id": "sponsor"},
                 headers={"Origin": local_origin},
             )
-            self.assertEqual(renew.status_code, 403, renew.text)
+            self.assertEqual(renew.status_code, 400, renew.text)
+            sponsor_renew = member.post(
+                "/api/ai/sponsor-auth/begin", json={}, headers={"Origin": local_origin}
+            )
+            self.assertEqual(sponsor_renew.status_code, 403, sponsor_renew.text)
             with patch(
                 "sigma.api.chatgpt_auth.disconnect",
-                new=AsyncMock(side_effect=AssertionError("sponsor credential was revoked")),
+                new=AsyncMock(return_value={"message": "disconnected"}),
             ):
-                disconnected = member.post("/api/ai/disconnect", headers={"Origin": local_origin})
-            self.assertEqual(disconnected.status_code, 403, disconnected.text)
+                disconnected = member.post(
+                    "/api/ai/disconnect", json={}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(disconnected.status_code, 200, disconnected.text)
 
             async def assert_intact():
                 async with sponsor_transaction() as state:
@@ -2672,7 +4117,7 @@ class CloudAuthTests(TestCase):
 
             asyncio.run(assert_intact())
 
-    def test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor(self):
+    def test_connection_choice_is_separate_from_allowance_and_hosted_personal_is_unsupported(self):
         signed_in = self.finish()
         self.client.cookies.set(
             cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
@@ -2683,21 +4128,29 @@ class CloudAuthTests(TestCase):
         with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
             selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)
         self.assertEqual(selected.status_code, 200, selected.text)
-        self.assertEqual(selected.json()["mode"], "api_key")
+        # The connection response's mode describes the provider adapter;
+        # funding selection is the persistent cloud-auth account state below.
+        self.assertEqual(selected.json()["mode"], "chatgpt")
         self.assertEqual(
             self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
             "sponsored",
         )
-        with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 0.0}):
+        with patch(
+            "sigma.api.cloud_research.snapshot",
+            side_effect=AssertionError("mode selection must not inspect spend ledger"),
+        ):
             exhausted = self.client.post(
                 "/api/ai/mode", json={"mode": "sponsored"}, headers=headers
             )
-        self.assertEqual(exhausted.status_code, 409, exhausted.text)
+        self.assertEqual(exhausted.status_code, 200, exhausted.text)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+            "sponsored",
+        )
         switched = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
-        self.assertEqual(switched.status_code, 200, switched.text)
-        self.assertEqual(switched.json()["status"], "unavailable")
+        self.assertEqual(switched.status_code, 403, switched.text)
         refreshed = self.client.get("/api/cloud-auth/status").json()
-        self.assertEqual(refreshed["account"]["model_access"]["mode"], "personal")
+        self.assertEqual(refreshed["account"]["model_access"]["mode"], "sponsored")
 
     def test_operator_can_disable_sponsor_without_removing_personal_connection(self):
         signed_in = self.finish()

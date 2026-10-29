@@ -318,7 +318,7 @@ with sync_playwright() as playwright:
     expect(admin_page.get_by_text("visitor@example.org").first).to_be_visible()
     expect(admin_page.get_by_role("heading", name="Product feedback")).to_be_visible()
     expect(admin_page.get_by_text("Please make project creation easier to find.")).to_be_visible()
-    expect(admin_page.get_by_role("tab", name="Account usage")).to_be_visible()
+    expect(admin_page.get_by_role("heading", name="Account usage")).to_be_visible()
 
     browser.close()
 

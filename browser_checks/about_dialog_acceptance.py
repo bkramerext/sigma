@@ -55,20 +55,23 @@ def main() -> None:
             page.route("**/api/**", home_data)
             page.goto(URL)
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            welcome = page.locator("#invitation-welcome-dialog")
+            if welcome.count() and welcome.is_visible():
+                welcome.get_by_role("button", name="Let's get started").click()
+                expect(welcome).to_have_count(0)
             opener = page.get_by_role("button", name="About")
             for width, height in ((1440, 960), (390, 844), (320, 740)):
                 page.set_viewport_size({"width": width, "height": height})
                 credit = page.locator(".home-art-credit")
                 expect(credit).to_be_visible()
-                assert credit.evaluate("e => getComputedStyle(e).textTransform") == "capitalize"
+                assert credit.evaluate("e => getComputedStyle(e).textTransform") == "none"
                 opener.click()
                 dialog = page.get_by_role("dialog", name="About SIGMA")
                 expect(dialog).to_be_visible()
                 page.screenshot(path=f"/tmp/sigma-about-collapsed-{width}.png", full_page=False)
                 expect(dialog.locator(".about-intro")).to_be_visible()
-                expect(dialog.locator(".about-terms")).to_be_visible()
-                expect(dialog.locator("details")).to_have_count(3)
-                region = dialog.locator("details").filter(
+                expect(dialog.get_by_role("navigation", name="Legal information")).to_be_visible()
+                region = dialog.locator(".about-dialog-content > details").filter(
                     has=page.locator("summary", has_text="Key Features")
                 )
                 expect(region).to_have_count(1)
@@ -116,11 +119,11 @@ def main() -> None:
                 )
                 provenance.locator("summary").click()
                 expect(provenance).not_to_have_attribute("open", "")
+                expect(dialog.get_by_role("navigation", name="Legal information")).to_contain_text(
+                    "Terms of Service"
+                )
                 expect(dialog.locator(".about-intro")).to_contain_text(
                     "research workbench for exploring answers"
-                )
-                expect(dialog.locator(".about-terms")).to_have_text(
-                    "Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate."
                 )
                 for title in (
                     "Multi-Strategy Exploration",
@@ -310,7 +313,7 @@ def main() -> None:
                 page.keyboard.press("Escape")
                 expect(dialog.get_by_role("tooltip")).to_have_count(0)
                 architecture.locator("summary").focus()
-                help_button = dialog.get_by_role("button", name="Explain Research Project")
+                help_button = dialog.get_by_role("button", name="Explain Research Question")
                 help_button.focus()
                 expect(dialog.get_by_role("tooltip")).to_contain_text("central research question")
                 page.keyboard.press("Escape")
@@ -340,7 +343,11 @@ def main() -> None:
             )
             touch_page = touch.new_page()
             touch_page.route("**/api/**", home_data)
-            touch_page.goto(URL)
+            touch_page.goto(URL, wait_until="networkidle")
+            touch_welcome = touch_page.locator("#invitation-welcome-dialog")
+            if touch_welcome.count() and touch_welcome.is_visible():
+                touch_welcome.get_by_role("button", name="Let's get started").tap()
+                expect(touch_welcome).to_have_count(0)
             touch_page.get_by_role("button", name="About").tap()
             dialog = touch_page.get_by_role("dialog", name="About SIGMA")
             arch = dialog.locator(".about-architecture-disclosure")
@@ -348,7 +355,7 @@ def main() -> None:
             expect(arch.locator("#about-architecture-details")).to_be_visible()
             dialog.locator(".about-session-toggle").tap()
             expect(dialog.locator("#about-session-details")).to_be_visible()
-            button = dialog.get_by_role("button", name="Explain Research Project")
+            button = dialog.get_by_role("button", name="Explain Research Question")
             button.tap()
             expect(dialog.get_by_role("tooltip")).to_contain_text("central research question")
             touch_page.keyboard.press("Escape")

@@ -50,10 +50,14 @@ class HostedPersonalIsolationTests(TestCase):
         self.b = cloud_auth.Principal("google-subject-B", "b@example.test", "member")
         cloud_auth._persist_user_state(self.cfg, self.a)
         cloud_auth._persist_user_state(self.cfg, self.b)
-        # Exercise hosted personal isolation after an explicit choice. Eligible
-        # accounts now begin in sponsored mode until the user selects personal.
-        cloud_auth.set_model_access(self.a.subject, "personal")
-        cloud_auth.set_model_access(self.b.subject, "personal")
+        # Model a legacy persisted personal choice; hosted OAuth cannot create
+        # a new personal selection, but must represent old state truthfully.
+        with cloud_auth._db(self.cfg) as db:
+            db.execute(
+                "UPDATE user_state SET model_access='personal',model_access_selected=1 "
+                "WHERE subject IN (?,?)",
+                (self.a.subject, self.b.subject),
+            )
 
     def _restore_env(self):
         for key, value in self.old_env.items():
@@ -111,7 +115,13 @@ class HostedPersonalIsolationTests(TestCase):
         sponsored_a = self._with_subject(self.a, lambda: asyncio.run(auth_for(self.a)))
         self.assertTrue(openai_connection.cloud_credential(sponsored_a))
         self.assertEqual(sponsored_a["token"], "fixture-sponsor-key")
-        cloud_auth.set_model_access(self.a.subject, "personal")
+        with self.assertRaises(PermissionError):
+            cloud_auth.set_model_access(self.a.subject, "personal")
+        with cloud_auth._db(self.cfg) as db:
+            db.execute(
+                "UPDATE user_state SET model_access='personal',model_access_selected=1 WHERE subject=?",
+                (self.a.subject,),
+            )
         restored_personal = self._with_subject(self.a, lambda: asyncio.run(auth_for(self.a)))
         personal_b = self._with_subject(self.b, lambda: asyncio.run(auth_for(self.b)))
         self.assertEqual(restored_personal["token"], "")

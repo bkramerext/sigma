@@ -1581,7 +1581,11 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     usage_steps = [
         step.get("token_usage")
         for step in unique_steps
-        if step.get("status") == "completed" and isinstance(step.get("token_usage"), dict)
+        if (
+            step.get("status") in {"completed", "incomplete"}
+            or step.get("attempt_status") == "usage_estimated"
+        )
+        and isinstance(step.get("token_usage"), dict)
     ]
     all_calls_have_usage = dispatched == 0 or (
         len(usage_steps) == dispatched and not unrecorded_calls
@@ -2446,14 +2450,22 @@ def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
         prices is None
         or type(usage.get("input_tokens")) is not int
         or type(usage.get("output_tokens")) is not int
-        or type(usage.get("cached_input_tokens")) is not int
     ):
         return None
-    input_cost = (
-        cast(int, usage["input_tokens"]) - cast(int, usage["cached_input_tokens"])
-    ) * prices["input"]
-    cached_cost = cast(int, usage["cached_input_tokens"]) * prices["cached_input"]
-    output_cost = cast(int, usage["output_tokens"]) * prices["output"]
+    input_tokens = cast(int, usage["input_tokens"])
+    output_tokens = cast(int, usage["output_tokens"])
+    cached = usage.get("cached_input_tokens")
+    if cached is None:
+        # Some providers report aggregate input/output usage without a
+        # cached-input breakdown. Price all input at the full uncached
+        # rate (a conservative upper bound) rather than retaining an
+        # unknown-cost hold on an otherwise metered provider response.
+        cached = 0
+    if type(cached) is not int or cached < 0 or cached > input_tokens:
+        return None
+    input_cost = (input_tokens - cached) * prices["input"]
+    cached_cost = cached * prices["cached_input"]
+    output_cost = output_tokens * prices["output"]
     return round((input_cost + cached_cost + output_cost) / 1_000_000, 9)
 
 
@@ -2678,21 +2690,24 @@ def _potential_truncation_fields(role: str, output: dict[str, Any]) -> list[str]
 def _refresh_token_accounting(record: dict[str, Any]) -> None:
     """Aggregate call usage without presenting missing usage as a zero total."""
     steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
-    completed = [step for step in steps if step.get("status") in {"completed", "incomplete"}]
+    # A provider can complete and report billable tokens even when the
+    # returned answer fails a local content/acknowledgment check. Include
+    # these securely metered failed attempts, but never infer token usage
+    # for rejected, timed-out, or unknown-dispatch calls.
+    metered = [
+        step
+        for step in steps
+        if step.get("status") in {"completed", "incomplete"}
+        or step.get("attempt_status") == "usage_estimated"
+    ]
     known = [
         step["token_usage"]
-        for step in completed
+        for step in metered
         if isinstance(step.get("token_usage"), dict)
         and type(step["token_usage"].get("input_tokens")) is int
         and type(step["token_usage"].get("output_tokens")) is int
     ]
-    incomplete_steps = any(
-        step.get("status") not in {"completed", "incomplete"}
-        or not isinstance(step.get("token_usage"), dict)
-        or type(step["token_usage"].get("input_tokens")) is not int
-        or type(step["token_usage"].get("output_tokens")) is not int
-        for step in steps
-    )
+    incomplete_steps = len(known) != len(steps)
     record["tokens_used"] = (
         sum(item["input_tokens"] + item["output_tokens"] for item in known) if known else None
     )
@@ -2734,7 +2749,13 @@ def _settle_request_budget(
         except BudgetExceeded as exc:
             step["hard_budget_status"] = "usage_exceeded_reservation"
             return str(exc)
-        record["tokens_reserved"] = max(0, int(record.get("tokens_reserved", 0)) - reserved_total)
+        # The cloud provider settlement already releases its single durable
+        # token reservation. A second decrement here can accidentally release
+        # tokens reserved by another concurrent strategy call.
+        if not cloud_research.billing_enabled():
+            record["tokens_reserved"] = max(
+                0, int(record.get("tokens_reserved", 0)) - reserved_total
+            )
         step["hard_budget_status"] = "settled"
         return None
     mark_unknown(ledger, call_id=call_id)
@@ -2895,7 +2916,7 @@ def _save(path: str, record: dict[str, Any]) -> None:
             return {member: encoded}
 
         transform_members(path, update)
-        if cloud_research.billing_enabled():
+        if cloud_research.billing_enabled() and not record.get("simulated"):
             try:
                 cloud_research.sync_job(record)
             except cloud_research.CloudResearchUnavailable as exc:
@@ -3219,23 +3240,30 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             queue_status = cloud_research.job_status(record["id"])
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
-        if queue_status in {"queued", "running", "stopping"}:
+        if queue_status == "queued":
             return record
-        record["status"] = "paused"
-        record["updated_at"] = _now()
-        record["current_action"] = "Paused after queue recovery"
-        record["message"] = (
-            "The queued session reservation was no longer present after backend recovery. "
-            "No provider request was dispatched; resume when ready."
-        )
-        for branch in record.get("strategy_runs", []):
-            if branch.get("status") == "queued":
-                branch["status"] = "paused"
-                branch["current_action"] = record["current_action"]
-                branch["reason"] = record["message"]
-        _event(record, "interrupted", record["message"])
-        _save(record["project_path"], record)
-        return record
+        if queue_status in {"running", "stopping"}:
+            # A queued record whose ledger already owns a running slot is
+            # inconsistent after an interrupted admission. Do not assume it
+            # is live: the worker lock below distinguishes a running process
+            # from a dead one and preserves the saved recovery evidence.
+            pass
+        else:
+            record["status"] = "paused"
+            record["updated_at"] = _now()
+            record["current_action"] = "Paused after queue recovery"
+            record["message"] = (
+                "The queued session reservation was no longer present after backend recovery. "
+                "No provider request was dispatched; resume when ready."
+            )
+            for branch in record.get("strategy_runs", []):
+                if branch.get("status") == "queued":
+                    branch["status"] = "paused"
+                    branch["current_action"] = record["current_action"]
+                    branch["reason"] = record["message"]
+            _event(record, "interrupted", record["message"])
+            _save(record["project_path"], record)
+            return record
     lock_path = _worker_lock_path(record["project_path"], record["id"])
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
@@ -3292,9 +3320,10 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         record["current_step"] = None
         record["current_steps"] = []
         for branch in record.get("strategy_runs", []):
-            if branch.get("status") == "running":
+            if branch.get("status") in {"queued", "running"}:
                 branch["status"] = "paused"
                 branch["current_action"] = "Interrupted after backend restart"
+                branch["reason"] = record["message"]
         record["current_action"] = "Paused after backend restart"
         if (record.get("mode") == "api_key" or record.get("cloud_sponsored") is True) and any(
             step.get("failure_kind") == "interrupted" for step in record.get("steps", [])
@@ -7661,9 +7690,18 @@ async def _portfolio_role_call(
             if cloud_research.billing_enabled() and (
                 int(record.get("tokens_used") or 0)
                 + int(record.get("tokens_reserved", 0))
-                + token_reserve
+                + (0 if isinstance(hard_ledger, dict) else token_reserve)
                 > int(record.get("total_token_limit", 0))
             ):
+                if isinstance(hard_ledger, dict):
+                    # The hard ledger was reserved above, but this session's
+                    # independent aggregate-token guard refused the call.
+                    # Neither durable admission nor the session's token
+                    # counter may retain a pre-dispatch reservation.
+                    cancel_before_dispatch(hard_ledger, call_id=step_id)
+                    record["tokens_reserved"] = max(
+                        0, int(record.get("tokens_reserved", 0)) - token_reserve
+                    )
                 branch["status"] = "ended"
                 branch["reason"] = (
                     "The bounded session token budget cannot reserve another provider call."
@@ -7821,16 +7859,26 @@ async def _portfolio_role_call(
                     _refresh_token_accounting(record)
                     _save(path, record)
                     return False
-                record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
+                # Hard-budget admission already added this reservation above.
+                # Counting it again leaks session tokens on every completed
+                # call and eventually prevents otherwise affordable research.
+                if not isinstance(hard_ledger, dict):
+                    record["tokens_reserved"] = (
+                        int(record.get("tokens_reserved", 0)) + token_reserve
+                    )
                 step["attempt_status"] = "reserved"
                 _event(record, "call.started", record["message"], role)
                 _save(path, record)
             call_record = record
+        response_received = False
+        response_usage: dict[str, int | None] | None = None
         try:
-            output, usage = await _call(
+            output, response_usage = await _call(
                 call_record, role, context, timeout_seconds, step_id=step_id
             )
+            response_received = True
             _validate_guidance_acknowledgments(human_guidance, output)
+            usage = response_usage
         except asyncio.CancelledError:
             if cloud_research.billing_enabled():
                 cloud_research.mark_call_unknown(session_id, step_id)
@@ -7875,6 +7923,31 @@ async def _portfolio_role_call(
                     )
                     if isinstance(step.get("provider_input_audit"), dict):
                         step["provider_input_audit"]["status"] = "provider_response_incomplete"
+                    estimate = (
+                        _estimate_cost(record["model"], exc.usage)
+                        if isinstance(exc.usage, dict)
+                        else None
+                    )
+                    if cloud_research.billing_enabled():
+                        # A clipped response still reached the provider and
+                        # can report actual usage. Settle the durable call
+                        # instead of retaining a phantom unknown-cost hold.
+                        input_tokens = exc.usage.get("input_tokens") if exc.usage else None
+                        output_tokens = exc.usage.get("output_tokens") if exc.usage else None
+                        cloud_research.settle_call(
+                            session_id,
+                            step_id,
+                            input_tokens=input_tokens if type(input_tokens) is int else None,
+                            output_tokens=output_tokens if type(output_tokens) is int else None,
+                            estimated_cost_usd=estimate,
+                        )
+                        if type(input_tokens) is int and type(output_tokens) is int:
+                            record["tokens_reserved"] = max(
+                                0, int(record.get("tokens_reserved", 0)) - token_reserve
+                            )
+                        step["attempt_status"] = (
+                            "usage_estimated" if estimate is not None else "unknown"
+                        )
                     budget_error = _settle_request_budget(record, step, exc.usage)
                     if budget_error:
                         step["hard_budget_error"] = budget_error
@@ -7884,11 +7957,6 @@ async def _portfolio_role_call(
                             float(record.get("estimated_cost_reserved_usd", 0.0))
                             - float(step["cost_reserve"]),
                         )
-                    estimate = (
-                        _estimate_cost(record["model"], exc.usage)
-                        if isinstance(exc.usage, dict)
-                        else None
-                    )
                     if estimate is None:
                         record["cost_status"] = "unavailable"
                         record["estimated_cost_usd"] = None
@@ -7925,22 +7993,68 @@ async def _portfolio_role_call(
                 timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
                 if not timeout_failure:
                     step.update(_provider_failure_fields(exc))
+                if response_received:
+                    # The provider completed and supplied a response, but a
+                    # local acknowledgment guard rejected its contents. This
+                    # is not uncertain dispatch: account for known usage and
+                    # preserve the rejection without publishing its output.
+                    step["failure_kind"] = "response_invalid"
+                    if response_usage is not None:
+                        step["token_usage"] = response_usage
+                input_tokens = response_usage.get("input_tokens") if response_usage else None
+                output_tokens = response_usage.get("output_tokens") if response_usage else None
+                reported_usage = (
+                    response_received and type(input_tokens) is int and type(output_tokens) is int
+                )
+                response_cost = (
+                    _estimate_cost(record["model"], response_usage)
+                    if response_received and isinstance(response_usage, dict)
+                    else None
+                )
                 if isinstance(record.get("hard_budget_ledger"), dict):
-                    if step.get("failure_kind") == "provider_limited":
+                    if response_received and reported_usage:
+                        budget_error = _settle_request_budget(record, step, response_usage)
+                        if budget_error:
+                            step["hard_budget_error"] = budget_error
+                    elif step.get("failure_kind") == "provider_limited":
                         settle_rejected(record["hard_budget_ledger"], call_id=step_id)
                     else:
                         mark_unknown(record["hard_budget_ledger"], call_id=step_id)
                 if cloud_research.billing_enabled():
-                    if step.get("failure_kind") == "provider_limited":
+                    if response_received:
+                        cloud_research.settle_call(
+                            session_id,
+                            step_id,
+                            input_tokens=input_tokens if reported_usage else None,
+                            output_tokens=output_tokens if reported_usage else None,
+                            estimated_cost_usd=response_cost,
+                        )
+                        if reported_usage:
+                            record["tokens_reserved"] = max(
+                                0, int(record.get("tokens_reserved", 0)) - token_reserve
+                            )
+                        step["attempt_status"] = (
+                            "usage_estimated" if response_cost is not None else "unknown"
+                        )
+                    elif step.get("failure_kind") == "provider_limited":
                         cloud_research.mark_call_provider_rejected(session_id, step_id)
+                        # The rejected provider request cannot consume tokens.
+                        # Releasing only the durable ledger but not the
+                        # session-local reservation strands its token budget
+                        # and prevents valid later calls/resumes.
+                        record["tokens_reserved"] = max(
+                            0, int(record.get("tokens_reserved", 0)) - token_reserve
+                        )
                         step["attempt_status"] = "provider_rejected"
                     else:
                         cloud_research.mark_call_unknown(session_id, step_id)
                         step["attempt_status"] = "unknown"
-                step["token_usage_status"] = "unavailable"
+                step["token_usage_status"] = "reported" if reported_usage else "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):
                     step["provider_input_audit"]["status"] = (
-                        "provider_response_rejected"
+                        "provider_response_invalid"
+                        if response_received
+                        else "provider_response_rejected"
                         if step.get("failure_kind") == "provider_limited"
                         else "call_failed_dispatch_unknown"
                     )
@@ -7948,23 +8062,31 @@ async def _portfolio_role_call(
                     {
                         "status": "failed",
                         "finished_at": _now(),
-                        "token_usage_status": "unavailable",
                     }
                 )
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
                 _record_guidance_interruption(record, step, "unacknowledged")
-                if (
-                    step.get("cost_reserve") is not None
-                    and step.get("failure_kind") == "provider_limited"
+                if step.get("cost_reserve") is not None and (
+                    step.get("failure_kind") == "provider_limited"
+                    or (response_received and response_cost is not None)
                 ):
                     record["estimated_cost_reserved_usd"] = max(
                         0.0,
                         float(record.get("estimated_cost_reserved_usd", 0.0))
                         - float(step["cost_reserve"]),
                     )
-                    record["cost_status"] = "available"
-                    record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
+                    if response_received and response_cost is not None:
+                        if record.get("cost_status") == "available":
+                            record["estimated_cost_usd"] = round(
+                                float(record.get("estimated_cost_usd", 0.0)) + response_cost,
+                                9,
+                            )
+                    else:
+                        record["cost_status"] = "available"
+                        record["estimated_cost_usd"] = float(
+                            record.get("estimated_cost_usd") or 0.0
+                        )
                 elif step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
@@ -9274,6 +9396,35 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
         try:
             if cloud_research.claim_job(session_id):
                 return True
+            ledger_status = cloud_research.job_status(session_id)
+            if ledger_status != "queued":
+                # The worker holds the exclusive project worker lock. No other
+                # process can legitimately own a running slot for this session.
+                # A stale slot must not strand the UI in "queued" until timeout.
+                async with _session_state_lock(session_id):
+                    record = _read(path, session_id)
+                    if record["status"] != "queued":
+                        return False
+                    record["status"] = "paused"
+                    record["updated_at"] = _now()
+                    record["current_action"] = "Paused after worker recovery"
+                    record["message"] = (
+                        "The saved session's worker reservation is no longer runnable. "
+                        "Its saved research is intact; resume to create a new worker reservation."
+                    )
+                    for branch in record.get("strategy_runs", []):
+                        if branch.get("status") == "queued":
+                            branch["status"] = "paused"
+                            branch["current_action"] = record["current_action"]
+                            branch["reason"] = record["message"]
+                    _event(record, "interrupted", record["message"])
+                    _save(path, record)
+                # Finish durable crash recovery after the saved session has
+                # been paused. Otherwise sync_job would overwrite the
+                # interrupted ledger status with a generic paused state.
+                if ledger_status in {"running", "stopping"}:
+                    cloud_research.recover_job(session_id)
+                return False
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
         if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
@@ -9284,6 +9435,15 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
                     "Cloud research queue wait reached the configured session time limit."
                 )
                 record["current_action"] = "Completed · duration limit"
+                for branch in record.get("strategy_runs", []):
+                    if branch.get("status") in {"queued", "running"}:
+                        branch["status"] = "ended"
+                        branch["current_action"] = "Duration limit"
+                        branch["reason"] = record["message"]
+                if record.get("strategy_runs"):
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
                 record["updated_at"] = _now()
                 _event(record, "queue.expired", record["message"])
                 _save(path, record)

@@ -52,8 +52,7 @@ async def sign_in(fixture, account_id=None, error=None, override=None):
 
 
 def reset_connection():
-    connection._cached, connection._identity, connection._known = None, "", set()
-    connection._pending = None
+    connection.clear_cache_for_tests()
 
 
 async def checks(root):
@@ -107,6 +106,8 @@ async def checks(root):
             and state["welcome_pending"]
         )
         assert state["account_label"] == "same-email@example.test"
+        async with transaction() as stored:
+            assert stored["accounts"][state["active_account"]]["plan_authorized"] is True
         assert fixture.generated == 0
         serialized = json.dumps(state)
         assert all(token not in serialized for token in fixture.tokens)
@@ -236,6 +237,8 @@ async def checks(root):
         denied_id = (await auth.preferences())["active_account"]
         assert denied_id != first_id and len((await auth.preferences())["accounts"]) == 2
         assert (await connection.connection())["status"] == "plan_not_permitted"
+        async with transaction() as stored:
+            assert stored["accounts"][denied_id]["plan_authorized"] is False
         fixture.scope = auth.SCOPES
         _, result = await sign_in(fixture, denied_id)
         assert result["status"] == "connected"

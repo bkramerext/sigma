@@ -2,6 +2,7 @@
 
 import asyncio
 import fcntl
+import hashlib
 import json
 import os
 import stat
@@ -16,6 +17,23 @@ from sigma.projects import ROOT, ProjectError
 from sigma.ui_instance import private_directory
 
 _DIRECTORY_OVERRIDE: ContextVar[Path | None] = ContextVar("sigma_ai_store_directory", default=None)
+
+
+def _personal_directory(identity: str) -> Path:
+    root = sponsor_directory() / "personal-users"
+    try:
+        private_directory(root)
+        path = root / identity
+        private_directory(path)
+    except (OSError, RuntimeError):
+        raise ProjectError("Cannot open private personal ChatGPT storage.") from None
+    return path
+
+
+def personal_directory_for_subject(subject: str) -> Path:
+    """Return the private credential directory bound to a verified Google subject."""
+    identity = hashlib.sha256(b"sigma-cloud-workspace-v1\0" + subject.encode()).hexdigest()
+    return _personal_directory(identity)
 
 
 def sponsor_directory() -> Path:
@@ -67,16 +85,14 @@ def directory() -> Path:
     if cloud_workspaces.enabled():
         workspace = cloud_workspaces.current()
         if workspace is not None:
-            root = sponsor_directory()
-            personal_root = root / "personal-users"
-            try:
-                private_directory(personal_root)
-                path = personal_root / workspace.subject_hash
-                private_directory(path)
-            except (OSError, RuntimeError):
-                raise ProjectError("Cannot open private user account storage.") from None
-            return path
+            return _personal_directory(workspace.subject_hash)
         return sponsor_directory()
+    from sigma import cloud_auth
+
+    cfg = cloud_auth.config()
+    principal = cloud_auth.current_principal()
+    if cfg.enabled and cfg.local and principal is not None:
+        return personal_directory_for_subject(principal.subject)
     return sponsor_directory()
 
 

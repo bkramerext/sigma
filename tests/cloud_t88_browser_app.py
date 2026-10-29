@@ -126,5 +126,5 @@ def set_provider_status(status: str):
         return JSONResponse({"error": "unknown fixture status"}, status_code=400)
     _provider_status["value"] = status
     # Force a fresh, deterministic provider check on the next account request.
-    openai_connection._cached = None
+    openai_connection.clear_cache_for_tests()
     return {"status": status}

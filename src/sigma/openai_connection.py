@@ -5,7 +5,9 @@ import hashlib
 import json
 import os
 import time
+from collections import OrderedDict
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -49,13 +51,53 @@ class AuthContext(Mapping[str, Any]):
         return f"AuthContext(mode={self._safe['mode']!r}, status={self._safe['status']!r})"
 
 
-_cached: dict[str, Any] | None = None
-_at = 0.0
-_identity = ""
-_pending: asyncio.Task | None = None
-_known: set[str] = set()
-_labels: dict[str, str] = {}
-_order: list[str] = []
+@dataclass
+class _CredentialState:
+    result: dict[str, Any] | None = None
+    checked_at: float = 0.0
+    pending: asyncio.Task | None = None
+    generation: int = 0
+    known: set[str] = field(default_factory=set)
+    labels: dict[str, str] = field(default_factory=dict)
+    order: list[str] = field(default_factory=list)
+
+
+_MAX_CREDENTIAL_STATES = 128
+_credential_states: OrderedDict[str, _CredentialState] = OrderedDict()
+
+
+def clear_cache_for_tests() -> None:
+    """Clear completed provider snapshots without cancelling live requests."""
+    for identity, state in list(_credential_states.items()):
+        if state.pending is None or state.pending.done():
+            _credential_states.pop(identity, None)
+
+
+def _credential_state(identity: str) -> _CredentialState | None:
+    state = _credential_states.get(identity)
+    if state is None:
+        # Never evict an in-flight check: a temporary capacity excess is safer
+        # than cancelling one user's provider request for another user.
+        while len(_credential_states) >= _MAX_CREDENTIAL_STATES:
+            victim = next(
+                (
+                    key
+                    for key, value in _credential_states.items()
+                    if value.pending is None or value.pending.done()
+                ),
+                None,
+            )
+            if victim is None:
+                break
+            _credential_states.pop(victim, None)
+        if len(_credential_states) >= _MAX_CREDENTIAL_STATES:
+            return None
+        state = _CredentialState()
+        _credential_states[identity] = state
+    _credential_states.move_to_end(identity)
+    return state
+
+
 MESSAGES = {
     "connected": (
         "OpenAI API · key billing",
@@ -99,9 +141,19 @@ def _result(status: str, checked: str | None) -> dict[str, Any]:
     }
 
 
-async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
-    global _cached, _at, _known, _labels, _order
+@dataclass
+class _CatalogResult:
+    result: dict[str, Any]
+    known: set[str] = field(default_factory=set)
+    labels: dict[str, str] = field(default_factory=dict)
+    order: list[str] = field(default_factory=list)
+
+
+async def _check(key: str, mode: str = "api_key") -> _CatalogResult:
     status = "unavailable"
+    known: set[str] = set()
+    labels: dict[str, str] = {}
+    order: list[str] = []
     try:
         async with (
             asyncio.timeout(TIMEOUT),
@@ -152,9 +204,8 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
                             if not 1 <= len(label) <= 100 or any(ord(char) < 32 for char in label):
                                 raise ValueError()
                             labels[identifier] = label
-                _known = set(ids) & set(CATALOG)
-                _labels = labels
-                _order = [identifier for identifier in ids if identifier in CATALOG]
+                known = set(ids) & set(CATALOG)
+                order = [identifier for identifier in ids if identifier in CATALOG]
                 status = "connected"
             else:
                 status = {401: "unauthorized", 403: "forbidden", 429: "limited"}.get(
@@ -164,9 +215,7 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
         status = "unavailable"
     except (ValueError, TypeError):
         status = "invalid_response"
-    _cached = _result(status, datetime.now(UTC).isoformat())
-    _at = time.monotonic()
-    return dict(_cached)
+    return _CatalogResult(_result(status, datetime.now(UTC).isoformat()), known, labels, order)
 
 
 async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
@@ -193,6 +242,7 @@ async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
             mode="chatgpt",
             status=selected["status"],
             identity=f"cloud_sponsor:{subject_hash}:" + str(selected.get("account_id", "")),
+            account_label=account.get("email") or account.get("name"),
         )
     if provider != "api_key":
         return AuthContext(token="", mode="chatgpt", status="unavailable", identity="cloud_invalid")
@@ -236,6 +286,7 @@ async def auth_context() -> AuthContext:
     from sigma import cloud_auth
 
     local_principal = cloud_auth.local_sponsored_principal(require_selected=False)
+    local_google_principal = cloud_auth.current_principal()
     if (
         local_principal is not None
         and cloud_auth.model_access_for_subject(local_principal.subject) == "sponsored"
@@ -253,10 +304,16 @@ async def auth_context() -> AuthContext:
             identity="api_key",
         )
     account = selected.get("account") or {}
-    if cloud_auth.config().local:
+    if cloud_auth.config().local and local_google_principal is None:
         from sigma.cloud_sponsor import expected_email
 
-        sponsor_account_selected = account.get("email", "").casefold() == expected_email()
+        try:
+            designated_sponsor_email = expected_email()
+        except ProjectError:
+            designated_sponsor_email = None
+        sponsor_account_selected = bool(designated_sponsor_email) and (
+            account.get("email", "").casefold() == designated_sponsor_email
+        )
     else:
         sponsor_account_selected = False
     if sponsor_account_selected:
@@ -354,7 +411,6 @@ PLAN_MESSAGES = {
 async def connection(
     refresh: bool = False, context: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
-    global _identity, _pending, _cached, _known
     try:
         if context is None:
             context = await auth_context()
@@ -385,20 +441,53 @@ async def connection(
         }
     key, mode = context["token"], context["mode"]
     identity = hashlib.sha256((mode + key).encode()).hexdigest()
-    if identity != _identity:
-        if _pending and not _pending.done():
-            _pending.cancel()
-            await asyncio.gather(_pending, return_exceptions=True)
-        _identity, _cached, _known, _pending = identity, None, set(), None
+    credential_state = _credential_state(identity) if key else None
     if context["status"] != "connected":
         state = {"status": context["status"], "checked_at": None, "ttl_seconds": TTL}
+    elif credential_state is None:
+        state = _result("unavailable", None)
     else:
-        age = time.monotonic() - _at
-        if not _cached or age >= (RETRY_COOLDOWN if refresh else TTL):
-            if _pending is None or _pending.done():
-                _pending = asyncio.create_task(_check(key, mode))
-            await asyncio.shield(_pending)
-        state = dict(_cached or _result("unavailable", None))
+        age = time.monotonic() - credential_state.checked_at
+        if credential_state.result is None or age >= (RETRY_COOLDOWN if refresh else TTL):
+            if credential_state.pending is None or credential_state.pending.done():
+                expected = credential_state.generation
+                task = asyncio.create_task(_check(key, mode))
+                credential_state.pending = task
+
+                def complete(
+                    done: asyncio.Task, *, target=credential_state, generation=expected
+                ) -> None:
+                    if target.pending is not done:
+                        return
+                    target.pending = None
+                    if target.generation != generation:
+                        return
+                    if done.cancelled():
+                        target.result = _result("unavailable", datetime.now(UTC).isoformat())
+                        target.checked_at = time.monotonic()
+                        return
+                    try:
+                        result = done.result()
+                        if isinstance(result, _CatalogResult):
+                            target.result = result.result
+                            target.known, target.labels, target.order = (
+                                result.known,
+                                result.labels,
+                                result.order,
+                            )
+                        else:
+                            target.result = dict(result)
+                            target.known, target.labels, target.order = set(), {}, []
+                        target.checked_at = time.monotonic()
+                    except (httpx.HTTPError, TimeoutError, ValueError, TypeError):
+                        target.result = _result("unavailable", datetime.now(UTC).isoformat())
+                        target.checked_at = time.monotonic()
+
+                task.add_done_callback(complete)
+            pending_task = credential_state.pending
+            if pending_task is not None:
+                await asyncio.shield(pending_task)
+        state = dict(credential_state.result or _result("unavailable", None))
     label, guidance = (PLAN_MESSAGES if mode == "chatgpt" else MESSAGES)[state["status"]]
     if cloud_workspaces.enabled() and str(context.get("identity", "")).startswith(
         "cloud_personal_unavailable:"
@@ -418,6 +507,7 @@ async def connection(
         **state,
         **prefs,
         "mode": mode,
+        "sponsor_account_selected": context.get("identity") == "local_personal_unconnected",
         "label": label,
         "guidance": guidance,
         "account_label": context.get("account_label"),
@@ -428,29 +518,66 @@ async def connection(
 
 
 def inference_failure(status: str, guard: str | None = None) -> None:
-    global _cached, _at
-    if guard is not None and guard != _identity:
+    if guard is None:
         return
-    _cached = {"status": status, "checked_at": datetime.now(UTC).isoformat(), "ttl_seconds": TTL}
-    _at = time.monotonic()
+    state = _credential_states.get(guard)
+    if state is None:
+        return
+    state.generation += 1
+    state.result = {
+        "status": status,
+        "checked_at": datetime.now(UTC).isoformat(),
+        "ttl_seconds": TTL,
+    }
+    state.checked_at = time.monotonic()
+    state.known, state.labels, state.order = set(), {}, []
 
 
 async def models(refresh: bool = False, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    if context is None:
+        try:
+            context = await auth_context()
+        except ProjectError:
+            context = None
     state = await connection(refresh, context)
+    identity = (
+        hashlib.sha256((str(context["mode"]) + str(context["token"])).encode()).hexdigest()
+        if context is not None
+        else ""
+    )
+    credential_state = _credential_states.get(identity)
+    # The models API is used broadly and does not need the account identity;
+    # keep the email scoped to the connection-status surface that owns its UI.
+    public_state = {key: value for key, value in state.items() if key != "account_label"}
     verified = state["status"] == "connected"
     choices = [
         {
             "id": identifier,
             **capability,
-            "label": _labels.get(identifier, capability["label"])
+            "label": (
+                credential_state.labels.get(identifier, capability["label"])
+                if credential_state
+                else capability["label"]
+            )
             if state["mode"] == "chatgpt" and verified
             else capability["label"],
-            "availability": ("available" if identifier in _known else "unavailable")
+            "availability": (
+                "available"
+                if credential_state and identifier in credential_state.known
+                else "unavailable"
+            )
             if verified
             else "unverified",
         }
         for identifier in (
-            (_order + [key for key in CATALOG if key not in _order])
+            (
+                (credential_state.order if credential_state else [])
+                + [
+                    key
+                    for key in CATALOG
+                    if key not in (credential_state.order if credential_state else [])
+                ]
+            )
             if state["mode"] == "chatgpt" and verified
             else list(CATALOG)
         )
@@ -471,7 +598,7 @@ async def models(refresh: bool = False, context: Mapping[str, Any] | None = None
         message += " SIGMA_AI_MODEL is not a reviewed reasoning model; legacy projects use the documented Sol/High default. Saved project choices are unaffected."
     return {
         "models": choices,
-        "connection": state,
+        "connection": public_state,
         "default_model": default,
         "default_effort": "high",
         "default_verified": verified and bool(accessible),

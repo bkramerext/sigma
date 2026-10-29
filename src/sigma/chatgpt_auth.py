@@ -10,13 +10,14 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 import jwt
 
-from sigma.ai_store import transaction
+from sigma.ai_store import directory, sponsor_directory, transaction, transaction_at
 from sigma.projects import ProjectError
 from sigma.sponsor_diagnostics import record
 
@@ -182,6 +183,9 @@ class Attempt:
     verifier: str = field(default_factory=lambda: secrets.token_urlsafe(48))
     account_id: str | None = None
     sponsor: bool = False
+    hosted: bool = False
+    store_directory: Path | None = None
+    owner_subject: str | None = None
     client_id: str = "dynamic_agent_client"
     redirect_uri: str = ""
     status: str = "connecting"
@@ -195,6 +199,42 @@ class Attempt:
 
 
 _attempts: dict[str, Attempt] = {}
+
+
+def _owner_subject() -> str | None:
+    from sigma import cloud_auth
+
+    principal = cloud_auth.current_principal()
+    return principal.subject if principal is not None else None
+
+
+def _attempt_store_directory(sponsor: bool) -> Path:
+    return sponsor_directory() if sponsor else directory()
+
+
+def _owned_attempt(identifier: str) -> Attempt:
+    attempt = _attempts.get(identifier)
+    if attempt is None:
+        raise ProjectError("Sign-in attempt expired or belongs to another user.")
+    if (
+        attempt.owner_subject != _owner_subject()
+        or attempt.store_directory is None
+        or attempt.store_directory.resolve() != _attempt_store_directory(attempt.sponsor).resolve()
+    ):
+        raise ProjectError("Sign-in attempt expired or belongs to another user.")
+    return attempt
+
+
+def _cancel_attempt(attempt: Attempt) -> None:
+    if attempt.status != "connecting":
+        return
+    if attempt.task:
+        attempt.task.cancel()
+    finish(
+        attempt,
+        "cancelled",
+        "Sign-in cancelled. Your existing account and research were retained.",
+    )
 
 
 def finish(attempt: Attempt, status: str, message: str) -> None:
@@ -226,11 +266,27 @@ async def begin(
         )
     try:
         endpoints = await discovery()
-        attempt = Attempt(account_id=account_id, sponsor=sponsor)
+        from sigma import cloud_workspaces
+
+        attempt = Attempt(
+            account_id=account_id,
+            sponsor=sponsor,
+            hosted=cloud_workspaces.enabled(),
+            store_directory=_attempt_store_directory(sponsor),
+            owner_subject=_owner_subject(),
+        )
+        attempt_store = attempt.store_directory
+        if attempt_store is None:
+            raise ProjectError("Personal ChatGPT storage is unavailable.")
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
+            failed_store = failed.store_directory if failed else None
             if (
                 not failed
+                or failed.owner_subject != attempt.owner_subject
+                or failed_store is None
+                or failed_store.resolve() != attempt_store.resolve()
+                or failed.sponsor != attempt.sponsor
                 or failed.account_id != account_id
                 or not failed.retry_client_id
                 or failed.status != "failed"
@@ -240,7 +296,7 @@ async def begin(
                     "Previous sign-in can no longer be retried. Start a new sign-in."
                 )
             attempt.client_id = failed.retry_client_id
-        async with transaction() as state:
+        async with transaction_at(attempt_store) as state:
             previous = state["accounts"].get(account_id) if account_id else None
             if account_id and not previous:
                 raise ProjectError("Saved account was not found. Choose Connect another account.")
@@ -251,7 +307,21 @@ async def begin(
             lambda reader, writer: callback(attempt, reader, writer), "127.0.0.1", 0, limit=8192
         )
         port = attempt.server.sockets[0].getsockname()[1]
-        attempt.redirect_uri = f"http://127.0.0.1:{port}/auth/callback"
+        if attempt.hosted:
+            from sigma.cloud_auth import config
+
+            origin = config().origin
+            if (
+                not origin
+                or urlsplit(origin).scheme != "https"
+                or urlsplit(origin).path not in ("", "/")
+            ):
+                raise ProjectError(
+                    "Hosted ChatGPT callback requires a configured HTTPS public origin."
+                )
+            attempt.redirect_uri = origin.rstrip("/") + "/api/ai/auth/callback/" + attempt.id
+        else:
+            attempt.redirect_uri = f"http://127.0.0.1:{port}/auth/callback"
         _attempts[attempt.id] = attempt
         attempt.timer = asyncio.get_running_loop().call_later(
             300,
@@ -305,13 +375,9 @@ _urls: dict[str, str] = {}
 
 
 def attempt_status(identifier: str) -> dict:
-    attempt = _attempts.get(identifier)
-    if not attempt:
-        raise ProjectError(
-            "Sign-in attempt expired or belongs to another server session. Retry sign-in."
-        )
+    attempt = _owned_attempt(identifier)
     if attempt.status == "connecting" and time.monotonic() > attempt.expires:
-        cancel(identifier)
+        _cancel_attempt(attempt)
     return {
         "id": attempt.id,
         "status": attempt.status,
@@ -321,21 +387,14 @@ def attempt_status(identifier: str) -> dict:
 
 
 def cancel(identifier: str) -> None:
-    attempt = _attempts.get(identifier)
-    if attempt and attempt.status == "connecting":
-        if attempt.task:
-            attempt.task.cancel()
-        finish(
-            attempt,
-            "cancelled",
-            "Sign-in cancelled. Your existing account and research were retained.",
-        )
+    attempt = _owned_attempt(identifier)
+    _cancel_attempt(attempt)
     _urls.pop(identifier, None)
 
 
 def authorization_url(identifier: str) -> str:
-    attempt = _attempts.get(identifier)
-    if not attempt or attempt.status != "connecting" or attempt.consumed:
+    attempt = _owned_attempt(identifier)
+    if attempt.status != "connecting" or attempt.consumed:
         raise ProjectError("Sign-in attempt is no longer active. Retry sign-in.")
     url = _urls.pop(identifier, None)
     if url is None:
@@ -367,7 +426,8 @@ async def callback(
             query = parse_qs(parsed.query, strict_parsing=True)
             if (
                 method != "GET"
-                or parsed.path != "/auth/callback"
+                or parsed.path
+                != ("/api/ai/auth/callback/" + attempt.id if attempt.hosted else "/auth/callback")
                 or parsed.netloc
                 or parsed.scheme
                 or headers.get("host") != urlsplit(attempt.redirect_uri).netloc
@@ -404,7 +464,10 @@ async def callback(
                 code = query.get("code", [""])[0]
                 if not 1 <= len(code) <= 4000:
                     raise ValueError()
-                async with transaction() as state:
+                store = attempt.store_directory or (
+                    sponsor_directory() if attempt.sponsor else directory()
+                )
+                async with transaction_at(store) as state:
                     previous = (
                         state["accounts"].get(attempt.account_id) if attempt.account_id else None
                     )
@@ -430,6 +493,18 @@ async def callback(
                     record = await validate_tokens(
                         raw, client_id, attempt.nonce, previous, state["ext_agent_host_id"]
                     )
+                    # Persist the successful OAuth permission contract with
+                    # the user-owned registration. It remains evidence of an
+                    # established preference if these tokens later expire.
+                    record["plan_authorized"] = PLAN_SCOPES.issubset(record["scopes"])
+                    if attempt.sponsor:
+                        from sigma.cloud_sponsor import expected_email
+
+                        if record["email"].casefold() != expected_email():
+                            raise AuthFailure(
+                                "failed",
+                                "ChatGPT sponsor identity does not match designated administrator.",
+                            )
                     # Same issued client must remain bound to its verified subject.
                     existing = next(
                         (
@@ -449,6 +524,15 @@ async def callback(
                     state["accounts"][identifier] = record
                     state["active"], state["mode"] = identifier, "chatgpt"
                 permitted = PLAN_SCOPES.issubset(record["scopes"])
+                if (
+                    permitted
+                    and not attempt.sponsor
+                    and not attempt.hosted
+                    and attempt.owner_subject
+                ):
+                    from sigma import cloud_auth
+
+                    cloud_auth.record_personal_authorization(attempt.owner_subject)
                 finish(
                     attempt,
                     "connected" if permitted else "plan_not_permitted",
@@ -546,6 +630,10 @@ async def session(account_id: str | None = None) -> dict:
                     refreshed = await validate_tokens(
                         raw, account["client_id"], None, account, state["ext_agent_host_id"]
                     )
+                    refreshed["plan_authorized"] = bool(
+                        account.get("plan_authorized", PLAN_SCOPES.issubset(account["scopes"]))
+                        and PLAN_SCOPES.issubset(refreshed["scopes"])
+                    )
                     state["accounts"][selected_id] = account = refreshed
                 except (
                     httpx.HTTPError,
@@ -619,8 +707,16 @@ async def welcome_seen() -> None:
 
 
 async def disconnect() -> dict:
+    owner_subject = _owner_subject()
+    current_store = _attempt_store_directory(sponsor=False).resolve()
     for attempt in list(_attempts.values()):
-        cancel(attempt.id)
+        if (
+            not attempt.sponsor
+            and attempt.owner_subject == owner_subject
+            and attempt.store_directory is not None
+            and attempt.store_directory.resolve() == current_store
+        ):
+            _cancel_attempt(attempt)
     confirmed = False
     async with transaction() as state:
         had_api_key = bool(state.pop("api_key", None))
@@ -658,3 +754,28 @@ async def disconnect() -> dict:
         if confirmed
         else "Local tokens cleared. Remote revocation was not confirmed; disconnect SIGMA in ChatGPT Settings → Usage if needed.",
     }
+
+
+async def hosted_callback(identifier: str, query: str) -> None:
+    """Forward a public HTTPS OAuth callback to the existing single-use verifier."""
+    attempt = _attempts.get(identifier)
+    if not attempt or not attempt.hosted or attempt.status != "connecting":
+        raise ProjectError("ChatGPT sign-in attempt is not active.")
+    # Only the validated HTTPS route can reach this bridge. The verifier checks
+    # the exact Host, callback path, OAuth state, nonce and PKCE code exchange.
+    target = "/api/ai/auth/callback/" + identifier
+    if query:
+        target += "?" + query
+    host = urlsplit(attempt.redirect_uri).netloc
+    if attempt.server is None:
+        raise ProjectError("Sign-in callback listener is unavailable.")
+    reader, writer = await asyncio.open_connection(
+        "127.0.0.1", attempt.server.sockets[0].getsockname()[1]
+    )
+    try:
+        writer.write(f"GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n".encode("ascii"))
+        await writer.drain()
+        await asyncio.wait_for(reader.read(4096), timeout=25)
+    finally:
+        writer.close()
+        await writer.wait_closed()
