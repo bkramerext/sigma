@@ -1,3 +1,41 @@
+## v0.1.4 production release preparation (2026-10-29)
+
+Product version metadata is aligned at `0.1.4` in `pyproject.toml`, `uv.lock`,
+`frontend/package.json`, and both npm lockfile version fields. Vite validates the
+Python/frontend versions and embeds the version in the About dialog. The
+release commit must be a descendant of merged main `6a0c16211391a7346f725cc5c2dd8f61cf4c2851`.
+GitHub Actions `SIGMA verification` for that main commit completed successfully;
+the merged PR's six passing CI workflows were reported by the coordinator.
+
+`./sigma test` passed after `npm --prefix frontend ci --no-audit --no-fund`
+installed the committed lockfile. This included the production frontend build,
+release image/source SHA checks, deployment automation, Ruff, formatting,
+Pyright (0 diagnostics), and frontend typecheck. The existing large JavaScript
+chunk advisory remains; epistemic continuity skipped its optional graph-present
+sandbox case because the local sandbox image is unavailable. Real Chrome About
+dialog acceptance passed at 1440, 390, and 320px; the production build output
+contains the exact `Version 0.1.4` footer. No provider calls were made.
+
+Read-only hosted checks on `https://sigma-research.duckdns.org` returned HTTP
+200 for the app and `/api/cloud-auth/status` (`ready=true`, hosted auth,
+`mock_auth=false`), and HTTP 401 for unauthenticated project and research-session
+requests. GCE preflight passed all 23 checks. `sigma.service` was active and
+`/srv/sigma-state` was mounted from `/dev/sdb` as ext4 with `rw,nosuid,nodev,noexec`.
+The production pin observed was `2761c0e12190807bafabe58445d6beac479140c4`.
+Schema review found additive tables/columns and no destructive table/column
+drops; session call reservations and unknown spend entries remain durable.
+
+**Deployment and authenticated acceptance have not been completed.** The backup
+timer and `/etc/sigma/backup.env` are absent. The latest READY snapshot is
+`sigma-state-issue265-20261027-0855` (2026-10-27); the separately restored
+`sigma-state-issue265-20261027-075405` verified three SQLite databases, two
+identities/mappings, three projects, ten artifacts, and a reserved/unknown call.
+A current, consistent recovery point is required before upgrade. Signed-in
+Google OAuth, existing project/session loading, and session controls also need
+an authorized production browser identity; no such interactive session was
+used here. No production files, databases, accounts, project records, or spend
+ledgers were changed.
+
 ## Issue #310 — cancellation-aware session removal (2026-10-28)
 
 Removing a queued, running, or paused research session now requests execution
