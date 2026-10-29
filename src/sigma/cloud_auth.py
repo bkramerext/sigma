@@ -1191,7 +1191,9 @@ def mock_funding(request: Request):
     cfg = config()
     if not _mock_enabled(cfg):
         raise HTTPException(404, "Not found")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(
+        _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    )
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     _persist_user_state(cfg, principal)

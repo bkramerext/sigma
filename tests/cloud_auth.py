@@ -3785,6 +3785,11 @@ class CloudAuthTests(TestCase):
             self.assertEqual(allowance.json()["remaining_usd"], 1.25)
             self.assertTrue(allowance.json()["local_preview"])
             self.assertFalse(allowance.json()["simulated"])
+            bearer_allowance = member.get(
+                "/api/cloud-auth/local-sponsored-allowance",
+                headers={"Authorization": f"Bearer {login.cookies['sigma_session']}"},
+            )
+            self.assertEqual(bearer_allowance.status_code, 200, bearer_allowance.text)
 
     def test_local_sponsored_service_key_starts_play_with_quarter_allowance(self):
         import asyncio
