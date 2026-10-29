@@ -30,6 +30,19 @@ function FlowArrow({ d, tone = 'blue', dashed = false }: { d: string; tone?: 'bl
 /** Illustrative provenance relationships. This is a product vision, not a live graph viewer. */
 export default function AboutProvenanceVision() {
   return <section className="about-provenance" aria-label="Vision for Investigation Provenance">
+    <p><strong>Beyond a linear LLM conversation.</strong> A conventional chat moves from prompt to response to another prompt and response. Its transcript preserves the exchange, but the relationships among evidence, competing ideas, challenges, and revisions can remain buried in the text. An investigation can be more than a sequence of messages: it can branch, revisit earlier findings, reconcile contradictions, and bring together scientific papers, AI agents, and human judgment.</p>
+    <div className="about-provenance-comparison" aria-label="Linear chat versus provenance-led investigation">
+      <div>
+        <strong>Conventional LLM chat</strong>
+        <span>Prompt → Response → Prompt → Response</span>
+        <small>A chronological conversation</small>
+      </div>
+      <div>
+        <strong>SIGMA's vision</strong>
+        <span>Evidence ↔ hypotheses ↔ decisions</span>
+        <small>A branching, revisitable research record</small>
+      </div>
+    </div>
     <p><strong>The investigation is the enduring artifact.</strong> A research paper is one interpretation of it. SIGMA's long-term vision is to make the evidence, reasoning, questions, corrections, and decisions behind a result inspectable as a connected provenance graph.</p>
     <figure className="about-provenance-figure">
       <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Investigation provenance diagram; scroll horizontally on narrow screens">
