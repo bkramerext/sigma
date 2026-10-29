@@ -7975,24 +7975,32 @@ results, and research-output browser states therefore remain unverified.
 No paid provider calls were made. R4R is open as
 [PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.
 
-## PR #297 Green guest authorization correction and consolidated R4R (2026-10-28)
+## PR #297 Green adversarial security corrections (2026-10-28)
 
-The guest `/api/projects/` policy is an explicit method/path allowlist with
-fail-closed handling for all other registered project routes. Direct API tests
-cover member-only reads, cross-user resources, mutation, provider-backed
-operations, research execution, proposal/model lookup, and sponsorship routes.
-Authenticated guests can browse samples and request access, but receive no
-membership or sponsorship allowance until admin approval. Invitation requests
-remain durable and deduplicated; built-in admin access remains intact.
+Guest workspace cookies are bound to the first verified Google subject; a
+mismatched authenticated subject receives a new isolated workspace. A callback
+copies a guest project only when the workspace matches its verified subject.
+Authenticated and anonymous guest project responses use no-store, no-referrer,
+nosniff, and frame-ancestors protections. The authorization audit now asserts
+the exact registered allowlist and exercises actual project, session, paper,
+execution-artifact, and provider-free read handlers. Direct guest HTTP requests
+confirm cross-workspace 404s and deny exports, mutations, research dispatch,
+provider-backed routes, and admin operations.
 
-After reconciling with `origin/main` at `4e4738a20fbb8bde2bc26b30d2599abd41dcef90`, the complete `./sigma test` suite passed on validated implementation HEAD
-`61e3b96452cd71ac06643627e2fd133c6a54043b`, including auth and research API regressions, frontend typecheck/build,
-Ruff, and Pyright. Chromium acceptance checks passed after the latest-main merge for real-backend auth with
-deterministic OAuth/provider boundaries, guest samples, invitations, admin and
-member sponsor pill, saved session playback, and responsive About behavior (including the updated About dialog help selector).
-No paid calls were made. One graph-present sandbox scenario skipped because the
-local image is unavailable. See the consolidated
-[`PR #297 Green R4R`](../messages/pr297_green_consolidated_r4r.md) for exact
-commands, evidence, and acceptance matrix. Live Google OAuth and N's final
-provider-backed Easy sponsored session remain UNVERIFIED; they are required
-manual release acceptance. Do not merge or deploy before that run succeeds.
+`tests/cloud_research_windows.py` covers monthly rollover, cumulative policy,
+settled usage, old reserved/unknown obligations, and simultaneous global
+reservations. Current correction code HEAD `fecf49f610d0d70ee7963003541891d1f6767cb3`
+passed `./sigma test` (71 cloud-auth cases, cloud research, Ruff, Pyright,
+frontend typecheck/build) plus seven real-Chrome checks, including the
+real-backend two-identity workspace switch, cache headers, Blue #314 math, and
+the approved About diagram. No paid provider calls were made. One existing
+graph-present sandbox scenario was skipped because the local sandbox image is
+unavailable. The live Google OAuth and N sponsored Easy run remain UNVERIFIED.
+
+The branch was reconciled to current `origin/main`
+`4cff1e544bc30f14096073ee6c7440c45bb5e499`, preserving Blue #314 and the
+approved About changes. Red PR #317 was still open and unmerged at review time,
+so post-Red reconciliation is pending. The published branch was updated by
+merge rather than rebased to avoid a prohibited force push. Keep PR #297 open
+and unmerged. See the detailed [consolidated R4R](../messages/pr297_green_consolidated_r4r.md)
+for the acceptance matrix and manual gate.
