@@ -10,7 +10,6 @@ from sigma.openai_connection import inference_failure
 from sigma.projects import ProjectError
 
 MAX_STREAM_BYTES = 1000000
-MAX_EVENTS = 4096
 KNOWN_ERRORS = {
     "subscription_sharing_usage_limit_exceeded": (
         "limited",
@@ -254,12 +253,13 @@ async def completed(
         raise ValueError(f"plan_stream:content_type({content_type!r})")
     decoder = codecs.getincrementaldecoder("utf-8")("strict")
     buffer = ""
-    byte_count = event_count = 0
+    byte_count = 0
     sequence = -1
     response_id = None
     terminal = None
     deltas = ""
     refused = False
+    done_seen = False
     async for chunk in response.aiter_bytes():
         byte_count += len(chunk)
         if byte_count > max_stream_bytes:
@@ -276,11 +276,18 @@ async def completed(
             if data == "[DONE]":
                 if terminal is None:
                     raise ValueError("plan_stream:done_before_terminal")
+                if done_seen:
+                    raise ValueError("plan_stream:duplicate_done")
+                done_seen = True
                 continue
-            event_count += 1
-            if event_count > MAX_EVENTS or terminal is not None:
-                raise ValueError("plan_stream:event_after_terminal")
-            event = json.loads(data)
+            if done_seen:
+                raise ValueError("plan_stream:event_after_done")
+            try:
+                event = json.loads(data)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("plan_stream:invalid_event_json") from exc
+            if not isinstance(event, dict):
+                raise TypeError("plan_stream:event_not_object")
             kind = event.get("type")
             seq = event.get("sequence_number")
             if (
@@ -294,6 +301,20 @@ async def completed(
             declared = [line[6:].strip() for line in block.split("\n") if line.startswith("event:")]
             if declared and declared != [kind]:
                 raise ValueError(f"plan_stream:declared_event({declared}!=[{kind}])")
+            if terminal is not None:
+                if kind in {"response.completed", "response.failed", "response.incomplete"}:
+                    raise ValueError(f"plan_stream:conflicting_terminal_event({kind})")
+                if kind == "response.usage":
+                    usage = event.get("usage")
+                    if not isinstance(usage, dict) or not any(
+                        isinstance(usage.get(field), int)
+                        and not isinstance(usage.get(field), bool)
+                        and usage[field] >= 0
+                        for field in ("input_tokens", "output_tokens", "total_tokens")
+                    ):
+                        raise ValueError("plan_stream:invalid_trailing_usage")
+                    continue
+                raise ValueError(f"plan_stream:unexpected_trailing_event({kind})")
             if kind == "error":
                 # Responses SSE errors wrap the provider error in an `error`
                 # event envelope. Normalize it to the JSON error shape used
@@ -345,7 +366,7 @@ async def completed(
             elif kind.startswith("response.refusal."):
                 refused = True
     buffer += decoder.decode(b"", final=True)
-    if buffer.strip() or terminal is None:
+    if terminal is None:
         raise ProjectError(
             "ChatGPT stream ended without a valid response.completed. No strategy was saved."
         )
