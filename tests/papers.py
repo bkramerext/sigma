@@ -2402,6 +2402,36 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         )
 
 
+def test_maximum_regions_archived_one_session_stays_fast() -> None:
+    """Use the actual archived happy-path evidence layout as a mode-selection gate."""
+    archived = (
+        Path(__file__).resolve().parents[1]
+        / "docs/evaluations/increment_19/exports/maximum-regions-sigma-reexport.json"
+    )
+    export = json.loads(archived.read_text(encoding="utf-8"))
+    assert export["project"]["difficulty"] == "easy"
+    assert len(export["research_sessions"]) == 1
+    with patch("sigma.api.export_project_view", return_value=export):
+        package, _ = papers._snapshot("fixture")
+    assert len(package["sources"]) == 5  # project + strategy + session + two artifacts
+    assert len(papers._json(package)) <= papers.MAX_ONE_SHOT_CONTEXT_BYTES
+    assert papers._paper_long_form(package) is False
+
+    # The old size-only mode switch made one additional research note cause
+    # several sequential/parallel AI calls. Keep full original evidence while
+    # selecting a single call for this easy one-session investigation.
+    augmented = copy.deepcopy(export)
+    augmented["research_sessions"][0]["outcome"]["new_saved_finding"] = (
+        "Further consideration of the same proof and its open obligations. " * 130
+    )
+    with patch("sigma.api.export_project_view", return_value=augmented):
+        bigger, _ = papers._snapshot("fixture")
+    assert papers.MAX_ONE_SHOT_CONTEXT_BYTES < len(papers._json(bigger))
+    assert len(papers._json(bigger)) < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
+    assert len(bigger["sources"]) == len(package["sources"])
+    assert papers._paper_long_form(bigger) is False
+
+
 def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
     """An easy one-session paper uses one full-evidence call past the 100 KB cliff."""
     package = {
@@ -2586,6 +2616,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 
 def main() -> None:
+    test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
     test_invalid_planning_claim_reference_is_recoverable()
     test_long_paper_planning_timeout_is_stage_specific()
