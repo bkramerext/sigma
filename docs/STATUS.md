@@ -8093,3 +8093,10 @@ check/format, Pyright on the modified research/stream modules, frontend
 typecheck, and frontend production build. The build emitted the existing
 Vite advisory for chunks larger than 500 kB. Full `./sigma test`, browser
 checks, and live-provider behavior were not rerun for this scoped correction.
+
+The first independent CI run exposed a project-bundle `save_limits()` decoding
+bug: its transaction callback receives raw member bytes, but the existing code
+attempted to Base64-decode them again. The decoder now parses those bytes
+directly. `tests/project_bundle.py` passes with the correction, along with the
+Python lint/format/type checks. No research session or provider call was
+started to investigate this failure.

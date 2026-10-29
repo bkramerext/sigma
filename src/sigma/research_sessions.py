@@ -2838,8 +2838,6 @@ def save_limits(
 ) -> dict[str, Any]:
     expected = _validate_limits(expected_limits) if expected_limits is not None else None
     if project_path(path).suffix == ".json":
-        import base64
-
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
@@ -2850,7 +2848,9 @@ def save_limits(
             current = dict(DEFAULT_LIMITS)
             if current_data is not None:
                 try:
-                    parsed = json.loads(base64.b64decode(current_data, validate=True))
+                    # transform_members supplies decoded member bytes; only
+                    # read_bundle exposes Base64-encoded JSON strings.
+                    parsed = json.loads(current_data)
                     current = _validate_limits(parsed)
                 except (ValueError, TypeError, ProjectError) as exc:
                     raise ProjectError(
