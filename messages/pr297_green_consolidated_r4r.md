@@ -1,77 +1,67 @@
-# PR #297 Green consolidated R4R — adversarial corrections
+# PR #297 Green final integration R4R
 
 Repository: `bkramerext/sigma`
 Branch: `coordinator/signin-session-playback-stabilization`
-Reviewed starting HEAD: `86b6b6ea6889271d50b6d9c69ce9af5a9bbd1724`
-Validated correction HEAD: `fecf49f610d0d70ee7963003541891d1f6767cb3`
-Reconciled `origin/main` base: `4cff1e544bc30f14096073ee6c7440c45bb5e499`
-PR #297 remains open and unmerged; no deployment or paid provider calls.
+Final integrated HEAD: `681fe09648c223119fa5022c63bc06b0ef93c634`
+Integrated `origin/main`: `2d4368adf341aca105f5b645c676909da71ed5fb`
+PR #297 remains open and unmerged. No deployment or paid provider calls.
 
-## Corrections
+## Main integration
 
-### Guest workspace identity isolation
+Merged the post-Red `main` into the published PR branch with a non-rewriting merge. Red #317 scheduler/session changes, Blue #314 Markdown rendering, and the approved About diagram remain present. Red's deterministic Maximum Regions browser lifecycle, Blue's real-Chrome math check, and responsive About acceptance all pass on the integrated tree.
 
-Temporary guest workspace tokens are now bound to the first verified Google subject that uses them. A later authenticated request with a different subject cannot resolve that workspace; it receives a fresh guest workspace and cookie. The Google callback copies a guest project only when the cookie's workspace is bound to the callback subject. Signed-out browser continuation remains available, while a different authenticated identity is checked against the binding.
+## Google sign-in failure and correction
 
-`browser_checks/local_auth_real_backend.py` starts a separate local API process with deterministic Google session fixtures for two uninvited subjects. It retains the same guest cookie while switching the session cookie, proves the original owner can read its project, session, and artifact, then verifies the second subject gets 404 for all three and a replacement guest cookie.
+The real-Chromium reproduction showed the first-visit `Welcome to SIGMA!` modal intercepting pointer events aimed at the visible Google sign-in pill. The modal now has its own **Sign in with Google** link so first-time visitors can start OAuth without dismissing Welcome first. The browser regression clicks that dialog link, continues past Welcome, then clicks the actual header pill. Both paths reach the real local `/api/cloud-auth/login` endpoint and assert its 302 target is Google's OAuth authorization URL. The redirect is captured and fulfilled by a deterministic fixture; live Google OAuth was not run.
 
-### Guest cache protections
+## Invitation, membership, and Reload me!
 
-All guest project responses, including authenticated guests, now receive `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy: frame-ancestors 'none'`. API and real-Chrome checks assert these headers for project, saved-session, paper, and research-artifact reads.
+`browser_checks/local_auth_real_backend.py` uses two deterministic Google identities against a separate real SIGMA API process and durable local auth database. It:
 
-### Authorization handler audit
+- Submits an uninvited guest's request through the real API and confirms it is persisted. Email delivery is deliberately unconfigured; the test stubs the delivery boundary after verifying the persisted request, so no email is sent.
+- Signs in as the built-in admin, opens the actual Administrator Settings dialog, confirms the guest request appears, adds the guest, and verifies the request leaves the queue. A fresh deterministic session then resolves as a member, matching the required subsequent-sign-in behavior.
+- Exercises **Reload me!** on the member pill. It is hidden at `$0.05`, visible at `$0.04`, and sends a real API reload request at `$0.03`. The admin dialog displays the persisted request as an allowance reload request.
+- Retains a guest cookie while switching Google identities and verifies project, saved-session, and artifact reads are isolated. Guest reads include `no-store`, `no-referrer`, `nosniff`, and `frame-ancestors 'none'` headers.
 
-Server-side default denial remains in place. The test inventory asserts the exact registered method/path allowlist. Direct HTTP tests exercise the real guest handlers for samples, project inspect/open/close, strategies, events, limits, current understanding, saved sessions, execution records/artifacts, paper metadata/PDF/TXT/TeX, proposal configuration, text inspection, and recents. Test records are owned by the guest workspace. Cross-workspace project/session/artifact/paper requests fail. Project audit, export/download/report, writes, research dispatch, provider-backed routes, and admin routes are denied. Provider discovery and queued dispatch are guarded in tests so safe reads cannot invoke them.
+## Security and spending checks
 
-### Monthly spending-window checks
-
-New `tests/cloud_research_windows.py` checks that calendar-month policy excludes old settled (`usage_estimated`) costs, while cumulative policy retains them; old `reserved` and `unknown` provider obligations remain counted across rollover. It verifies an unresolved obligation prevents a reservation that would exceed the global ceiling and that two concurrent $0.06 reservations against a $0.10 global ceiling serialize to exactly one reservation. Existing explicit global and per-user spend admission tests remain passing.
-
-## Main reconciliation and dependency
-
-Fetched `origin/main` at `4cff1e544bc30f14096073ee6c7440c45bb5e499` and reconciled it with the PR branch. Blue #314's context-aware math rendering and the approved About diagram changes from #315 are present and verified by the T301 Chrome check and responsive About Chrome check.
-
-Red's happy-path work is PR #317, currently open and unmerged at lookup time; it is not in current main. Therefore the requested post-Red-merge reconciliation remains **UNMET** until that PR lands and #297 is refreshed against the resulting main.
-
-The published PR branch already contains history beyond its original remote HEAD. Repository instructions prohibit force pushes. To preserve the remote branch and avoid overwriting concurrent work, current main was integrated with a merge commit rather than rewriting published history with rebase. The requested rebase is therefore **UNMET**; the branch is based on current main without force-pushing.
+Guest middleware retains server-side default denial and an explicit method/path allowlist. Direct API tests exercise actual guest-safe handlers and deny cross-owner/member data, writes, exports, research dispatch, provider operations, and admin routes. Monthly spending tests cover settled usage across rollover under monthly and cumulative policies, unresolved reserved/unknown obligations, and concurrent reservations against the global ceiling.
 
 ## Verification
 
-`./sigma test` — PASS, all steps on correction HEAD `fecf49f610d0d70ee7963003541891d1f6767cb3`. This includes 71 `tests/cloud_auth.py` cases, `tests/cloud_research_windows.py`, cloud research and deterministic sponsored API calls, Ruff check/format, Pyright, frontend typecheck, and production build. One existing graph-present sandbox scenario remains skipped because the local Python sandbox image is unavailable; the graph-withheld branch passes. Frontend dependencies were installed with `npm --prefix frontend ci` from the lockfile after the first run found the newly declared `remark-gfm` package absent locally.
+- `./sigma test` — PASS on this integrated source tree, including cloud auth, monthly research windows, Red's research-session tests, Ruff, Pyright, frontend typecheck, and production build. The existing graph-present sandbox subcase was skipped because its local Python sandbox image is unavailable; the graph-withheld branch passed.
+- `browser_checks/local_auth_real_backend.py` — PASS: both Google sign-in entry points, durable invitation, admin visibility/approval, subsequent member session, `$0.03` Reload me! request/admin visibility, guest response headers, and two-identity project/session/artifact isolation.
+- `browser_checks/guest_samples.py` — PASS: public sample flow and welcome dialog.
+- `browser_checks/issue279_invite_me.py` — PASS: invitation request/retry, reload threshold at `$0.05`/`$0.04`, and member access.
+- `browser_checks/happy_path_reliability.py` — PASS: Red's deterministic Maximum Regions lifecycle, report, usage fixture, and reopen.
+- `browser_checks/t301_markdown_math.py` — PASS: Blue #314 Markdown math rendering and semantic preservation.
+- `browser_checks/about_dialog_acceptance.py` — PASS at 1440/390/320px and touch help at 390px.
+- `git diff --check` — PASS.
 
-Real Chromium checks — PASS against the updated tree:
+The product feedback API and administrator handling have existing coverage in `tests/cloud_auth.py`, which passed in the full suite. This pass did not add a dedicated product-feedback browser acceptance.
 
-- `browser_checks/local_auth_real_backend.py`: two-identity cookie switch, workspace/project/session/artifact isolation, guest cache headers, plus prior auth/membership/invitation coverage.
-- `browser_checks/guest_samples.py`: public guest sample flow.
-- `browser_checks/issue279_invite_me.py`: invitation request, retry/reload, member behavior.
-- `browser_checks/local_admin_sponsor_pill.py`: admin/member sponsorship behavior.
-- `browser_checks/t17_8_saved_session.py`: saved session playback, no provider calls.
-- `browser_checks/about_dialog_acceptance.py`: About diagram behavior at 1440/390/320 and touch help at 390.
-- `browser_checks/t301_markdown_math.py`: Blue #314 math rendering and semantic preservation.
-
-`git diff --check` — PASS for PR changes. No paid provider calls. Automated OAuth and sponsored responses use deterministic fixtures.
-
-## Acceptance matrix
+## Acceptance state
 
 | Criterion | State | Evidence |
 |---|---|---|
-| Guest cookie cannot be reused across verified Google identities | MET (automated + real backend Chrome) | Two identity switch retains cookie then proves project/session/artifact denial and cookie rotation |
-| Authenticated guest project/artifact responses are non-cacheable | MET | API tests and browser response-header assertions |
-| Actual handlers behind guest allowlist are ownership-scoped | MET | Owned project/session/paper/artifact reads plus other-identity 404s; exact route inventory |
-| Guests cannot export, mutate member data, dispatch research, call providers, or access admin operations | MET (automated) | Direct HTTP route inventory and handler/provider guards |
-| Monthly rollover preserves unsettled obligations and respects global ceiling | MET (automated) | Rollover, cumulative policy, unknown/reserved and concurrent reservation tests |
-| Blue #314 and approved About diagram changes remain intact | MET (automated + Chrome) | Full suite; T301 math and About diagram Chrome checks |
-| Reconcile after Red PR #317 merges | UNMET | #317 was still open/unmerged; latest available main is `4cff1e5` |
-| Rebase published PR branch on main | UNMET | Used non-rewriting merge to preserve remote history under the repo's no-force-push rule |
-| Live Google sign-in → invitation → approval → member → Easy sponsored session as N | UNVERIFIED (human acceptance gate) | Not run; no live Google or paid provider call |
+| Current main integrated, preserving Red #317, Blue #314, and About changes | MET | Merge commit and three relevant Chrome checks |
+| Google sign-in controls reach the real local OAuth-start endpoint | MET (automated) | Welcome CTA and actual pill clicked in real Chrome; redirect URL validated by fixture |
+| Live Google OAuth with account N | UNVERIFIED | No live OAuth callback was performed |
+| Durable guest invitation, real admin dialog visibility/approval, and subsequent member role | MET (deterministic real API/browser) | Shared auth DB, real admin dialog/API, fresh post-approval session |
+| Reload me! threshold below `$0.05` and admin visibility | MET (deterministic real API/browser) | Hidden at `$0.05`, visible at `$0.04`, request recorded at `$0.03` and shown to admin |
+| Guest identity isolation, cache protection, default-deny route audit | MET | Direct API and real-backend Chrome checks |
+| Monthly rollover and global reservation limits | MET | Adversarial unit tests |
+| Red scheduler/session, Blue Markdown, approved About diagram | MET (automated + Chrome) | Full suite and real-Chrome checks |
+| N's live Google → invitation → approval → Easy sponsored session with usage attribution | UNVERIFIED (human release gate) | Not run; deterministic provider fixtures do not establish a live provider call or N's real spend attribution |
+| Dedicated product-feedback browser acceptance | UNMET / not in this pass | Existing feedback API/admin tests pass; no feature-specific browser acceptance was added |
 
-Keep PR #297 open and unmerged. Do not deploy. After Red #317 merges, fetch that new main and re-run the affected full suite and browser checks before another review handoff.
+## Manual release acceptance steps
 
-## Manual acceptance runbook (still pending)
+The local SIGMA UI is available at `http://127.0.0.1:5173` from this checkout.
 
-1. Open the local UI at `http://127.0.0.1:5173` and sign in with test account N through Google. Confirm N is authenticated, sees the Google identity pill and **Invite Me!**, and cannot run research or use sponsorship before approval.
-2. Click **Invite Me!** once. Confirm the request acknowledgement, reload, and verify the pending request suppresses the button and a duplicate request is not created.
-3. Sign in as `zetacontinuation@gmail.com`. In administration, locate N's pending request and approve it. Confirm the approval is saved.
+1. Sign in with test account N through Google. Confirm N's identity pill and **Invite Me!** appear, with research and sponsorship unavailable before approval.
+2. Click **Invite Me!** once. Confirm acknowledgement; reload and confirm the pending request suppresses the button and a duplicate is not created.
+3. Sign in as `zetacontinuation@gmail.com`. Open Administrator Settings, locate N's request, approve it, and verify it is removed from the pending list.
 4. Sign back in as N. Confirm member status, no invitation prompt, and the displayed sponsorship allowance.
-5. Without connecting N's personal ChatGPT account, start one short Easy research session. Confirm sponsored inference is selected, at least one provider call succeeds, and the session completes. Confirm usage is attributed to N and the allowance reflects the debit.
-6. Record the timestamp, N identity, admin approval, completed session, and before/after allowance for release evidence. Stop and report any deviation; do not treat fixture-based browser checks as live acceptance.
+5. Without connecting personal ChatGPT, run one short Easy session. Confirm sponsored inference, a successful provider call, session completion, usage attributed to N, and the allowance debit.
+6. Record timestamps, N identity, admin approval, completed session, and before/after allowance. This live run remains pending; do not merge or deploy before it passes.

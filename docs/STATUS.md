@@ -7793,7 +7793,7 @@ payload and peak-memory behavior remain UNVERIFIED. No deployment or merge.
 
 ## PR #297 Green post-Red integration (2026-10-29)
 
-Integrated `origin/main` at `2d4368adf341aca105f5b645c676909da71ed5fb` without rewriting the published branch. Red #317's scheduler/session changes, Blue #314 Markdown improvements, and the approved About diagram are retained. The merge and final HEAD are recorded in `messages/pr297_green_consolidated_r4r.md`.
+Integrated `origin/main` at `2d4368adf341aca105f5b645c676909da71ed5fb` without rewriting the published branch. Red #317's scheduler/session changes, Blue #314 Markdown improvements, and the approved About diagram are retained. The merge HEAD is `681fe09648c223119fa5022c63bc06b0ef93c634`; final evidence is in `messages/pr297_green_consolidated_r4r.md`.
 
 Real Chromium reproduced the sign-in obstruction: the first-visit Welcome dialog covered the visible Google pill. The dialog now contains a Google sign-in link. The real-backend check clicks that link and, after continuing past Welcome, the actual header pill; both reach SIGMA's real `/api/cloud-auth/login` endpoint and validate its 302 Google authorization URL through a deterministic local fixture. No live Google OAuth call was made.
 
