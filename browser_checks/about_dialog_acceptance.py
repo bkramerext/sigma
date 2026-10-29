@@ -91,10 +91,28 @@ def main() -> None:
                 expect(provenance).to_contain_text("The investigation is the enduring artifact.")
                 expect(provenance).to_contain_text("Understanding")
                 expect(provenance).to_contain_text("Published TeX")
+                expect(provenance).to_contain_text("Beyond a linear LLM conversation.")
+                expect(provenance).to_contain_text("Prompt → Response → Prompt → Response")
+                expect(provenance).to_contain_text("A branching, revisitable research record")
                 scrollport = provenance.locator(".about-provenance-diagram-scroll")
-                assert scrollport.evaluate("e => e.scrollWidth >= e.clientWidth")
+                scroll_metrics = scrollport.evaluate(
+                    "e => ({scroll: e.scrollWidth, client: e.clientWidth})"
+                )
+                if width > 600:
+                    assert scroll_metrics["scroll"] <= scroll_metrics["client"] + 1, (
+                        width,
+                        "Desktop provenance diagram must fit without scrolling",
+                        scroll_metrics,
+                    )
+                else:
+                    assert scroll_metrics["scroll"] > scroll_metrics["client"], (
+                        width,
+                        "Narrow-screen provenance diagram remains scrollable for legibility",
+                        scroll_metrics,
+                    )
                 assert dialog.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), (
-                    width, "About dialog must not overflow horizontally"
+                    width,
+                    "About dialog must not overflow horizontally",
                 )
                 provenance.locator("summary").click()
                 expect(provenance).not_to_have_attribute("open", "")
