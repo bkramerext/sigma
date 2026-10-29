@@ -52,7 +52,7 @@ export default function SessionLogPage() {
   }, [sessionId, path]);
   useEffect(() => {
     if (!session) return;
-    const title = `${projectTitle || shortName}, Session ${session.number}`;
+    const title = `${shortName}, Session ${session.number}`;
     document.title = title;
   }, [projectTitle, shortName, session]);
   useEffect(() => { if (following && list.current) list.current.scrollTop = list.current.scrollHeight; }, [events, following]);
