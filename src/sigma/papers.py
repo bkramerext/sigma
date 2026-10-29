@@ -1117,9 +1117,15 @@ async def _restart_work_locked(
 ) -> dict[str, Any]:
     """Explicitly reset long-paper work while retaining prior attempt accounting."""
     view = inspect_project(path)
+    if view.project.id != expected_project_id:
+        raise ProjectError("Project identity changed; reopen and review before restarting")
+    # An explicitly confirmed restart DISCARDs the unfinished draft and rebinds
+    # to the newest evidence. The dialog's preflight hash may become stale when
+    # another research session updates the project; rejecting that stale hash
+    # would trap users behind an unclickable-in-practice Start over control.
+    # Do not relax the snapshot check on generation itself: a new provider call
+    # still requires a fresh, matching preflight.
     package, snapshot_hash = _snapshot(path)
-    if view.project.id != expected_project_id or snapshot_hash != expected_snapshot_sha256:
-        raise ProjectError("Project evidence changed; review preflight before restarting")
     state = _load_work(path)
     if state is None or state.get("project_id") != view.project.id:
         raise ProjectError("There is no resumable paper checkpoint to restart")
@@ -1162,6 +1168,8 @@ async def _restart_work_locked(
         "provider_calls_previous_runs": sum(item["provider_calls_attempted"] for item in history),
         "maximum_provider_calls": MAX_LONG_PAPER_CALLS,
         "snapshot_bytes": len(_json(package)),
+        "snapshot_sha256": snapshot_hash,
+        "evidence_updated_since_preflight": snapshot_hash != expected_snapshot_sha256,
     }
 
 
