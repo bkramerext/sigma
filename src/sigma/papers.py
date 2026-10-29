@@ -631,6 +631,9 @@ _FAST_STRONG_TERMS = (
     "result", "construction", "invariant", "verification",
 )
 _FAST_CONTEXT_TERMS = ("title", "problem", "name", "description", "goal")
+_FAST_ARTIFACT_TEXT_TERMS = (
+    "content", "text", "body", "output", "summary", "report", "description"
+)
 
 
 def _structured_evidence_index(
@@ -662,8 +665,11 @@ def _structured_evidence_index(
                     child_path = f"{path}/{name}" if path else name
                     important = any(term in lower for term in _FAST_RESEARCH_TERMS)
                     context = (
-                        kind in {"project", "strategy"}
-                        and lower in _FAST_CONTEXT_TERMS
+                        (kind in {"project", "strategy"} and lower in _FAST_CONTEXT_TERMS)
+                        or (
+                            kind in {"artifact", "agentic_step"}
+                            and lower in _FAST_ARTIFACT_TEXT_TERMS
+                        )
                     )
                     visit(child, child_path, meaningful or important or context)
                 return
