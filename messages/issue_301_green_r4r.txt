@@ -6,7 +6,8 @@
 - PR: [#324](https://github.com/bkramerext/sigma/pull/324), open, Ready for Review, not merged
 - Base: `main` at `26628d549dbe11aad0c9f612633c08964ae9eb90`
 - Reviewed prior head: `ddb58e221d73197f089908e72ba18ae66390bb54`
-- Final implementation HEAD: pending final verification commit
+- Final implementation HEAD (code, tests, browser checks, and screenshot artifacts): `d179bb7353dc93c7f9b5853119e5ac5120b67684`
+- A docs-only handoff/tracker commit follows this implementation commit; the current branch ref remains the authoritative PR head.
 
 ## Corrections and architecture
 
