@@ -910,8 +910,14 @@ async def _restart_work_locked(
     """Explicitly reset long-paper work while retaining prior attempt accounting."""
     view = inspect_project(path)
     package, snapshot_hash = _snapshot(path)
-    if view.project.id != expected_project_id or snapshot_hash != expected_snapshot_sha256:
-        raise ProjectError("Project evidence changed; review preflight before restarting")
+    if view.project.id != expected_project_id:
+        raise ProjectError("Project identity changed; reopen the project before restarting")
+    # The user explicitly confirmed discarding the incompatible checkpoint.
+    # Evidence may have changed since preflight (or since the failed attempt);
+    # requiring its old hash would make this recovery action impossible.
+    # Always bind the fresh checkpoint to the current snapshot instead.
+    if not expected_snapshot_sha256:
+        raise ProjectError("Review paper preflight before restarting")
     state = _load_work(path)
     if state is None or state.get("project_id") != view.project.id:
         raise ProjectError("There is no resumable paper checkpoint to restart")
