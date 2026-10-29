@@ -5,6 +5,8 @@
 **Base:** `2cf878a3290e697b408ebdb5d58871690e2c030b`  
 **Implementation commit:** `c3c0dcbc589f90bb3dfa428e48743bcc291f1169` (initial implementation; subsequent verification refinements are on the same branch)
 
+**Correction base:** `2cf878a3290e697b408ebdb5d58871690e2c030b` (latest fetched `origin/main`; branch merge-base matches, so no rebase was required)
+
 **PR:** [#314](https://github.com/bkramerext/sigma/pull/314) — open, not merged
 **Ticket:** [T301](../tickets/t301.md)
 
@@ -24,6 +26,20 @@
   same deterministic output fixture. The API test asserts the original project
   bytes are unchanged.
 
+## Consolidated review corrections
+
+- Equation recognition now requires mathematical structure in the expression
+  or a nearby mathematical cue. Bare `x = value`, `x = y`, `x = 3`, and
+  configuration assignment examples remain ordinary prose. The regression also
+  covers `x_i` in a sentence containing `MAX_RETRY_COUNT`.
+- Currency markers are classified individually before remaining dollar signs
+  are paired as inline math. This covers multiple prices, prices before or
+  after explicit math, multiple independent formulas, escaped/unmatched signs,
+  and dollar signs in inline/fenced code.
+- Added these adversarial cases to the shared API/render fixture and real Chrome
+  regression. The test checks exact KaTeX annotations and rendered literal text;
+  updated screenshots are included below.
+
 ## Example
 
 Input sent through the application's existing conversion route:
@@ -40,6 +56,18 @@ The probability is $\frac{1}{2}$. We obtain $f(x) = x^2 + 3x$. Einstein's equati
 The sequence has terms $a_n = a_{n-1} + d$. The value of $x_i$ is stored in MAX_RETRY_COUNT.
 ```
 
+Adversarial examples in the same actual conversion fixture:
+
+```text
+Assignments stay ordinary prose: x = value, x = y, x = 3, and TIMEOUT = 30.
+Prices are $5 and $100; a price before math is $5 then $x+1$,
+and math before a price is $y$ costs $100. Independent expressions $x$ and $y$ remain separate.
+Explicit numeric math $1/2$ remains an expression.
+```
+
+The Chrome run confirmed ordinary assignments and prices remain literal text,
+while each explicitly delimited expression produces a KaTeX annotation.
+
 The full shared fixture is
 [`markdown-regression-output.md`](../docs/evaluations/t301/markdown-regression-output.md).
 The Chrome evidence is
@@ -49,6 +77,24 @@ converted fixture and
 for bare notation inside source prose.
 
 ## Verification actually run
+
+Latest correction verification:
+
+- `git fetch origin main` — passed; latest main and branch merge-base are
+  `2cf878a3290e697b408ebdb5d58871690e2c030b`.
+- `uv run --locked --no-sync python tests/text_views.py` — passed with the
+  expanded ordinary-assignment and currency fixture; actual API route and
+  source-byte preservation checks remain enabled.
+- `uv run --with playwright python browser_checks/t301_markdown_math.py` —
+  passed in real Chrome, checking 25 fixture KaTeX spans and seven raw math
+  spans plus literal assignment/currency/code preservation; screenshots were
+  recaptured.
+- `npm run typecheck && npm run build` — passed; Vite emitted its existing
+  large chunk advisory.
+- `./sigma test` — passed all steps, including Ruff, formatting, Pyright,
+  frontend typecheck, production build, and repository tests. Output is archived
+  at [`full-test.txt`](../docs/evaluations/t301/full-test.txt).
+- `git diff --check` — passed after all changes.
 
 - `uv run --locked --no-sync python tests/text_views.py` — passed. Calls the
   real `POST /api/projects/text/convert` endpoint with a deterministic mocked
@@ -83,6 +129,20 @@ for bare notation inside source prose.
   usage and billing path may differ. Current pricing:
   https://developers.openai.com/api/docs/pricing.
 - **UNMET:** None in deterministic local acceptance.
+
+## Final review status
+
+- **MET:** Conservative equation classification, literal currency handling
+  around explicit delimiters, adversarial API/browser regression coverage,
+  source-byte preservation, browser screenshots, typecheck/build/full suite,
+  and latest-main reconciliation (no divergence).
+- **UNVERIFIED:** Live model semantic classification and quality. No paid/live
+  provider calls were made.
+- **UNMET:** None known.
+
+**Final tested implementation HEAD:** `54b7903c3b202324952c39cf07681c45c6c7e111`.
+All code, fixture and evidence changes were tested at this commit; the handoff
+update is a documentation-only commit on top. **Provider calls/cost:** zero.
 
 No provider call, paid inference, credential access, or project data change
 occurred. Formatting does not verify a mathematical claim.
