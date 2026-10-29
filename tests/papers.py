@@ -625,6 +625,123 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
     asyncio.run(check())
 
 
+def test_restart_uses_current_evidence_and_is_idempotent() -> None:
+    """A stale dialog preflight must never trap a confirmed reset."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "stale-restart.sigma"
+        view = initialize_project(path, "Stale restart", "Preserve saved research")
+        current_snapshot_sha256 = papers._snapshot(str(path))[1]
+        old_snapshot_sha256 = "a" * 64
+        stale_dialog_sha256 = "b" * 64
+        assert current_snapshot_sha256 not in {
+            old_snapshot_sha256, stale_dialog_sha256
+        }
+
+        credential = {
+            "mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"
+        }
+        config = {
+            "available": True, "model": "gpt-fixture", "reasoning_effort": "high"
+        }
+        old_history = [{
+            "provider_calls_attempted": 2,
+            "snapshot_sha256": "c" * 64,
+            "model": "previous-model",
+            "reset_at": "2026-10-29T00:00:00+00:00",
+        }]
+        checkpoint = papers._new_work(
+            old_snapshot_sha256,
+            view.project.id,
+            "d" * 64,
+            "previous-model",
+            "low",
+            provider_calls_total=3,
+            prior_runs=old_history,
+        )
+        checkpoint["provider_calls"] = 1
+        checkpoint["next_batch"] = 1
+        papers._save_work(str(path), checkpoint)
+
+        async def fake_auth():
+            return credential
+
+        async def fake_configuration(**_kwargs):
+            return config
+
+        async def check() -> None:
+            with (
+                patch.object(papers, "auth_context", new=fake_auth),
+                patch.object(papers, "configuration", new=fake_configuration),
+                patch.object(papers, "_provider", side_effect=AssertionError("no inference")),
+                patch.object(
+                    papers, "_provider_structured",
+                    side_effect=AssertionError("no inference"),
+                ),
+            ):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://testserver",
+                ) as client:
+                    body = {
+                        "path": str(path),
+                        "expected_project_id": view.project.id,
+                        "expected_binding": credential["identity"],
+                        "expected_snapshot_sha256": stale_dialog_sha256,
+                        "confirm_restart": True,
+                        "long_form": True,
+                    }
+                    wrong_project = await client.post(
+                        "/api/projects/papers/restart",
+                        json={**body, "expected_project_id": "wrong-project"},
+                    )
+                    assert wrong_project.status_code != 200
+                    assert papers._load_work(str(path))["provider_calls"] == 1
+
+                    response = await client.post(
+                        "/api/projects/papers/restart", json=body
+                    )
+                    assert response.status_code == 200, response.text
+                    result = response.json()
+                    assert result["snapshot_sha256"] == current_snapshot_sha256
+                    assert result["evidence_updated_since_preflight"] is True
+                    assert result["provider_calls_previous_runs"] == 3
+                    assert result["provider_calls_attempted"] == 0
+
+                    reset = papers._load_work(str(path))
+                    assert reset is not None
+                    assert reset["snapshot_sha256"] == current_snapshot_sha256
+                    assert reset["explicit_restart_pending"] is True
+                    assert reset["provider_calls"] == 0
+                    assert reset["provider_calls_total"] == 3
+                    assert len(reset["prior_runs"]) == 2
+
+                    repeated = await client.post(
+                        "/api/projects/papers/restart", json=body
+                    )
+                    assert repeated.status_code == 200, repeated.text
+                    assert repeated.json()["provider_calls_previous_runs"] == 3
+                    reset_again = papers._load_work(str(path))
+                    assert reset_again is not None
+                    assert len(reset_again["prior_runs"]) == 2
+                    assert reset_again["provider_calls_total"] == 3
+                    assert reset_again["snapshot_sha256"] == current_snapshot_sha256
+                    assert papers.progress_status(str(path)) is None
+
+                    preflight = papers.preflight(
+                        str(path),
+                        force_long_form=True,
+                        expected_project_id=view.project.id,
+                        expected_binding=credential["identity"],
+                        mode=credential["mode"],
+                        model=config["model"],
+                        reasoning_effort=config["reasoning_effort"],
+                    )
+                    assert preflight["resume_available"] is True
+                    assert preflight["provider_calls_attempted"] == 0
+
+        asyncio.run(check())
+
+
 def test_explicit_restart_checkpoint_migrates_and_rebinds_safely() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "restart.sigma"
@@ -1338,6 +1455,7 @@ def main() -> None:
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_paper_progress_endpoint_recovers_interrupted_checkpoint()
+    test_restart_uses_current_evidence_and_is_idempotent()
     test_explicit_restart_checkpoint_migrates_and_rebinds_safely()
     test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
