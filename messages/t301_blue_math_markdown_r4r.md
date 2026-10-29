@@ -29,7 +29,8 @@
 ## Consolidated review corrections
 
 - Equation recognition now requires mathematical structure in the expression
-  or a nearby mathematical cue. Bare `x = value`, `x = y`, `x = 3`, and
+  or a nearby mathematical cue; the programming keyword `let` does not qualify
+  as a math cue. Bare `x = value`, `x = y`, `x = 3`, `let x = value`, and
   configuration assignment examples remain ordinary prose. The regression also
   covers `x_i` in a sentence containing `MAX_RETRY_COUNT`.
 - Currency markers are classified individually before remaining dollar signs
@@ -59,7 +60,7 @@ The sequence has terms $a_n = a_{n-1} + d$. The value of $x_i$ is stored in MAX_
 Adversarial examples in the same actual conversion fixture:
 
 ```text
-Assignments stay ordinary prose: x = value, x = y, x = 3, and TIMEOUT = 30.
+Assignments stay ordinary prose: x = value, x = y, x = 3, let x = value, and TIMEOUT = 30.
 Prices are $5 and $100; a price before math is $5 then $x+1$,
 and math before a price is $y$ costs $100. Independent expressions $x$ and $y$ remain separate.
 Explicit numeric math $1/2$ remains an expression.
@@ -140,7 +141,7 @@ Latest correction verification:
   provider calls were made.
 - **UNMET:** None known.
 
-**Final tested implementation HEAD:** `54b7903c3b202324952c39cf07681c45c6c7e111`.
+**Final tested implementation HEAD:** `229679c9e28e61b27675116c5f696c04af80ce2d`.
 All code, fixture and evidence changes were tested at this commit; the handoff
 update is a documentation-only commit on top. **Provider calls/cost:** zero.
 
