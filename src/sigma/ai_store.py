@@ -30,6 +30,12 @@ def _personal_directory(identity: str) -> Path:
     return path
 
 
+def personal_directory_for_subject(subject: str) -> Path:
+    """Return the private credential directory bound to a verified Google subject."""
+    identity = hashlib.sha256(b"sigma-cloud-workspace-v1\0" + subject.encode()).hexdigest()
+    return _personal_directory(identity)
+
+
 def sponsor_directory() -> Path:
     """Return the SIGMA-owned sponsor store, independent of request identity."""
     from sigma import cloud_workspaces
@@ -86,10 +92,7 @@ def directory() -> Path:
     cfg = cloud_auth.config()
     principal = cloud_auth.current_principal()
     if cfg.enabled and cfg.local and principal is not None:
-        identity = hashlib.sha256(
-            b"sigma-cloud-workspace-v1\0" + principal.subject.encode()
-        ).hexdigest()
-        return _personal_directory(identity)
+        return personal_directory_for_subject(principal.subject)
     return sponsor_directory()
 
 

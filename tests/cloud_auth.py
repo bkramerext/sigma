@@ -956,6 +956,28 @@ class CloudAuthTests(TestCase):
                 follow_redirects=False,
             )
 
+    def seed_personal_plan_authorization(self, subject: str, email: str | None = None) -> None:
+        """Fixture for tests whose setup assumes completed personal OAuth."""
+        from sigma import ai_store, chatgpt_auth
+
+        directory = ai_store.personal_directory_for_subject(subject)
+        path = directory / "credentials.json"
+        state = ai_store.read(path)
+        state["accounts"] = {
+            "fixture-personal": {
+                "subject": "chatgpt-subject-" + subject,
+                "client_id": "fixture-chatgpt-client",
+                "email": email or f"personal-{subject}@example.org",
+                "access_token": "fixture-personal-access-token-" + os.urandom(8).hex(),
+                "refresh_token": "fixture-personal-refresh-token-" + subject,
+                "expires_at": time.time() + 3600,
+                "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                "plan_authorized": True,
+            }
+        }
+        state["active"], state["mode"] = "fixture-personal", "chatgpt"
+        ai_store.write(path, state)
+
     def test_signin_returns_to_safe_project_continuation(self):
         project_return = "/project?path=%2Ftmp%2Fguest-project&resume_play=1"
         completed = self.finish(return_to=project_return)
@@ -1655,6 +1677,7 @@ class CloudAuthTests(TestCase):
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["account"]["model_access"]["mode"], "sponsored")
 
+            self.seed_personal_plan_authorization("configured-google-admin")
             cloud_auth.set_model_access("configured-google-admin", "personal")
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["account"]["model_access"]["mode"], "personal")
@@ -1743,26 +1766,60 @@ class CloudAuthTests(TestCase):
                 self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
                 "sponsored",
             )
-            cloud_auth.set_model_access("mode-transition-admin", "personal")
+            with patch(
+                "sigma.api.chatgpt_auth.discovery",
+                AsyncMock(
+                    return_value={"authorization_endpoint": "https://auth.openai.com/authorize"}
+                ),
+            ):
+                started = self.client.post(
+                    "/api/ai/auth/begin", json={}, headers={"Origin": local_origin}
+                )
+                self.assertEqual(started.status_code, 200, started.text)
+                cancelled = self.client.post(
+                    f"/api/ai/auth/cancel/{started.json()['id']}",
+                    json={},
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(cancelled.status_code, 200, cancelled.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            headers = {"Origin": local_origin}
+            fabricated = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(fabricated.status_code, 403, fabricated.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            self.seed_personal_plan_authorization("mode-transition-admin")
+            switched_personal = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(switched_personal.status_code, 200, switched_personal.text)
 
             from sigma import cloud_research
 
-            # A snapshot failure must leave the deliberate personal choice
-            # intact; the endpoint must not claim sponsorship succeeded.
+            # Funding mode selection remains possible even when allowance
+            # inspection is unavailable; Play admission checks the ledger.
             with patch.object(
                 cloud_research,
                 "snapshot",
                 side_effect=cloud_research.CloudResearchUnavailable("fixture ledger unavailable"),
-            ):
-                failed = self.client.post(
+            ) as snapshot:
+                selected = self.client.post(
                     "/api/ai/mode",
                     json={"mode": "sponsored"},
                     headers={"Origin": local_origin},
                 )
-            self.assertEqual(failed.status_code, 503, failed.text)
+            self.assertEqual(selected.status_code, 200, selected.text)
+            snapshot.assert_not_called()
             self.assertEqual(
                 self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
-                "personal",
+                "sponsored",
             )
 
             selected = self.client.post(
@@ -1980,6 +2037,16 @@ class CloudAuthTests(TestCase):
         local_origin = "http://127.0.0.1:5173"
         sponsor_token = "shared-sponsor-access"
         personal_token = "z-personal-access"
+        observed_tokens: list[str] = []
+
+        async def checked_catalog(access_token, mode="chatgpt"):
+            observed_tokens.append(access_token)
+            return {
+                "status": "connected",
+                "checked_at": "2026-10-28T00:00:00Z",
+                "ttl_seconds": 60,
+            }
+
         with patch.dict(
             os.environ,
             {
@@ -2014,12 +2081,17 @@ class CloudAuthTests(TestCase):
                     state["active"] = "shared-sponsor"
 
             asyncio.run(seed_shared_sponsor())
-            cloud_auth.set_model_access("same-email-personal-owner", "personal")
+            rejected_before_oauth = self.client.post(
+                "/api/ai/mode",
+                json={"mode": "personal"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(rejected_before_oauth.status_code, 403, rejected_before_oauth.text)
             cookie_name = cloud_auth._cookie_name(cloud_auth.SESSION_COOKIE, cloud_auth.config())
             cookie = self.client.cookies.get(cookie_name)
 
-            # Reopen a fresh client using the existing cookie and the same
-            # durable auth home; the deliberate personal selection survives.
+            # Reopen a fresh client using the existing cookie and durable auth
+            # home; sponsored default survives before OAuth succeeds.
             restart_context = TestClient(
                 app, base_url="http://127.0.0.1", client=("127.0.0.1", 23459)
             )
@@ -2028,12 +2100,19 @@ class CloudAuthTests(TestCase):
             restarted.cookies.set(cookie_name, cookie)
             status = restarted.get("/api/cloud-auth/status")
             self.assertEqual(status.status_code, 200, status.text)
-            self.assertEqual(status.json()["account"]["model_access"]["mode"], "personal")
-            initial_connection = restarted.get("/api/ai/connection")
+            self.assertEqual(status.json()["account"]["model_access"]["mode"], "sponsored")
+            with patch.object(
+                openai_connection,
+                "_check",
+                AsyncMock(side_effect=checked_catalog),
+            ):
+                initial_connection = restarted.get("/api/ai/connection")
             self.assertEqual(initial_connection.status_code, 200, initial_connection.text)
-            self.assertEqual(initial_connection.json()["status"], "disconnected")
-            self.assertIsNone(initial_connection.json().get("active_account"))
-            self.assertEqual(initial_connection.json().get("accounts"), [])
+            self.assertEqual(initial_connection.json()["status"], "connected")
+            self.assertEqual(
+                initial_connection.json().get("account_label"), "zetacontinuation@gmail.com"
+            )
+            self.assertIn(sponsor_token, observed_tokens)
 
             token_record = {
                 "client_id": "oaiapp_fixture",
@@ -2108,18 +2187,21 @@ class CloudAuthTests(TestCase):
                     break
                 time.sleep(0.01)
             self.assertEqual(oauth_status.json()["status"], "connected")
+            self.assertEqual(
+                restarted.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+                "successful OAuth alone must not switch funding mode",
+            )
 
-            observed_tokens: list[str] = []
-
-            async def checked_catalog(access_token, mode="chatgpt"):
-                observed_tokens.append(access_token)
-                result = {
-                    "status": "connected",
-                    "checked_at": "2026-10-28T00:00:00Z",
-                    "ttl_seconds": 60,
-                }
-                return result
-
+            with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
+                personal_mode = restarted.post(
+                    "/api/ai/mode", json={"mode": "personal"}, headers={"Origin": local_origin}
+                )
+            self.assertEqual(personal_mode.status_code, 200, personal_mode.text)
+            self.assertEqual(
+                restarted.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "personal",
+            )
             with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
                 personal = restarted.get("/api/ai/connection?refresh=true")
             self.assertEqual(personal.status_code, 200, personal.text)
@@ -2157,7 +2239,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(
                 sponsor_connection.json()["account_label"], "zetacontinuation@gmail.com"
             )
-            self.assertEqual(observed_tokens[-1], sponsor_token)
+            self.assertIn(sponsor_token, observed_tokens)
 
             with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
                 personal_mode = restarted.post(
@@ -2193,7 +2275,7 @@ class CloudAuthTests(TestCase):
             with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
                 sponsor_after_personal_disconnect = restarted.get("/api/ai/connection?refresh=true")
             self.assertEqual(sponsor_after_personal_disconnect.json()["status"], "connected")
-            self.assertEqual(observed_tokens[-1], sponsor_token)
+            self.assertIn(sponsor_token, observed_tokens)
 
             async def sponsor_store_token():
                 async with ai_store.sponsor_transaction() as state:
@@ -2209,6 +2291,7 @@ class CloudAuthTests(TestCase):
                 "SIGMA_CLOUD_AUTH_LOCAL": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "allowance-sponsor-auth"),
             },
         ):
             z_login = self.finish(email="zetacontinuation@gmail.com", subject="allowance-z-admin")
@@ -2258,17 +2341,42 @@ class CloudAuthTests(TestCase):
                 self.assertEqual(budget.json()["allowance_usd"], expected_allowance)
 
                 if expected_role == "admin":
-                    # A new Google identity gets its own empty personal store;
-                    # Z's same-email personal registration is not borrowed.
-                    personal = client.post(
+                    # A new Google identity can only select personal after its
+                    # own isolated registration has plan permission.
+                    unconnected = client.post(
                         "/api/ai/mode",
                         json={"mode": "personal"},
                         headers={"Origin": local_origin},
                     )
-                    self.assertEqual(personal.status_code, 200, personal.text)
-                    connection = client.get("/api/ai/connection")
-                    self.assertEqual(connection.json()["status"], "disconnected")
-                    self.assertIsNone(connection.json().get("active_account"))
+                    self.assertEqual(unconnected.status_code, 403, unconnected.text)
+                    self.assertEqual(
+                        client.get("/api/cloud-auth/status").json()["account"]["model_access"][
+                            "mode"
+                        ],
+                        "sponsored",
+                    )
+                    self.seed_personal_plan_authorization(subject, "zetacontinuation@gmail.com")
+                    with patch(
+                        "sigma.openai_connection._check",
+                        new=AsyncMock(
+                            return_value={
+                                "status": "connected",
+                                "checked_at": "fixture",
+                                "ttl_seconds": 60,
+                            }
+                        ),
+                    ):
+                        personal = client.post(
+                            "/api/ai/mode",
+                            json={"mode": "personal"},
+                            headers={"Origin": local_origin},
+                        )
+                        self.assertEqual(personal.status_code, 200, personal.text)
+                        connection = client.get("/api/ai/connection")
+                    self.assertEqual(connection.json()["status"], "connected")
+                    self.assertEqual(
+                        connection.json().get("account_label"), "zetacontinuation@gmail.com"
+                    )
 
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
@@ -2453,13 +2561,12 @@ class CloudAuthTests(TestCase):
                 personal = self.client.post(
                     "/api/ai/mode", json={"mode": "personal"}, headers={"Origin": ORIGIN}
                 )
-                self.assertEqual(personal.status_code, 200, personal.text)
-                self.assertEqual(personal.json()["status"], "unavailable")
+                self.assertEqual(personal.status_code, 403, personal.text)
                 self.assertEqual(
                     self.client.get("/api/cloud-auth/status").json()["account"]["model_access"][
                         "mode"
                     ],
-                    "personal",
+                    "sponsored",
                 )
                 self.assertEqual(
                     len(provider_keys), 1, "personal mode must not borrow sponsor credentials"
@@ -3058,6 +3165,7 @@ class CloudAuthTests(TestCase):
                 # A selected personal funding source must fail closed on a
                 # temporary provider outage instead of silently spending the
                 # sponsor allowance.
+                self.seed_personal_plan_authorization("local-service-key-member")
                 cloud_auth.set_model_access("local-service-key-member", "personal")
                 with patch.object(
                     openai_connection.chatgpt_auth,
@@ -3273,7 +3381,14 @@ class CloudAuthTests(TestCase):
             self.assertEqual(initial_status["account"]["model_access"]["mode"], "sponsored")
             # Once the user explicitly selects personal mode, later status
             # refreshes must preserve that choice.
-            cloud_auth.set_model_access("local-sponsored-member", "personal")
+            self.seed_personal_plan_authorization("local-sponsored-member")
+            with patch(
+                "sigma.openai_connection._check",
+                new=AsyncMock(
+                    return_value={"status": "connected", "checked_at": "fixture", "ttl_seconds": 60}
+                ),
+            ):
+                cloud_auth.set_model_access("local-sponsored-member", "personal")
             with (
                 patch(
                     "sigma.openai_connection.chatgpt_auth.session",
@@ -3367,6 +3482,7 @@ class CloudAuthTests(TestCase):
                 client=member,
             )
             member.cookies.set("sigma_session", login.cookies["sigma_session"])
+            self.seed_personal_plan_authorization("local-sponsored-member")
             cloud_auth.set_model_access("local-sponsored-member", "personal")
 
             async def seed():
@@ -3387,11 +3503,13 @@ class CloudAuthTests(TestCase):
             asyncio.run(seed())
             with patch(
                 "sigma.openai_connection._check",
-                new=AsyncMock(side_effect=AssertionError("sponsor token reached personal catalog")),
+                new=AsyncMock(
+                    return_value={"status": "connected", "checked_at": "fixture", "ttl_seconds": 60}
+                ),
             ):
                 connection = member.get("/api/ai/connection")
             self.assertEqual(connection.status_code, 200, connection.text)
-            self.assertEqual(connection.json()["status"], "disconnected")
+            self.assertEqual(connection.json()["status"], "connected")
             self.assertNotIn("fixture-sponsor-token", connection.text)
 
             renew = member.post(
@@ -3421,7 +3539,7 @@ class CloudAuthTests(TestCase):
 
             asyncio.run(assert_intact())
 
-    def test_connection_choice_persists_per_verified_subject_and_exhaustion_blocks_sponsor(self):
+    def test_connection_choice_is_separate_from_allowance_and_hosted_personal_is_unsupported(self):
         signed_in = self.finish()
         self.client.cookies.set(
             cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
@@ -3439,16 +3557,22 @@ class CloudAuthTests(TestCase):
             self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
             "sponsored",
         )
-        with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 0.0}):
+        with patch(
+            "sigma.api.cloud_research.snapshot",
+            side_effect=AssertionError("mode selection must not inspect spend ledger"),
+        ):
             exhausted = self.client.post(
                 "/api/ai/mode", json={"mode": "sponsored"}, headers=headers
             )
-        self.assertEqual(exhausted.status_code, 409, exhausted.text)
+        self.assertEqual(exhausted.status_code, 200, exhausted.text)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+            "sponsored",
+        )
         switched = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
-        self.assertEqual(switched.status_code, 200, switched.text)
-        self.assertEqual(switched.json()["status"], "unavailable")
+        self.assertEqual(switched.status_code, 403, switched.text)
         refreshed = self.client.get("/api/cloud-auth/status").json()
-        self.assertEqual(refreshed["account"]["model_access"]["mode"], "personal")
+        self.assertEqual(refreshed["account"]["model_access"]["mode"], "sponsored")
 
     def test_operator_can_disable_sponsor_without_removing_personal_connection(self):
         signed_in = self.finish()

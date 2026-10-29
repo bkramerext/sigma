@@ -1391,15 +1391,8 @@ async def auth_mode(body: AuthModeRequest, request: Request):
     if cfg.local and isinstance(principal, cloud_auth.Principal):
         if body.mode not in {"personal", "sponsored"} or body.account_id is not None:
             raise HTTPException(422, "Choose personal or sponsored access.")
-        if body.mode == "sponsored":
-            if not cloud_auth.sponsored_access_enabled():
-                raise HTTPException(403, "Sponsored access is disabled.")
-            try:
-                allowance = cloud_research.snapshot()
-            except cloud_research.CloudResearchUnavailable as exc:
-                raise HTTPException(503, "Sponsored allowance is unavailable.") from exc
-            if float(allowance.get("remaining_usd", 0)) <= 0:
-                raise HTTPException(409, "No sponsored allowance remains.")
+        if body.mode == "sponsored" and not cloud_auth.sponsored_access_enabled():
+            raise HTTPException(403, "Sponsored access is disabled.")
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)
         except PermissionError as exc:
@@ -1412,15 +1405,8 @@ async def auth_mode(body: AuthModeRequest, request: Request):
             raise HTTPException(401, "Authentication required.")
         if body.mode not in {"personal", "sponsored"} or body.account_id is not None:
             raise HTTPException(422, "Choose personal or sponsored access.")
-        if body.mode == "sponsored":
-            if not cloud_auth.sponsored_access_enabled():
-                raise HTTPException(403, "Sponsored access is disabled.")
-            try:
-                allowance = cloud_research.snapshot()
-            except cloud_research.CloudResearchUnavailable as exc:
-                raise HTTPException(503, "Sponsored allowance is unavailable.") from exc
-            if float(allowance.get("remaining_usd", 0)) <= 0:
-                raise HTTPException(409, "No sponsored allowance remains.")
+        if body.mode == "sponsored" and not cloud_auth.sponsored_access_enabled():
+            raise HTTPException(403, "Sponsored access is disabled.")
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)
         except PermissionError as exc:

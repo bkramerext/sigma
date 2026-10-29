@@ -613,7 +613,7 @@ def set_model_access(subject: str, mode: str) -> None:
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
         eligibility = db.execute(
-            "SELECT sponsorship_eligible FROM user_state WHERE subject=? AND access_active=1",
+            "SELECT sponsorship_eligible,model_access,model_access_selected FROM user_state WHERE subject=? AND access_active=1",
             (subject,),
         ).fetchone()
         if (
@@ -627,6 +627,25 @@ def set_model_access(subject: str, mode: str) -> None:
             and eligibility["sponsorship_eligible"]
         ):
             raise PermissionError("Sponsored mode is required for this account.")
+        if (
+            mode == "personal"
+            and eligibility is not None
+            and eligibility["sponsorship_eligible"]
+            and (
+                eligibility["model_access"] != "personal"
+                or not eligibility["model_access_selected"]
+            )
+        ):
+            # A selected mode is not evidence of OAuth. Only a durable, plan-
+            # permitted registration in this subject's isolated store can
+            # establish the first personal preference. Existing preferences
+            # survive later token/provider failures.
+            from sigma import cloud_personal
+
+            if not cfg.local or not cloud_personal.has_durable_plan_authorization(subject):
+                raise PermissionError(
+                    "Connect your personal ChatGPT account before selecting personal access."
+                )
         changed = db.execute(
             "UPDATE user_state SET model_access=?,model_access_selected=1,model_access_explicit=1,updated_at=? WHERE subject=? AND access_active=1"
             + (" AND sponsorship_eligible=1" if mode == "sponsored" else ""),

@@ -106,6 +106,8 @@ async def checks(root):
             and state["welcome_pending"]
         )
         assert state["account_label"] == "same-email@example.test"
+        async with transaction() as stored:
+            assert stored["accounts"][state["active_account"]]["plan_authorized"] is True
         assert fixture.generated == 0
         serialized = json.dumps(state)
         assert all(token not in serialized for token in fixture.tokens)

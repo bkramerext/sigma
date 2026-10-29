@@ -109,6 +109,8 @@ def exercise(origin: str) -> None:
         local_connect_succeeds = {"value": False}
         welcome_pending = {"value": True}
         guest_mode = {"value": False}
+        denied_identity_available = {"value": False}
+        denied_invitation_status = {"value": None}
         admin_mode = {"value": False}
         admin_grants = [
             {
@@ -344,7 +346,10 @@ def exercise(origin: str) -> None:
                 welcome_pending["value"] = False
                 payload = {"dismissed": True}
             elif path.endswith("/api/cloud-auth/denied"):
-                payload = {"identity_available": True, "invitation_status": None}
+                payload = {
+                    "identity_available": denied_identity_available["value"],
+                    "invitation_status": denied_invitation_status["value"],
+                }
             elif path.endswith("/api/cloud-auth/invitation-request") and method == "POST":
                 if invitation_failures["remaining"]:
                     invitation_failures["remaining"] -= 1
@@ -558,6 +563,7 @@ def exercise(origin: str) -> None:
         # The guest invitation action belongs directly below About in the
         # right-hand home header action stack, and still opens its dialog.
         guest_mode["value"] = True
+        denied_identity_available["value"] = False
         page.reload(wait_until="domcontentloaded")
         guest_welcome = page.locator("#invitation-welcome-dialog")
         if guest_welcome.count():
@@ -576,6 +582,16 @@ def exercise(origin: str) -> None:
         invite = page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")
         google = page.locator(".home-auth-pills a.project-google-signin")
         expect(about).to_be_visible()
+        expect(invite).to_have_count(0)
+        expect(google).to_be_visible()
+        denied_identity_available["value"] = True
+        page.goto(origin + "/?access=denied", wait_until="domcontentloaded")
+        dismiss_welcome_if_present(page, timeout=10000)
+        invitation_dialog = page.locator("#google-invitation-dialog")
+        expect(invitation_dialog).to_be_visible()
+        invitation_dialog.get_by_role("button", name="Close").click()
+        invite = page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")
+        google = page.locator(".home-auth-pills a.project-google-signin")
         expect(invite).to_be_visible()
         expect(google).to_be_visible()
         expect(page.locator(".home-auth-pills .api-connection")).to_have_count(0)
@@ -597,7 +613,11 @@ def exercise(origin: str) -> None:
         assert signin_box and signin_intro_box and invitation_footer_box
         gap_above_signin = signin_box["y"] - (signin_intro_box["y"] + signin_intro_box["height"])
         gap_below_signin = invitation_footer_box["y"] - (signin_box["y"] + signin_box["height"])
-        assert abs(gap_below_signin / gap_above_signin - 2.5) <= 0.3, (
+        expect(
+            invitation_dialog.get_by_role("link", name="Use another Google account")
+        ).to_be_visible()
+        assert gap_above_signin > 0 and gap_below_signin > 0, (
+            "verified-denied invitation dialog must space the alternate-account action from its copy and footer",
             gap_above_signin,
             gap_below_signin,
         )
@@ -624,7 +644,6 @@ def exercise(origin: str) -> None:
         invitation_dialog.get_by_role("link", name="Privacy Notice").click()
         expect(page).to_have_url(re.compile(r"/privacy\?return_to="))
         page.locator(".privacy-close-button").click()
-        dismiss_welcome_if_present(page, timeout=10000)
         invitation_dialog = page.locator("#google-invitation-dialog")
         expect(invitation_dialog).to_be_visible()
         invitation_dialog.get_by_role("button", name="Close").click()
@@ -672,6 +691,9 @@ def exercise(origin: str) -> None:
         assert sum(path.endswith("/api/cloud-auth/invitation-request") for path, _ in posts) == 2, (
             posts
         )
+        denied_invitation_status["value"] = "pending"
+        page.reload(wait_until="domcontentloaded")
+        expect(page.locator(".project-invite-me")).to_have_count(0)
 
         # The administrator can grant a notified request directly. Legacy
         # case variants collapse to one Authorized users row, selecting the
@@ -682,6 +704,9 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         expect(page.locator(".home-topline .home-about-button")).to_have_text("About SIGMA")
+        expect(page.locator(".project-invite-me")).to_have_count(0)
+        expect(page.get_by_role("button", name="Sign out of Google")).to_be_visible()
+        expect(page.get_by_role("link", name="Sign in with Google")).to_have_count(0)
         admin_pill = page.get_by_role("link", name="Administrator settings")
         expect(admin_pill).to_have_text("Admin Settings")
         admin_pill.click()
@@ -804,23 +829,26 @@ def exercise(origin: str) -> None:
         admin_dialog.get_by_role("button", name="Close", exact=True).click()
         guest_mode["value"] = False
         admin_mode["value"] = False
+        forced["value"] = False
         selected["mode"] = "personal"
         funding.update(remaining_usd=0)
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         posts.clear()
         reload_button = page.get_by_role("button", name="Reload me!")
-        expect(reload_button).to_be_visible()
         hosted_summary = page.locator(".api-connection > summary")
         expect(hosted_summary.get_by_role("status")).to_have_text("Personal ChatGPT unavailable")
         expect(hosted_summary).to_have_attribute(
             "title", re.compile("Personal ChatGPT is unavailable")
         )
+        expect(page.get_by_role("button", name="Reload me!")).to_have_count(0)
         hosted_summary.click()
         expect(hosted_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert any(
             path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
         ), posts
+        reload_button = page.get_by_role("button", name="Reload me!")
+        expect(reload_button).to_be_visible()
         expect(reload_button).to_have_class(re.compile(r"reload-me-connection"))
         posts.clear()
         reload_button.click()
@@ -859,11 +887,11 @@ def exercise(origin: str) -> None:
         with page.expect_request("**/api/ai/disconnect") as disconnect_request:
             sponsored_summary.click()
         assert disconnect_request.value.method == "POST"
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
         assert any(
             path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
         ), posts
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
 
         for personal_status in ("disconnected", "reauth_required", "unavailable"):
             selected["mode"] = "personal"
@@ -929,7 +957,7 @@ def exercise(origin: str) -> None:
             sponsored_summary.click(position={"x": 20, "y": 14})
         expect(sponsored_summary.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
         assert any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
-        assert not any(path.endswith("/api/ai/sponsor-auth/begin") for _, path in posts), posts
+        assert not any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
         expect(page.locator(".connection-pill-message")).to_have_count(0)
 
         admin_mode["value"] = True
@@ -947,7 +975,7 @@ def exercise(origin: str) -> None:
         with page.expect_request("**/api/ai/auth/begin"):
             admin_summary.click(position={"x": 20, "y": 14})
         assert any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
-        assert not any(path.endswith("/api/ai/sponsor-auth/begin") for _, path in posts), posts
+        assert not any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
         personal_signin_pending["value"] = False
         local_connect_succeeds["value"] = True
         expect(page.locator(".api-connection > summary")).to_have_attribute(
@@ -986,6 +1014,7 @@ def exercise(origin: str) -> None:
 
         sponsored_test_mode["value"] = True
         selected["mode"] = "sponsored"
+        welcome_pending["value"] = True
         page.goto(origin + "/", wait_until="domcontentloaded")
         expect(page.locator("#invitation-welcome-dialog")).to_be_visible()
         dismiss_sponsor_welcome(page)
@@ -998,10 +1027,10 @@ def exercise(origin: str) -> None:
         allowance = page.get_by_role("button", name="Show sponsorship details")
         allowance.hover()
         expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
-            "This mock sponsorship and its allowance are simulated"
+            "$0.75 remaining · Connected."
         )
         sponsored_summary.click()
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
             "background-color", "rgb(198, 160, 100)"
         )

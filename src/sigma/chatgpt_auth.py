@@ -493,6 +493,10 @@ async def callback(
                     record = await validate_tokens(
                         raw, client_id, attempt.nonce, previous, state["ext_agent_host_id"]
                     )
+                    # Persist the successful OAuth permission contract with
+                    # the user-owned registration. It remains evidence of an
+                    # established preference if these tokens later expire.
+                    record["plan_authorized"] = PLAN_SCOPES.issubset(record["scopes"])
                     if attempt.sponsor:
                         from sigma.cloud_sponsor import expected_email
 
@@ -616,6 +620,10 @@ async def session(account_id: str | None = None) -> dict:
                         }
                     refreshed = await validate_tokens(
                         raw, account["client_id"], None, account, state["ext_agent_host_id"]
+                    )
+                    refreshed["plan_authorized"] = bool(
+                        account.get("plan_authorized", PLAN_SCOPES.issubset(account["scopes"]))
+                        and PLAN_SCOPES.issubset(refreshed["scopes"])
                     )
                     state["accounts"][selected_id] = account = refreshed
                 except (
