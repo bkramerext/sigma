@@ -2081,25 +2081,11 @@ function AboutArchitecture() {
       <div className="about-flow-connector about-strategy-parallel-note"><span>Press Play to investigate the selected approaches</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
         <div className="about-session-heading">{card('session', 'Research Session', 'A run where SIGMA investigates your selected approaches')}</div>
-        <p className="about-session-round-label">One round <small>An Investigator tries an idea. A Skeptic challenges it.</small></p>
         <div className="about-agent-cycle-preview">
           <span className="about-agent-role">Investigator<small>Tries an idea</small></span>
           <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span className="about-agent-role">Skeptic<small>Looks for flaws</small></span>
-          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'See 6 turns') + ' Investigator and Skeptic example'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'See 6 turns'}</button>
-        </div>
-        <div className="about-round-feedback"><span aria-hidden="true">↶</span> The Investigator can revise the idea and try again</div>
-        <p className="about-shared-budget"><strong>Why repeat?</strong> A Skeptic may find a flaw the Investigator can fix or a question worth testing. Each new attempt can build on the last one.</p>
-        <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
-          <p className="about-exploration-title">How much can one session explore?</p>
-          <p>Suppose you select all three strategies and allow <strong>three rounds per strategy</strong>:</p>
-          <div className="about-exploration-grid">
-            {strategyExamples.map(strategy => <div className="about-exploration-row" key={strategy.id}>
-              <span className="about-exploration-strategy">{strategy.title}</span>
-              {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>2 turns</small></span>)}
-            </div>)}
-          </div>
-          <p className="about-session-exploration-example">That's <strong>9 possible rounds, or 18 agent turns</strong>. You also choose a <strong>maximum number of turns for the whole session</strong>. With a 12-turn limit, SIGMA could run at most 6 complete rounds across the three strategies. Some strategies might stop early or never start.</p>
+          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show') + ' Investigator and Skeptic example'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show'}</button>
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
@@ -2133,6 +2119,18 @@ function AboutArchitecture() {
               </div>
               <p className="about-agent-instantiation-note">These six turns show how <strong>one strategy</strong> can develop. Another strategy may take a different path—or stop early. Python and SageMath experiments may help when available. SIGMA saves the arguments, challenges, and results for review.</p>
             </section>
+            <p className="about-shared-budget"><strong>Why repeat?</strong> A Skeptic may find a flaw the Investigator can fix or a question worth testing. Each new attempt can build on the last one.</p>
+            <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
+              <p className="about-exploration-title">How much can one session explore?</p>
+              <p>Suppose you select all three strategies and allow <strong>three rounds per strategy</strong>:</p>
+              <div className="about-exploration-grid">
+                {strategyExamples.map(strategy => <div className="about-exploration-row" key={strategy.id}>
+                  <span className="about-exploration-strategy">{strategy.title}</span>
+                  {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>2 turns</small></span>)}
+                </div>)}
+              </div>
+              <p className="about-session-exploration-example">That's <strong>9 possible rounds, or 18 agent turns</strong>. You also choose a <strong>maximum number of turns for the whole session</strong>. With a 12-turn limit, SIGMA could run at most 6 complete rounds across the three strategies. Some strategies might stop early or never start.</p>
+            </div>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
             <p className="about-multiple-strategies-note">Each selected strategy has its own sequence of attempts. All strategies draw from the same session-wide turn limit.</p>
             <p className="about-multiple-sessions-note">You can run another session later to revisit a strategy with new evidence or compare what changed.</p>

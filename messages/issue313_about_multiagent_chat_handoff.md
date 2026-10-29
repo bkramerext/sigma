@@ -56,3 +56,7 @@ The human requested less abstract copy and an understandable **total exploration
 ## Final copy polish
 
 The exploration grid is labelled for assistive technology. The worked limit example now says "maximum number of turns for the whole session" and "9 possible rounds, or 18 agent turns"; the browser assertions match the copy and the six-turn example. Build and actual browser acceptance remain to be verified on this final SHA.
+
+## Human feedback — compact collapsed view and shorter toggle
+
+The user requested the visible button label **Show** (with **Hide** when expanded) and noted that long explanations had leaked outside the collapsible session details. Moved the **Why repeat?** explanation and **How much can one session explore?** 3-by-3 grid into `#about-session-details`, and removed the redundant outside **One round** heading and feedback sentence. Closed view now contains only the Research Session card, Investigator → Skeptic preview and the Show control, before continuing to Saved Evidence & Outcome. Expanded view retains the complete six-turn illustration and shared-budget exploration overview. Updated browser regression assertions to verify the explanation is hidden when collapsed and visible when expanded; same tests must be rerun on this new head. No paid provider calls.

@@ -136,8 +136,14 @@ def main() -> None:
                     "aria-expanded", "false"
                 )
                 session_toggle = dialog.locator(".about-session-toggle")
-                expect(session_toggle).to_contain_text("See 6 turns")
+                expect(session_toggle).to_have_text("Show")
                 expect(session_toggle).to_have_count(1)
+                details = dialog.locator("#about-session-details")
+                expect(details).to_be_hidden()
+                expect(details.locator(".about-exploration-space")).to_be_hidden()
+                expect(details.locator(".about-shared-budget")).to_be_hidden()
+                expect(dialog.locator(".about-session-frame > .about-exploration-space")).to_have_count(0)
+                expect(dialog.locator(".about-session-frame > .about-shared-budget")).to_have_count(0)
                 session_toggle.hover()
                 agent_toggle_style = session_toggle.evaluate(
                     "e => ({background: getComputedStyle(e).backgroundImage, text: getComputedStyle(e).color})"
@@ -175,22 +181,16 @@ def main() -> None:
                 for i in range(3):
                     expect(strategy_rounds.nth(i)).to_contain_text("Investigator")
                     expect(strategy_rounds.nth(i)).to_contain_text("Skeptic")
-                expect(dialog.locator(".about-session-round-label")).to_contain_text(
-                    "One round"
-                )
-                expect(dialog.locator(".about-shared-budget")).to_contain_text(
-                    "Why repeat?"
-                )
-                expect(dialog.locator(".about-exploration-row")).to_have_count(3)
-                expect(dialog.locator(".about-exploration-round")).to_have_count(9)
-                expect(dialog.locator(".about-exploration-space")).to_contain_text(
+                expect(details.locator(".about-shared-budget")).to_be_visible()
+                expect(details.locator(".about-shared-budget")).to_contain_text("Why repeat?")
+                expect(details.locator(".about-exploration-space")).to_be_visible()
+                expect(details.locator(".about-exploration-row")).to_have_count(3)
+                expect(details.locator(".about-exploration-round")).to_have_count(9)
+                expect(details.locator(".about-exploration-space")).to_contain_text(
                     "maximum number of turns for the whole session"
                 )
                 expect(dialog.locator(".about-evidence-report-note")).to_contain_text(
                     "Export the research or write a report"
-                )
-                expect(dialog.locator(".about-round-feedback")).to_contain_text(
-                    "revise the idea"
                 )
                 expect(
                     details.get_by_role("heading", name="How an idea grows over six agent turns")
@@ -262,6 +262,9 @@ def main() -> None:
                 )
                 session_toggle.click()
                 expect(session_toggle).to_have_attribute("aria-expanded", "false")
+                expect(session_toggle).to_have_text("Show")
+                expect(details).to_be_hidden()
+                expect(details.locator(".about-exploration-space")).to_be_hidden()
                 # Help affordances are separate from expansion controls.
                 strategy_a = dialog.locator('[data-about-info-node="strategyA"]')
                 page.mouse.move(5, 5)

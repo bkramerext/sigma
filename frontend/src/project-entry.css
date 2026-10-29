@@ -123,13 +123,9 @@
 .home-page .about-session-chevron { position: absolute; right: 10px; top: 50%; color: #d4a372; transform: translateY(-50%); transition: transform 140ms ease; }
 .home-page .about-session-frame { width: 100%; padding: 12px; border: 1px solid #8a6846; border-radius: 9px; background: radial-gradient(ellipse at 50% 5%, #a965481c, transparent 65%), linear-gradient(150deg, #171c20, #0b121a 72%); box-shadow: inset 0 1px 0 #e3bd8c22, 0 12px 28px #0007; }
 .home-page .about-session-heading .about-diagram-node { min-height: 54px; }
-.home-page .about-session-round-label { margin: 11px 0 -4px; color: #f0c999; text-align: center; font: 600 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; }
-.home-page .about-session-round-label small { display: block; color: #c8d6e1; font: 10px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-agent-cycle-preview { position: relative; display: grid; grid-template-columns: minmax(84px, 1fr) minmax(96px, 1.25fr) minmax(84px, 1fr); align-items: center; gap: 5px; min-height: 58px; margin-top: 9px; padding: 7px 10px; }
 .home-page .about-agent-role { color: #acd9fa; text-align: center; font: 600 12px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-agent-review-arrow { width: 100%; height: 32px; overflow: visible; filter: drop-shadow(0 0 4px #4b98cf70); }
-.home-page .about-round-feedback { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 9px; color: #a8d4f0; text-align: center; font: 10px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
-.home-page .about-round-feedback span { color: #e1b77f; font: 22px/1 Georgia, serif; }
 .home-page .about-shared-budget { margin: 9px 0 1px; padding: 8px 10px; border: 1px solid #537c97; border-radius: 6px; color: #c7d6e2; background: #102638; text-align: center; font: 11px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-shared-budget strong { color: #f0c999; }
 .home-page .about-exploration-space { margin: 12px 0 4px; padding: 10px; border: 1px solid #537c97; border-radius: 7px; background: linear-gradient(145deg, #152a39, #0d1d2a); }
