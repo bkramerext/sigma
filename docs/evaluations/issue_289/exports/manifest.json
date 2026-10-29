@@ -4,8 +4,7 @@
   "source_project": "samples/operation-narrow-passage",
   "project_title": "Operation Narrow Passage v2 (fixture copy)",
   "project_id": "9141e4ee-8ecc-4196-b1f9-8fe2c8b993c5",
-  "capture_commit": "26628d54 baseline plus issue #289 working changes",
-  "publishing_commit": "pending",
+  "capture_commit": "working tree based on main 26628d54; implementation in 103cc6de3885a890febce323eaab62dc431d3f0f",
   "provider": "mocked fixture; provider network was not called",
   "model_configuration": {
     "model": "gpt-6.1-sol",
@@ -47,5 +46,6 @@
     "fixture_settled_call_estimate_usd": 0.025,
     "fixture_ceiling_after_replenishment_usd": 0.2
   },
-  "session_id": "e86473ee-660c-4be9-a6ee-1e8119570bcf"
+  "session_id": "e86473ee-660c-4be9-a6ee-1e8119570bcf",
+  "artifact_commit": "103cc6de3885a890febce323eaab62dc431d3f0f"
 }
