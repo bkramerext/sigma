@@ -2382,7 +2382,48 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         )
 
 
+
+def test_long_paper_planning_timeout_is_stage_specific() -> None:
+    """Only the complex planning call receives the longer provider allowance."""
+    assert papers._long_paper_call_timeout("sigma_long_paper_plan") == 300
+    assert papers._long_paper_call_timeout("sigma_long_paper_section") == papers.CALL_SECONDS
+    assert papers._long_paper_call_timeout("sigma_paper_evidence_batch") == papers.CALL_SECONDS
+
+    observed: list[float | int | httpx.Timeout] = []
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": "invalid_json_schema"}})
+
+    actual_client = httpx.AsyncClient
+
+    def client_factory(**kwargs: Any) -> httpx.AsyncClient:
+        observed.append(kwargs["timeout"])
+        return actual_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    async def check() -> None:
+        for stage in ("sigma_long_paper_plan", "sigma_long_paper_section"):
+            try:
+                await papers._provider_structured(
+                    {"fixture": "timeout-check"},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "test-model", "reasoning_effort": "high"},
+                    instructions="fixture",
+                    schema_name=stage,
+                    response_model=papers.PaperDraft,
+                )
+            except ProjectError as exc:
+                assert "HTTP 400" in str(exc)
+            else:
+                raise AssertionError("Mock rejection should not complete paper authoring")
+
+    with patch("sigma.papers.httpx.AsyncClient", side_effect=client_factory):
+        asyncio.run(check())
+    assert observed == [300, papers.CALL_SECONDS]
+
+
+
 def main() -> None:
+    test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
     test_incomplete_chatgpt_paper_stream_is_rejected()
