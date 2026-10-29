@@ -7920,3 +7920,25 @@ authentication ownership and were not changed. Session playback/progress,
 results, and research-output browser states therefore remain unverified.
 No paid provider calls were made. R4R is open as
 [PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.
+
+## PR #297 Green guest authorization correction and consolidated R4R (2026-10-28)
+
+The guest `/api/projects/` policy is an explicit method/path allowlist with
+fail-closed handling for all other registered project routes. Direct API tests
+cover member-only reads, cross-user resources, mutation, provider-backed
+operations, research execution, proposal/model lookup, and sponsorship routes.
+Authenticated guests can browse samples and request access, but receive no
+membership or sponsorship allowance until admin approval. Invitation requests
+remain durable and deduplicated; built-in admin access remains intact.
+
+The complete `./sigma test` suite passed on validated implementation HEAD
+`efa26c2`, including auth and research API regressions, frontend typecheck/build,
+Ruff, and Pyright. Chromium acceptance checks passed for real-backend auth with
+deterministic OAuth/provider boundaries, guest samples, invitations, admin and
+member sponsor pill, saved session playback, and responsive About behavior.
+No paid calls were made. One graph-present sandbox scenario skipped because the
+local image is unavailable. See the consolidated
+[`PR #297 Green R4R`](../messages/pr297_green_consolidated_r4r.md) for exact
+commands, evidence, and acceptance matrix. Live Google OAuth and N's final
+provider-backed Easy sponsored session remain UNVERIFIED; they are required
+manual release acceptance. Do not merge or deploy before that run succeeds.
