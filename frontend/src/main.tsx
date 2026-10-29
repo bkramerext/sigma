@@ -1444,11 +1444,19 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           }
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
+            const current = Number(event.current);
+            const total = Number(event.total);
+            const count = Number.isInteger(current) && Number.isInteger(total) && total > 0
+              ? ` (${current} of ${total})` : '';
             setPhase(event.stage === 'compile' ? 'Compiling PDF…'
               : event.stage === 'snapshot' ? (preflight.draft_recovery_available
                 ? 'Reusing the validated draft from the previous attempt…'
                 : 'Preparing research evidence…')
-              : 'Writing paper…');
+              : event.stage === 'evidence' ? `Extracting research evidence${count}…`
+              : event.stage === 'index' ? `Consolidating evidence (pass ${current || 1})…`
+              : event.stage === 'outline' ? 'Paper outline complete; preparing sections…'
+              : event.stage === 'sections' ? `Writing paper sections${count}…`
+              : 'Generating paper…');
           }
         }
         if (done) break;
