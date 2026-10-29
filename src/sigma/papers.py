@@ -714,7 +714,10 @@ def _structured_evidence_index(
             length = FAST_NOTE_TEXT_LENGTH - min(len(label), 55) - 3
             fragments = [content[i : i + length] for i in range(0, len(content), length)]
             if len(fragments) > 1 and len(fragments[-1]) < 12:
-                fragments[-2] += fragments.pop()
+                # Merge while BOTH elements still exist: evaluating pop()
+                # before the indexed assignment leaves no [-2] element when
+                # the original list contains exactly two fragments.
+                fragments[-2:] = [fragments[-2] + fragments[-1]]
             for index, fragment in enumerate(fragments):
                 if len(fragment) > 500:
                     raise ProjectError("Structured evidence fragment exceeds note safety bound")
