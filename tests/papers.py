@@ -2482,6 +2482,21 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
     assert papers._paper_long_form(package) is False
     assert papers._paper_long_form(package, force_long_form=True) is True
 
+    # A paid long-form checkpoint also survives when the snapshot is smaller
+    # than the historical 100 KB boundary (e.g. an explicitly long run).
+    small_package = copy.deepcopy(package)
+    small_package["sources"][1]["data"]["outcome"]["argument"] = "Short proof candidate."
+    assert papers._paper_long_form(small_package) is False
+    paid_small = papers._new_work(
+        papers.hashlib.sha256(papers._json(small_package)).hexdigest(),
+        "easy-fixture",
+        "b" * 64,
+        "fixture-model",
+        "high",
+    )
+    paid_small["provider_calls"] = 1
+    assert papers._paper_long_form(small_package, existing=paid_small) is True
+
     # An earlier, compatible long-form attempt retains its checkpoint. The
     # optimization must never abandon paid outline or section work.
     existing = papers._new_work(
