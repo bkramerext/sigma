@@ -467,7 +467,7 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
             ):
                 await progress("evidence", 1, 2)
                 assert force_long_form is False
-                assert len(expected_snapshot_sha256) == 64
+                assert expected_snapshot_sha256 is None
                 return {"paper_id": "fixture-paper"}
 
             with patch.object(papers, "generate", new=fake_generate):
@@ -480,7 +480,6 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                             "path": str(path),
                             "expected_project_id": project_id,
                             "expected_binding": "chatgpt:fixture",
-                            "expected_snapshot_sha256": "a" * 64,
                         },
                     )
             assert response.status_code == 200
