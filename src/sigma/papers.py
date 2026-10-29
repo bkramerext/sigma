@@ -1757,7 +1757,7 @@ def _draft_text(draft: PaperDraft) -> str:
 _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
     # (opening section, methods section, findings label, authoring emphasis)
     "mathematical": (
-        "Introduction and definitions", "Proof strategy and evidence",
+        "Introduction", "Evidence and scope",
         "Arguments and claims",
         "Distinguish proved statements from conjectures, failed arguments, and open proof obligations. "
         "State assumptions and explain bridges between logical steps.",
@@ -1823,7 +1823,7 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         "traditions, counterarguments, and open questions.",
     ),
     "default": (
-        "Introduction", "Methods and evidence",
+        "Problem framing", "Methods and evidence",
         "Findings and interpretation",
         "Match the genre to the available evidence and clearly distinguish "
         "findings, hypotheses, negative results and unresolved questions.",
@@ -1934,7 +1934,7 @@ def _tex(
 
     def claim_register() -> None:
         parts.append(
-            r"\section*{Proof and claim status}" if math_style
+            r"\section*{Claim status and evidence}" if math_style
             else r"\section{" + esc(findings_heading) + "}"
         )
         for claim in draft.claims:
