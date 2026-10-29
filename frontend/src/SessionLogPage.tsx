@@ -15,6 +15,7 @@ export default function SessionLogPage() {
   const seen = useRef(new Set<number>());
   const [session, setSession] = useState<{ number: number; status: string } | null>(null);
   const [shortName, setShortName] = useState('Research Project');
+  const [projectTitle, setProjectTitle] = useState('');
   const [filter, setFilter] = useState('all');
   const [following, setFollowing] = useState(true);
   const [jumpVisible, setJumpVisible] = useState(false);
@@ -33,13 +34,13 @@ export default function SessionLogPage() {
         const query = new URLSearchParams({ path, after: String(cursor.current) });
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin' });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session log.' : 'This session log is unavailable or access was denied.');
-        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; session: { number: number; status: string } };
+        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; session: { number: number; status: string } };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
-        setShortName(data.short_name); setSession(data.session); setError('');
+        setShortName(data.short_name); setProjectTitle(data.project_title); setSession(data.session); setError('');
       } catch (cause) { if (alive) setError(displayError(cause)); }
       finally {
         fetching = false;
@@ -51,9 +52,9 @@ export default function SessionLogPage() {
   }, [sessionId, path]);
   useEffect(() => {
     if (!session) return;
-    const title = `${shortName}, Session ${session.number}`;
+    const title = `${projectTitle || shortName}, Session ${session.number}`;
     document.title = title;
-  }, [shortName, session]);
+  }, [projectTitle, shortName, session]);
   useEffect(() => { if (following && list.current) list.current.scrollTop = list.current.scrollHeight; }, [events, following]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const calls = new Map<string, SessionLogEvent>();
@@ -81,7 +82,7 @@ export default function SessionLogPage() {
     setJumpVisible(false);
   };
   return <main className="session-log-page">
-    <header><h1>{shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div><label>Show <select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All events</option><option value="investigator">Investigator</option><option value="skeptic">Skeptic</option><option value="provider">Provider calls</option><option value="session_event">Session events</option></select></label> {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to end</button>} <a className="session-log-secondary-action session-log-download" href={`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path })}`}>Download</a></div></header>
+    <header><h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div><label>Show <select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All events</option><option value="investigator">Investigator</option><option value="skeptic">Skeptic</option><option value="provider">Provider calls</option><option value="session_event">Session events</option></select></label> {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to end</button>} <a className="session-log-secondary-action session-log-download" href={`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path })}`}>Download</a></div></header>
     {error && <p role="alert">{error}</p>}
     <ol ref={list} onScroll={updateScrollState} className="session-log-events" aria-live="polite">{shown.map(event => {
       const paired = event.request_id ? calls.get(event.request_id) : undefined;
