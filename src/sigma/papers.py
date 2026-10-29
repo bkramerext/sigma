@@ -185,6 +185,14 @@ class LongPaperPlan(BaseModel):
     validation_warnings: list[str] = Field(max_length=12)
 
 
+FAST_MAX_SECTIONS = 8
+
+
+class FastLongPaperPlan(LongPaperPlan):
+    """Bounded full-paper outline for fast synthesis (detailed, not sprawling)."""
+    sections: list[LongSectionPlan] = Field(min_length=2, max_length=FAST_MAX_SECTIONS)
+
+
 class LongSectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     paragraphs: list[LongText] = Field(min_length=1, max_length=80)
@@ -2601,6 +2609,12 @@ that occur in the input. Do not add scientific claims or outside citations."""
     plan_instructions = (
         INSTRUCTIONS + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
+        + (
+            "\n\nProduce between 2 and 8 substantial, logically connected sections. "
+            "Each section should provide enough space for a detailed argument; "
+            "do not split every observation into its own section.\n"
+            if fast_path else ""
+        )
         + """
 
 You are planning a long-form paper, not writing its full section prose. The evidence index is a
@@ -2632,7 +2646,7 @@ Return the complete plan JSON matching the schema."""
             reserve=MAX_LONG_PAPER_SECTIONS,
             instructions=plan_instructions,
             schema_name="sigma_long_paper_plan",
-            response_model=LongPaperPlan,
+            response_model=FastLongPaperPlan if fast_path else LongPaperPlan,
             max_input_bytes=220_000,
             legacy=not fast_path,
         )
@@ -3290,7 +3304,8 @@ def preflight(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
     )
     maximum_calls = (
-        min(
+        (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
+        if fast_preflight else min(
             MAX_LONG_PAPER_CALLS,
             len(batches)
             + MAX_LONG_PAPER_REDUCTION_CALLS
@@ -3303,7 +3318,8 @@ def preflight(
         else 1
     )
     maximum_restart_calls = (
-        min(
+        (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
+        if fast_preflight else min(
             MAX_LONG_PAPER_CALLS,
             len(batches)
             + MAX_LONG_PAPER_REDUCTION_CALLS
@@ -3338,7 +3354,7 @@ def preflight(
         "maximum_provider_calls": maximum_calls,
         "maximum_restart_provider_calls": maximum_restart_calls,
         "maximum_evidence_calls": len(batches),
-        "maximum_index_reduction_calls": min(
+        "maximum_index_reduction_calls": 0 if fast_preflight else min(
             MAX_LONG_PAPER_REDUCTION_CALLS,
             max(
                 0,
@@ -3349,7 +3365,9 @@ def preflight(
             ),
         ),
         "maximum_outline_calls": MAX_LONG_PAPER_OUTLINE_CALLS if long_form else 0,
-        "maximum_section_calls": MAX_LONG_PAPER_SECTIONS if long_form else 0,
+        "maximum_section_calls": (
+            FAST_MAX_SECTIONS if fast_preflight else MAX_LONG_PAPER_SECTIONS
+        ) if long_form else 0,
         "max_output_tokens_per_call": 12_000 if mode == "api_key" else None,
         "maximum_requested_output_tokens": maximum_output_tokens,
         "maximum_fresh_run_requested_output_tokens": (
