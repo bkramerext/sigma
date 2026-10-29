@@ -170,10 +170,42 @@ def main() -> None:
                 expect(dialog.locator(".about-strategy-parallel-note")).to_contain_text(
                     "advance side by side"
                 )
+                strategy_rounds = dialog.locator(".about-strategy-round")
+                expect(strategy_rounds).to_have_count(3)
+                for i in range(3):
+                    expect(strategy_rounds.nth(i)).to_contain_text("Investigator")
+                    expect(strategy_rounds.nth(i)).to_contain_text("Skeptic")
+                expect(dialog.locator(".about-session-round-label")).to_contain_text(
+                    "Research round"
+                )
+                expect(dialog.locator(".about-shared-budget")).to_contain_text(
+                    "Shared maximum agent turns"
+                )
+                expect(dialog.locator(".about-round-feedback")).to_contain_text(
+                    "next round"
+                )
                 expect(
                     details.get_by_role("heading", name="One investigation. Multiple agent turns.")
                 ).to_be_visible()
                 expect(details.locator(".about-agent-turn")).to_have_count(3)
+                expect(details.locator(".about-round-definition")).to_contain_text(
+                    "One research round"
+                )
+                expect(details.locator(".about-round-definition")).to_contain_text(
+                    "One agent turn"
+                )
+                expect(details.locator(".about-turn-number").nth(0)).to_have_text(
+                    "ROUND 1 · TURN 1"
+                )
+                expect(details.locator(".about-turn-number").nth(1)).to_have_text(
+                    "ROUND 1 · TURN 2"
+                )
+                expect(details.locator(".about-turn-number").nth(2)).to_have_text(
+                    "ROUND 2 · NEXT TURN"
+                )
+                expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
+                    "3 strategies × 2 rounds × 2 turns = up to 12 agent turns"
+                )
                 expect(
                     details.locator(
                         ".about-agent-turn .about-diagram-node-title", has_text="Investigator"
