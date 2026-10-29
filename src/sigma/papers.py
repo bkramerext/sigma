@@ -517,14 +517,18 @@ def _evidence_batches(package: dict[str, Any]) -> list[dict[str, Any]]:
     batches: list[dict[str, Any]] = []
     current: list[dict[str, Any]] = []
     for row in rows:
-        trial = {"fields": [*current, row]}
+        # Size the exact input sent to the provider, including batch_id.
+        # Otherwise a near-limit batch can fail *after* checkpoint accounting.
+        trial = {"batch_id": f"E{len(batches) + 1}", "fields": [*current, row]}
         if (
             len(_json(trial)) > MAX_PROVIDER_INPUT_BYTES
             or len(trial["fields"]) > MAX_FIELDS_PER_BATCH
         ):
-            if not current:
+            if current:
+                batches.append({"batch_id": f"E{len(batches) + 1}", "fields": current})
+            trial = {"batch_id": f"E{len(batches) + 1}", "fields": [row]}
+            if len(_json(trial)) > MAX_PROVIDER_INPUT_BYTES:
                 raise ProjectError("One evidence field exceeds the provider batch limit")
-            batches.append({"batch_id": f"E{len(batches) + 1}", "fields": current})
             current = [row]
         else:
             current.append(row)
@@ -1583,6 +1587,16 @@ async def _provider(
                 pass
 
 
+def _check_paper_stage_input(input_value: Any, schema_name: str, limit: int) -> None:
+    """Check the exact UTF-8 request input before reserving a provider call."""
+    encoded = json.dumps(input_value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > limit:
+        raise ProjectError(
+            f"Paper stage {schema_name} needs {len(encoded):,} input bytes; "
+            f"the supported limit is {limit:,}. No provider call was made for this stage."
+        )
+
+
 async def _provider_structured(
     input_value: Any,
     binding: Mapping[str, Any],
@@ -1597,12 +1611,7 @@ async def _provider_structured(
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = json.dumps(input_value, ensure_ascii=False, separators=(",", ":"))
-    input_bytes = len(input_text.encode("utf-8"))
-    if input_bytes > max_input_bytes:
-        raise ProjectError(
-            f"Paper stage {schema_name} needs {input_bytes:,} input bytes; "
-            f"the supported limit is {max_input_bytes:,}. No provider call was made for this stage."
-        )
+    _check_paper_stage_input(input_value, schema_name, max_input_bytes)
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
@@ -1757,6 +1766,7 @@ distinct whenever merging would obscure differences between sessions or experime
         start_batch = int(state.get("next_batch", 0))
         for batch_index in range(start_batch, len(batches)):
             batch = batches[batch_index]
+            _check_paper_stage_input(batch, "sigma_paper_evidence_batch", MAX_PROVIDER_INPUT_BYTES)
             before_provider_call(MAX_LONG_PAPER_SECTIONS + 1 + 32)
             result, _ = await _provider_structured(
                 batch,
@@ -1869,9 +1879,11 @@ that occur in the input. Do not add scientific claims or outside citations."""
         ]
         for group_index in range(int(state.get("reduction_next_group", 0)), len(groups)):
             group = groups[group_index]
+            group_input = [item.model_dump() for item in group]
+            _check_paper_stage_input(group_input, "sigma_paper_evidence_reduction", MAX_REDUCTION_GROUP_BYTES)
             before_provider_call(MAX_LONG_PAPER_SECTIONS + 1)
             reduced, _ = await _provider_structured(
-                [item.model_dump() for item in group],
+                group_input,
                 binding,
                 config,
                 instructions=reduce_instructions,
@@ -1968,6 +1980,7 @@ into a result. Return the complete plan JSON matching the schema."""
     if state.get("plan"):
         long_plan = LongPaperPlan.model_validate(state["plan"])
     else:
+        _check_paper_stage_input(plan_input, "sigma_long_paper_plan", 220_000)
         before_provider_call(MAX_LONG_PAPER_SECTIONS)
         plan, _ = await _provider_structured(
             plan_input,
@@ -2036,6 +2049,7 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             "section_plan": section.model_dump(),
             "evidence_notes": relevant,
         }
+        _check_paper_stage_input(section_input, "sigma_long_paper_section", 220_000)
         before_provider_call(len(long_plan.sections) - section_number)
         body, _ = await _provider_structured(
             section_input,

@@ -88,6 +88,60 @@ def test_paper_provider_schema_requires_all_nested_fields() -> None:
     assert "omitted_fields" in normalized["required"]
 
 
+def test_evidence_batches_account_for_full_provider_envelope() -> None:
+    package = {
+        "sources": [
+            {"id": "project:fixture", "kind": "project", "data": {"text": "x" * 40}}
+        ]
+    }
+    full_batch = papers._evidence_batches(package)[0]
+    exact_bytes = len(papers._json(full_batch))
+    # A missing batch_id in the sizing calculation used to accept this case.
+    with patch.object(papers, "MAX_PROVIDER_INPUT_BYTES", exact_bytes - 1):
+        try:
+            papers._evidence_batches(package)
+        except ProjectError as exc:
+            assert "exceeds the provider batch limit" in str(exc)
+        else:
+            raise AssertionError("Oversized single-field batches must fail before dispatch")
+    package["sources"][0]["data"] = {str(i): "x" * 320 for i in range(100)}
+    with patch.object(papers, "MAX_PROVIDER_INPUT_BYTES", 2_500):
+        batches = papers._evidence_batches(package)
+    assert len(batches) > 1
+    assert all(len(papers._json(batch)) <= 2_500 for batch in batches)
+    assert [batch["batch_id"] for batch in batches] == [
+        f"E{i + 1}" for i in range(len(batches))
+    ]
+
+
+def test_oversized_paper_stage_does_not_reserve_provider_call() -> None:
+    package = {"sources": [{"id": "project:fixture", "kind": "project", "data": {}}]}
+    state = papers._new_work("0" * 64, "fixture", "1" * 64, "gpt-6.1-sol", "high")
+    persisted = []
+    batch = {"batch_id": "E1", "fields": [{"value": "a" * 60_000}]}
+    with (
+        patch.object(papers, "_evidence_batches", return_value=[batch]),
+        patch.object(papers, "_provider_structured", side_effect=AssertionError("dispatched")),
+    ):
+        try:
+            asyncio.run(
+                papers._generate_long_draft(
+                    package,
+                    {"mode": "chatgpt", "identity": "fixture", "token": "unused"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                    state,
+                    lambda item: persisted.append(item.copy()),
+                )
+            )
+        except ProjectError as exc:
+            assert "sigma_paper_evidence_batch" in str(exc)
+            assert "No provider call was made for this stage" in str(exc)
+        else:
+            raise AssertionError("Oversized stage must fail before dispatch")
+    assert state["provider_calls"] == 0
+    assert persisted == []
+
+
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "resp-paper"}},
@@ -1033,6 +1087,8 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 
 
 def main() -> None:
+    test_evidence_batches_account_for_full_provider_envelope()
+    test_oversized_paper_stage_does_not_reserve_provider_call()
     test_paper_provider_schema_requires_all_nested_fields()
     test_chatgpt_schema_rejection_has_safe_diagnostics()
     test_incomplete_chatgpt_paper_stream_is_rejected()
