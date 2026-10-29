@@ -1703,14 +1703,26 @@ class CloudAuthTests(TestCase):
                     ).json()["duplicate"]
                 )
                 deliver.assert_called_once()
-            queue = self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+            admin_restart = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 12347)
+            )
+            self.addCleanup(admin_restart.close)
+            admin_restart.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            queue = admin_restart.get("/api/cloud-auth/admin/invitation-requests").json()[
+                "requests"
+            ]
             self.assertEqual(queue[0]["email"], "new-member@example.org")
-            approved = self.client.post(
+            approved = admin_restart.post(
                 "/api/cloud-auth/admin/grants",
                 json={"kind": "email", "value": "new-member@example.org", "role": "member"},
                 headers={"Origin": local_origin},
             )
             self.assertEqual(approved.status_code, 200, approved.text)
+            signed_in_again = self.finish(
+                email="new-member@example.org", subject="onboard-member", client=guest
+            )
+            self.assertEqual(signed_in_again.status_code, 303)
+            guest.cookies.set("sigma_session", signed_in_again.cookies["sigma_session"])
             member = guest.get("/api/cloud-auth/status").json()
             self.assertEqual(member["user"]["role"], "member")
             self.assertTrue(member["account"]["sponsorship"]["eligible"])
