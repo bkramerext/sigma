@@ -7628,4 +7628,5 @@ suite (all steps, including frontend build), Ruff format/check, Pyright, and
 HTTP 403 on account changes; those screens/actions overlap Green's active
 authentication ownership and were not changed. Session playback/progress,
 results, and research-output browser states therefore remain unverified.
-No paid provider calls were made. PR pending.
+No paid provider calls were made. R4R is open as
+[PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.

@@ -4,7 +4,7 @@
 
 | Issue | Owner | Status | Branch / handoff |
 |---|---|---|---|
-| T313 — SIGMA UI quality and consistency pass | Gray | **R4R** · browser evidence and `./sigma test` pass; session-flow browser coverage limited by Green-owned account-change fixture rejection | `gray/ui-quality-pass` · [ticket](../tickets/t313.md) · [audit evidence](../docs/evaluations/t313/README.md) · handoff in `messages/t313_gray_ui_quality.txt` · PR pending |
+| T313 — SIGMA UI quality and consistency pass | Gray | **R4R** · browser evidence and `./sigma test` pass; session-flow browser coverage limited by Green-owned account-change fixture rejection | `gray/ui-quality-pass` · [PR #316](https://github.com/bkramerext/sigma/pull/316) · [ticket](../tickets/t313.md) · [audit evidence](../docs/evaluations/t313/README.md) · [handoff](../messages/t313_gray_ui_quality.txt) |
 | #286 — Maximum Concurrent Sessions | Blue | **R4R** · [PR #287](https://github.com/bkramerext/sigma/pull/287) | `blue/issue-286-concurrent-sessions` · [ticket](../tickets/t286.md) · [handoff](../messages/issue_286_blue_r4r.md) |
 
 | T279 — Invite me from sign-in pill | Blue | Implemented; local verification passed; R4R · [PR #281](https://github.com/bkramerext/sigma/pull/281) open, not merged | [ticket](../tickets/t279.md) · [issue #279](https://github.com/bkramerext/sigma/issues/279) · [handoff](../messages/issue_279_blue_r4r.md) |
