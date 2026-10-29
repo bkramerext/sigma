@@ -232,3 +232,12 @@ working tree, including Ruff, format, Pyright, frontend typecheck, and frontend
 production build. One unrelated sandbox graph-present case explicitly skipped
 because its local Python sandbox image is unavailable. The deterministic
 Maximum Regions Chrome lifecycle passed on the same working tree.
+
+### Commit identifiers
+
+- Base `main` SHA: `6ecc0df23127f4f1f920943331ff43afcc399682`.
+- Correction implementation SHA (tested tree):
+  `fd826d4b` (`Strengthen research scheduling and happy path regressions`).
+- The handoff/status documentation update is committed after this tested code
+  tree; the branch's current HEAD includes this handoff update.
+- PR #317: https://github.com/bkramerext/sigma/pull/317 (open; not merged).
