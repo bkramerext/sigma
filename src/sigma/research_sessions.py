@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces
+from sigma import cloud_research, cloud_workspaces, session_log
 from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
@@ -578,6 +578,19 @@ def _event(record: dict[str, Any], kind: str, message: str, role: str | None = N
             "message": message,
         }
     )
+    log_context = _session_log_context(record)
+    if log_context:
+        session_log.append(
+            record["project_path"],
+            log_context,
+            {
+                "type": "session_event",
+                "event_kind": kind,
+                "role": role,
+                "message": message,
+                "round": record.get("cycle"),
+            },
+        )
 
 
 def _record_preflight_failure(
@@ -3916,6 +3929,9 @@ def _remove_terminal_session(
             raise ProjectError(
                 "Session execution is still releasing resources; its record was retained"
             )
+        from sigma import session_log
+
+        session_log.delete_session(path, str(record["project_id"]), session_id)
         if project_path(path).suffix == ".json":
             from sigma.project_bundle import delete_file
 
@@ -4486,6 +4502,7 @@ async def start_session(
                     if item.removed_at is None
                 ],
                 "problem": view.project.problem,
+                "project_title": view.project.title,
                 "investigation_type": view.project.investigation_type,
                 "model": config["model"],
                 "reasoning_effort": config["reasoning_effort"],
@@ -4946,6 +4963,13 @@ async def _call_provider(
     timeout_seconds: float | None = None,
     step_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None] | None]:
+    import time
+    from uuid import uuid4
+
+    from sigma import session_log
+
+    request_id = str(uuid4())
+    started = time.monotonic()
     credential = await auth_context()
     if (
         credential["mode"] != record["mode"]
@@ -4956,8 +4980,71 @@ async def _call_provider(
         )
     schema_model = Investigator if role == "investigator" else Skeptic
     payload = _role_request_payload(record, role, context)
+    context["_session_log_request_id"] = request_id
     _assert_safe_role_request(payload, credential.get("token"))
     _assert_saved_role_input_matches(record, role, payload, step_id)
+    log_context = _session_log_context(record)
+    step = next((item for item in record.get("steps", []) if item.get("id") == step_id), {})
+    strategy_id = context.get("strategy_id") or step.get("strategy_id")
+    branch = next(
+        (
+            item
+            for item in record.get("strategy_runs", [])
+            if item.get("strategy_id") == strategy_id
+        ),
+        {},
+    )
+    if log_context:
+        peer_handoffs = context.get("peer_handoffs", [])
+        peer_evidence = context.get("other_strategy_evidence", [])
+        serialized_request = _serialized_role_request(payload).decode("utf-8")
+        session_log.append(
+            record["project_path"],
+            log_context,
+            {
+                "type": "provider_request",
+                "request_id": request_id,
+                "role": role,
+                "round": context.get("cycle", branch.get("cycle", record.get("cycle"))),
+                "strategy_id": strategy_id,
+                "turn": step.get("sequence", record.get("calls_used")),
+                "step_id": step_id,
+                "peer_handoffs_available": [
+                    item.get("handoff_id")
+                    for item in peer_handoffs
+                    if isinstance(item, dict) and isinstance(item.get("handoff_id"), str)
+                ],
+                "peer_evidence_available": [
+                    item.get("artifact_id")
+                    for item in peer_evidence
+                    if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+                ],
+                "peer_evidence_in_actual_request": [
+                    item["artifact_id"]
+                    for item in peer_evidence
+                    if isinstance(item, dict)
+                    and isinstance(item.get("artifact_id"), str)
+                    and item["artifact_id"] in serialized_request
+                ],
+                "peer_handoff_artifacts_in_actual_request": [
+                    artifact_id
+                    for item in peer_handoffs
+                    if isinstance(item, dict)
+                    for artifact_id in (
+                        item.get("source_artifact_id"),
+                        item.get("target_artifact_id"),
+                    )
+                    if isinstance(artifact_id, str) and artifact_id in serialized_request
+                ],
+                "provider": "openai",
+                "model": record.get("model"),
+                "reasoning_effort": record.get("reasoning_effort"),
+                "cost_reservation_usd": step.get("cost_reserve"),
+                "token_reservation": step.get("token_reservation"),
+                "request": payload,
+                "status": "in_flight",
+            },
+        )
     headers = {
         "Authorization": "Bearer " + credential["token"],
         "Content-Type": "application/json",
@@ -5003,6 +5090,20 @@ async def _call_provider(
                 else "unknown"
             )
             _sponsor_inference_diagnostic(record, f"http_{response.status_code}_{suffix}".lower())
+            if log_context:
+                session_log.append(
+                    record["project_path"],
+                    log_context,
+                    {
+                        "type": "provider_failure",
+                        "request_id": request_id,
+                        "role": role,
+                        "status": "provider_rejected",
+                        "http_status": response.status_code,
+                        "provider_error": error_data,
+                        "elapsed_seconds": round(time.monotonic() - started, 3),
+                    },
+                )
             failure(response.status_code, error_data, credential["mode"], "research")
         if credential["mode"] == "chatgpt":
             raw = await completed(
@@ -5070,6 +5171,26 @@ async def _call_provider(
             raise ProjectError("Research provider returned malformed output") from exc
     if not isinstance(data, dict):
         raise ProjectError("Research provider returned malformed output")
+    usage_for_log = _usage(raw)
+    if log_context:
+        session_log.append(
+            record["project_path"],
+            log_context,
+            {
+                "type": "provider_response",
+                "request_id": request_id,
+                "role": role,
+                "status": "completed",
+                "response": raw,
+                "response_wire": body.decode("utf-8", errors="replace"),
+                "duration_seconds": round(time.monotonic() - started, 3),
+                "usage": usage_for_log,
+                "estimated_cost_usd": _estimate_cost(record.get("model", ""), usage_for_log)
+                if usage_for_log
+                else None,
+                "provider_response_id": raw.get("id"),
+            },
+        )
     try:
         validated = schema_model.model_validate(data).model_dump(exclude_unset=True)
     except ValidationError as exc:
@@ -5263,6 +5384,22 @@ def _sponsor_inference_diagnostic(record: dict[str, Any], status: str) -> None:
         return
 
 
+def _session_log_context(record: dict[str, Any]) -> dict[str, Any] | None:
+    if not all(
+        isinstance(record.get(key), str) and record[key]
+        for key in ("project_path", "project_id", "id")
+    ):
+        return None
+    return {
+        "project_id": record["project_id"],
+        "id": record["id"],
+        "session_number": record.get("session_number", 1),
+        "project_title": record.get("short_project_name")
+        or record.get("project_title")
+        or "Research Project",
+    }
+
+
 async def _call(
     record: dict[str, Any],
     role: str,
@@ -5275,8 +5412,34 @@ async def _call(
         result = await _call_provider(record, role, context, timeout_seconds, step_id)
     except (TimeoutError, httpx.TimeoutException):
         _sponsor_inference_diagnostic(record, "call_timeout")
+        log_context = _session_log_context(record)
+        if log_context:
+            session_log.append(
+                record["project_path"],
+                log_context,
+                {
+                    "type": "provider_failure",
+                    "request_id": context.get("_session_log_request_id"),
+                    "role": role,
+                    "status": "timeout",
+                    "message": "Provider request timed out.",
+                },
+            )
         raise
     except Exception as exc:
+        log_context = _session_log_context(record)
+        if log_context:
+            session_log.append(
+                record["project_path"],
+                log_context,
+                {
+                    "type": "provider_failure",
+                    "request_id": context.get("_session_log_request_id"),
+                    "role": role,
+                    "status": "failed",
+                    "failure_type": type(exc).__name__,
+                },
+            )
         message = str(exc).casefold()
         if (
             "transport exceeded the 8 mb safety bound" in message
@@ -6923,6 +7086,7 @@ def _queue_peer_handoffs(
             and item.get("target_artifact_id") == handoff["target_artifact_id"]
             for item in existing
         ):
+            availability = "available_to_receiving_strategy"
             if not pending:
                 target["peer_handoff_base_question"] = (
                     target.get("pending_skeptic", {}).get("next_question")
@@ -6932,7 +7096,9 @@ def _queue_peer_handoffs(
                 pending.append(handoff)
             elif len(deferred) < MAX_DEFERRED_PEER_HANDOFFS:
                 deferred.append(handoff)
+                availability = "deferred_available_to_receiving_strategy"
             else:
+                availability = "omitted_from_receiving_strategy_queue"
                 target["deferred_peer_handoff_overflow_count"] = (
                     target.get("deferred_peer_handoff_overflow_count", 0) + 1
                 )
@@ -6951,6 +7117,22 @@ def _queue_peer_handoffs(
                         target.get("deferred_peer_handoff_overflow_omitted_count", 0) + 1
                     )
                 continue
+            log_context = _session_log_context(record)
+            if log_context:
+                session_log.append(
+                    record["project_path"],
+                    log_context,
+                    {
+                        "type": "cross_strategy_artifact_availability",
+                        "availability": availability,
+                        "handoff_id": handoff["handoff_id"],
+                        "source_strategy_id": handoff["source_strategy_id"],
+                        "source_artifact_id": handoff["source_artifact_id"],
+                        "target_strategy_id": handoff["target_strategy_id"],
+                        "target_artifact_id": handoff["target_artifact_id"],
+                        "relation": handoff["relation"],
+                    },
+                )
             target["current_question"] = target[
                 "peer_handoff_base_question"
             ] + _peer_handoff_question(pending)

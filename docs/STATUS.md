@@ -8018,3 +8018,19 @@ and follows a deterministic OAuth redirect fixture. `./sigma test`, frontend
 typecheck, `browser_checks/local_auth_real_backend.py`, and
 `browser_checks/guest_samples.py` passed with this update in the worktree. No
 live Google OAuth callback or paid provider call was made.
+## Issue #301 live session log (2026-10-29)
+
+Implementation is complete on `green/issue-301-live-logging`, based on
+`26628d549dbe11aad0c9f612633c08964ae9eb90`. The isolated Markdown log store
+uses UUID-derived project/session directories, framed JSON events, serialized
+append with fsync, crash-tail repair, secret redaction, and a 32 MiB session
+limit. The provider hook captures complete request JSON and returned response
+wire content, paired by request ID. Authorized incremental read and Markdown
+download endpoints and the separate polling window are implemented. Focused
+store, deterministic research-session, cloud authorization, frontend typecheck,
+and real-Chromium window/polling/download checks passed. `./sigma test` passed
+all steps, including backend regression suites, Ruff check/format, Pyright,
+frontend typecheck and build. The graph-present local sandbox subcase skipped
+because the configured image is unavailable. See the issue handoff for criteria
+that remain unverified. No paid provider calls were made. The issue branch is
+being prepared for pull request review; see `messages/issue_301_green_r4r.txt`.

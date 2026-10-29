@@ -202,6 +202,27 @@ def main() -> None:
                 assert saved["status"] == "ended"
                 assert len(saved["steps"]) == 10
                 assert calls.await_count == 10
+                trace = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log", params={"path": path}
+                )
+                assert trace.status_code == 200, trace.text
+                assert trace.json()["short_name"] == "Cloud API"
+                assert any(item["type"] == "session_event" for item in trace.json()["events"])
+                no_new_events = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log",
+                    params={"path": path, "after": trace.json()["cursor"]},
+                )
+                assert no_new_events.status_code == 200 and no_new_events.json()["events"] == []
+                client.headers.update(
+                    {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
+                )
+                hidden_log = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log", params={"path": path}
+                )
+                assert hidden_log.status_code == 404, hidden_log.text
+                client.headers.update(
+                    {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
+                )
 
                 # Standalone strategy generation uses the same sponsored
                 # credential and durable ledger as research sessions.

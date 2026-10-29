@@ -411,6 +411,9 @@
 .workspace-page .strategy-process-controls .process-control:hover:not(:disabled) { color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054; }
 .workspace-page .strategy-process-controls .process-control:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .workspace-page .strategy-process-controls .process-control:disabled { opacity: .45; cursor: not-allowed; }
+.workspace-page .session-heading-actions .session-mini-process-control { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-width: 24px; min-height: 24px; padding: 3px; margin: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #c7a16d; }
+.workspace-page .session-heading-actions .session-mini-process-control svg { width: 14px; height: 14px; fill: currentColor; }
+.workspace-page .session-heading-actions .session-mini-process-control:hover:not(:disabled) { color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054; }
 .workspace-page .workspace-pane-heading :is(h1,h2) { margin: 0; flex: 0 0 auto; color: #e7be8d; font-size: 23px; line-height: 1.3; }
 .workspace-page .workspace-pane-heading h1 { border: 0; }
 .workspace-page .workspace-pane-heading :is(h1,h2) > button { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
