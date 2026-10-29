@@ -104,7 +104,9 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("alert")).to_contain_text(
         "Deterministic fixture provider returned HTTP 500", timeout=30_000
     )
-    expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled(timeout=10_000)
+    expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled(
+        timeout=10_000
+    )
     expect(dialog).to_contain_text("makes a new AI request and may consume provider allowance")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     dialog.get_by_role("button", name="Retry paper planning", exact=True).click()
@@ -151,7 +153,9 @@ with sync_playwright() as playwright:
     expect(dialog.locator(".ai-paper-restart-notice")).to_contain_text(
         "research or AI settings changed", timeout=20_000
     )
-    expect(dialog.get_by_role("button", name="Clear outdated paper work", exact=True)).to_be_enabled()
+    expect(
+        dialog.get_by_role("button", name="Clear outdated paper work", exact=True)
+    ).to_be_enabled()
     expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
     dialog.get_by_role("button", name="Clear outdated paper work", exact=True).click()
     expect(dialog.locator(".ai-paper-status:not(.ai-paper-progress)")).to_contain_text(
