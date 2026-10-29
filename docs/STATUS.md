@@ -7607,3 +7607,26 @@ status. Ruff check/format and `git diff --check` passed. No live provider calls
 were made. GitHub Actions all passed at implementation commit
 `f01d4417f1ae64123d9b20d2758b29224ca709c9`: SIGMA verification, T200, T201,
 T249, T92, and Research Outcome.
+
+## T313 Gray UI quality pass (2026-10-28)
+
+On `gray/ui-quality-pass`, based on `main` / `origin/main` at
+`2cf878a3290e697b408ebdb5d58871690e2c030b`, the narrow Home view now suppresses
+the oversized slogan and dims the established background artwork so sample
+content remains readable. The ChatGPT connected tooltip no longer includes a
+provider account label; visible connected/disconnected/sponsored states and
+click behavior remain intact. Main already contained the Sponsorship Allowance
+alignment correction from PR #232; this pass added browser regression coverage
+for `$2`, `$15`, and Unlimited at desktop and narrow widths.
+
+Real Chrome checks passed for allowance alignment (1440/390), connection states
+and Home overflow (1440/390/320), the narrow New Project dialog (390), and
+Project About disclosure/focus behavior (1440/390). Screenshots and audit
+limits are in `docs/evaluations/t313/`. `npm run typecheck`, the `./sigma test`
+suite (all steps, including frontend build), Ruff format/check, Pyright, and
+`git diff --check` passed. The end-to-end A17 browser walk stopped at a fixture
+HTTP 403 on account changes; those screens/actions overlap Green's active
+authentication ownership and were not changed. Session playback/progress,
+results, and research-output browser states therefore remain unverified.
+No paid provider calls were made. R4R is open as
+[PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.

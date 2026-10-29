@@ -1,13 +1,16 @@
 """Real Chrome checks that the workspace About action opens and closes accessibly."""
 
 import os
+from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
 BASE_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
 FIXTURE_URL = os.environ.get("SIGMA_BROWSER_FIXTURE_URL", "http://127.0.0.1:8026").rstrip("/")
+EVIDENCE = Path("docs/evaluations/t313/evidence")
 
 with sync_playwright() as playwright:
+    EVIDENCE.mkdir(parents=True, exist_ok=True)
     browser = playwright.chromium.launch(
         executable_path=os.environ.get(
             "SIGMA_BROWSER_EXECUTABLE",
@@ -31,7 +34,11 @@ with sync_playwright() as playwright:
     page.goto(BASE_URL)
     samples = page.get_by_role("tab", name="Samples", exact=True)
     expect(samples).to_be_visible()
-    page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
+    samples_panel = page.get_by_role("tabpanel", name="Samples", exact=True)
+    samples_panel.locator(".sample-type-group").filter(has_text="Mathematics").locator(
+        "summary"
+    ).click()
+    samples_panel.get_by_role(
         "button", name="Open Counting Constrained Binary Strings", exact=True
     ).click()
     expect(page.get_by_role("heading", name="Counting Constrained Binary Strings")).to_be_visible()
@@ -57,14 +64,13 @@ with sync_playwright() as playwright:
             "contentColor": "rgb(196, 206, 216)",
         }, (width, appearance)
         expect(dialog.locator(".about-intro")).to_contain_text("research workbench")
-        expect(dialog.locator(".about-terms")).to_have_text(
-            "Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate."
-        )
+        expect(dialog.locator(".about-disclosure")).to_have_count(3)
+        expect(dialog.get_by_role("link", name="Terms of Service", exact=True)).to_be_visible()
         assert len(api_requests) == requests_before, "Opening About made an API request"
         assert dialog.evaluate("element => element.matches(':modal')")
         box = dialog.bounding_box()
         assert box and box["x"] >= 0 and box["x"] + box["width"] <= width, (width, box)
-        page.screenshot(path=f"/tmp/t226-about-project-{width}-after.png")
+        page.screenshot(path=str(EVIDENCE / f"project-about-{width}.png"))
         page.keyboard.press("Escape")
         expect(dialog).not_to_be_visible()
         expect(about_button).to_be_focused()
