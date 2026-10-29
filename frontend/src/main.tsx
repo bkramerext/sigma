@@ -787,11 +787,54 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const inferencePending = useRef(false);
   const inferenceRequestId = useRef<string | null>(null);
   const inferenceCancelled = useRef(false);
+  const inferenceCancelRequested = useRef(false);
+  const inferenceBinding = useRef<string | null>(null);
+  const inferenceResolved = useRef(false);
   useEffect(() => { setSuggestionError(''); setSuggestionStatus(''); }, [path]);
+  function applyInferenceStatus(result: { status?: string; strategy?: Strategy | null; project?: ProjectView }) {
+    if (result.status === 'completed' && result.strategy && result.project) {
+      if (!inferenceResolved.current) onInferred(result.project, result.strategy.id);
+      inferenceResolved.current = true;
+      setSuggestionStatus(`Saved strategy: ${result.strategy.title}. You can review or remove it in Strategies.`);
+    } else if (result.status === 'no_strategy' || result.status === 'completed' && !result.strategy) {
+      inferenceResolved.current = true;
+      setSuggestionStatus('No additional strategy was identified from the current research.');
+    } else if (result.status === 'cancelled') {
+      inferenceResolved.current = true;
+      setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was saved.');
+    } else if (result.status === 'uncertain' || result.status === 'dispatched') {
+      setSuggestionStatus('Cancellation was requested, but the provider outcome is uncertain. This request will not be repeated; refresh Strategies to check for a saved result.');
+    } else if (result.status === 'provider_completed') {
+      setSuggestionStatus('The provider completed, but SIGMA cannot confirm that the strategy was saved. Refresh Strategies to inspect the current project; this request will not be repeated.');
+    } else if (result.status === 'failed') {
+      setSuggestionError('Inference did not complete. This request will not be repeated; start a new inference to try again.');
+    } else if (result.status === 'not_found') {
+      setSuggestionStatus('Inference was cancelled before the server accepted a provider request.');
+    }
+  }
+  async function refreshInferenceStatus(requestId: string) {
+    const binding = inferenceBinding.current;
+    if (!binding) {
+      setSuggestionStatus('Cancellation status is unavailable. Refresh Strategies to inspect the current project.');
+      return;
+    }
+    try {
+      const query = new URLSearchParams({ path, expected_project_id: projectId, expected_binding: binding, request_id: requestId });
+      const response = await fetch(`/api/projects/strategy-inference/status?${query}`, { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not check inference status.');
+      applyInferenceStatus(result);
+    } catch {
+      setSuggestionStatus('Cancellation status is unavailable. Refresh Strategies to inspect the current project; the request will not be repeated automatically.');
+    }
+  }
   async function inferStrategy() {
     if (inferencePending.current) return;
     inferencePending.current = true;
     inferenceCancelled.current = false;
+    inferenceCancelRequested.current = false;
+    inferenceResolved.current = false;
+    inferenceBinding.current = null;
     inferenceRequestId.current = crypto.randomUUID();
     setSuggestionBusy(true); setSuggestionError(''); setSuggestionStatus('');
     let finishProviderRequest = () => {};
@@ -801,18 +844,20 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       if (!configResponse.ok) throw new Error(config.error ?? 'Could not read AI settings.');
       if (config.project_id !== projectId) throw new Error('Project identity changed. Reopen it before suggesting a strategy.');
       if (!config.available) throw new Error(config.message ?? 'Connect the selected AI account before requesting a suggestion.');
+      inferenceBinding.current = config.binding;
+      if (inferenceCancelRequested.current) {
+        inferenceResolved.current = true;
+        setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was saved.');
+        return;
+      }
       finishProviderRequest = beginProviderRequest('strategy-inference');
-      const result = await post<{ strategy: Strategy | null; project: ProjectView }>('strategy-inference', {
+      const result = await post<{ strategy: Strategy | null; project: ProjectView; inference_status?: string }>('strategy-inference', {
         path, expected_binding: config.binding, expected_mode: config.mode, expected_project_id: projectId, request_id: inferenceRequestId.current,
       });
-      if (!result.strategy) setSuggestionStatus('No additional strategy was identified from the current research.');
-      else {
-        onInferred(result.project, result.strategy.id);
-        setSuggestionStatus(`Saved strategy: ${result.strategy.title}. You can review or remove it in Strategies.`);
-      }
+      applyInferenceStatus({ ...result, status: result.inference_status ?? (result.strategy ? 'completed' : 'no_strategy') });
     } catch (cause) {
-      if (inferenceCancelled.current) {
-        setSuggestionStatus('Inference cancelled. No strategy was saved.');
+      if (inferenceCancelRequested.current) {
+        await refreshInferenceStatus(inferenceRequestId.current ?? '');
         return;
       }
       const message = errorMessage(cause);
@@ -821,11 +866,21 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   }
   async function cancelInference() {
     const requestId = inferenceRequestId.current;
-    if (!requestId || inferenceCancelled.current) return;
+    if (!requestId || inferenceCancelRequested.current) return;
+    inferenceCancelRequested.current = true;
     inferenceCancelled.current = true;
-    setSuggestionStatus('Cancelling inference…');
-    try { await post('proposals/cancel', { request_id: requestId }); }
-    catch (cause) { const message = errorMessage(cause); setSuggestionError(message); reportRequestFailure(message); }
+    setSuggestionStatus('Cancellation requested. Checking whether a strategy was saved…');
+    try {
+      if (!inferenceBinding.current) return;
+      const result = await post<{ status: string; strategy?: Strategy | null; project?: ProjectView }>('proposals/cancel', {
+        request_id: requestId, path, expected_project_id: projectId, expected_binding: inferenceBinding.current,
+      });
+      applyInferenceStatus(result);
+    }
+    catch (cause) {
+      const message = errorMessage(cause); setSuggestionError(message); reportRequestFailure(message);
+      await refreshInferenceStatus(requestId);
+    }
   }
   const sourceButton = (source: EvidencePointer, context: string) => <button type="button" className="text-view-link" disabled={!source.available} aria-label={`${context}: Session ${source.session_number}, Artifact ${source.artifact_sequence || 'unnumbered'}`} onClick={() => onEvidence(source)}>Session #{source.session_number} · {source.artifact_sequence ? `Artifact ${source.artifact_sequence}` : 'Saved evidence'}</button>;
   const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (saved text continues)` : text;
@@ -838,7 +893,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const changeRow = (row: CurrentUnderstanding['changes'][number], index: number) => <li key={`${row.kind}-${row.source.session_id}-${row.source.artifact_id}-${index}`}><strong>{({ obligation_addressed: 'Resolution reported', obligation_superseded: 'Supersession reported', obligation_retracted: 'Retraction reported', local_refutation_reported: 'Local counterexample reported', later_finding_available: 'Later review saved', supersedes: 'Supersession reported', refutes: 'Refutation reported' } as Record<string, string>)[row.kind] || 'Saved assessment'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.caution}</p><p>{sourceButton(row.source, 'Inspect later evidence')}{row.earlier && <> · {sourceButton(row.earlier, 'Inspect earlier evidence')}</>}</p></li>;
   const questionRow = (row: CurrentQuestion) => <li key={row.id}><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.note}</p>{row.sources.length > 0 && <p>{sourceButton(row.sources.at(-1)!, 'Inspect obligation')}{row.narrative_resolution_sources.slice(-1).map(source => <span key={source.record_path}> · {sourceButton(source, 'Inspect narrative resolution')}</span>)}{row.dispositions.filter(item => item.valid).slice(-1).map(item => <span key={item.source.record_path}> · {sourceButton(item.source, 'Inspect disposition')}</span>)}</p>}</li>;
   return <details className="outcome-subsection current-understanding" open>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelled.current ? 'Cancelling…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Cancel this inference. No strategy will be saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
     <p className="hint current-understanding-scope">{state.scope_note}</p>
     <div className="current-understanding-columns">
       <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>

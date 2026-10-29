@@ -1,28 +1,22 @@
 ## Issue #332 — Current Understanding strategy inference (2026-10-29)
 
 Current Understanding now offers **Infer strategy #n**. The ordinal comes from
-the project's complete persisted strategy history, including removed entries.
-Inference reuses the bounded cross-session synthesis and source-linked evidence,
-validates a strict title/summary/approach result, rejects nonnovel directions,
-and automatically saves an accepted inference through the shared strategy model
-with OpenAI model/reasoning provenance. It checks account binding, project/model
-identity, the Current Understanding context, and the expected strategy snapshot
-before write. Request IDs prevent duplicate saves on replay; the inline Cancel
-action cancels the provider task before persistence. Generate remains the
-separate agentic proposal/review/accept workflow. Both actions have accessible
-in-app tooltip guidance, and the ephemeral Markdown/copy block is gone.
+the complete persisted strategy history, including removed entries. Inference
+uses bounded Current Understanding and source-linked evidence, validates a
+strict title/summary/approach result, rejects nonnovel directions, and saves
+through the shared strategy service with model/reasoning provenance. A durable
+request ledger and strategy provenance make retries, process restarts, and
+replay after removal idempotent; replay returns a freshly inspected project
+view. Ambiguous provider dispatches are terminal and never silently retried.
+A shared project write lock serializes the final account/project/context/
+settings/history check with session evidence, settings, and strategy writes.
+Cancellation reports reconciled authoritative state without promising that no
+strategy was saved. Generate remains the separate proposal/review/accept
+workflow. Both actions have accessible in-app tooltip guidance, and the
+ephemeral Markdown/copy block is gone.
 
-`uv run --locked --no-sync python tests/proposals.py` passed, including
-structured inference persistence/provenance, no-novel and invalid-output
-nonmutation, idempotent replay, removal history, and existing proposal/account
-failure regressions. `npm --prefix frontend run typecheck` passed. Real Chrome
-`browser_checks/issue332_infer_strategy.py` passed against the Maximum Regions
-Formed by Lines sample with a deterministic inference fixture: keyboard action,
-count update, strategy reveal/removal, reload persistence, ordinal advancement,
-tooltip text, Generate distinction, and 390px view. `./sigma test` passed all
-steps, including production build; the optional graph-present Python sandbox
-case was skipped because its local image is unavailable. No live or paid
-provider calls were made. See [issue #332 handoff](../messages/issue_332_gray_r4r.txt).
+Verification and CI investigation, including actual results and limitations,
+are recorded in [the issue #332 handoff](../messages/issue_332_gray_r4r.txt).
 
 ## PR #325 — documentation accuracy and onboarding verification (2026-10-29)
 

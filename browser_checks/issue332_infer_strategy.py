@@ -1,6 +1,5 @@
 """Real Chrome acceptance for Current Understanding strategy inference."""
 
-import json
 import os
 from urllib.parse import quote
 
@@ -8,6 +7,7 @@ from playwright.sync_api import expect, sync_playwright
 
 UI = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
 API = os.environ.get("SIGMA_BROWSER_FIXTURE_URL", "http://127.0.0.1:8002").rstrip("/")
+PROVIDER = os.environ.get("SIGMA_FAKE_PROVIDER_URL", "http://127.0.0.1:8003").rstrip("/")
 CHROME = os.environ.get(
     "SIGMA_BROWSER_EXECUTABLE",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -23,55 +23,25 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1280, "height": 850})
     errors = []
     inference_requests = []
-    fixture_state = {"project_id": ""}
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
         request = route.request
-        if (
-            request.url.endswith("/api/projects/proposals/config")
-            or "/api/projects/proposals/config?" in request.url
-        ):
-            route.fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps(
-                    {
-                        "available": True,
-                        "project_id": fixture_state["project_id"],
-                        "binding": "issue332-fixture-account",
-                        "mode": "api_key",
-                        "model": "fixture-model",
-                        "reasoning_effort": "high",
-                    }
-                ),
-            )
-            return
         if request.method == "POST" and request.url.endswith("/api/projects/strategy-inference"):
-            body = request.post_data_json
-            inference_requests.append(body)
-            saved_response = route.fetch(
-                url=API + "/api/projects/strategies",
-                method="POST",
-                headers={**request.headers, "Content-Type": "application/json", "Origin": UI},
-                post_data=json.dumps({"path": body["path"], **INFERRED}),
-            )
-            assert saved_response.ok, saved_response.text()
-            saved = saved_response.json()
-            route.fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps({"strategy": saved["project"]["strategies"][-1], "project": saved}),
-            )
-            return
+            inference_requests.append(request.post_data_json)
         response = route.fetch(url=request.url.replace(UI, API))
-        if request.method == "POST" and request.url.endswith("/api/projects/samples/open"):
-            fixture_state["project_id"] = response.json()["project"]["id"]
         route.fulfill(response=response)
 
     page.route("**/api/**", forward)
     page.goto(UI, wait_until="networkidle")
-    page.get_by_label("Mock authentication identity").select_option("member-a")
+    mock_identity = page.get_by_label("Mock authentication identity")
+    if mock_identity.count():
+        mock_identity.select_option("member-a")
+    else:
+        mode_result = page.evaluate(
+            """async () => { const response = await fetch('/api/ai/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'api_key' }) }); return { ok: response.ok, body: await response.json() }; }"""
+        )
+        assert mode_result["ok"], mode_result
     samples = page.get_by_role("tab", name="Samples", exact=True)
     if samples.get_attribute("aria-selected") != "true":
         samples.click()
@@ -121,6 +91,33 @@ with sync_playwright() as playwright:
     expect(page.locator(".strategies-pane .section-count")).to_contain_text(
         str(len(before["project"]["active_order"]))
     )
+    replay = page.request.post(API + "/api/projects/strategy-inference", data=inference_requests[0])
+    assert replay.ok, replay.text()
+    replay_data = replay.json()
+    assert replay_data["status"] == "completed"
+    assert replay_data["strategy"]["title"] == INFERRED["title"]
+    assert replay_data["strategy"]["removed_at"]
+    assert any(
+        item["id"] == replay_data["strategy"]["id"] and item["removed_at"]
+        for item in replay_data["project"]["project"]["strategies"]
+    )
+    assert page.request.get(PROVIDER + "/__test/count").json()["responses"] == 1
+    # Account/project binding rejection must happen before provider dispatch.
+    mismatched = dict(inference_requests[0])
+    mismatched["expected_project_id"] = "00000000-0000-0000-0000-000000000001"
+    rejected = page.request.post(API + "/api/projects/strategy-inference", data=mismatched)
+    assert rejected.status in (400, 404, 409), rejected.text()
+    assert page.request.get(PROVIDER + "/__test/count").json()["responses"] == 1
+
+    # A provider error is ambiguous and remains terminal across response retries.
+    assert page.request.get(PROVIDER + "/__test/fail-next").ok
+    failed_request = dict(inference_requests[0])
+    failed_request["request_id"] = "f2222222-2222-4222-8222-222222222222"
+    first_failure = page.request.post(API + "/api/projects/strategy-inference", data=failed_request)
+    assert first_failure.status >= 400, first_failure.text()
+    retry_failure = page.request.post(API + "/api/projects/strategy-inference", data=failed_request)
+    assert retry_failure.status >= 400, retry_failure.text()
+    assert page.request.get(PROVIDER + "/__test/count").json()["responses"] == 2
     page.reload()
     expect(page.locator(".current-understanding")).to_be_visible()
     expect(
@@ -138,6 +135,6 @@ with sync_playwright() as playwright:
     )
     assert not errors, errors
     print(
-        "PASS real Chrome issue #332 inference save, count, reveal, remove/reopen, tooltips, keyboard and mobile visibility"
+        "PASS real Chrome issue #332 real inference endpoint, deterministic mock provider, binding rejection, terminal provider failure retry, durable replay after removal, count, reveal, remove/reopen, tooltips, keyboard and mobile visibility"
     )
     browser.close()

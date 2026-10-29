@@ -1,32 +1,39 @@
-# Issue #332 handoff — Gray (R4R)
+# Issue #332 / PR #334 adversarial review handoff — Gray (R4R)
 
-## Assignment
+## Assignment and review
 
-Implement [SIGMA issue #332](https://github.com/bkramerext/sigma/issues/332) on a fresh branch from `main`. This work is on `gray/issue-332-infer-strategy`, based on `origin/main` at `0253b2a`. PR #330 and its branch were not modified.
+Continued on the existing `gray/issue-332-infer-strategy` branch and PR #334, based on `main` at `0253b2a3dcdb0542e365c00e480156c05f3132af`. PR #330 and its branch were not modified. The full coordinator review comment [#6511058802](https://github.com/bkramerext/sigma/pull/334#issuecomment-6511058802) requested durable retry/removal/restart safety, truthful cancellation, atomic context/settings/history checks, real endpoint Chrome acceptance, adversarial backend coverage, and investigation of the CI research-session failure. Each item is addressed below.
 
-## Delivered
+## Changes
 
-Current Understanding now offers **Infer strategy #n**. The ordinal counts the full persisted strategy history, including removed strategies. Inference uses the bounded Current Understanding and evidence context, returns a strict title/summary/approach structure, rejects a nonnovel direction, and immediately saves a valid result through the shared strategy service with model/reasoning provenance. Account binding, project identity, expected mode, current context, and expected strategy history are checked before save; request IDs make replay idempotent, and the UI exposes cancellation. The result is shown as a real strategy and remains subject to existing strategy removal behavior.
+Current Understanding offers **Infer strategy #n**, which derives one useful direction from current findings and source-linked session evidence, validates it, and immediately saves it through the shared strategy service with model/reasoning provenance. Generate retains its proposal/review/accept flow. Accessible in-app tooltips explain both actions.
 
-Generate remains the existing separate proposal, review, and acceptance workflow. Infer and Generate both have accessible in-app tooltip guidance. The ephemeral Markdown/copy-only suggestion is removed. Backend and deterministic real-Chrome regressions cover persistence, provenance, duplicate replay, invalid/no-novel results, account/mode and stale-context protection, removal/reopen, count/reveal behavior, keyboard access, tooltip guidance, and mobile visibility.
+Inference request state is held in a durable per-project ledger. Strategy provenance links a committed inference to its request so recovery works if the process stops after save but before ledger completion. Retries and restarts inspect current authoritative project state, including edits or removals; they do not return an old ProjectView. A provider dispatch whose result is ambiguous is terminal and is never silently repeated. Cancellation records a request, reconciles durable state, and does not claim that nothing was saved. A common project write lock serializes the final Current Understanding, session evidence, project setting, account, and strategy-history check with all corresponding writes and the actual strategy commit.
+
+Backend adversarial coverage includes provider refusal/HTTP and timeout failures, strategy write failure and retry recovery, account/history/settings changes in flight, concurrent requests, lock-boundary races, cancellation before dispatch and during dispatch, persisted replay after removal and restart, and sponsored call/spending accounting. The Chrome fixture forwards to the real inference endpoint and uses a deterministic local OpenAI-compatible mock provider; it tests successful save/replay after removal, binding rejection before dispatch, terminal provider failure retries, count/reveal/removal, keyboard use, tooltip accessibility, and mobile visibility.
 
 ## Verification actually run
 
-- `./sigma setup` — passed in this worktree.
-- `uv run --locked --no-sync python tests/proposals.py` — passed with structured inference, provenance, idempotency, nonmutation, removal-history, invalid-output, and stale mode cases.
-- `uv run --locked --no-sync pyright src/sigma/api.py src/sigma/proposals.py src/sigma/projects.py` — passed, 0 diagnostics.
-- `uv run --locked --no-sync ruff format src/sigma/api.py src/sigma/proposals.py src/sigma/projects.py tests/proposals.py browser_checks/issue332_infer_strategy.py` — passed.
+- `uv run --locked --no-sync python tests/proposals.py` — passed the focused backend inference and adversarial regression suite.
+- `uv run --locked --no-sync python tests/cloud_research_api.py` — passed authenticated endpoint, sponsor selection, spending limits, concurrency, failure accounting, cancellation, restart recovery, workspace artifacts, and cross-user isolation.
 - `npm --prefix frontend run typecheck` — passed.
-- `./sigma test` — passed all steps, including Ruff, formatting, Pyright, frontend typecheck, and production build. The optional graph-present Python sandbox check was skipped because its configured local image is unavailable.
-- `browser_checks/issue332_infer_strategy.py` — passed in real Chrome against a temporary local API and Vite UI on isolated ports 8002/5174, with a deterministic inference fixture and real strategy save/removal APIs. Covered keyboard inference, count/reveal, removal/reopen, persistence and ordinal advancement, tooltips, and 390px layout. Both temporary processes were stopped by the command cleanup trap.
+- `uv run --locked --no-sync pyright src/sigma/api.py src/sigma/proposals.py src/sigma/projects.py src/sigma/research_sessions.py src/sigma/openai_connection.py` — passed with 0 diagnostics.
+- `uv run --locked --no-sync ruff check src tests sigma deploy browser_checks scripts docs/evaluations` — passed.
+- `uv run --locked --no-sync ruff format --check src tests sigma deploy scripts browser_checks docs/evaluations` — passed, 306 files formatted.
+- `./sigma test` — passed all steps, including Ruff, formatting, full Pyright, frontend typecheck, and production build. The build emitted the existing advisory about chunks over 500 kB. The graph-present local Python sandbox subcase was skipped because its configured image is unavailable; graph-withheld checks passed.
+- Real Chrome `browser_checks/issue332_infer_strategy.py` — passed against the local API/UI and deterministic mock provider on isolated ports 8002, 8003, and 5173. Its cleanup trap stopped the services it started.
 - `git diff --check` — passed before commit.
 
-The first repeat browser launch attempted ports 8000/5173, which were already occupied, so it timed out waiting for the mock-auth selector. Those listeners were left untouched. The browser acceptance then passed on isolated ports 8002/5174. The services started for that successful browser run were stopped afterward.
+No live or paid provider call was made. No inference call was made outside deterministic local test providers.
 
-No live provider calls, paid calls, or secrets were used. No worker coordination occurred. No merge was performed.
+## GitHub CI research-session failure investigation
 
-Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.
+The GitHub `verify` job for the original reviewed PR head `27968e00...` failed in `tests/research_sessions.py:4766` because the expected event was missing. I ran the same test on a clean detached worktree at the PR parent (`0253b2a3...`) with the local locked environment; it passed. The same test also passed on the PR worktree. The full `./sigma test` runs on this corrected branch passed `tests/research_sessions.py` twice. This supports classifying the CI result as an intermittent baseline/flaky failure rather than a deterministic regression, but does not prove the cause; only one clean-parent run and local PR runs were available. No unrelated research-session code was changed to mask it. The corrected branch's GitHub CI result remains to be observed after push.
 
-## Review
+## Remaining unverified conditions
 
-Implementation commit: `726e4568912c1d1f74f84ee42161561808430aa9`. [PR #334](https://github.com/bkramerext/sigma/pull/334) is open against `main` at base `0253b2a3dcdb0542e365c00e480156c05f3132af`, with this implementation commit as its current head. This branch is ready for review and has not been self-merged.
+- The local graph-present sandbox execution was skipped because the preconfigured image is unavailable.
+- The post-push GitHub CI run has not yet been observed.
+- No live provider or paid provider request was made, by design.
+
+PR #334 remains open and unmerged; this is the existing PR, not a new one. No worker coordination occurred.

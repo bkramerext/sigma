@@ -2874,6 +2874,20 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
+    # Inference commits compare Current Understanding while holding this same
+    # lock, so evidence cannot change between its final check and strategy save.
+    from sigma.projects import project_write_lock
+
+    # Preserve injected persistence seams that use symbolic test labels rather
+    # than filesystem project paths. Production project paths use the lock.
+    if Path(path).suffix not in {".sigma", ".json"}:
+        _save_unlocked(path, record)
+        return
+    with project_write_lock(path):
+        _save_unlocked(path, record)
+
+
+def _save_unlocked(path: str, record: dict[str, Any]) -> None:
     if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
