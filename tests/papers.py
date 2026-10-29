@@ -144,6 +144,64 @@ def fast_package(section_count: int = 2) -> tuple[dict[str, Any], papers.FastLon
         validation_warnings=["No independent proof checker was run."],
     )
     return package, plan
+def test_structured_evidence_short_tail_does_not_crash() -> None:
+    """Two fragments with a short tail must merge without IndexError.
+
+    Tadpoles exposed an augmented assignment that popped the last fragment
+    before indexing [-2]; this case is deterministic and provider-free.
+    """
+    field = "reasoning_steps"
+    fragment_width = (
+        papers.FAST_NOTE_TEXT_LENGTH - min(len(field), 55) - 3
+    )
+    research = "x" * (fragment_width + 5)
+    package = {
+        "sources": [
+            {
+                "id": "session:tadpoles-fixture",
+                "kind": "session",
+                "data": {field: research},
+            }
+        ]
+    }
+    notes, omitted = papers._structured_evidence_index(package)
+    assert len(notes) == 1
+    assert notes[0].evidence_refs == ["session:tadpoles-fixture"]
+    assert research in notes[0].statement
+    assert omitted == []
+
+
+def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
+    """An unexpected crash must not terminate HTTP 200 without an SSE error."""
+
+    async def check() -> None:
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "paper-error.sigma"
+            view = initialize_project(path, "Paper error test", "Verify SSE error recovery")
+
+            async def crash(*_args, **_kwargs):
+                raise IndexError("secret saved research must not be exposed")
+
+            with patch.object(papers, "generate", new=crash):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.post(
+                        "/api/projects/papers",
+                        json={
+                            "path": str(path),
+                            "expected_project_id": view.project.id,
+                            "expected_binding": "chatgpt:fixture",
+                            "expected_snapshot_sha256": "a" * 64,
+                        },
+                    )
+            assert response.status_code == 200
+            assert '"type": "error"' in response.text
+            assert "unexpected paper-generation error" in response.text
+            assert "secret saved research" not in response.text
+
+    asyncio.run(check())
 
 
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
@@ -2325,6 +2383,8 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
 
 
 def main() -> None:
+    test_structured_evidence_short_tail_does_not_crash()
+    test_unexpected_paper_exception_yields_sanitized_sse_error()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
     test_chatgpt_schema_rejection_is_actionable_and_redacted()

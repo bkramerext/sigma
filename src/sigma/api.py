@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import re
 import secrets
@@ -596,6 +597,27 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             if type(provider_calls_attempted) is int:
                 event["provider_calls_attempted"] = provider_calls_attempted
             yield "data: " + json.dumps(event) + "\n\n"
+        except Exception:
+            # StreamingResponse has already sent HTTP 200. An unexpected
+            # server error must still terminate with a well-formed SSE error,
+            # rather than dropping the socket and concealing the cause from
+            # the user. Keep the traceback in server logs only: it can
+            # contain project data or provider request details.
+            logging.getLogger(__name__).exception("Unexpected paper-generation failure")
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "error": (
+                            "An unexpected paper-generation error occurred. "
+                            "No version was published. Check server logs; "
+                            "saved work may be resumable."
+                        ),
+                    }
+                )
+                + "\n\n"
+            )
         finally:
             if not task.done():
                 task.cancel()

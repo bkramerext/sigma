@@ -656,7 +656,15 @@ def _structured_evidence_index(
         source_ref = source["id"]
         kind = source["kind"]
 
-        def visit(value: Any, path: str = "", meaningful: bool = False) -> None:
+        def visit(
+            value: Any,
+            path: str = "",
+            meaningful: bool = False,
+            *,
+            source_ref: str = source_ref,
+            source_number: int = source_number,
+            kind: str = kind,
+        ) -> None:
             nonlocal sequence
             if isinstance(value, dict):
                 for key, child in value.items():
@@ -714,7 +722,10 @@ def _structured_evidence_index(
             length = FAST_NOTE_TEXT_LENGTH - min(len(label), 55) - 3
             fragments = [content[i : i + length] for i in range(0, len(content), length)]
             if len(fragments) > 1 and len(fragments[-1]) < 12:
-                fragments[-2] += fragments.pop()
+                # Merge while BOTH elements still exist: evaluating pop()
+                # before the indexed assignment leaves no [-2] element when
+                # the original list contains exactly two fragments.
+                fragments[-2:] = [fragments[-2] + fragments[-1]]
             for index, fragment in enumerate(fragments):
                 if len(fragment) > 500:
                     raise ProjectError("Structured evidence fragment exceeds note safety bound")
@@ -1754,76 +1765,64 @@ def _draft_text(draft: PaperDraft) -> str:
 _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
     # (opening section, methods section, findings label, authoring emphasis)
     "mathematical": (
-        "Introduction and definitions", "Proof strategy and evidence",
+        "Introduction", "Evidence and scope",
         "Arguments and claims",
-        "Distinguish proved statements from conjectures, failed arguments, and open proof obligations. "
-        "State assumptions and explain bridges between logical steps.",
+        ("Distinguish proved statements from conjectures, failed arguments, and open proof obligations. " + " " + "State assumptions and explain bridges between logical steps."),
     ),
     "biology": (
         "Introduction and biological context", "Methods and evidence",
         "Findings and hypotheses",
-        "Distinguish observed biology from mechanistic hypotheses and proposed experiments. "
-        "Identify organisms, developmental stages, controls, and cross-species limitations.",
+        ("Distinguish observed biology from mechanistic hypotheses and proposed experiments. " + " " + "Identify organisms, developmental stages, controls, and cross-species limitations."),
     ),
     "chemistry": (
         "Introduction and chemical context", "Methods and evidence",
         "Results and mechanistic interpretation",
-        "Distinguish measured outcomes, mechanistic hypotheses, and unperformed experiments. "
-        "Report conditions, measurements and uncertainty only when recorded.",
+        ("Distinguish measured outcomes, mechanistic hypotheses, and unperformed experiments. " + " " + "Report conditions, measurements and uncertainty only when recorded."),
     ),
     "physics": (
         "Introduction and physical framework", "Methods and evidence",
         "Results and interpretation",
-        "Distinguish models and derivations from measurements and simulations; "
-        "identify assumptions, units, uncertainties and verification gaps.",
+        ("Distinguish models and derivations from measurements and simulations; " + " " + "identify assumptions, units, uncertainties and verification gaps."),
     ),
     "computer_science": (
         "Introduction and problem statement", "Methods and evidence",
         "Algorithms, results, and limitations",
-        "Distinguish algorithmic guarantees from tests, benchmarks and conjectures. "
-        "Document counterexamples, complexity assumptions and reproducibility.",
+        ("Distinguish algorithmic guarantees from tests, benchmarks and conjectures. " + " " + "Document counterexamples, complexity assumptions and reproducibility."),
     ),
     "engineering": (
         "Introduction and design objectives", "Methods and evidence",
         "Design analysis and tradeoffs",
-        "Distinguish simulated, measured and predicted performance, with operating "
-        "constraints, failure modes and validation gaps.",
+        ("Distinguish simulated, measured and predicted performance, with operating " + " " + "constraints, failure modes and validation gaps."),
     ),
     "economics": (
         "Introduction and economic question", "Methods and evidence",
         "Findings and interpretation",
-        "Distinguish causal claims from associations and theoretical predictions; "
-        "state assumptions, data limitations and competing explanations.",
+        ("Distinguish causal claims from associations and theoretical predictions; " + " " + "state assumptions, data limitations and competing explanations."),
     ),
     "law": (
         "Question presented and background", "Authorities and analytical method",
         "Analysis and competing interpretations",
-        "Distinguish verified authorities from speculative interpretations; "
-        "represent jurisdictional limits, contrary arguments and unanswered questions.",
+        ("Distinguish verified authorities from speculative interpretations; " + " " + "represent jurisdictional limits, contrary arguments and unanswered questions."),
     ),
     "military": (
         "Question and operational context", "Methods and evidence",
         "Analysis and constraints",
-        "Distinguish historical evidence, scenarios, assumptions and speculation. "
-        "Describe uncertainties and alternative interpretations.",
+        ("Distinguish historical evidence, scenarios, assumptions and speculation. " + " " + "Describe uncertainties and alternative interpretations."),
     ),
     "philosophy": (
         "Question and conceptual framework", "Argument and sources",
         "Arguments and objections",
-        "State definitions and premises, develop competing arguments, and preserve "
-        "objections and unresolved disagreements.",
+        ("State definitions and premises, develop competing arguments, and preserve " + " " + "objections and unresolved disagreements."),
     ),
     "religion": (
         "Question and textual context", "Interpretive approach and sources",
         "Interpretations and counterarguments",
-        "Distinguish documented textual claims from interpretations; acknowledge "
-        "traditions, counterarguments, and open questions.",
+        ("Distinguish documented textual claims from interpretations; acknowledge " + " " + "traditions, counterarguments, and open questions."),
     ),
     "default": (
-        "Introduction", "Methods and evidence",
+        "Problem framing", "Methods and evidence",
         "Findings and interpretation",
-        "Match the genre to the available evidence and clearly distinguish "
-        "findings, hypotheses, negative results and unresolved questions.",
+        ("Match the genre to the available evidence and clearly distinguish " + " " + "findings, hypotheses, negative results and unresolved questions."),
     ),
 }
 
@@ -1931,7 +1930,7 @@ def _tex(
 
     def claim_register() -> None:
         parts.append(
-            r"\section*{Proof and claim status}" if math_style
+            r"\section*{Claim status and evidence}" if math_style
             else r"\section{" + esc(findings_heading) + "}"
         )
         for claim in draft.claims:
