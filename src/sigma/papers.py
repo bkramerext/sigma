@@ -953,6 +953,9 @@ async def _restart_work_locked(
             else "one_shot"
         ),
     )
+    # A confirmed reset may be safely rebased again before its first provider
+    # call if project evidence or settings change while the dialog is open.
+    restarted["explicit_restart_pending"] = True
     _save_work(path, restarted)
     return {
         "provider_calls_attempted": 0,
@@ -2152,9 +2155,29 @@ async def generate(
             )
         )
         if checkpoint is not None and not compatible:
-            raise ProjectError(
-                "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
-            )
+            if (
+                checkpoint.get("explicit_restart_pending") is True
+                and checkpoint.get("project_id") == view.project.id
+                and checkpoint.get("provider_calls") == 0
+                and checkpoint.get("one_shot_draft") is None
+                and not checkpoint.get("section_drafts")
+                and checkpoint.get("next_batch") == 0
+            ):
+                checkpoint = _new_work(
+                    snapshot_hash,
+                    view.project.id,
+                    binding_fingerprint,
+                    config["model"],
+                    config["reasoning_effort"],
+                    provider_calls_total=checkpoint["provider_calls_total"],
+                    prior_runs=checkpoint["prior_runs"],
+                    kind=expected_kind,
+                )
+                _save_work(path, checkpoint)
+            else:
+                raise ProjectError(
+                    "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
+                )
         if not long_form:
             if checkpoint is not None and checkpoint.get("one_shot_draft") is not None:
                 draft = PaperDraft.model_validate(checkpoint["one_shot_draft"])
@@ -2383,6 +2406,19 @@ def preflight(
         and work_state.get("reasoning_effort") == reasoning_effort
         and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
+    # A confirmed restart with no new provider work must never trap the user
+    # behind another Start over prompt. Generation will rebind this empty
+    # checkpoint under the generation lock before making a provider call.
+    if (
+        not resume_available
+        and work_state.get("explicit_restart_pending") is True
+        and work_state.get("project_id") == view.project.id
+        and work_state.get("provider_calls") == 0
+        and work_state.get("one_shot_draft") is None
+        and not work_state.get("section_drafts")
+        and work_state.get("next_batch") == 0
+    ):
+        resume_available = True
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
     )
