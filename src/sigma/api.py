@@ -624,7 +624,9 @@ def current_understanding_view(path: str):
 
 @app.get("/api/projects/research-sessions")
 async def research_sessions_view(path: str):
-    await research_sessions.ensure_queued_workers(path)
+    principal = cloud_auth.current_principal()
+    if not (principal and principal.role == "guest"):
+        await research_sessions.ensure_queued_workers(path)
     from sigma.research_state import build_current_understanding
 
     sessions = research_sessions.list_sessions(path)
@@ -637,7 +639,9 @@ async def research_sessions_view(path: str):
 
 @app.get("/api/projects/research-sessions/{session_id}")
 async def research_session_view(session_id: str, path: str):
-    await research_sessions.ensure_queued_workers(path)
+    principal = cloud_auth.current_principal()
+    if not (principal and principal.role == "guest"):
+        await research_sessions.ensure_queued_workers(path)
     return research_sessions.get_session(path, session_id)
 
 
@@ -1064,6 +1068,20 @@ class ProposalCancelRequest(BaseModel):
 
 @app.get("/api/projects/proposals/config")
 async def proposal_config(path: str | None = None):
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        view = inspect_project(path) if path else None
+        return {
+            "provider": "unavailable",
+            "mode": "guest",
+            "binding": "guest",
+            "project_id": view.project.id if view else None,
+            "model": view.project.ai_model if view else None,
+            "reasoning_effort": view.project.reasoning_effort if view else None,
+            "available": False,
+            "message": "Sign in as a member to use AI features.",
+            "connection": {"status": "unavailable", "guidance": "Member access is required."},
+        }
     return await configuration(path)
 
 

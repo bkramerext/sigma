@@ -3989,7 +3989,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         ? new URLSearchParams(window.location.search).get('path')
         : null;
       let destination = '/';
-      if (currentProjectPath) {
+      if (currentProjectPath && !authenticatedGuest) {
         const copied = await fetch('/api/projects/guest-copy', {
           method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
@@ -3999,6 +3999,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         const result = await copied.json() as { path: string };
         destination = projectUrl(result.path);
         currentProjectPath = result.path;
+      } else if (currentProjectPath) {
+        destination = projectUrl(currentProjectPath);
       }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');

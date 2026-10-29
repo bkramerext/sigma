@@ -762,6 +762,98 @@ def resolve_session(raw: str | None) -> Principal | None:
         return Principal(row["subject"], row["email"], role)
 
 
+_GUEST_PROJECT_READ_PATHS = {
+    "/api/projects/inspect",
+    "/api/projects/strategies",
+    "/api/projects/events",
+    "/api/projects/research-limits",
+    "/api/projects/current-understanding",
+    "/api/projects/research-sessions",
+    "/api/projects/research-executions",
+    "/api/projects/papers",
+    "/api/projects/papers/preflight",
+    "/api/projects/proposals/config",
+    "/api/projects/text",
+    "/api/projects/recent",
+}
+
+
+def _guest_project_route_allowed(method: str, path: str) -> bool:
+    """Explicitly allow sample browsing and project reads inside a guest workspace."""
+    if method == "GET" and (path == "/api/projects/samples" or path in _GUEST_PROJECT_READ_PATHS):
+        return True
+    if method == "POST" and path in {
+        "/api/projects/samples/open",
+        "/api/projects/open",
+        "/api/projects/close",
+    }:
+        return True
+    if method != "GET":
+        return False
+    parts = path.split("/")
+    if len(parts) == 5 and parts[:3] == ["", "api", "projects"]:
+        resource, identifier = parts[3:]
+        if resource == "research-sessions" and identifier:
+            return True
+        if resource == "papers" and identifier and identifier != "preflight":
+            return True
+        if resource == "research-executions" and identifier:
+            return True
+    if (
+        len(parts) == 7
+        and parts[:3] == ["", "api", "projects"]
+        and parts[3] == "research-executions"
+        and parts[4]
+        and parts[5] == "artifacts"
+        and parts[6]
+    ):
+        return True
+    if (
+        len(parts) == 5
+        and parts[:3] == ["", "api", "projects"]
+        and parts[3] == "papers"
+        and parts[4]
+    ):
+        return True
+    return bool(
+        len(parts) == 6
+        and parts[:3] == ["", "api", "projects"]
+        and parts[3] == "papers"
+        and parts[4]
+        and parts[5] in {"pdf", "txt", "tex"}
+    )
+
+
+async def _guest_project_response(request: Request, call_next, principal: Principal | None = None):
+    """Run one allowlisted operation within a temporary guest-only workspace."""
+    from sigma import cloud_workspaces
+
+    cfg = config()
+    token = request.cookies.get(_cookie_name(GUEST_COOKIE, cfg))
+    workspace = cloud_workspaces.guest_workspace(token) if token else None
+    if workspace is None:
+        token = secrets.token_hex(32)
+        workspace = cloud_workspaces.guest_workspace(token, create=True)
+    if workspace is None:
+        return JSONResponse({"error": "Guest workspace is unavailable."}, status_code=503)
+    request.state.cloud_guest_workspace = workspace
+    # Mark authenticated and anonymous guests so project reads can suppress
+    # provider discovery and queued session dispatch.
+    guest_principal = principal or Principal("guest-workspace", "guest@localhost.invalid", "guest")
+    request.state.cloud_principal = guest_principal
+    principal_token = _CURRENT_PRINCIPAL.set(guest_principal)
+    try:
+        response = await call_next(request)
+    finally:
+        _CURRENT_PRINCIPAL.reset(principal_token)
+    response.set_cookie(
+        _cookie_name(GUEST_COOKIE, cfg),
+        token,
+        **_cookie_options(cfg, GUEST_COOKIE, max_age=SESSION_SECONDS),
+    )
+    return response
+
+
 async def middleware(request: Request, call_next):
     cfg = config()
     if not cfg.enabled:
@@ -835,40 +927,13 @@ async def middleware(request: Request, call_next):
         create_guest = (path == "/api/projects/samples" and request.method == "GET") or (
             path == "/api/projects/samples/open" and request.method == "POST"
         )
-        if guest_workspace is None and create_guest:
-            from sigma import cloud_workspaces
-
-            guest_token = secrets.token_hex(32)
-            guest_workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
-            request.state.cloud_guest_cookie_token = guest_token
-        if guest_workspace is not None and path.startswith("/api/projects/"):
-            if (
-                path
-                in {
-                    "/api/projects/research-sessions/start",
-                    "/api/projects/proposals",
-                    "/api/projects/proposals/agentic",
-                    "/api/projects/strategy-suggestions",
-                    "/api/projects/text/convert",
-                    "/api/projects/papers",
-                    "/api/projects/papers/restart",
-                    "/api/projects/research-executions",
-                }
-                or path.startswith("/api/projects/research-sessions/")
-                and request.method == "POST"
-            ):
+        if path.startswith("/api/projects/") and (guest_workspace is not None or create_guest):
+            if not _guest_project_route_allowed(request.method, path):
                 return JSONResponse(
-                    {"error": "Guest projects are available for local review only."},
+                    {"error": "This project operation requires member access."},
                     status_code=403,
                 )
-            request.state.cloud_guest_workspace = guest_workspace
-            response = await call_next(request)
-            if getattr(request.state, "cloud_guest_cookie_token", None):
-                response.set_cookie(
-                    guest_cookie,
-                    guest_token,
-                    **_cookie_options(cfg, guest_cookie, max_age=SESSION_SECONDS),
-                )
+            response = await _guest_project_response(request, call_next)
             response.headers["Cache-Control"] = "no-store"
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["X-Content-Type-Options"] = "nosniff"
@@ -884,42 +949,12 @@ async def middleware(request: Request, call_next):
             ("POST", "/api/cloud-auth/feedback"),
         }
         if path.startswith("/api/projects/"):
-            if request.method not in {"GET", "HEAD", "OPTIONS"} and origin != cfg.origin:
-                return JSONResponse({"error": "Request origin is not authorized."}, status_code=403)
-            if (
-                path
-                in {
-                    "/api/projects/research-sessions/start",
-                    "/api/projects/proposals",
-                    "/api/projects/proposals/agentic",
-                    "/api/projects/strategy-suggestions",
-                    "/api/projects/text/convert",
-                    "/api/projects/papers",
-                    "/api/projects/papers/restart",
-                    "/api/projects/research-executions",
-                }
-                or path.startswith("/api/projects/research-sessions/")
-                and request.method == "POST"
-            ):
+            if not _guest_project_route_allowed(request.method, path):
                 return JSONResponse(
-                    {"error": "Guest projects are available for local review only."},
+                    {"error": "This project operation requires member access."},
                     status_code=403,
                 )
-            from sigma import cloud_workspaces
-
-            guest_token = request.cookies.get(_cookie_name(GUEST_COOKIE, cfg))
-            workspace = cloud_workspaces.guest_workspace(guest_token) if guest_token else None
-            if workspace is None:
-                guest_token = secrets.token_hex(32)
-                workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
-            request.state.cloud_guest_workspace = workspace
-            response = await call_next(request)
-            response.set_cookie(
-                _cookie_name(GUEST_COOKIE, cfg),
-                guest_token,
-                **_cookie_options(cfg, GUEST_COOKIE, max_age=SESSION_SECONDS),
-            )
-            return response
+            return await _guest_project_response(request, call_next, principal)
         if path != "/api/cloud-auth/status" and (request.method, path) not in guest_auth_paths:
             return JSONResponse({"error": "Member access requires an invitation."}, status_code=403)
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":

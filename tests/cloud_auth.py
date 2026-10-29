@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -1714,7 +1715,12 @@ class CloudAuthTests(TestCase):
             self.assertEqual(queue[0]["email"], "new-member@example.org")
             approved = admin_restart.post(
                 "/api/cloud-auth/admin/grants",
-                json={"kind": "email", "value": "new-member@example.org", "role": "member"},
+                json={
+                    "kind": "email",
+                    "value": "new-member@example.org",
+                    "role": "member",
+                    "allowance_usd": 0.75,
+                },
                 headers={"Origin": local_origin},
             )
             self.assertEqual(approved.status_code, 200, approved.text)
@@ -1727,6 +1733,168 @@ class CloudAuthTests(TestCase):
             self.assertEqual(member["user"]["role"], "member")
             self.assertTrue(member["account"]["sponsorship"]["eligible"])
             self.assertIsNone(member["account"].get("invitation_status"))
+            allowance = guest.get("/api/cloud-auth/local-sponsored-allowance")
+            self.assertEqual(allowance.status_code, 200, allowance.text)
+            self.assertEqual(allowance.json()["allowance_usd"], 0.75)
+
+    def test_guest_project_api_allowlist_denies_every_other_registered_operation(self):
+        local_origin = "http://127.0.0.1:5173"
+        projects_root = Path(self.temp.name) / "projects"
+        workspaces_root = Path(self.temp.name) / "workspaces"
+        projects_root.mkdir()
+        workspaces_root.mkdir()
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
+                "SIGMA_PROJECTS_ROOT": str(projects_root),
+                "SIGMA_CLOUD_WORKSPACES_ROOT": str(workspaces_root),
+            },
+        ):
+            admin_login = self.finish(email="admin@example.org", subject="route-admin")
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            member_project = self.client.post(
+                "/api/projects/create",
+                json={
+                    "title": f"Private route audit project {time.time_ns()}",
+                    "problem": "A private member project used to check guest scoping.",
+                    "research_mode": "default",
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(member_project.status_code, 201, member_project.text)
+            member_path = member_project.json()["path"]
+            member_project_before = self.client.get(
+                "/api/projects/inspect", params={"path": member_path}
+            ).json()
+
+            guest_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 12348)
+            )
+            guest = guest_context.__enter__()
+            self.addCleanup(guest_context.__exit__, None, None, None)
+            guest_login = self.finish(
+                email="route-guest@example.org", subject="route-guest", client=guest
+            )
+            guest.cookies.set("sigma_session", guest_login.cookies["sigma_session"])
+            catalog = guest.get("/api/projects/samples")
+            self.assertEqual(catalog.status_code, 200, catalog.text)
+            sample_id = catalog.json()["projects"][0]["id"]
+            copied = guest.post(
+                "/api/projects/samples/open",
+                json={"sample_id": sample_id},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(copied.status_code, 200, copied.text)
+            guest_path = copied.json()["path"]
+            self.assertEqual(
+                guest.get("/api/projects/inspect", params={"path": guest_path}).status_code, 200
+            )
+            self.assertEqual(
+                guest.get("/api/projects/strategies", params={"path": guest_path}).status_code,
+                200,
+            )
+            from sigma import research_sessions
+
+            with patch.object(
+                research_sessions,
+                "ensure_queued_workers",
+                side_effect=AssertionError("guest read attempted queued provider work"),
+            ):
+                sessions = guest.get("/api/projects/research-sessions", params={"path": guest_path})
+            self.assertEqual(sessions.status_code, 200, sessions.text)
+            with patch(
+                "sigma.proposals.models",
+                side_effect=AssertionError("guest config attempted provider discovery"),
+            ):
+                config = guest.get("/api/projects/proposals/config", params={"path": guest_path})
+            self.assertEqual(config.status_code, 200, config.text)
+            self.assertFalse(config.json()["available"])
+
+            # Direct API requests to member-owned paths are scoped to the
+            # guest workspace and return the same not-found response as absent
+            # guest data. This avoids leaking whether member data exists.
+            for route in (
+                "inspect",
+                "strategies",
+                "events",
+                "research-limits",
+                "research-sessions",
+                "current-understanding",
+                "research-executions",
+                "papers",
+                "papers/preflight",
+            ):
+                response = guest.get(f"/api/projects/{route}", params={"path": member_path})
+                self.assertEqual(response.status_code, 404, (route, response.text))
+            text_response = guest.get(
+                "/api/projects/text", params={"path": member_path, "scope": "conclusions"}
+            )
+            self.assertEqual(text_response.status_code, 404, text_response.text)
+            for route in (
+                "research-sessions/audit-probe",
+                "research-executions/audit-probe",
+                "research-executions/audit-probe/artifacts/audit-probe",
+                "papers/audit-probe",
+                "papers/audit-probe/pdf",
+                "papers/audit-probe/txt",
+                "papers/audit-probe/tex",
+            ):
+                response = guest.get(f"/api/projects/{route}", params={"path": member_path})
+                self.assertIn(response.status_code, {400, 404}, (route, response.text))
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/open",
+                    json={"path": member_path},
+                    headers={"Origin": local_origin},
+                ).status_code,
+                404,
+            )
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/update",
+                    json={"path": member_path, "title": "Overwritten"},
+                    headers={"Origin": local_origin},
+                ).status_code,
+                403,
+            )
+            member_project_after = self.client.get(
+                "/api/projects/inspect", params={"path": member_path}
+            ).json()
+            self.assertEqual(member_project_after, member_project_before)
+
+            # The route inventory is an enforcement test: future project
+            # endpoints are denied unless their exact method/path is added to
+            # the reviewed guest-safe allowlist.
+            protected_count = 0
+            for route in app.routes:
+                route_path = getattr(route, "path", "")
+                if not route_path.startswith("/api/projects/"):
+                    continue
+                for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
+                    concrete_path = re.sub(r"\{[^}]+\}", "audit-probe", route_path)
+                    if cloud_auth._guest_project_route_allowed(method, concrete_path):
+                        continue
+                    response = guest.request(
+                        method,
+                        concrete_path,
+                        params={"path": member_path},
+                        json={} if method in {"POST", "PUT", "PATCH", "DELETE"} else None,
+                        headers={"Origin": local_origin},
+                    )
+                    self.assertEqual(
+                        response.status_code,
+                        403,
+                        (method, route_path, response.status_code, response.text),
+                    )
+                    protected_count += 1
+            self.assertGreater(protected_count, 30)
+            self.assertEqual(
+                guest.get("/api/cloud-auth/local-sponsored-allowance").status_code, 403
+            )
+            self.assertEqual(guest.get("/api/ai/connection").status_code, 403)
 
     def test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth(self):
         from sigma import ai_store
