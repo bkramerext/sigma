@@ -15,10 +15,10 @@ test` passed for the final implementation, including Ruff, formatting, Pyright,
 frontend typecheck, and production build; the build reports the existing large
 main JavaScript chunk advisory. The focused research-session suite and targeted
 Ruff/Pyright/frontend typecheck also passed. Real Chrome on an isolated local
-fixture verified the session-row removal confirmation, successful DELETE,
-removed row, and absent backend record. Active execution cancellation was
-verified through the deterministic service regressions. All provider requests
-were deterministic mocked fixtures; no live or paid calls were made.
+fixture verified a queued simulated session's stop-and-remove confirmation,
+successful DELETE, removed row, and absent backend record. Active execution
+cancellation was verified through deterministic service regressions. No live
+or paid provider calls were made.
 
 The worktree branch is based on current `origin/main`. Open PR #297 also changes
 the session service, API, and session UI. A Git merge-tree check against its
