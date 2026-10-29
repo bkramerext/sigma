@@ -41,7 +41,9 @@ MAX_LONG_PAPER_CALLS = (
     + MAX_LONG_PAPER_SECTIONS
 )
 MAX_RESPONSE_BYTES = 1_000_000
-MAX_CHATGPT_STREAM_BYTES = 4_000_000
+# Responses SSE contains event envelopes and can repeat an entire completed output.
+# Keep a finite transport bound separate from the validated 1 MB API response.
+MAX_CHATGPT_STREAM_BYTES = 16_000_000
 MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
@@ -75,9 +77,9 @@ PaperStageCallback = Callable[
     [PaperProgressStage, int | None, int | None, Literal["active", "milestone", "complete"]],
     Awaitable[None],
 ]
-CALL_SECONDS = 120
-# A complex paper outline can take longer than an ordinary provider call.
-# This is an upper bound, not a measure of model progress or a retry policy.
+# Five minutes is the minimum inference-call allowance, not a target duration.
+# It does not authorize repeating an ambiguous paid provider request.
+CALL_SECONDS = 300
 PLANNING_CALL_SECONDS = 300
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
@@ -2394,6 +2396,33 @@ async def _provider_structured(
                 pass
 
 
+def _validate_long_plan_references(plan: LongPaperPlan, indexed_refs: set[str]) -> None:
+    """Reject inconsistent provider-authored references before checkpointing them."""
+    if len(plan.sections) > MAX_LONG_PAPER_SECTIONS:
+        raise ProjectError("Paper outline exceeded the supported section count")
+    claim_ids = {claim.id for claim in plan.claims}
+    if len(claim_ids) != len(plan.claims):
+        raise ProjectError("Paper outline has duplicate claim identifiers")
+    for claim in plan.claims:
+        if set(claim.evidence_refs) - indexed_refs:
+            raise ProjectError(f"Claim {claim.id} cites evidence absent from the extracted index")
+    for label, linked_ids in (
+        ("abstract", plan.abstract_claim_ids),
+        ("problem framing", plan.problem_framing_claim_ids),
+        ("methods", plan.methods_claim_ids),
+        ("conclusions", plan.conclusion_claim_ids),
+    ):
+        if set(linked_ids) - claim_ids:
+            raise ProjectError(f"Paper outline {label} cites an unknown claim")
+    for section in plan.sections:
+        if set(section.evidence_refs) - indexed_refs:
+            raise ProjectError(
+                f"Paper outline for {section.heading} cites an unknown evidence source"
+            )
+        if set(section.claim_ids) - claim_ids:
+            raise ProjectError(f"Paper outline for {section.heading} cites an unknown claim")
+
+
 def _provider_input_text(input_value: Any, schema_name: str, max_input_bytes: int) -> str:
     input_text = json.dumps(input_value, ensure_ascii=False, separators=(",", ":"))
     input_size = len(input_text.encode("utf-8"))
@@ -2778,8 +2807,22 @@ Return the complete plan JSON matching the schema."""
         plan_input["index_origin"] = "deterministic_selection_from_structured_research"
         plan_input["indexed_fragments_not_selected"] = len(state.get("omitted_evidence", []))
     if state.get("plan"):
-        long_plan = LongPaperPlan.model_validate(state["plan"])
-    else:
+        try:
+            long_plan = LongPaperPlan.model_validate(state["plan"])
+            _validate_long_plan_references(long_plan, indexed_refs)
+        except (ProjectError, ValidationError):
+            # Older versions saved some invalid outlines *before* checking IDs.
+            # An explicit Continue is allowed to retry just the plan, not discard
+            # the indexed research or quietly reuse an unsupported claim. Keep
+            # completed authored sections protected against incompatible plans.
+            if state.get("section_drafts"):
+                raise ProjectError(
+                    "Saved paper sections refer to an invalid outline; restart explicitly "
+                    "to protect completed paper work."
+                ) from None
+            state.pop("plan", None)
+            save_state(state)
+    if not state.get("plan"):
         if progress:
             await progress("planning", None, None, "active")
         plan, _ = await call_with_safe_retry(
@@ -2792,23 +2835,19 @@ Return the complete plan JSON matching the schema."""
             legacy=not fast_path,
         )
         long_plan = LongPaperPlan.model_validate(plan)
+        try:
+            _validate_long_plan_references(long_plan, indexed_refs)
+        except ProjectError as exc:
+            # A completed but semantically invalid plan consumed its accounted
+            # call. Never checkpoint it or automatically dispatch another.
+            raise ProjectError(
+                f"{exc}. The invalid outline was not saved. Choose Retry paper "
+                "planning to request a new outline; that call may use allowance."
+            ) from exc
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
         save_state(state)
         if progress:
             await progress("planning", None, None, "milestone")
-    if len(long_plan.sections) > MAX_LONG_PAPER_SECTIONS:
-        raise ProjectError("Paper outline exceeded the supported section count")
-    claim_ids = {claim.id for claim in long_plan.claims}
-    for claim in long_plan.claims:
-        if set(claim.evidence_refs) - indexed_refs:
-            raise ProjectError(f"Claim {claim.id} cites evidence absent from the extracted index")
-    for section in long_plan.sections:
-        if set(section.evidence_refs) - indexed_refs:
-            raise ProjectError(
-                f"Paper outline for {section.heading} cites an unknown evidence source"
-            )
-        if set(section.claim_ids) - claim_ids:
-            raise ProjectError(f"Paper outline for {section.heading} cites an unknown claim")
 
     long_sections: list[PaperSection] = []
     section_instructions = """Write the prose for exactly one planned paper section. The supplied
