@@ -985,6 +985,7 @@ def main() -> None:
                     "async () => (await (await fetch('/api/cloud-auth/status')).json()).account.invitation_welcome_pending"
                 )
                 expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
+                page.goto(origin, wait_until="domcontentloaded")
                 login_cookie(Z)
                 page.reload(wait_until="domcontentloaded")
                 page.get_by_role("button", name="About").click()

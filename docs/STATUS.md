@@ -7878,3 +7878,20 @@ is acknowledged, admin feedback identity and removal, action alignment/colors,
 larger headers/arrows, and collapsible sections. No live
 Google OAuth callback or paid provider call was made. The graph-present Python
 sandbox case remains skipped because its local image is unavailable.
+
+## PR #297 invited-user welcome follow-up (2026-10-28)
+
+Manual acceptance found that N could become a member without seeing the
+invitation welcome. The pending flag was present, but the frontend suppressed
+the dialog when Google sign-in returned to `/project` after starting from guest
+play. Removed that suppression; the pending server flag remains authoritative
+and dismissal is still persisted by the welcome endpoint. The real-Chrome
+regression now sets the project sign-in return marker, loads `/project`, checks
+that **You have been invited!** appears, dismisses it, and verifies persistence.
+
+Verification: 72 cloud-auth tests and frontend typecheck passed. The real-Chrome
+local-auth flow passed, including the project-return welcome and the existing
+invitation, admin, feedback, cache-header, and identity-isolation checks. A
+full `./sigma test` passed on the immediately prior SHA; it has not yet been
+rerun after this frontend condition and browser-check update. No live Google
+OAuth callback or paid provider call was made.
