@@ -6,7 +6,8 @@
 - PR: [#324](https://github.com/bkramerext/sigma/pull/324), keep open and unmerged
 - Base: `main` at `26628d549dbe11aad0c9f612633c08964ae9eb90`
 - Reviewed prior head: `2ecaf1af84fb83a5c7d2d18cc6102e48f7fbaa22`
-- Final HEAD: recorded after the correction commit is created below.
+- Implementation HEAD: `6bc74dfcd911ac863abbbb839ac8f8d13b0af838`
+- A docs-only handoff/tracking commit follows; the current PR branch ref is the authoritative final HEAD.
 
 ## Changes
 
