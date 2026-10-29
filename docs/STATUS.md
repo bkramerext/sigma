@@ -1,113 +1,36 @@
-## Ticket #312 — Local uninvited-user onboarding (2026-10-28)
+## Issue #306 and happy-path reliability (#302) (2026-10-28)
 
-Local Google sign-in now creates a verified, role-limited guest session when an
-identity has no active membership grant. The account pill keeps the Google
-identity visible; guests can browse sample projects and request an invitation
-without receiving sponsorship eligibility. Guest middleware continues to deny
-member-only routes and research execution. Invitation requests remain bound to
-the verified Google subject in the durable auth database, duplicate requests
-are suppressed, and an admin grant turns the same identity into a member on its
-next status check. The invitation dialog now keeps its recorded-request
-acknowledgment visible while hiding further request actions. Guest UI hides AI
-connection and new/import project controls.
+Research limits now say **Research rounds** and **Maximum agent turns**. A round
+is an Investigator/Skeptic exchange for one strategy; the shared turn budget
+can be smaller than twice the round ceiling or the number of selected
+strategies. The scheduler rotates across strategies, reserves complete pairs,
+and records any deferred strategy explicitly. Defaults are 2 rounds, 12 turns,
+30 minutes, 4,000 output tokens per call, one concurrent session, and no
+optional input-token or cost cap. These settings limit routine provider use
+without forcing users into higher token or duration ceilings.
 
-The new `tests/cloud_auth.py` regression exercises Google callback verification
-with a deterministic OAuth fixture, guest access restrictions, durable request,
-duplicate suppression, admin review/grant, and transition to sponsored member
-eligibility. `browser_checks/local_auth_real_backend.py` now checks the
-authenticated guest pill, invitation UI acknowledgment, duplicate-action
-suppression, and absence of the AI connection pill against Chromium and the
-real local API. `./sigma test` passed all configured steps, including Ruff,
-format, Pyright, frontend typecheck, and production build. The graph-present
-sandbox scenario was skipped because its local image is unavailable. The
-real-browser scenario uses seeded local identities and intercepts invitation
-delivery; it does not claim live Google OAuth or provider inference. No paid
-provider calls were made. Manual acceptance with N, admin approval in the UI,
-and a sponsored Easy research session remain unverified and are required
-before release acceptance.
+The frontend and backend accept the same ranges and require at least one full
+two-turn pair. USD cost entry accepts surrounding whitespace and an optional
+leading `$`, then persists a normalized numeric USD value. A proposed
+productive stop is reopened when reviewed evidence leaves objective obligations
+unresolved and the saved limits allow another round. Provider response bodies
+and completed SSE streams are bounded at 8 MB; the prior 1 MB transport bound
+rejected large successful Responses envelopes (including session #11's
+reported >1 MB response). The Maximum Regions browser acceptance measured a
+3,801-byte project payload and 5,410-byte assembled provider context, so this
+sample's 1 MB issue is not project-data overhead. The larger stream bound is
+still bounded and regression-tested at both 1 MB and 8 MB.
 
-## PR #297 — Gate 3 corrections (2026-10-28)
-
-Implementation commit: `19821f010ac6620a3b259b25860a2721c76c509d` on
-`coordinator/signin-session-playback-stabilization`.
-
-First personal mode selection now requires a subject-bound authorization record
-written only after that Google user's local ChatGPT OAuth callback succeeds
-with both required plan scopes. This authorization record is separate from the
-persisted funding-mode preference, so an existing personal preference survives
-later token or provider failure. A legacy personal mode flag without OAuth
-proof remains visible as personal and cannot authorize a new personal switch;
-it never silently routes to sponsor billing.
-
-Selecting sponsored mode no longer reads the allowance ledger or rejects an
-empty balance. Sponsored Play admission still checks user and global budget
-before provider dispatch. Google sign-in remains visible for all signed-out
-states, while Invite Me is shown only for a verified denied Google identity
-with no existing invitation request.
-
-Focused API regressions cover a canceled initial sign-in, a forged legacy
-personal preference, missing OAuth plan scope, the successful real callback
-and persistence path, same-email personal and sponsor registrations, retained
-personal preference after provider failure, exhausted-budget sponsorship
-selection, sponsored Play denial, and Z/B/N identity and allowance boundaries.
-The full hosted Chromium regression covers signed-out guest, verified denied,
-pending-request, and authorized-admin Google pill states. A real-backend local
-Chromium run covers the same-email personal/sponsor OAuth sequence, restart,
-member privacy, and zero-budget Play denial.
-
-Verification: `./sigma test` passed all configured steps, including Ruff,
-format, Pyright, frontend typecheck, and production build. The graph-present
-local sandbox case was skipped because the existing Python sandbox image is
-unavailable. Both `browser_checks/hosted_sponsored_connection.py` and
-`browser_checks/local_auth_real_backend.py` passed using local Chromium and
-deterministic external OAuth/provider boundaries. No paid provider calls, CI
-wait, merge, or deployment occurred. Live OAuth/provider validation and the
-seven live Play acceptance scenarios remain unverified. See
-[`messages/pr297_green_gate3_r4r.md`](../messages/pr297_green_gate3_r4r.md).
-
-## PR #297 — personal and sponsor credential ownership follow-up (2026-10-28)
-
-Local Google-authenticated ChatGPT registrations now use a credential directory
-derived from the verified Google subject. The shared ChatGPT sponsor continues
-to use its independent SIGMA-owned directory. `/api/ai/auth/begin` always means
-personal authorization; sponsor renewal remains on the administrator-only
-`/api/ai/sponsor-auth/begin` route. Matching the ChatGPT email no longer routes
-authorization or credential use between those stores. Personal disconnect
-removes only the current Google user's credentials.
-
-The pill now has three primary ChatGPT states: **Sponsored ChatGPT**,
-**Disconnect from ChatGPT**, and **Connect to ChatGPT**. Connected personal
-mode exposes only the personal account email in its concise tooltip and no
-allowance. Sponsored mode shows the user's allowance; admins may see sponsor
-connection identity, while member UI/API responses omit it. The sponsored pill
-offers the concise personal-connection action. Failed authorization leaves the
-funding mode unchanged.
-
-Focused verification passed: the existing-cookie Z API sequence including
-simulated OAuth callback, token validation, persisted same-email personal
-credential, switch to sponsor credentials, personal disconnect, and sponsor
-credential preservation; Z/B unlimited and N metered allowance checks; the
-focused sponsor API regressions; 19 `cloud_sponsor.py` tests; Chromium pill
-transitions, exact visible states, hover/accessibility content, member sponsor
-identity privacy, personal OAuth routing, and failed-OAuth recovery; scoped
-Ruff, Pyright, and frontend TypeScript checks. A new TestClient reloaded the
-same persisted cookie/state; a separate operating-system process restart and
-live provider OAuth are unverified. Hosted personal ChatGPT OAuth remains
-unverified. The seven live session-playback acceptance cases remain reserved
-for the next round. No paid calls, full CI wait, merge, or deployment occurred.
-See [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
-The repository-required local `./sigma test` command was also attempted. Its
-first pass found the hosted generic `/api/ai/auth/begin` gate still admitted
-admins, conflicting with its new personal-only meaning; the gate now reserves
-hosted OAuth to `/api/ai/sponsor-auth/begin`. All 66 `tests/cloud_auth.py`
-cases, global Ruff, and global Pyright pass after correction. The full local
-runner still has unrelated `tests/cloud_research.py` / `tests/storage.py`
-fixture failures: they assume API-key provider mode while the default provider
-is ChatGPT. Under a diagnostic API-key override matching that fixture's
-assumption, cloud research advances to a JSON orphan-recovery fixture that
-does not create its parent directory. `tests/deployment_package.py` also
-assumes API-key mode without setting it. No CI was run or awaited.
+Deterministic browser acceptance with SIGMA, Chrome, and the local provider
+fixture passed: sample copy, USD round-trip, Investigator/Skeptic order, usage
+and estimated cost accounting, mathematical candidate, terminal status,
+report export, refresh and reopening. It measured two simulated provider calls
+and $0.004008 estimated usage. This was fixture traffic, not a live provider
+session. Focused project-settings, research-session, Sage execution, Ruff,
+Pyright, frontend typecheck, production build, and full `./sigma test` all
+passed. Live provider behavior is **UNVERIFIED**; no paid call was authorized
+or made. See `messages/issue_306_happy_path_r4r.txt` for the full Software
+Factory handoff.
 
 ## T301 — Context-aware mathematical Markdown (2026-10-28)
 
@@ -7773,185 +7696,6 @@ were made. GitHub Actions all passed at implementation commit
 `f01d4417f1ae64123d9b20d2758b29224ca709c9`: SIGMA verification, T200, T201,
 T249, T92, and Research Outcome.
 
-## PR #297 initial sponsor sign-in validation (superseded, 2026-10-28)
-
-Strengthened `tests/cloud_sponsor.py` to exercise the hosted
-`/api/ai/sponsor-auth/begin` route with a verified Google admin whose email is
-different from the configured ChatGPT sponsor; a member remains rejected. A
-deterministic hosted OAuth callback regression now performs the code exchange,
-validates the returned credential fixture, reads the saved sponsor account back
-from the protected store, and confirms its status is `connected`. This closes
-the previous coverage gap where the test only prepopulated credentials.
-
-`tests/cloud_sponsor.py` passed (18 tests), Ruff check/format passed, and
-`git diff --check` passed at implementation commit
-`588494d541f262886da1cee2e779aafa2d9a6fa6`. The focused real-browser check
-`browser_checks/hosted_sponsored_connection.py` could not start because
-Playwright is not installed in this checkout. Real Google/OpenAI OAuth and
-provider availability remain unverified; the test uses mocked code exchange
-and token validation. No product defect was found, no paid calls were made,
-and no merge or deployment occurred. This initial validation did not reproduce
-the pill's local-admin click path; see the refined correction below. See
-[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
-## PR #297 Gate 2 adversarial corrections (2026-10-28)
-
-Provider validation and model-catalog state now live in a bounded cache keyed
-by the credential fingerprint. Same-credential checks coalesce; a different
-credential cannot cancel a pending check or replace its status/catalog. An
-inference failure updates only the matching guarded credential entry. Zero
-member allowance no longer replaces the ChatGPT pill: reload is separate and
-sponsored session admission still rejects zero-budget Play. Hosted personal
-mode is shown as unavailable until the user explicitly selects real sponsored
-mode; forced sponsorship remains enforced by the backend. Getting Started now
-documents the personal pill action and administrator-only sponsor maintenance.
-
-Focused evidence: `tests/model_connection.py` passes independent concurrent
-Z/B catalogs and failures plus same-sponsor coalescing; the hosted API contract
-test verifies default sponsored selection, unavailable personal mode, explicit
-sponsored selection, and actual sponsor credential routing. Chromium against
-the real local API passes N's zero-allowance Play denial while the pill still
-starts personal OAuth. The focused hosted Chromium path passes non-forced
-personal-unavailable/sponsored selection, zero-balance reload separation, and
-forced sponsorship. Full `./sigma test`, Ruff, Pyright, frontend typecheck and
-build pass; the graph-present sandbox remains skipped because its local image
-is unavailable. Live Google/OpenAI OAuth/provider checks, hosted personal OAuth,
-and the seven live play-session scenarios remain unverified/deferred. A broader
-legacy hosted browser script still has an unrelated Invite Me! fixture failure
-after its focused hosted connection checks; that segment is not evidence for
-the ChatGPT connection contract. See
-[`messages/pr297_green_gate2_r4r.md`](../messages/pr297_green_gate2_r4r.md).
-
-## PR #297 sponsored-member disconnected pill correction (2026-10-28)
-
-The local disconnected sponsor state now distinguishes verified admins from
-sponsored members. Admins retain the sponsor reconnect action; a sponsored
-member sees “Sponsored ChatGPT unavailable,” gets administrator reconnection
-guidance, and the pill is disabled. Its handler also returns before either
-sponsor or personal OAuth can start. Genuine personal and admin sponsor routes
-remain available.
-
-`browser_checks/local_admin_sponsor_pill.py` now covers the sponsored member
-state in Chromium and asserts that clicking the pill makes no auth-begin
-request, between the admin sponsor completion and personal-account checks.
-Frontend typecheck, two focused cloud-auth tests, scoped Ruff check/format,
-Chromium `browser_checks/local_admin_sponsor_pill.py`, and `git diff --check`
-passed at implementation commit `77cb5d94834758940a882764a665f2ebecb20582`.
-Real provider connectivity and live OAuth remain unverified. No paid calls,
-CI wait, merge, or deployment occurred. See
-[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
-## PR #297 prior local admin sponsor pill correction (superseded, 2026-10-28)
-
-The prior correction incorrectly required an explicit local sponsor setting
-and used the invited sponsored member's email as the sponsor fixture. Both
-decisions are reverted in the coordinator correction below. The pill routing
-and personal-account distinction remain in place.
-
-## PR #297 coordinator review corrections (2026-10-28)
-
-Restored the established local sponsor fallback to
-`cloud_auth.INVITATION_RECIPIENT` (`zetacontinuation@gmail.com`) when
-`SIGMA_CLOUD_SPONSOR_EMAIL` is absent. The actual admin pill regression now
-starts with the Google admin and saved ChatGPT sponsor both
-`zetacontinuation@gmail.com`, personal mode selected, and the sponsor setting
-absent. It verifies sponsor OAuth routing and connected status after simulated
-completion. Genuine personal registrations keep their own route. The
-`/api/ai/sponsor-auth/begin` endpoint is now admin-only; eligible members are
-denied, as they are when they directly submit the sponsor registration to
-`/api/ai/auth/begin`, and the saved sponsor token remains unchanged.
-
-Two focused `tests/cloud_auth.py` cases passed, `tests/cloud_sponsor.py` passed
-19 tests, and Chromium `browser_checks/local_admin_sponsor_pill.py` passed both
-sponsor and personal pill paths. Scoped Ruff, frontend typecheck, and
-`git diff --check` passed at implementation commit
-`52c103c5c58635ceae58815a4d4da4f5f6b86069`. Live Google/ChatGPT OAuth and
-provider connectivity remain unverified; no CI wait, paid call, merge, or
-deployment occurred. See
-[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
-## PR #297 local admin sponsor live-acceptance corrections (2026-10-28)
-
-The local `/api/ai/mode` transition checked a spending snapshot before saving
-the sponsored selection. Both the local pilot ceiling and its monthly window
-were gated on the current selection, so a verified eligible admin in personal
-mode was treated as outside the pilot and the snapshot failed when no explicit
-global ceiling was configured. The decision now uses verified local
-sponsorship eligibility while remaining before the mode switch. The bounded
-local pilot remains capped at $50 per UTC calendar month; explicit configured
-ceilings remain honored. A failed snapshot still returns 503 before changing
-the selected mode.
-
-The existing-cookie admin coverage checks default sponsor mode unless personal
-was explicitly selected, then checks successful selection and unchanged mode
-after a simulated snapshot failure. A post-OAuth local connection regression
-reads the saved sponsor credential, checks the ChatGPT catalog through a mock
-validation result, and verifies `connected` plus the sponsor email with no
-tokens in the response. The backend attaches that email only to connection
-status, not the broader models response. Chromium checks the initial Sponsored
-ChatGPT / Unlimited pill and Connected label and tooltip; OAuth remains
-simulated.
-
-Three focused local cloud-auth tests, all 19 `tests/cloud_sponsor.py` tests,
-frontend typecheck, Chromium `browser_checks/local_admin_sponsor_pill.py`,
-Ruff check/format, and `git diff --check` passed at implementation commit
-`4b3c71e24b4580096092e888d593165725225130`. Real Google/OpenAI OAuth,
-provider validation, and live allowance-store availability remain unverified.
-No paid calls, CI wait, merge, or deployment occurred. See
-[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
-## PR #297 sponsor identity privacy correction (2026-10-28)
-
-`/api/ai/connection` and successful `/api/ai/mode` responses now omit the
-designated sponsor account label for non-admin users while sponsored mode is
-selected. The existing admin response still provides the sponsor identity for
-connection confirmation. Models responses already omit account labels. The
-pill now says “ChatGPT Connected” and includes the identity in its hover
-tooltip only for administrators; sponsored members continue to see the
-Sponsored ChatGPT pill and their allowance/provider state. Their disconnected,
-unavailable, unauthorized, or reauthentication-required sponsor state cannot
-trigger sponsor or personal OAuth from the pill.
-
-Three focused cloud-auth tests, all 19 sponsor tests, typecheck, the Chromium
-admin/member pill regression, scoped Ruff check/format, and `git diff --check`
-passed at implementation commit
-`794ae30f27f82e83758c4002a214b86d1fd3c8c9`. The seven play-session cases
-remain explicitly deferred to the next round. See
-[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
-## PR #297 OAuth attempt ownership and real-backend regressions (2026-10-28)
-
-Personal disconnect previously iterated the process-global OAuth attempt map
-and cancelled every pending entry. Attempts are now bound to the verified
-Google subject, resolved credential store, and personal/sponsor intent.
-Disconnect only cancels this user's personal attempts; attempt status, cancel,
-authorization handoff, and retry reject another subject or store. Sponsor
-maintenance attempts remain unaffected by personal disconnect.
-
-The sponsored pill's primary native hover now includes “Click to connect your
-own ChatGPT account.” The nested allowance control has its own concise
-“Click to show sponsorship details.” hover and only toggles allowance details.
-The browser regression checks both targets and click effects. A second Chromium
-regression drives the UI through Vite to the real local API subprocess, performs
-same-email personal OAuth and sponsor maintenance OAuth using simulated
-external token/catalog responses, checks distinct durable stores, restarts the
-API subprocess against the same auth DB and credential home, then checks the
-existing cookie, explicit mode, personal connection, sponsor persistence, and
-member sponsor-email redaction.
-
-Fixture findings were baseline-confirmed at `846848e`: cloud research first
-failed because its API-key assertions inherited the ChatGPT provider default;
-with explicit API-key mode it next failed because the JSON orphan fixture
-helper did not create missing parent directories. Deployment-package checks
-also inherited the provider default. These are now explicit fixture settings
-and safe parent creation; no production billing behavior changed. The storage
-runner passes at baseline in this environment and passes in the updated tree.
-Full local `./sigma test` now passes; one graph-present sandbox scenario remains
-skipped because the Docker image is unavailable. Hosted personal OAuth remains
-unsupported and was not enabled. Real Google/OpenAI account OAuth and the seven
-live session-playback scenarios are deferred/unverified. See the current
-[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
-
 ## T313 Gray UI quality pass (2026-10-28)
 
 On `gray/ui-quality-pass`, based on `main` / `origin/main` at
@@ -7975,32 +7719,84 @@ results, and research-output browser states therefore remain unverified.
 No paid provider calls were made. R4R is open as
 [PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.
 
-## PR #297 Green adversarial security corrections (2026-10-28)
+## PR #317 adversarial correction pass (2026-10-28)
 
-Guest workspace cookies are bound to the first verified Google subject; a
-mismatched authenticated subject receives a new isolated workspace. A callback
-copies a guest project only when the workspace matches its verified subject.
-Authenticated and anonymous guest project responses use no-store, no-referrer,
-nosniff, and frame-ancestors protections. The authorization audit now asserts
-the exact registered allowlist and exercises actual project, session, paper,
-execution-artifact, and provider-free read handlers. Direct guest HTTP requests
-confirm cross-workspace 404s and deny exports, mutations, research dispatch,
-provider-backed routes, and admin operations.
+Added adversarial regressions for changing shared-turn strategy sets, fairness,
+final-turn Skeptic dispatch, deferred branch reasons, and unsupported completion
+claims at the exact budget boundary. The deterministic Maximum Regions Chrome
+acceptance now runs two rounds: flawed Investigator claim, Skeptic objection,
+revised proof, final Skeptic review, saved artifacts, usage/cost reconciliation,
+report export, refresh and reopen. It passed with four fixture calls, 3,600
+input / 400 cached / 4,800 output tokens, 3,801-byte copied project JSON, and
+5,410-byte assembled context. These usage/cost values are simulated; no paid
+provider calls were made.
 
-`tests/cloud_research_windows.py` covers monthly rollover, cumulative policy,
-settled usage, old reserved/unknown obligations, and simultaneous global
-reservations. Current correction code HEAD `fecf49f610d0d70ee7963003541891d1f6767cb3`
-passed `./sigma test` (71 cloud-auth cases, cloud research, Ruff, Pyright,
-frontend typecheck/build) plus seven real-Chrome checks, including the
-real-backend two-identity workspace switch, cache headers, Blue #314 math, and
-the approved About diagram. No paid provider calls were made. One existing
-graph-present sandbox scenario was skipped because the local sandbox image is
-unavailable. The live Google OAuth and N sponsored Easy run remain UNVERIFIED.
+T201 workflow run `40809905085` passed `t201_overflow.py` and
+`t81_public_legal_pages.py` but failed at `guest_samples.py:409`: the existing
+model-availability status span intercepted the Cancel button. The same guest
+sample script passed twice on unchanged base `6ecc0df23127f4f1f920943331ff43afcc399682`
+and failed once on the PR head; evidence indicates an intermittent, pre-existing
+UI hit-test defect, not a changed locator or status component. The aggregate
+T201 result remains UNMET pending a clean rerun. See
+`messages/issue_306_happy_path_r4r.txt` for exact disposition and evidence.
 
-The branch was reconciled to current `origin/main`
-`4cff1e544bc30f14096073ee6c7440c45bb5e499`, preserving Blue #314 and the
-approved About changes. Red PR #317 was still open and unmerged at review time,
-so post-Red reconciliation is pending. The published branch was updated by
-merge rather than rebased to avoid a prohibited force push. Keep PR #297 open
-and unmerged. See the detailed [consolidated R4R](../messages/pr297_green_consolidated_r4r.md)
-for the acceptance matrix and manual gate.
+Correction-pass `./sigma test` completed successfully, including backend tests,
+Ruff check/format, Pyright, frontend typecheck, and production build. Its
+existing graph-present sandbox subcase explicitly skipped because the local
+Python sandbox image is unavailable. The deterministic two-round Maximum
+Regions Chrome test also passed. No live provider calls were made.
+
+GitHub Actions snapshot for correction implementation `a651a96622340e4a4c8cd9aa66fa5ca839cfa7ee`: SIGMA verification, Research Outcome, T92, and T200 succeeded; T201 recovery run `40811468962` failed again in its browser recovery exercise; T249 run `40811468856` was still running the sandbox image build at the last observation (**UNVERIFIED**). Local `./sigma test` and the two-round deterministic Chrome lifecycle passed. No paid provider calls were made.
+
+## PR #317 reconciliation and T201 correction (2026-10-28)
+
+Merged current `origin/main` at `4cff1e544bc30f14096073ee6c7440c45bb5e499`,
+preserving the T314 Markdown renderer, browser checks, ticket and evidence.
+The T201 guest-sample Cancel obstruction reproduced locally on the merged tree.
+A narrow workspace-header hit-testing fix lets the empty grid area pass pointer
+events through while retaining events on interactive controls. Real Chrome
+`browser_checks/guest_samples.py` passed after the fix (68 transient guest
+workspaces observed).
+
+The Maximum Regions four-turn deterministic Chrome test verifies scripted
+orchestration, storage, report and simulated usage/cost reconciliation only.
+It launches Chrome with `--disable-web-security` and routes API calls to a
+separate fixture origin; it is not normal same-origin/CORS or browser-security
+acceptance, and does not test live model quality, actual provider usage, or real
+provider cost. The research response limit remains a finite 8,000,000 bytes.
+The retained oversized-response regression accepts a 1,010,000-byte response
+and rejects payloads/streams above 8 MB. Production payload sizes, parsing peak
+memory, and live provider behavior remain **UNVERIFIED**. Local portfolio
+execution can buffer three 8 MB responses concurrently (24 MB raw bodies in
+theoretical aggregate, excluding parser/object overhead); hosted execution
+serializes calls. This is not a total process-memory ceiling.
+
+Final review gates for PR #317 are met on implementation HEAD
+`f7ce1dafe6c513db995ab847e16f7bea66439e07`, based on current main
+`4cff1e544bc30f14096073ee6c7440c45bb5e499`. All six associated GitHub Actions
+runs succeeded: T201 `40813340833`, T249 `40813340817`, SIGMA verification
+`40813340820`, Research Outcome `40813340819`, T92 `40813340813`, and T200
+`40813340805`. Local `./sigma test` also passed all steps after installing the
+merged lockfile; the local graph-present sandbox subcase skipped because the
+image is unavailable, while T249 CI passed its sandbox build/integration.
+Real Chrome passed guest samples (including Cancel), T301 Markdown, T47
+Research Outcome, and the two-round scripted Maximum Regions lifecycle.
+
+The Chrome Maximum Regions fixture scripts all four responses and token counts;
+it verifies deterministic orchestration/persistence/simulated accounting only.
+It uses `--disable-web-security` and a separate fixture origin, so does not
+verify normal origin/CORS behavior. Live provider behavior and cost remain
+UNVERIFIED; no paid calls were made. The 8 MB per-response limit and 1.01 MB
+accept/8 MB overflow regressions remain in place. Three concurrent local
+responses could hold 24 MB raw buffers plus parsing allocations; production
+payload and peak-memory behavior remain UNVERIFIED. No deployment or merge.
+
+## PR #297 Green post-Red integration (2026-10-29)
+
+Integrated `origin/main` at `2d4368adf341aca105f5b645c676909da71ed5fb` without rewriting the published branch. Red #317's scheduler/session changes, Blue #314 Markdown improvements, and the approved About diagram are retained. The merge and final HEAD are recorded in `messages/pr297_green_consolidated_r4r.md`.
+
+Real Chromium reproduced the sign-in obstruction: the first-visit Welcome dialog covered the visible Google pill. The dialog now contains a Google sign-in link. The real-backend check clicks that link and, after continuing past Welcome, the actual header pill; both reach SIGMA's real `/api/cloud-auth/login` endpoint and validate its 302 Google authorization URL through a deterministic local fixture. No live Google OAuth call was made.
+
+`Reload me!` now appears when the member's remaining allowance is below $0.05. Chromium confirms it is hidden at $0.05, appears at $0.04, and submits a real API reload request at $0.03. The built-in administrator's actual dialog reads that request and the pending guest invitation from the durable database; it approves the invitation, and a fresh deterministic session resolves as a member. The invitation email boundary is stubbed, and no email is sent.
+
+Verification passed: `./sigma test`; real Chromium for Google sign-in/invitation/admin approval/reload, public guest samples, Red's deterministic Maximum Regions lifecycle, Blue #314 math rendering, and About diagram layouts at 1440/390/320 plus touch help. The existing graph-present sandbox subcase was skipped because the local Python sandbox image is unavailable. Product feedback API/admin behavior is covered by `tests/cloud_auth.py`; a dedicated product-feedback browser acceptance was not part of this pass. No paid provider calls, deployment, or merge to main.

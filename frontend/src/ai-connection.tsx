@@ -363,7 +363,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // The connection error is shown beside the pill by the AI provider state.
     }
   }
-  const zeroAllowance = sponsoredPill && !adminSponsored && cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0;
+  const zeroAllowance = sponsoredPill && !adminSponsored && cloudFunding?.budget && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
     <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} title={sponsoredPill ? sponsorTooltip : connectionTooltip} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>

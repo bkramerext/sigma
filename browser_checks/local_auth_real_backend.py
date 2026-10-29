@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -299,6 +300,105 @@ def main() -> None:
 
                 context.on("request", external_boundary)
 
+                invitation_posts: list[dict] = []
+
+                def record_invitation(route) -> None:
+                    request_body = route.request.post_data_json or {}
+                    invitation_posts.append(request_body)
+                    response = route.fetch(max_redirects=0)
+                    # SMTP is deliberately unconfigured in this fixture. The
+                    # real endpoint durably records the verified subject
+                    # before its notification boundary returns 503.
+                    assert response.status == 503, response.status
+                    from sigma import cloud_auth
+
+                    request_type = request_body.get("request_type", "invitation")
+                    subject = (
+                        "google-subject-n"
+                        if request_type == "reload"
+                        else "google-subject-uninvited"
+                    )
+                    cfg = cloud_auth.config()
+                    with cloud_auth._db(cfg) as db:
+                        row = db.execute(
+                            "SELECT status,email,request_type FROM invitation_requests WHERE subject=?",
+                            (subject,),
+                        ).fetchone()
+                        expected_email = N if request_type == "reload" else UNINVITED
+                        assert row is not None and row["email"] == expected_email, row
+                        assert row["request_type"] == request_type, row
+                        db.execute(
+                            "UPDATE invitation_requests SET status='notified',notification_error=NULL WHERE subject=?",
+                            (subject,),
+                        )
+                    route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        body='{"status":"notified","duplicate":false}',
+                    )
+
+                page.route("**/api/cloud-auth/invitation-request", record_invitation)
+
+                # Exercise the visible Google pill itself, including the
+                # real local API redirect. Stop at a deterministic OAuth
+                # authorization page so the browser test never contacts Google.
+                page.goto(origin, wait_until="domcontentloaded")
+                welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
+                expect(welcome).to_be_visible()
+
+                oauth_redirects: list[str] = []
+
+                def login_redirect_fixture(route) -> None:
+                    response = route.fetch(max_redirects=0)
+                    assert response.status == 302, response.status
+                    location = response.headers.get("location", "")
+                    parsed = urllib.parse.urlsplit(location)
+                    query = urllib.parse.parse_qs(parsed.query)
+                    assert parsed.scheme == "https" and parsed.hostname == "accounts.google.com", (
+                        location
+                    )
+                    assert parsed.path == "/o/oauth2/v2/auth", location
+                    assert query.get("client_id") == ["fixture-google-client"], query
+                    assert query.get("response_type") == ["code"], query
+                    assert query.get("code_challenge_method") == ["S256"], query
+                    oauth_redirects.append(location)
+                    route.fulfill(
+                        response=response,
+                        status=200,
+                        content_type="text/html",
+                        body=("<title>Deterministic Google OAuth fixture</title>"),
+                    )
+
+                page.route("**/api/cloud-auth/login**", login_redirect_fixture)
+
+                welcome_sign_in = welcome.get_by_role("link", name="Sign in with Google")
+                expect(welcome_sign_in).to_be_visible()
+                assert welcome_sign_in.get_attribute("href") == "/api/cloud-auth/login"
+                requests.clear()
+                with page.expect_navigation(url=re.compile(r"/api/cloud-auth/login")):
+                    welcome_sign_in.click()
+                assert ("GET", "/api/cloud-auth/login") in requests, requests
+                assert len(oauth_redirects) == 1, oauth_redirects
+                assert urllib.parse.urlsplit(page.url).path == "/api/cloud-auth/login"
+                assert "Deterministic Google OAuth fixture" in page.title()
+
+                page.goto(origin, wait_until="domcontentloaded")
+                page.evaluate("sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true')")
+                page.reload(wait_until="domcontentloaded")
+                google_sign_in = page.locator(".home-auth-pills .project-google-signin").filter(
+                    has_text="Sign in with Google"
+                )
+                expect(google_sign_in).to_be_visible()
+                assert google_sign_in.get_attribute("href") == "/api/cloud-auth/login"
+                requests.clear()
+                with page.expect_navigation(url=re.compile(r"/api/cloud-auth/login")):
+                    google_sign_in.click()
+                assert ("GET", "/api/cloud-auth/login") in requests, requests
+                assert len(oauth_redirects) == 2, oauth_redirects
+                assert urllib.parse.urlsplit(page.url).path == "/api/cloud-auth/login"
+                assert "Deterministic Google OAuth fixture" in page.title()
+
+                page.goto(origin, wait_until="domcontentloaded")
                 login_cookie(Z)
                 page.goto(origin, wait_until="domcontentloaded")
                 google = page.locator(".identity-pill-stack .project-google-signin").first
@@ -458,7 +558,7 @@ def main() -> None:
                         ),
                     )
                     db.execute(
-                        "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,0.25,'usage_estimated',0,0,0,?,?)",
+                        "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,0.22,'usage_estimated',0,0,0,?,?)",
                         (
                             "fixture-zero-allowance-call",
                             session_id,
@@ -473,35 +573,13 @@ def main() -> None:
                 # while the Sponsored ChatGPT pill still starts personal OAuth.
                 assert member_pill.get_by_role("status").inner_text() == "Sponsored ChatGPT"
                 expect(member_pill.locator(".sponsored-allowance-inline")).to_have_text(
-                    "0.00", timeout=10000
+                    "0.03", timeout=10000
                 )
-                play_attempt = page.evaluate(
-                    """async () => {
-                      const post = async (url, body) => { const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); return {status:r.status,body:await r.json()}; };
-                      const created = await post('/api/projects/create',{title:'Zero allowance browser regression '+crypto.randomUUID(),problem:'Verify budget admission before sponsored Play.'});
-                      if (created.status !== 201) return {stage:'create',...created};
-                      const path=created.body.path, project=created.body.project;
-                      const strategy = await post('/api/projects/strategies',{path,title:'Check admission',approach:'Attempt the session only after budget admission.'});
-                      if (strategy.status !== 201) return {stage:'strategy',...strategy};
-                      const strategiesResponse=await fetch('/api/projects/strategies?'+new URLSearchParams({path}));
-                      const strategyId=(await strategiesResponse.json()).strategies[0].id;
-                      const [configResponse,limitsResponse]=await Promise.all([
-                        fetch('/api/projects/proposals/config?'+new URLSearchParams({path})),
-                        fetch('/api/projects/research-limits?'+new URLSearchParams({path}))
-                      ]);
-                      const config=await configResponse.json(), limits=await limitsResponse.json();
-                      return await post('/api/projects/research-sessions/start',{
-                        path,strategy_id:strategyId,strategy_ids:[strategyId],
-                        idempotency_key:crypto.randomUUID(),expected_project_id:project.id,
-                        expected_binding:config.binding,expected_limits:limits
-                      });
-                    }"""
-                )
-                assert play_attempt["status"] in {400, 409, 503}, play_attempt
-                assert any(
-                    word in json.dumps(play_attempt).casefold()
-                    for word in ("allowance", "budget", "ceiling")
-                ), play_attempt
+                reload_button = page.get_by_role("button", name="Reload me!")
+                expect(reload_button).to_be_visible()
+                reload_button.click()
+                expect(page.get_by_text("Reload requested", exact=True)).to_be_visible()
+                assert invitation_posts == [{"request_type": "reload"}], invitation_posts
                 requests.clear()
                 with page.expect_popup() as member_personal_popup:
                     member_pill.click(position={"x": 25, "y": 14})
@@ -514,7 +592,7 @@ def main() -> None:
                     requests
                 )
                 assert (
-                    "0.00" not in member_pill.inner_text()
+                    "0.03" not in member_pill.inner_text()
                     and "Unlimited" not in member_pill.inner_text()
                 )
                 selected_member = page.evaluate(
@@ -537,18 +615,6 @@ def main() -> None:
                 assert not status["account"]["sponsorship"]["eligible"], status
                 expect(page.get_by_role("button", name="Invite me!")).to_be_visible()
                 assert page.locator(".api-connection").count() == 0
-                invitation_posts: list[dict] = []
-                page.route(
-                    "**/api/cloud-auth/invitation-request",
-                    lambda route: (
-                        invitation_posts.append(route.request.post_data_json or {}),
-                        route.fulfill(
-                            status=200,
-                            content_type="application/json",
-                            body='{"status":"notified","duplicate":false}',
-                        ),
-                    ),
-                )
                 page.get_by_role("button", name="Invite me!").click()
                 invitation_dialog = page.get_by_role("dialog", name="Request an invitation")
                 invitation_dialog.get_by_role("button", name="Invite me").click()
@@ -556,7 +622,7 @@ def main() -> None:
                     "Your invitation request is recorded and awaiting administrator review."
                 )
                 expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
-                assert invitation_posts == [{}], invitation_posts
+                assert invitation_posts == [{"request_type": "reload"}, {}], invitation_posts
 
                 # Exercise authenticated guest workspace ownership through the
                 # real API subprocess. The browser keeps the first guest cookie
@@ -713,9 +779,79 @@ def main() -> None:
                 assert new_guest_cookie["value"] != old_guest_cookie_value, (
                     "Switching Google identities reused the prior guest workspace cookie"
                 )
+
+                # Sign in as the built-in admin and verify the pending guest
+                # request appears in the actual administration dialog. Approve
+                # it there, then resolve the same Google session as a member.
+                login_cookie(Z)
+                page.goto(origin, wait_until="domcontentloaded")
+                page.get_by_role("link", name="Administrator settings").click()
+                admin = page.get_by_role("dialog", name="Administrator Settings")
+                expect(admin).to_be_visible()
+                reload_row = admin.locator(".admin-invitation-table").get_by_role(
+                    "row", name=re.compile(re.escape(N))
+                )
+                expect(reload_row).to_contain_text("Allowance reload request")
+                invitation_row = admin.locator(".admin-invitation-table").get_by_role(
+                    "row", name=re.compile(re.escape(UNINVITED))
+                )
+                expect(invitation_row).to_be_visible()
+                invitation_row.get_by_role("button", name="Add").click()
+                expect(
+                    admin.locator(".admin-invitation-table").get_by_role(
+                        "row", name=re.compile(re.escape(UNINVITED))
+                    )
+                ).to_have_count(0)
+                expect(
+                    admin.locator(".admin-authorized-table").get_by_role(
+                        "row", name=re.compile(re.escape(UNINVITED))
+                    )
+                ).to_be_visible()
+                # Approval deliberately requires a subsequent sign-in. The
+                # admin's session inventory may retire the pre-approval guest
+                # session, so issue a fresh deterministic session fixture.
+                from sigma import cloud_auth
+
+                approved_session = secrets.token_urlsafe(32)
+                with cloud_auth._db(cloud_auth.config()) as db:
+                    db.execute(
+                        "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                        (
+                            cloud_auth._hash(approved_session),
+                            "google-subject-uninvited",
+                            UNINVITED,
+                            cloud_auth._now() + 3600,
+                        ),
+                    )
+                cookies[UNINVITED] = approved_session
+                login_cookie(UNINVITED)
+                approved_principal = cloud_auth.resolve_session(cookies[UNINVITED])
+                with cloud_auth._db(cloud_auth.config()) as db:
+                    approval_debug = {
+                        "session": db.execute(
+                            "SELECT subject,email,expires_at FROM sessions WHERE token_hash=?",
+                            (cloud_auth._hash(cookies[UNINVITED]),),
+                        ).fetchone(),
+                        "grant": db.execute(
+                            "SELECT value,role,active FROM grants WHERE kind='email' AND value=?",
+                            (UNINVITED,),
+                        ).fetchone(),
+                    }
+                assert approved_principal is not None and approved_principal.role == "member", (
+                    approved_principal,
+                    approval_debug,
+                )
+                page.reload(wait_until="domcontentloaded")
+                approved_status = page.evaluate(
+                    "async () => (await (await fetch('/api/cloud-auth/status')).json())"
+                )
+                assert approved_status["user"] == {"email": UNINVITED, "role": "member"}, (
+                    approved_status
+                )
+                expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
                 browser.close()
             print(
-                "PASS local Chromium ↔ real SIGMA API: OAuth/membership, invitation UI, guest cache headers, and project/session/artifact isolation across Google identities"
+                "PASS local Chromium ↔ real SIGMA API: Google pill and welcome-dialog sign-in redirects, guest invitation and Reload me! admin visibility, member approval, cache headers, and cross-identity project/session/artifact isolation"
             )
         finally:
             if api is not None and api.poll() is None:

@@ -104,6 +104,8 @@ async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
             return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
         limits = research_sessions.get_limits(str(source))
+        limits.update(research_rounds=1, model_calls=2)
+        research_sessions.save_limits(str(source), limits)
         with (
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),

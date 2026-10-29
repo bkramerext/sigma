@@ -197,8 +197,13 @@ with sync_playwright() as playwright:
     expect(member_page.get_by_role("button", name="Invite me!")).to_have_count(0)
     expect(member_page.get_by_role("button", name="Sign out of Google")).to_be_visible()
     expect(member_page.get_by_role("button", name="Reload me!")).to_have_count(0)
-    allowance["remaining_usd"] = 0
+    allowance["remaining_usd"] = 0.05
     member_page.evaluate("window.dispatchEvent(new Event('focus'))")
+    expect(member_page.locator(".sponsored-allowance-inline")).to_have_text("0.05")
+    expect(member_page.get_by_role("button", name="Reload me!")).to_have_count(0)
+    allowance["remaining_usd"] = 0.04
+    member_page.evaluate("window.dispatchEvent(new Event('focus'))")
+    expect(member_page.locator(".sponsored-allowance-inline")).to_have_text("0.04")
     reload_button = member_page.get_by_role("button", name="Reload me!")
     expect(reload_button).to_be_visible()
     expect(reload_button.locator("xpath=..")).to_have_class("identity-pill-stack")
@@ -211,5 +216,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS issue #279 real Chrome desktop/mobile invitation, retry/reload persistence, zero-allowance Reload me!, and member access"
+    "PASS issue #279 real Chrome invitation, retry/reload persistence, Reload me! threshold below $0.05, and member access"
 )

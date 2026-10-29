@@ -268,19 +268,25 @@ def main():
             limits_url = "/api/projects/research-limits"
             defaults = client.get(limits_url, params={"path": str(path)}).json()
             assert defaults == {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": "1"}
-            assert defaults["model_calls"] == 30
-            assert defaults["session_duration_minutes"] == 60
-            assert defaults["output_tokens_per_call"] == 12000
+            assert defaults["research_rounds"] == 2
+            assert defaults["model_calls"] == 12
+            assert defaults["session_duration_minutes"] == 30
+            assert defaults["output_tokens_per_call"] == 4000
             changed_limits = {**defaults, "research_rounds": 2, "model_calls": 4}
             saved_limits = client.put(limits_url, json={"path": str(path), **changed_limits})
             assert saved_limits.status_code == 200 and saved_limits.json() == changed_limits
             assert client.get(limits_url, params={"path": str(path)}).json() == changed_limits
             assert (
                 client.put(
-                    limits_url, json={"path": str(path), **changed_limits, "model_calls": 3}
+                    limits_url, json={"path": str(path), **changed_limits, "model_calls": 1}
                 ).status_code
-                == 400
+                == 422
             )
+            three_turns = client.put(
+                limits_url, json={"path": str(path), **changed_limits, "model_calls": 3}
+            )
+            assert three_turns.status_code == 200
+            assert three_turns.json()["model_calls"] == 3
             for invalid in (
                 {**defaults, "research_rounds": 6, "model_calls": 30},
                 {**defaults, "model_calls": 121},
