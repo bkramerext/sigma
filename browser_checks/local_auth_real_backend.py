@@ -350,9 +350,10 @@ def main() -> None:
                     invitation_posts.append(request_body)
                     response = route.fetch(max_redirects=0)
                     # SMTP is deliberately unconfigured in this fixture. The
-                    # real endpoint durably records the verified subject
-                    # before its notification boundary returns 503.
-                    assert response.status == 503, response.status
+                    # real endpoint accepts the durable request as pending so
+                    # the UI does not prompt for a duplicate submission.
+                    assert response.status == 200, response.status
+                    assert response.json() == {"status": "pending", "duplicate": False}
                     from sigma import cloud_auth
 
                     request_type = request_body.get("request_type", "invitation")
@@ -367,7 +368,7 @@ def main() -> None:
                     cfg = cloud_auth.config()
                     with cloud_auth._db(cfg) as db:
                         row = db.execute(
-                            "SELECT status,email,request_type FROM invitation_requests WHERE subject=?",
+                            "SELECT status,email,request_type,notification_error FROM invitation_requests WHERE subject=?",
                             (subject,),
                         ).fetchone()
                         expected_email = (
@@ -375,15 +376,9 @@ def main() -> None:
                         )
                         assert row is not None and row["email"] == expected_email, row
                         assert row["request_type"] == request_type, row
-                        db.execute(
-                            "UPDATE invitation_requests SET status='notified',notification_error=NULL WHERE subject=?",
-                            (subject,),
-                        )
-                    route.fulfill(
-                        status=200,
-                        content_type="application/json",
-                        body='{"status":"notified","duplicate":false}',
-                    )
+                        assert row["status"] == "pending", row
+                        assert row["notification_error"] == "delivery failed", row
+                    route.fulfill(response=response)
 
                 page.route("**/api/cloud-auth/invitation-request", record_invitation)
 
@@ -858,6 +853,24 @@ def main() -> None:
                 page.get_by_role("link", name="Administrator settings").click()
                 admin = page.get_by_role("dialog", name="Administrator Settings")
                 expect(admin).to_be_visible()
+                expect(admin.locator(".admin-tabs")).to_have_count(0)
+                expect(admin.locator(".admin-collapsible-section")).to_have_count(4)
+                usage_section = admin.locator(".admin-account-usage-section")
+                expect(usage_section).to_have_attribute("open", "")
+                expect(admin.locator(".admin-usage-table")).to_be_visible()
+                usage_section.locator("summary").click()
+                expect(usage_section).not_to_have_attribute("open", "")
+                expect(admin.locator(".admin-usage-table")).to_be_hidden()
+                usage_section.locator("summary").click()
+                expect(usage_section).to_have_attribute("open", "")
+                header_size = admin.locator(".admin-feedback-table thead th").first.evaluate(
+                    "element => parseFloat(getComputedStyle(element).fontSize)"
+                )
+                arrow_size = admin.locator(".admin-feedback-section summary").evaluate(
+                    "element => parseFloat(getComputedStyle(element, '::before').fontSize)"
+                )
+                assert header_size >= 12, header_size
+                assert arrow_size >= 27, arrow_size
                 reload_row = admin.locator(".admin-invitation-table").get_by_role(
                     "row", name=re.compile(re.escape(N))
                 )
@@ -879,6 +892,16 @@ def main() -> None:
                 expect(signed_feedback.locator("td").nth(0)).to_have_text(N)
                 expect(signed_feedback.locator("th")).not_to_contain_text("Signed-in account")
                 expect(signed_feedback).not_to_contain_text("contact-provided@example.org")
+                feedback_actions = signed_feedback.locator(".admin-feedback-actions button")
+                expect(feedback_actions).to_have_count(3)
+                action_colors = feedback_actions.evaluate_all(
+                    "elements => elements.map(element => getComputedStyle(element).color)"
+                )
+                assert len(set(action_colors)) == 1, action_colors
+                action_tops = feedback_actions.evaluate_all(
+                    "elements => elements.map(element => element.getBoundingClientRect().top)"
+                )
+                assert max(action_tops) - min(action_tops) <= 2, action_tops
                 anonymous_feedback = feedback_table.locator("tbody tr").filter(
                     has_text="Anonymous feedback fixture message"
                 )

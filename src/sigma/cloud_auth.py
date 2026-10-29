@@ -2032,13 +2032,16 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
     try:
         if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
             _deliver_invitation(identity["email"], requested_at, request_type=body.request_type)
-    except RuntimeError as exc:
+    except RuntimeError:
         with _db(cfg) as db:
             db.execute(
                 "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? WHERE subject=?",
                 ("delivery failed", subject),
             )
-        raise HTTPException(503, "Your request could not be sent. Please try again later.") from exc
+        # The durable request is already recorded and visible to administrators.
+        # Notification delivery is best-effort; returning an error here would
+        # tell the user to retry an action that has already succeeded.
+        return {"status": "pending", "duplicate": bool(existing)}
     with _db(cfg) as db:
         db.execute(
             "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL WHERE subject=?",

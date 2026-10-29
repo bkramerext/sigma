@@ -7855,3 +7855,26 @@ anonymous feedback identity display, submission button style/position, and
 Remove deleting the row. No live Google callback or paid provider call was
 made. The graph-present Python sandbox case skipped because its image is
 unavailable.
+
+## PR #297 invitation acknowledgement and admin layout follow-up (2026-10-28)
+
+An invitation is durably stored before the notification email is attempted. If
+delivery fails, the request remains `pending` and visible to administrators;
+the API now returns a successful pending response so the UI acknowledges the
+saved request instead of inviting a duplicate retry. The local real-backend
+Chrome check exercises this exact delivery-failure path with SMTP unconfigured.
+
+Administrator Settings is wider and taller, with separate collapsible sections
+for invitation/reload requests, product feedback, authorized users, and account
+usage. The tab bar is removed. Feedback actions stay on one line, use one shared
+color, and have a wider Actions column; table headers and disclosure triangles
+are larger.
+
+Verification passed: full `./sigma test`; 72 cloud-auth tests; frontend
+typecheck/build; Ruff and formatting; `git diff --check`; real-Chrome
+`browser_checks/local_auth_real_backend.py`, `browser_checks/issue279_invite_me.py`,
+and the updated admin dialog flow. Chrome verified a pending saved invitation
+is acknowledged, admin feedback identity and removal, action alignment/colors,
+larger headers/arrows, and collapsible sections. No live
+Google OAuth callback or paid provider call was made. The graph-present Python
+sandbox case remains skipped because its local image is unavailable.

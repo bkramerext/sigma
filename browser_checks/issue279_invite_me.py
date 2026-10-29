@@ -30,7 +30,7 @@ def guest_status(route):
                     "model_access": {"mode": "sponsored", "connection": "unavailable"},
                     "sponsorship": {"eligible": False, "forced": False},
                     "invitation_welcome_pending": False,
-                    "invitation_status": "notified" if len(posts) > 1 else None,
+                    "invitation_status": "pending" if posts else None,
                 },
                 "admin_contact_email": "zetacontinuation@gmail.com",
                 "target": "local",
@@ -52,18 +52,14 @@ with sync_playwright() as playwright:
 
     def invitation_response(route):
         posts.append({"method": route.request.method, "body": route.request.post_data_json})
-        if len(posts) == 1:
-            route.fulfill(
-                status=503,
-                content_type="application/json",
-                body='{"detail":"Your request could not be sent. Please try again later."}',
-            )
-        else:
-            route.fulfill(
-                status=200,
-                content_type="application/json",
-                body='{"status":"notified"}',
-            )
+        # The durable request is accepted even when its admin email cannot be
+        # delivered; the UI must acknowledge the saved request instead of
+        # asking the user to repeat an action that already succeeded.
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"status":"pending","duplicate":false}',
+        )
 
     def guest_api(route):
         path = urlsplit(route.request.url).path
@@ -104,29 +100,15 @@ with sync_playwright() as playwright:
         "href", re.compile(r"^/privacy")
     )
     dialog.get_by_role("button", name="Invite me").click()
-    expect(dialog.locator(".google-invitation-actions [role='alert']")).to_contain_text(
-        "Your request could not be sent. Please try again later."
-    )
-    retry = dialog.get_by_role("button", name="Try again")
-    expect(retry).to_be_enabled()
-    assert retry.evaluate("element => getComputedStyle(element).backgroundColor") == (
-        "rgba(0, 0, 0, 0)"
-    )
-    assert retry.evaluate("element => getComputedStyle(element).textDecorationLine") == "underline"
-    retry.focus()
-    expect(retry).to_be_focused()
-    retry.press("Enter")
     expect(dialog.locator("[role='status']")).to_contain_text(
         "Your invitation request is recorded and awaiting administrator review."
     )
+    expect(dialog.locator("[role='alert']")).to_have_count(0)
     expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
-    assert posts == [
-        {"method": "POST", "body": {}},
-        {"method": "POST", "body": {}},
-    ]
+    assert posts == [{"method": "POST", "body": {}}]
     page.reload(wait_until="networkidle")
     status = page.evaluate("async () => (await (await fetch('/api/cloud-auth/status')).json())")
-    assert status["account"]["invitation_status"] == "notified", status
+    assert status["account"]["invitation_status"] == "pending", status
     expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
     page.set_viewport_size({"width": 1280, "height": 850})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -216,5 +198,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS issue #279 real Chrome invitation, retry/reload persistence, Reload me! threshold below $0.05, and member access"
+    "PASS issue #279 real Chrome invitation, saved-request acknowledgement, reload persistence, Reload me! threshold below $0.05, and member access"
 )

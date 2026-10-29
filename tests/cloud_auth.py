@@ -1398,19 +1398,23 @@ class CloudAuthTests(TestCase):
         self.assertEqual(pending, 0)
         self.assertEqual(explicit, 0)
 
-    def test_invitation_request_fails_closed_when_notification_unconfigured(self):
+    def test_invitation_request_succeeds_when_notification_delivery_fails(self):
         denied = self.finish(email="visitor@example.org", subject="request-retry")
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
         with patch.object(
             cloud_auth, "_deliver_invitation", side_effect=RuntimeError("not configured")
         ):
-            failed = self.client.post(
+            accepted = self.client.post(
                 "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
             )
-        self.assertEqual(failed.status_code, 503)
-        self.assertEqual(
-            failed.json()["detail"], "Your request could not be sent. Please try again later."
-        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json(), {"status": "pending", "duplicate": False})
+        with cloud_auth._db(cloud_auth.config()) as db:
+            saved = db.execute(
+                "SELECT status,notification_error FROM invitation_requests WHERE subject='request-retry'"
+            ).fetchone()
+        self.assertEqual(saved["status"], "pending")
+        self.assertEqual(saved["notification_error"], "delivery failed")
         self.assertEqual(denied.headers["location"], "/?access=denied")
 
     def test_invitation_notification_uses_authenticated_sender_and_fixed_recipient(self):
