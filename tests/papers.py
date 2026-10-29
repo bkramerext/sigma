@@ -266,6 +266,66 @@ def test_strict_paper_schemas_require_all_properties() -> None:
     assert parsed.covered_field_refs == [] and parsed.omitted_fields == []
 
 
+def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> None:
+    """Trailing usage bookkeeping must not invalidate a paid completed stage."""
+    stage_text = json.dumps({
+        "notes": [],
+        "conflicts_or_gaps": [],
+        "covered_field_refs": [],
+        "omitted_fields": [],
+    })
+    stage_response = {
+        "id": "resp-evidence-fixture",
+        "status": "completed",
+        "model": "gpt-6.1-sol",
+        "output": [],
+    }
+    events = [
+        {"type": "response.created", "sequence_number": 0,
+         "response": {"id": stage_response["id"]}},
+        {"type": "response.output_text.delta", "sequence_number": 1,
+         "delta": stage_text},
+        {"type": "response.completed", "sequence_number": 2,
+         "response": stage_response},
+        {"type": "response.usage", "sequence_number": 3,
+         "usage": {"input_tokens": 32, "output_tokens": 17}},
+    ]
+    sent: list[dict[str, Any]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        stream = "".join("data: " + json.dumps(event) + "\\n\\n" for event in events)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"},
+            content=(stream + "data: [DONE]\\n\\n").encode(),
+        )
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(
+            transport=httpx.MockTransport(handler), **kwargs
+        ),
+    ):
+        result, model = asyncio.run(
+            papers._provider_structured(
+                {"fields": []},
+                {"mode": "chatgpt", "token": "fixture"},
+                {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                instructions="Extract a bounded evidence index.",
+                schema_name="sigma_paper_evidence_batch",
+                response_model=papers.EvidenceBatchResult,
+            )
+        )
+
+    assert model == "gpt-6.1-sol"
+    assert isinstance(result, papers.EvidenceBatchResult)
+    assert result.notes == [] and result.covered_field_refs == []
+    assert len(sent) == 1
+    assert sent[0]["stream"] is True and "max_output_tokens" not in sent[0]
+    assert sent[0]["text"]["format"]["strict"] is True
+
+
 def test_long_tex_compiler_source_bound_is_configurable() -> None:
     with patch("sigma.project_reports.shutil.which", return_value="tectonic-fixture"):
         try:
@@ -1450,6 +1510,7 @@ def main() -> None:
     test_chatgpt_schema_rejection_is_actionable_and_redacted()
     test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once()
     test_strict_paper_schemas_require_all_properties()
+    test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
