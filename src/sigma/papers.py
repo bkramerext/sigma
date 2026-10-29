@@ -780,7 +780,8 @@ def _structured_evidence_index(
                     context = (
                         kind in {"project", "strategy"} and lower in _FAST_CONTEXT_TERMS
                     ) or (
-                        kind in {"artifact", "agentic_step"} and lower in _FAST_ARTIFACT_TEXT_TERMS
+                        kind in {"session", "artifact", "agentic_run", "agentic_step"}
+                        and lower in _FAST_ARTIFACT_TEXT_TERMS
                     )
                     visit(child, child_path, meaningful or important or context)
                 return
@@ -900,6 +901,9 @@ def _long_plan_input(
             for key in ("title", "investigation_type", "difficulty")
             if key in project_data
         },
+        # The paper's scientific question should not be inferred only from
+        # selected index fragments. Retain the actual project problem.
+        "project_question": str(project_data.get("problem", ""))[:4_000],
         "evidence_index": evidence_index,
         "source_count_in_frozen_snapshot": source_count,
         "batch_coverage": {"completed": batch_count, "total": batch_count},
@@ -2931,6 +2935,8 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
         ]
         section_input = {
             "title": long_plan.title,
+            "project_question": str(project_data.get("problem", ""))[:3_000],
+            "investigation_type": project_type,
             "shared_claim_register": [
                 claim.model_dump() for claim in long_plan.claims if claim.id in section.claim_ids
             ],
@@ -3208,6 +3214,19 @@ async def _generate_impl(
                 )
         one_shot_validation_started = False
         if not long_form:
+            # A one-shot request can consume allowance even when its response
+            # is malformed, timed out or interrupted. Do not silently replay
+            # an uncertain paid attempt after a restart or lost connection.
+            if (
+                checkpoint is not None
+                and int(checkpoint.get("provider_calls", 0)) > 0
+                and checkpoint.get("one_shot_draft") is None
+            ):
+                raise ProjectError(
+                    "The previous paper-writing request did not produce a saved draft. "
+                    "Start over explicitly before making another AI request; "
+                    "the original research and provider-call history are preserved."
+                )
             if checkpoint is not None and checkpoint.get("one_shot_draft") is not None:
                 draft = PaperDraft.model_validate(checkpoint["one_shot_draft"])
                 model = config["model"]
@@ -3233,6 +3252,13 @@ async def _generate_impl(
                     "updated_at": _now(),
                     "elapsed_seconds": elapsed_before,
                 }
+                # Persist a conservative attempted-call count BEFORE dispatch.
+                # An unsuccessful or interrupted response still may have used
+                # provider allowance. Clearing the explicit reset marker keeps
+                # any later failed attempt from being silently repeated.
+                work.pop("explicit_restart_pending", None)
+                work["provider_calls"] = int(work.get("provider_calls", 0)) + 1
+                work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 _save_work(path, work)
                 await report("writing", None, None)
                 draft, model = await _provider(package, initial_auth, config, view.project.id, path)
@@ -3241,8 +3267,6 @@ async def _generate_impl(
                 await report("validation", None, None)
                 _validate(draft, package)
                 one_shot_validation_started = True
-                work["provider_calls"] = int(work.get("provider_calls", 0)) + 1
-                work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 work["one_shot_draft"] = draft.model_dump()
                 _save_work(path, work)
                 provider_calls = int(work["provider_calls"])
