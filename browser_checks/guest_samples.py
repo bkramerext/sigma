@@ -281,7 +281,7 @@ def exercise(ui_url: str, root: Path) -> None:
         ).to_have_count(5)
         papers_before_dialog = len(paper_requests)
         page.get_by_role("button", name="LaTeX research paper").click()
-        tex_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+        tex_dialog = page.get_by_role("dialog", name="Generate paper using LaTeX")
         expect(tex_dialog).to_contain_text("Sign in to export your research as TeX.")
         assert len(paper_requests) == papers_before_dialog, paper_requests
         tex_dialog.get_by_role("button", name="Close").click()
