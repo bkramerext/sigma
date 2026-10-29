@@ -220,7 +220,7 @@ def main() -> None:
                 )
                 assert markdown_download.status_code == 200, markdown_download.text
                 assert markdown_download.text.startswith(
-                    f"# {trace.json()['short_name']}, Session 1"
+                    f"# {trace.json()['project_title']}, Session 1"
                 )
                 assert "## Canonical event records" in markdown_download.text
                 assert "```json\n{" in markdown_download.text
