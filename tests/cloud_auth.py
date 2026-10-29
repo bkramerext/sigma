@@ -791,6 +791,21 @@ class CloudAuthTests(TestCase):
         flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
         return query["state"][0], response.cookies[flow_cookie]
 
+    def test_google_login_reports_missing_local_oauth_settings_before_redirect(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                "GOOGLE_OIDC_CLIENT_ID": "",
+                "GOOGLE_OIDC_CLIENT_SECRET": "",
+            },
+        ):
+            response = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("GOOGLE_OIDC_CLIENT_ID", response.json()["detail"])
+        self.assertIn("GOOGLE_OIDC_CLIENT_SECRET", response.json()["detail"])
+
     def test_guest_cookie_is_bound_to_one_verified_subject(self):
         from sigma import cloud_workspaces
 

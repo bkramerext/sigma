@@ -1459,8 +1459,23 @@ def login(
     cfg = config()
     if not cfg.enabled:
         return RedirectResponse("/")
-    if cfg.error or not cfg.origin or not cfg.client_id:
+    if cfg.error or not cfg.origin:
         raise HTTPException(503, "Cloud authentication is not ready.")
+    oauth_missing = [
+        key
+        for key, value in (
+            ("GOOGLE_OIDC_CLIENT_ID", cfg.client_id),
+            ("GOOGLE_OIDC_CLIENT_SECRET", cfg.client_secret),
+        )
+        if not value
+    ]
+    if oauth_missing:
+        raise HTTPException(
+            503,
+            "Google sign-in is not configured. Set "
+            + " and ".join(oauth_missing)
+            + " and restart SIGMA.",
+        )
     state, nonce, verifier = (
         secrets.token_urlsafe(32),
         secrets.token_urlsafe(32),

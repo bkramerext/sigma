@@ -7800,3 +7800,28 @@ Real Chromium reproduced the sign-in obstruction: the first-visit Welcome dialog
 `Reload me!` now appears when the member's remaining allowance is below $0.05. Chromium confirms it is hidden at $0.05, appears at $0.04, and submits a real API reload request at $0.03. The built-in administrator's actual dialog reads that request and the pending guest invitation from the durable database; it approves the invitation, and a fresh deterministic session resolves as a member. The invitation email boundary is stubbed, and no email is sent.
 
 Verification passed: `./sigma test`; real Chromium for Google sign-in/invitation/admin approval/reload, public guest samples, Red's deterministic Maximum Regions lifecycle, Blue #314 math rendering, and About diagram layouts at 1440/390/320 plus touch help. The existing graph-present sandbox subcase was skipped because the local Python sandbox image is unavailable. Product feedback API/admin behavior is covered by `tests/cloud_auth.py`; a dedicated product-feedback browser acceptance was not part of this pass. No paid provider calls, deployment, or merge to main.
+
+## PR #297 local Google sign-in startup correction (2026-10-28)
+
+The reported local `/api/cloud-auth/login` 503 reproduced on the already-running
+backend. Its status showed `GOOGLE_OIDC_CLIENT_ID` and
+`GOOGLE_OIDC_CLIENT_SECRET` missing. The checkout `.env` contains both, and a
+fresh `./sigma shutdown && ./sigma start` loaded them; local status then had no
+missing setup and login redirected through Google's real account-selection
+page. The observed blocker was a backend process running without the checkout's
+OAuth settings. The exact reason that process had been started in that state
+could not be established from retained logs.
+
+The local launcher now prints a credential-safe, actionable warning when Google
+OAuth or the designated administrator setting is absent. The login endpoint
+names missing OAuth setting keys rather than returning the generic “Cloud
+authentication is not ready” response. No credential values are logged or
+returned.
+
+Verification: `./sigma test` passed all steps, including 72 cloud-auth tests,
+Ruff, formatting, Pyright, frontend typecheck, and production build. The
+graph-present Python sandbox case skipped because its local image is unavailable.
+Real Chrome clicked the sign-in link from the local first-visit dialog and
+reached `accounts.google.com` (“Sign in - Google Accounts”); this verified the
+real configured redirect and chooser page, not completion of Google OAuth or
+callback. No paid provider calls were made. `git diff --check` passed.
