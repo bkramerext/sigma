@@ -117,6 +117,36 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
             raise AssertionError("Partial provider streams must not produce a paper draft")
 
 
+def test_chatgpt_schema_rejection_has_safe_diagnostics() -> None:
+    with patch("sigma.plan_stream.inference_failure"):
+        for error, expected in (
+            (
+                {"code": "invalid_json_schema", "param": "text.format.schema",
+                 "message": "private evidence contents"},
+                ("structured-output schema", "code=invalid_json_schema",
+                 "param=text.format.schema"),
+            ),
+            (
+                {"code": "unsafe_private_value", "param": "private field",
+                 "message": "another private evidence fragment"},
+                ("response shape: responses-error",),
+            ),
+        ):
+            try:
+                failure(400, {"error": error}, "chatgpt")
+            except ProjectError as exc:
+                message = str(exc)
+                for phrase in expected:
+                    assert phrase in message
+                assert "private evidence" not in message
+                assert "unsafe_private_value" not in message
+                assert "private field" not in message
+                assert "another private" not in message
+                assert "no automatic billing fallback" in message
+            else:
+                raise AssertionError("Mock HTTP 400 must not be retried")
+
+
 def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
     cases = [
         (
@@ -986,6 +1016,8 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 
 
 def main() -> None:
+    test_paper_provider_schema_requires_all_nested_fields()
+    test_chatgpt_schema_rejection_has_safe_diagnostics()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
