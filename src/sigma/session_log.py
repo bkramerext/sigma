@@ -929,6 +929,7 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
         "events": events,
         "cursor": cursor,
         "short_name": short_name,
+        "project_title": view.project.title,
         "session": {
             "id": session_id,
             "number": session.get("session_number"),
