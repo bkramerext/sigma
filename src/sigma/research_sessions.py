@@ -4811,10 +4811,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                         "A previous provider call ended without a complete saved response. "
                         "Its usage may still accrue; resume explicitly to make a new attempt."
                     )
-                    if resumable_timeout:
-                        record["resume_window_reset"] = True
-                    else:
-                        record["stopped_at"] = previous_step.get("finished_at") or _now()
+                    record["stopped_at"] = previous_step.get("finished_at") or _now()
                     for branch in record.get("strategy_runs", []):
                         if branch.get("status") == "failed":
                             branch["status"] = "paused"
@@ -4829,22 +4826,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         # A paused session's idle time does not consume its active runtime
         # window. Older paused records may predate stopped_at; use their last
         # durable update as the pause boundary.
-        if (
-            record.get("status") == "paused"
-            and not record.get("stopped_at")
-            and not record.get("resume_window_reset")
-        ):
+        if record.get("status") == "paused" and not record.get("stopped_at"):
             record["stopped_at"] = record.get("updated_at") or _now()
-        if record.pop("resume_window_reset", False):
-            duration = int(record.get("duration_limit_minutes", CALL_TIMEOUT // 60))
-            record["deadline_at"] = (datetime.now(UTC) + timedelta(minutes=duration)).isoformat()
-            _event(
-                record,
-                "session.resume_window",
-                f"A new {duration}-minute runtime window was granted for the explicit resume.",
-            )
-            record["updated_at"] = _now()
-            _save(record["project_path"], record)
         project = inspect_project(path).project
         strategy_ids = record.get("strategy_ids", [record.get("strategy_id")])
         for strategy_id in strategy_ids:

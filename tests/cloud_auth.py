@@ -791,6 +791,29 @@ class CloudAuthTests(TestCase):
         flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
         return query["state"][0], response.cookies[flow_cookie]
 
+    def test_invalid_bearer_never_falls_back_to_valid_session_cookie(self):
+        login = self.finish(email="admin@example.org", subject="invalid-bearer-cookie")
+        cookie_name = cloud_auth._cookie_name(cloud_auth.SESSION_COOKIE, cloud_auth.config())
+        self.client.cookies.set(cookie_name, login.cookies[cookie_name])
+
+        invalid_bearer = {
+            "Authorization": "Bearer malformed-or-revoked-token",
+            "Origin": ORIGIN,
+        }
+        status = self.client.get("/api/cloud-auth/status", headers=invalid_bearer)
+        self.assertFalse(status.json()["authenticated"], status.json())
+        denied = self.client.post("/api/cloud-auth/logout", headers=invalid_bearer)
+        self.assertEqual(denied.status_code, 401, denied.text)
+
+        # Browser-cookie requests remain subject to the configured same-origin
+        # guard, and the rejected bearer did not revoke or replace the cookie.
+        cross_origin = self.client.post(
+            "/api/cloud-auth/logout", headers={"Origin": "https://foreign.example"}
+        )
+        self.assertEqual(cross_origin.status_code, 403, cross_origin.text)
+        browser_status = self.client.get("/api/cloud-auth/status")
+        self.assertTrue(browser_status.json()["authenticated"], browser_status.json())
+
     def test_cli_pkce_exchange_issues_revocable_bearer_and_rejects_reuse(self):
         import base64
 

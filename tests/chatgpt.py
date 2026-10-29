@@ -310,6 +310,52 @@ async def checks(root):
         trailing_result = await generate_proposal(str(path))
         assert trailing_result["draft"] == DRAFT
         fixture.stream_override = None
+        # Only recognized, well-formed bookkeeping may follow completion.
+        # Malformed payloads, unknown protocol events, and contradictory
+        # terminal events must remain visible stream failures.
+        completed_events = fixture.events()
+        trailing_failures = [
+            "data: {malformed-json}\n\n",
+            "data: []\n\n",
+            "data: "
+            + json.dumps(
+                {
+                    "type": "response.usage",
+                    "sequence_number": 3,
+                    "usage": "not-an-object",
+                }
+            )
+            + "\n\n",
+            "data: "
+            + json.dumps(
+                {"type": "response.telemetry", "sequence_number": 3, "detail": "unexpected"}
+            )
+            + "\n\n",
+            "data: "
+            + json.dumps(
+                {
+                    "type": "response.failed",
+                    "sequence_number": 3,
+                    "response": {
+                        "id": "resp-fixture",
+                        "status": "failed",
+                        "error": {"code": "server_error"},
+                    },
+                }
+            )
+            + "\n\n",
+        ]
+        for tail in trailing_failures:
+            fixture.stream_override = (
+                "".join(
+                    "data: " + json.dumps(event) + "\n\n" for event in completed_events
+                ).encode()
+                + tail.encode()
+            )
+            reset_connection()
+            await rejection(generate_proposal(str(path)))
+            assert (path / "project.json").read_bytes() == before
+        fixture.stream_override = None
         # Sol/High can emit many small SSE frames. The byte limit bounds the
         # stream; frame count alone is not a reliable proxy for its size.
         base_events = fixture.events()
@@ -332,7 +378,7 @@ async def checks(root):
         many_event_result = await generate_proposal(str(path))
         assert many_event_result["draft"] == DRAFT
         fixture.stream_override = None
-        assert fixture.generated == 3
+        assert fixture.generated == 3 + len(trailing_failures)
         await rejection(generate_proposal(str(path), expected_project_id="changed"), "identity")
         await rejection(generate_proposal(str(path), expected_binding="api_key"), "billing mode")
         # SSE malformed/failed/incomplete/refusal/truncated/oversized/out-of-order streams.

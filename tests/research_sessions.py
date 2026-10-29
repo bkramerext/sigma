@@ -6545,7 +6545,13 @@ async def test_invalid_provider_stream_pauses_and_resumes_without_replaying_inve
 ):
     """An invalid stream is held for explicit resume; saved Investigator work remains intact."""
     view, strategy, credential, config = await setup(path)
-    limits = {**research_sessions.DEFAULT_LIMITS, "model_calls": 6, "research_rounds": 1}
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "model_calls": 6,
+        "research_rounds": 1,
+        "session_duration_minutes": 1,
+        "maximum_estimated_cost_usd": 5.0,
+    }
     limits = research_sessions.save_limits(str(path), limits)
     calls = []
 
@@ -6571,6 +6577,9 @@ async def test_invalid_provider_stream_pauses_and_resumes_without_replaying_inve
         assert interrupted["calls_used"] == 2
         assert interrupted["steps"][0]["status"] == "completed"
         assert interrupted["steps"][1]["status"] == "interrupted"
+        unknown_cost_hold = interrupted["estimated_cost_reserved_usd"]
+        assert unknown_cost_hold > 0
+        assert interrupted["steps"][1]["attempt_status"] == "unknown"
         saved_investigator = interrupted["steps"][0]["output"]
         assert isinstance(saved_investigator, dict) and saved_investigator
         assert calls == ["investigator", "skeptic"]
@@ -6601,6 +6610,7 @@ async def test_invalid_provider_stream_pauses_and_resumes_without_replaying_inve
         "skeptic",
     ]
     assert finished["steps"][0]["output"] == saved_investigator
+    assert finished["estimated_cost_reserved_usd"] >= unknown_cost_hold
 
     # A timeout can consume the remaining runtime window. Explicitly resuming
     # that failed attempt must grant a new bounded window, without replaying
@@ -6608,9 +6618,17 @@ async def test_invalid_provider_stream_pauses_and_resumes_without_replaying_inve
     expired = research_sessions._read(str(path), started["id"])
     expired["status"] = "failed"
     expired["message"] = "AI provider call timed out at its 104-second call/session limit."
-    expired["deadline_at"] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+    failed_at = datetime.now(UTC) - timedelta(seconds=90)
+    expired["started_at"] = (failed_at - timedelta(seconds=30)).isoformat()
+    expired["deadline_at"] = (failed_at + timedelta(seconds=30)).isoformat()
+    expired["stopped_duration_seconds"] = 0
     expired["steps"][-1].update(
-        {"status": "failed", "attempt_status": "unknown", "failure_kind": "timeout"}
+        {
+            "status": "failed",
+            "attempt_status": "unknown",
+            "failure_kind": "timeout",
+            "finished_at": failed_at.isoformat(),
+        }
     )
     expired["strategy_runs"][0].update(
         {"status": "failed", "pending_investigation": saved_investigator, "pending_skeptic": None}
@@ -6621,15 +6639,19 @@ async def test_invalid_provider_stream_pauses_and_resumes_without_replaying_inve
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "_call_provider", new=AsyncMock(side_effect=provider_call)),
     ):
+        resumed_at = datetime.now(UTC)
         resumed_after_timeout = await research_sessions.control_session(
             str(path), started["id"], "resume"
         )
         assert resumed_after_timeout["status"] == "queued", resumed_after_timeout
-        assert datetime.fromisoformat(resumed_after_timeout["deadline_at"]) > datetime.now(UTC)
+        remaining = datetime.fromisoformat(resumed_after_timeout["deadline_at"]) - resumed_at
+        assert timedelta(0) < remaining <= timedelta(seconds=30.5), remaining
         timeout_recovered = await wait_for(path, started["id"])
     assert calls == ["investigator", "skeptic", "skeptic", "skeptic"], calls
     assert timeout_recovered["status"] == "ended", timeout_recovered
     assert timeout_recovered["steps"][0]["output"] == saved_investigator
+    assert 25 <= timeout_recovered["elapsed_seconds"] <= 35, timeout_recovered["elapsed_seconds"]
+    assert timeout_recovered["estimated_cost_reserved_usd"] >= unknown_cost_hold
 
     limits = research_sessions.save_limits(str(path), {**limits, "output_tokens_per_call": 8000})
     oversized = research_sessions._read(str(path), started["id"])

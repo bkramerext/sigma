@@ -803,6 +803,13 @@ def _bearer_session(request: Request) -> str | None:
     return token
 
 
+def _request_session_credential(request: Request, cfg: Config) -> str | None:
+    """An explicit Authorization header takes precedence over browser cookies."""
+    if "authorization" in request.headers:
+        return _bearer_session(request)
+    return request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+
+
 _GUEST_PROJECT_READ_PATHS = {
     "/api/projects/inspect",
     "/api/projects/strategies",
@@ -961,6 +968,7 @@ async def middleware(request: Request, call_next):
             return await call_next(request)
         return JSONResponse({"error": "Cloud authentication is not ready."}, status_code=503)
     origin = request.headers.get("origin")
+    authorization_supplied = "authorization" in request.headers
     bearer = _bearer_session(request)
     if (
         not bearer
@@ -972,14 +980,16 @@ async def middleware(request: Request, call_next):
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(
-            bearer or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
-        )
+        principal = resolve_session(_request_session_credential(request, cfg))
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
         )
     if principal is None:
+        if authorization_supplied:
+            # Do not turn a rejected explicit credential into an authenticated
+            # browser request or a guest-cookie request.
+            return JSONResponse({"error": "Authentication required."}, status_code=401)
         guest_cookie = _cookie_name(GUEST_COOKIE, cfg)
         guest_token = request.cookies.get(guest_cookie)
         guest_workspace = None
@@ -1191,9 +1201,7 @@ def mock_funding(request: Request):
     cfg = config()
     if not _mock_enabled(cfg):
         raise HTTPException(404, "Not found")
-    principal = resolve_session(
-        _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
-    )
+    principal = resolve_session(_request_session_credential(request, cfg))
     if principal is None or not principal.subject.startswith("mock:"):
         raise HTTPException(401, "Choose a mock member first.")
     _persist_user_state(cfg, principal)
@@ -1397,9 +1405,7 @@ def status(request: Request):
     try:
         principal = (
             getattr(request.state, "cloud_principal", None)
-            or resolve_session(
-                _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
-            )
+            or resolve_session(_request_session_credential(request, cfg))
             if cfg.enabled and not cfg.error
             else None
         )
@@ -1469,9 +1475,7 @@ def local_sponsored_allowance(request: Request):
         raise HTTPException(404, "Not found")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Local sponsored preview requires a loopback client.")
-    principal = resolve_session(
-        _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
-    )
+    principal = resolve_session(_request_session_credential(request, cfg))
     if principal is None:
         raise HTTPException(401, "Sign in with an eligible account to view its allowance.")
     account = _persist_user_state(cfg, principal)
@@ -2452,7 +2456,7 @@ def remove_feedback(feedback_id: str, request: Request):
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
-    raw = _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    raw = _request_session_credential(request, cfg)
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))

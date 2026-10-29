@@ -243,6 +243,7 @@ async def completed(
     terminal = None
     deltas = ""
     refused = False
+    done_seen = False
     async for chunk in response.aiter_bytes():
         byte_count += len(chunk)
         if byte_count > max_stream_bytes:
@@ -259,14 +260,18 @@ async def completed(
             if data == "[DONE]":
                 if terminal is None:
                     raise ValueError("plan_stream:done_before_terminal")
+                if done_seen:
+                    raise ValueError("plan_stream:duplicate_done")
+                done_seen = True
                 continue
-            if terminal is not None:
-                # A completed response is authoritative. Some hosted bridges
-                # append bounded bookkeeping events after response.completed;
-                # never let those events replace or invalidate the response
-                # whose usage and output were already finalized.
-                continue
-            event = json.loads(data)
+            if done_seen:
+                raise ValueError("plan_stream:event_after_done")
+            try:
+                event = json.loads(data)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("plan_stream:invalid_event_json") from exc
+            if not isinstance(event, dict):
+                raise TypeError("plan_stream:event_not_object")
             kind = event.get("type")
             seq = event.get("sequence_number")
             if (
@@ -280,6 +285,20 @@ async def completed(
             declared = [line[6:].strip() for line in block.split("\n") if line.startswith("event:")]
             if declared and declared != [kind]:
                 raise ValueError(f"plan_stream:declared_event({declared}!=[{kind}])")
+            if terminal is not None:
+                if kind in {"response.completed", "response.failed", "response.incomplete"}:
+                    raise ValueError(f"plan_stream:conflicting_terminal_event({kind})")
+                if kind == "response.usage":
+                    usage = event.get("usage")
+                    if not isinstance(usage, dict) or not any(
+                        isinstance(usage.get(field), int)
+                        and not isinstance(usage.get(field), bool)
+                        and usage[field] >= 0
+                        for field in ("input_tokens", "output_tokens", "total_tokens")
+                    ):
+                        raise ValueError("plan_stream:invalid_trailing_usage")
+                    continue
+                raise ValueError(f"plan_stream:unexpected_trailing_event({kind})")
             if kind == "error":
                 # Responses SSE errors wrap the provider error in an `error`
                 # event envelope. Normalize it to the JSON error shape used

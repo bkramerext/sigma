@@ -8100,3 +8100,25 @@ attempted to Base64-decode them again. The decoder now parses those bytes
 directly. `tests/project_bundle.py` passes with the correction, along with the
 Python lint/format/type checks. No research session or provider call was
 started to investigate this failure.
+
+The independent review follow-up now makes explicit bearer credentials
+exclusive: malformed Authorization headers cannot fall back to valid session
+or guest cookies, and cookie-based mutations still require the trusted origin.
+Completed SSE responses accept a validated `response.usage` tail, while
+malformed/unknown trailing events and conflicting terminal events fail closed;
+the one-million-byte stream limit remains. Explicit retry after a timed-out
+provider attempt now preserves only the remaining configured runtime, shifts
+the deadline by paused time, does not replay completed calls, and retains the
+unknown-cost reservation.
+
+The existing `samples/operation-narrow-passage` entry now carries the
+sanitized two-session investigation history from the saved local project,
+including the five-round Partial outcome; its catalog identifier, title and
+scenario notes remain. Opening the sample in an isolated temporary workspace
+rebound the project/session identities and loaded both ended sessions.
+
+Verification: focused bearer-cookie auth test and full `tests/cloud_auth.py`
+(76 tests), `tests/chatgpt.py`, the targeted timed-out-call resume regression,
+`tests/make_sample.py`, `tests/test_sample_copies.py` (9 tests), Ruff,
+formatting, Pyright, and sample import smoke all passed. No ONP rerun, live
+provider call, or external AI generation was performed.
