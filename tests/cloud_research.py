@@ -1656,6 +1656,13 @@ def test_issue289_global_funding_pause_can_resume(
         binding = cloud_workspaces._CURRENT.set(member)
         try:
             project = open_sample_project("operation-narrow-passage")
+            # The built-in ONP sample now carries real, saved investigation
+            # history for reviewers. This regression is specifically about a
+            # fresh funding interruption, so remove that history only from
+            # this disposable test copy while retaining its project setup.
+            sample_session_dir = Path(project.path) / "research-sessions"
+            for prior_session in research_sessions.list_sessions(project.path):
+                (sample_session_dir / f"{prior_session['id']}.json").unlink()
             settings = project.project
             expected = {
                 "title": settings.title,
