@@ -1,3 +1,37 @@
+## Issue #306 and happy-path reliability (#302) (2026-10-28)
+
+Research limits now say **Research rounds** and **Maximum agent turns**. A round
+is an Investigator/Skeptic exchange for one strategy; the shared turn budget
+can be smaller than twice the round ceiling or the number of selected
+strategies. The scheduler rotates across strategies, reserves complete pairs,
+and records any deferred strategy explicitly. Defaults are 2 rounds, 12 turns,
+30 minutes, 4,000 output tokens per call, one concurrent session, and no
+optional input-token or cost cap. These settings limit routine provider use
+without forcing users into higher token or duration ceilings.
+
+The frontend and backend accept the same ranges and require at least one full
+two-turn pair. USD cost entry accepts surrounding whitespace and an optional
+leading `$`, then persists a normalized numeric USD value. A proposed
+productive stop is reopened when reviewed evidence leaves objective obligations
+unresolved and the saved limits allow another round. Provider response bodies
+and completed SSE streams are bounded at 8 MB; the prior 1 MB transport bound
+rejected large successful Responses envelopes (including session #11's
+reported >1 MB response). The Maximum Regions browser acceptance measured a
+3,801-byte project payload and 5,410-byte assembled provider context, so this
+sample's 1 MB issue is not project-data overhead. The larger stream bound is
+still bounded and regression-tested at both 1 MB and 8 MB.
+
+Deterministic browser acceptance with SIGMA, Chrome, and the local provider
+fixture passed: sample copy, USD round-trip, Investigator/Skeptic order, usage
+and estimated cost accounting, mathematical candidate, terminal status,
+report export, refresh and reopening. It measured two simulated provider calls
+and $0.004008 estimated usage. This was fixture traffic, not a live provider
+session. Focused project-settings, research-session, Sage execution, Ruff,
+Pyright, frontend typecheck, production build, and full `./sigma test` all
+passed. Live provider behavior is **UNVERIFIED**; no paid call was authorized
+or made. See `messages/issue_306_happy_path_r4r.md` for the full Software
+Factory handoff.
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the

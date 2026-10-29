@@ -203,8 +203,8 @@ def main() -> None:
                         "Hosted research may apply service-side caps to saved session limits."
                     )
                 ).to_be_visible()
-                calls = settings.get_by_label("Maximum agent calls", exact=True)
-                expect(calls).to_have_value("30")
+                calls = settings.get_by_label("Maximum agent turns", exact=True)
+                expect(calls).to_have_value("12")
                 calls.fill("12")
                 cost = settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
                 expect(cost).to_be_visible()
@@ -225,7 +225,7 @@ def main() -> None:
                 page.get_by_role("button", name="Project settings", exact=True).click()
                 settings = page.get_by_role("dialog", name="Project Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
-                expect(settings.get_by_label("Maximum agent calls", exact=True)).to_have_value("12")
+                expect(settings.get_by_label("Maximum agent turns", exact=True)).to_have_value("12")
                 expect(
                     settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
                 ).to_have_value("")

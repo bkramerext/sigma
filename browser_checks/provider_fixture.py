@@ -311,7 +311,8 @@ async def handler(request):
         if strategy_title == "Pause and stop fixture strategy":
             await asyncio.sleep(2)
         cycle = context["cycle"]
-        maximum_regions = "maximum number of regions" in context.get("problem", "").lower()
+        problem_text = context.get("problem", "").lower()
+        maximum_regions = "line" in problem_text and "region" in problem_text
         if body["text"]["format"]["name"] == "research_investigator":
             result = (
                 {
@@ -354,7 +355,9 @@ async def handler(request):
                     "objective_status": "achieved",
                     "solution_claim": "$R(n) = 1 + n(n+1)/2$ for all $n \\ge 0$.",
                     "argument_summary": "The kth line adds at most k regions; y=kx+k^2 attains k at every step; sum from k=1 to n and include the empty arrangement.",
-                    "assumptions_reviewed": ["The lines are distinct straight Euclidean lines."],
+                    "assumptions_reviewed": [
+                        "Lines are distinct straight lines in the Euclidean plane."
+                    ],
                     "proof_obligations": [
                         "Prove the per-line upper bound.",
                         "Show one arrangement attains every increment.",
@@ -493,6 +496,17 @@ async def handler(request):
             json={
                 "status": "completed",
                 "model": body["model"],
+                **(
+                    {
+                        "usage": {
+                            "input_tokens": 900,
+                            "input_tokens_details": {"cached_tokens": 100},
+                            "output_tokens": 1200,
+                        }
+                    }
+                    if maximum_regions
+                    else {}
+                ),
                 "output": [
                     {
                         "type": "message",
