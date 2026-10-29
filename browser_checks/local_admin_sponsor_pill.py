@@ -224,10 +224,12 @@ def exercise(origin: str) -> None:
         assert not any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
         attempt_complete["value"] = True
         connected["value"] = True
-        expect(pill.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
-        expect(pill).to_have_attribute("aria-label", "Disconnect from ChatGPT")
+        expect(pill.get_by_role("status")).to_have_text("ChatGPT connected")
+        expect(pill).to_have_attribute("aria-label", "ChatGPT connected")
         expect(pill).not_to_contain_text("Unlimited")
-        assert pill.get_attribute("data-tooltip") == "Connected as zetacontinuation@gmail.com."
+        assert pill.get_attribute("data-tooltip") == (
+            "ChatGPT is connected. Click to return to sponsorship."
+        )
         assert not any(
             url.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for url, body in posts
         ), posts
@@ -301,7 +303,7 @@ def exercise(origin: str) -> None:
         connected["value"] = True
         assert member_personal_begin.value.post_data_json == {"enable_plan": False}
         assert not any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
-        expect(member_pill.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
+        expect(member_pill.get_by_role("status")).to_have_text("ChatGPT connected")
         expect(member_pill).not_to_contain_text("0.37")
         expect(member_pill).not_to_contain_text("Unlimited")
 

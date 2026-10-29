@@ -299,9 +299,11 @@ def main() -> None:
                 google = page.locator(".identity-pill-stack .project-google-signin").first
                 expect(google).to_have_text("Sign out of Google")
                 pill = page.locator(".api-connection > summary")
-                expect(pill.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
+                expect(pill.get_by_role("status")).to_have_text("ChatGPT connected")
                 expect(pill).not_to_contain_text("Unlimited")
-                assert "Connected as zetacontinuation@gmail.com." == pill.get_attribute("title")
+                assert pill.get_attribute("title") == (
+                    "ChatGPT is connected. Click to return to sponsorship."
+                )
                 # The persistent existing cookie held an intentional personal
                 # selection even though personal and sponsor ChatGPT emails match.
                 status = page.evaluate(
@@ -331,9 +333,7 @@ def main() -> None:
                 with page.expect_popup() as popup_info:
                     pill.click(position={"x": 24, "y": 14})
                 popup_info.value.wait_for_timeout(100)
-                expect(pill.get_by_role("status")).to_have_text(
-                    "Disconnect from ChatGPT", timeout=15000
-                )
+                expect(pill.get_by_role("status")).to_have_text("ChatGPT connected", timeout=15000)
                 assert ("POST", "/api/ai/auth/begin") in requests, requests
                 assert not any(path == "/api/ai/sponsor-auth/begin" for _, path in requests), (
                     requests
@@ -394,7 +394,7 @@ def main() -> None:
                 page.reload(wait_until="domcontentloaded")
                 expect(
                     page.locator(".api-connection > summary").get_by_role("status")
-                ).to_have_text("Disconnect from ChatGPT")
+                ).to_have_text("ChatGPT connected")
                 restarted = page.evaluate(
                     "async () => { const s=await (await fetch('/api/cloud-auth/status')).json(); const c=await (await fetch('/api/ai/connection?refresh=true')).json(); return {email:s.user.email,mode:s.account.model_access.mode,connection:c}; }"
                 )
@@ -502,7 +502,7 @@ def main() -> None:
                     member_pill.click(position={"x": 25, "y": 14})
                 member_personal_popup.value.wait_for_timeout(100)
                 expect(member_pill.get_by_role("status")).to_have_text(
-                    "Disconnect from ChatGPT", timeout=15000
+                    "ChatGPT connected", timeout=15000
                 )
                 assert ("POST", "/api/ai/auth/begin") in requests, requests
                 assert not any(path == "/api/ai/sponsor-auth/begin" for _, path in requests), (

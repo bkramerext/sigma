@@ -285,11 +285,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
-    : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+    : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = hostedPersonalUnavailable
     ? 'Personal ChatGPT is unavailable in hosted SIGMA. Click to use sponsored ChatGPT.'
     : connected && !sponsoredPill
-    ? ai.info?.account_label ? `Connected as ${ai.info.account_label}.` : 'ChatGPT connected.'
+    ? 'ChatGPT is connected. Click to return to sponsorship.'
     : undefined;
   const globalRemaining = cloudFunding?.budget?.global_remaining_usd;
   const globalFundingExhausted = sponsoredSelected
