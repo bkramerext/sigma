@@ -29,3 +29,12 @@ $$
 \[x = 1\]
 
 Date 2026/10/28, version v1/2, path /var/data/a_b, and https://example.com/a_b stay ordinary. Price is $5 and escaped dollar \$10 stays text. Escaped delimiters \\(x_i\\) and unmatched $x_i remain visible source.
+
+Assignments stay ordinary prose: x = value, x = y, x = 3, and TIMEOUT = 30. Prices are $5 and $100; a price before math is $5 then $x+1$, and math before a price is $y$ costs $100. Independent expressions $x$ and $y$ remain separate. Inline code `cost = $5` and fenced code keep dollar signs literal.
+
+Explicit numeric math $1/2$ remains an expression.
+
+```text
+PRICE = $100
+formula = $x+1$
+```

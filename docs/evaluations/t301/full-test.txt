@@ -28,14 +28,14 @@ PASS sample discovery and independent copies, retained edits, collision safety, 
 > uv run --locked --no-sync python tests/test_sample_copies.py
 .........
 ----------------------------------------------------------------------
-Ran 9 tests in 0.170s
+Ran 9 tests in 0.169s
 
 OK
 
 > uv run --locked --no-sync python tests/make_sample.py
 {
   "sample": "t30-exported",
-  "path": "/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-make-sample-3nkihftq/samples/t30-exported"
+  "path": "/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-make-sample-ynr_r1q9/samples/t30-exported"
 }
 PASS exported project -> make_sample -> sample loader preserves sessions, outcomes, evidence and provenance safely
 
@@ -72,7 +72,7 @@ PASS per-project model/actual effort request, changed-model draft rejection, sig
 ..sponsor_connection status=registration_missing
 .
 ----------------------------------------------------------------------
-Ran 14 tests in 0.028s
+Ran 14 tests in 0.027s
 
 OK
 
@@ -112,7 +112,7 @@ PASS durable run evidence round-trip, failed/incomplete work, storage failure an
 PASS evidence persistence, cross-project isolation, private modes, run/byte retention, size cap and symlink rejection
 
 > uv run --locked --no-sync python tests/research_sessions.py
-PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.599s
+PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.623s
 Persistent research session scenarios passed.
 
 > uv run --locked --no-sync python tests/epistemic_continuity.py
@@ -121,26 +121,26 @@ PASS retracted and truncated source closures rejected through real Skeptic dispa
 SKIP graph-present local execution: existing Python sandbox image unavailable; graph-withheld still checked
 {
   "parity": {
-    "project_id": "17dcbfe8-d006-458c-9143-bcac49f4dcf9",
-    "first_session_id": "03d5cfc9-a0f1-4192-886a-662cda12fe08",
-    "later_session_id": "35c17d08-cc26-49db-9775-d541139c0346",
-    "foreign_session_id": "fcbb06fa-70f8-4367-83e9-2951ab562e2b",
-    "first_artifact_id": "2fe73354-deee-4042-b148-7eb224a7fb81",
+    "project_id": "c90914af-4eb0-4f1f-859c-a7121f2a7bc9",
+    "first_session_id": "c71adf62-ffeb-4e84-bddf-dcd04e35e2f0",
+    "later_session_id": "06f6cd0d-e87e-41a2-aad7-e1a56ef80fac",
+    "foreign_session_id": "4a627b5d-861f-4451-98fd-cbb7c8d940b7",
+    "first_artifact_id": "fd8aca2b-47f0-4910-b217-605fcc42770f",
     "calls": 6,
     "foreign_rejected_calls": 1,
     "first_record_unchanged": true
   },
   "parity_retracted": {
-    "project_id": "17dcbfe8-d006-458c-9143-bcac49f4dcf9",
-    "rejected_session_id": "96226874-7a5d-421d-9978-f8880c7883ea",
-    "tainted_source_artifact_id": "2fe73354-deee-4042-b148-7eb224a7fb81",
+    "project_id": "c90914af-4eb0-4f1f-859c-a7121f2a7bc9",
+    "rejected_session_id": "167ff31a-265b-4343-a7be-a939adca9d94",
+    "tainted_source_artifact_id": "fd8aca2b-47f0-4910-b217-605fcc42770f",
     "kind": "retracted",
     "source_record_unchanged_after_rejected_call": true
   },
   "parity_truncated": {
-    "project_id": "17dcbfe8-d006-458c-9143-bcac49f4dcf9",
-    "rejected_session_id": "8be2d6d1-c295-43bf-ae92-4e63e93856e7",
-    "tainted_source_artifact_id": "2fe73354-deee-4042-b148-7eb224a7fb81",
+    "project_id": "c90914af-4eb0-4f1f-859c-a7121f2a7bc9",
+    "rejected_session_id": "1afcb174-d38f-460e-8a2a-e6cb7e422188",
+    "tainted_source_artifact_id": "fd8aca2b-47f0-4910-b217-605fcc42770f",
     "kind": "truncated",
     "source_record_unchanged_after_rejected_call": true
   },
@@ -148,8 +148,8 @@ SKIP graph-present local execution: existing Python sandbox image unavailable; g
     "skipped": "Local Python sandbox image unavailable; no graph-present computation was claimed"
   },
   "graph_withheld": {
-    "project_id": "492aaab5-3fd1-4f05-bc69-3df9a3ab62c0",
-    "initial_session_id": "56355cb4-5836-4923-a6d7-ca42b2d05da4",
+    "project_id": "3b8bb03f-360e-4334-a6d5-ad82438e68af",
+    "initial_session_id": "9216d44d-249c-4ec1-b46c-dc999dc2764e",
     "followup_session_id": null,
     "fork_session_id": null,
     "approved_negative_source_id": null,
@@ -274,7 +274,7 @@ PASS checkout dotenv syntax, missing file, environment precedence, no evaluation
   from starlette.testclient import TestClient as TestClient  # noqa
 ......
 ----------------------------------------------------------------------
-Ran 6 tests in 0.079s
+Ran 6 tests in 0.086s
 
 OK
 
@@ -282,19 +282,19 @@ OK
 /Users/admin/sigma_blue_math_markdown/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
   from starlette.testclient import TestClient as TestClient  # noqa
 ..............................................sponsor_sessions_api status=post_404
-............../Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/contextlib.py:385: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x106e3f880>
+............../Users/admin/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib/python3.14/contextlib.py:385: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a647c40>
   def __init__(self, thing):
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
 .
 ----------------------------------------------------------------------
-Ran 61 tests in 1.474s
+Ran 61 tests in 1.631s
 
 OK
 
 > uv run --locked --no-sync python tests/cloud_personal.py
 ...
 ----------------------------------------------------------------------
-Ran 3 tests in 0.036s
+Ran 3 tests in 0.039s
 
 OK
 
@@ -456,7 +456,7 @@ post-deploy_checkout_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 > uv run --locked --no-sync python tests/release_image.py
 ...
 ----------------------------------------------------------------------
-Ran 3 tests in 0.271s
+Ran 3 tests in 0.252s
 
 OK
 
@@ -465,28 +465,28 @@ OK
 > uv run --locked --no-sync python tests/public_endpoint.py
 .......
 ----------------------------------------------------------------------
-Ran 7 tests in 0.510s
+Ran 7 tests in 0.514s
 
 OK
 
 > uv run --locked --no-sync python tests/gce_host.py
 .....................
 ----------------------------------------------------------------------
-Ran 21 tests in 0.026s
+Ran 21 tests in 0.023s
 
 OK
 
 > uv run --locked --no-sync python tests/state_backup.py
 ..........
 ----------------------------------------------------------------------
-Ran 10 tests in 0.051s
+Ran 10 tests in 0.046s
 
 OK
 
 > uv run --locked --no-sync python tests/host_monitor.py
 .........
 ----------------------------------------------------------------------
-Ran 9 tests in 0.011s
+Ran 9 tests in 0.010s
 
 OK
 
@@ -502,20 +502,20 @@ PASS global cross-checkout shutdown, stale owner/socket/temp cleanup and no PID 
 > uv run --locked --no-sync python tests/ui_orphans.py
 Stopping orphaned SIGMA server on port 8000 (PID 123)…
 Stopping orphaned SIGMA server on port 5173 (PID 124)…
-Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmplmtnkmm2/checkout-a); ownership could not be verified, so SIGMA left it untouched.
-Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmplmtnkmm2/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmpfwm91ed8/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmpfwm91ed8/checkout-a); ownership could not be verified, so SIGMA left it untouched.
 PASS cross-checkout orphan discovery, command/marker verification, occupied-port reporting and PID reuse protection
 
 > node --test frontend/src/request-toast-store.test.mjs
-✔ expires exactly at 60 seconds, slides out, then cleans up (0.59775ms)
-✔ each toast keeps its own lifetime when other toasts arrive (0.695584ms)
-✔ manual dismissal uses the exit lifecycle and clears the 60-second timer (0.072125ms)
-✔ simultaneous expirations remove each toast once and leave no timers (0.112417ms)
-✔ reduced motion expires immediately without scheduling an exit animation (0.066458ms)
-✔ dispose and burst eviction clear all timers (0.088125ms)
-✔ adding a sixth toast immediately removes the oldest and keeps five visible (0.112166ms)
-✔ long error messages are shortened before they can fill the screen (0.080042ms)
-✔ exit phase slides down, stack gap collapses, and reduced-motion CSS disables motion (2.881166ms)
+✔ expires exactly at 60 seconds, slides out, then cleans up (0.589625ms)
+✔ each toast keeps its own lifetime when other toasts arrive (0.67ms)
+✔ manual dismissal uses the exit lifecycle and clears the 60-second timer (0.069333ms)
+✔ simultaneous expirations remove each toast once and leave no timers (0.1085ms)
+✔ reduced motion expires immediately without scheduling an exit animation (0.063709ms)
+✔ dispose and burst eviction clear all timers (0.089459ms)
+✔ adding a sixth toast immediately removes the oldest and keeps five visible (0.119666ms)
+✔ long error messages are shortened before they can fill the screen (0.07375ms)
+✔ exit phase slides down, stack gap collapses, and reduced-motion CSS disables motion (2.832834ms)
 ℹ tests 9
 ℹ suites 0
 ℹ pass 9
@@ -523,7 +523,7 @@ PASS cross-checkout orphan discovery, command/marker verification, occupied-port
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 37.499041
+ℹ duration_ms 36.532959
 
 > uv run --locked --no-sync ruff check src tests sigma deploy browser_checks scripts docs/evaluations
 All checks passed!
@@ -612,13 +612,13 @@ dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf            53.58 kB
 dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf             63.63 kB
 dist/assets/RenderedMarkdown-DdZNUVNG.css              30.25 kB │ gzip:   8.09 kB
 dist/assets/index-B2PBNhmO.css                        252.09 kB │ gzip:  41.19 kB
-dist/assets/RenderedMarkdown-DYB_WT1W.js              442.73 kB │ gzip: 134.25 kB
-dist/assets/index-DekuN5_G.js                         560.31 kB │ gzip: 161.90 kB
+dist/assets/RenderedMarkdown-qgeWcxRN.js              443.40 kB │ gzip: 134.49 kB
+dist/assets/index-0q4HaklV.js                         560.31 kB │ gzip: 161.90 kB
 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 986ms
+✓ built in 1.14s
 
 sigma test: all steps passed.

@@ -1018,7 +1018,13 @@ async def main_async(root: Path):
         "| Kind | Value |\n| --- | --- |\n| Probability | 3/4 |\n\n"
         "Inline `a_n = 2` and fenced identifiers remain literal.\n\n"
         "```python\nMAX_RETRY_COUNT = 3\n```\n\n"
-        r"Escaped \(x_i\); unmatched $x_i stays text."
+        r"Escaped \(x_i\); unmatched $x_i stays text." + "\n\n"
+        "Ordinary assignments x = value, x = y, and x = 3 plus configuration "
+        "RETRY_LIMIT = 5 remain prose. Multiple prices are $5 and $100. "
+        "Currency before explicit $x+1$ and math before currency $y$ costs $100; "
+        "independent formulas $x$ and $y$ stay distinct. Escaped \\$10 and unmatched $x_i stay text.\n\n"
+        "Inline `cost = $5` and fenced code remain literal.\n\n"
+        "```text\nPRICE = $100\nformula = $x+1$\n```"
     )
     math_markdown = (
         Path("docs/evaluations/t301/markdown-regression-output.md")

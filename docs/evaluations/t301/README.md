@@ -13,6 +13,12 @@ It checks the KaTeX TeX annotations for the expected formulas, as well as math
 in prose, lists, a nested list, a GFM table, blockquotes, inline code and a code
 fence. It also checks preservation of identifiers, dates, paths, URLs, currency,
 and malformed or escaped delimiters.
+Adversarial cases now include bare `x = value`, `x = y`, and `x = 3`, a
+configuration assignment, multiple `$5`/`$100` prices before and after explicit
+math, separate `$x$` and `$y$` expressions, and dollar signs in inline/fenced
+code. The browser check verifies literal rendered text alongside each KaTeX
+annotation, including the expected count of 25 KaTeX spans for the shared
+fixture and seven for bare source notation.
 
 ![Real Chrome rendering of the regression Markdown](markdown-render.png)
 

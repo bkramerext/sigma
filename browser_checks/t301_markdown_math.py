@@ -9,11 +9,13 @@ BASE_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5193")
 BODY = (
     Path("docs/evaluations/t301/markdown-regression-output.md").read_text(encoding="utf-8").rstrip()
 )
-RAW_BODY = r"""The probability is 1/2. We obtain f(x) = x² + 3x and E = mc². The roots satisfy x = (-b ± √(b²-4ac))/(2a). The sequence has terms a_n = a_(n-1) + d. The value of x_i is stored in MAX_RETRY_COUNT. The fraction is (a+b)/(c+d). Inline `MAX_RETRY_COUNT` and fenced code remain literal.
+RAW_BODY = r"""The probability is 1/2. We obtain f(x) = x² + 3x and E = mc². The roots satisfy x = (-b ± √(b²-4ac))/(2a). The sequence has terms a_n = a_(n-1) + d. The value of x_i is stored in MAX_RETRY_COUNT. The fraction is (a+b)/(c+d). Inline `MAX_RETRY_COUNT` and fenced code remain literal. Ordinary assignments x = value, x = y, and x = 3 remain prose. Configuration DATABASE_URL = value stays literal.
 
 ```python
 MAX_RETRY_COUNT = 3
-```"""
+```
+
+Ordinary assignments stay ordinary: x = value, x = y, and x = 3. The setting RETRY_LIMIT = 5 is prose too."""
 
 
 with sync_playwright() as playwright:
@@ -40,7 +42,7 @@ with sync_playwright() as playwright:
         BODY,
     )
     root = page.locator("#t301-math-regression")
-    expect(root.locator(".katex")).to_have_count(20)
+    expect(root.locator(".katex")).to_have_count(25)
     math_tex = root.locator(".katex").evaluate_all(
         "nodes => nodes.map(node => node.querySelector('annotation')?.textContent || '')"
     )
@@ -52,6 +54,7 @@ with sync_playwright() as playwright:
         "a_n = a_{n-1} + d",
         r"\frac{a+b}{c+d}",
         r"\frac{x^2+1}{2x}",
+        "1/2",
     ):
         assert expression in math_tex, f"Missing expected typeset expression: {expression}"
     assert not any("MAX_RETRY_COUNT" in expression for expression in math_tex)
@@ -60,8 +63,8 @@ with sync_playwright() as playwright:
     expect(root.locator("table tbody tr").nth(0).locator(".katex")).to_have_count(1)
     expect(root.locator("em")).to_contain_text("An emphasized value")
     expect(root.locator("li li .katex")).to_have_count(2)
-    expect(root.locator("code")).to_have_count(5)
-    expect(root.locator("pre code")).to_contain_text("MAX_RETRY_COUNT = 3")
+    expect(root.locator("code")).to_have_count(7)
+    expect(root.locator("pre code").nth(0)).to_contain_text("MAX_RETRY_COUNT = 3")
     expect(root).to_contain_text("MAX_RETRY_COUNT")
     expect(root).to_contain_text("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL")
     expect(root).to_contain_text("DATABASE_URL")
@@ -70,6 +73,13 @@ with sync_playwright() as playwright:
     expect(root).to_contain_text("/var/data/a_b")
     expect(root).to_contain_text("https://example.com/a_b")
     expect(root).to_contain_text("$5")
+    expect(root).to_contain_text("$100")
+    expect(root).to_contain_text("Assignments stay ordinary prose: x = value, x = y, x = 3")
+    expect(root).to_contain_text("Prices are $5 and $100")
+    expect(root.locator(".katex").filter(has_text="TIMEOUT")).to_have_count(0)
+    expect(root.locator(".katex").filter(has_text="RETRY_LIMIT")).to_have_count(0)
+    expect(root.locator("code").nth(5)).to_contain_text("cost = $5")
+    expect(root.locator("pre code").nth(1)).to_contain_text("PRICE = $100")
     expect(root.locator(".katex").filter(has_text="MAX_RETRY_COUNT")).to_have_count(0)
     expect(root.locator(".katex").filter(has_text="DATABASE_URL")).to_have_count(0)
     expect(root.locator(".katex").filter(has_text="2026")).to_have_count(0)
@@ -104,6 +114,11 @@ with sync_playwright() as playwright:
     ):
         assert expression in raw_tex, f"Bare notation was not recognized: {expression}"
     expect(raw).to_contain_text("MAX_RETRY_COUNT")
+    expect(raw).to_contain_text("x = value, x = y, and x = 3")
+    expect(raw).to_contain_text("DATABASE_URL = value")
+    expect(raw.locator(".katex").filter(has_text="x = value")).to_have_count(0)
+    expect(raw.locator(".katex").filter(has_text="x = y")).to_have_count(0)
+    expect(raw.locator(".katex").filter(has_text="DATABASE_URL")).to_have_count(0)
     expect(raw.locator(".katex").filter(has_text="MAX_RETRY_COUNT")).to_have_count(0)
     expect(raw.locator("code")).to_have_count(2)
     page.screenshot(path="docs/evaluations/t301/markdown-render-raw-math.png", full_page=True)

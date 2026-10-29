@@ -4,7 +4,11 @@ The existing AI conversion prompt now explicitly distinguishes math from prose
 using sentence meaning and preserves code identifiers, environment variables,
 URLs, paths, dates, versions, currency, escaped delimiters and Markdown
 structure. `RenderedMarkdown` now applies conservative recognition to Markdown
-text nodes, so equations, context-labeled fractions and indexed variables can
+text nodes: a bare equation needs mathematical structure or a nearby math cue,
+so assignment-shaped prose such as `x = value`, `x = y`, and `x = 3` remains
+ordinary text. Dollar amounts are excluded individually before delimiter
+pairing, preserving prices adjacent to explicit inline math. Equations,
+context-labeled fractions and indexed variables can
 typeset inside paragraphs, emphasis, lists, blockquotes and GFM tables while
 inline code, fences and link labels remain protected. Paired legacy `\(...\)`
 and `\[...\]` delimiters convert safely; unmatched dollars are treated as
@@ -15,10 +19,12 @@ the small `remark-gfm` plugin; KaTeX remains the renderer.
 `POST /api/projects/text/convert` route using one deterministic mocked provider
 response. It verifies the prompt, exact stored Markdown and unchanged source
 project bytes. `browser_checks/t301_markdown_math.py` passed against the real
-React Markdown component in Chrome, checking 20 KaTeX spans and exact TeX
+React Markdown component in Chrome, checking 25 KaTeX spans and exact TeX
 annotations for formulas, fractions, subscripts and the quadratic root formula.
-It also checks GFM table/list structure, source-code preservation, identifiers,
-dates, paths, URLs, currency and delimiters. Screenshots of the converted
+Adversarial checks cover plain assignments and configuration values, multiple
+prices before and after explicit math, independent math delimiters, code
+dollars, and literal text preservation. It also checks GFM table/list structure,
+identifiers, dates, paths, URLs and escaped/unmatched delimiters. Screenshots of the converted
 fixture and bare math are
 [markdown-render.png](evaluations/t301/markdown-render.png) and
 [markdown-render-raw-math.png](evaluations/t301/markdown-render-raw-math.png).

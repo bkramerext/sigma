@@ -72,7 +72,14 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
   // A local equation is a mathematical span even when ordinary prose follows it.
   add(/\b(?:[a-zα-ω]|[A-Z])(?:_[a-zA-Zα-ωΑ-Ω\d{}+-]+)?(?:\([^()\s]{1,24}\))?\s*=\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+(?:\s*[=+−*/±]\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+)*/gu, 6, match => {
     const expression = match[0].trim().replace(/[.,;:!?]+$/u, '');
-    if (!/[\p{L}\d]/u.test(expression.slice(expression.indexOf('=') + 1))) return false;
+    const equalsAt = expression.indexOf('=');
+    const right = expression.slice(equalsAt + 1).trim();
+    if (!/[\p{L}\d]/u.test(right)) return false;
+    const boundary = Math.max(text.lastIndexOf('.', match.index), text.lastIndexOf('!', match.index), text.lastIndexOf('?', match.index), text.lastIndexOf(';', match.index), 0);
+    const precedingSentence = text.slice(Math.max(boundary, match.index - 100), match.index).toLowerCase();
+    const hasMathematicalCue = /\b(?:equation|root|roots|sequence|term|variable|function|probability|fraction|ratio|solution|solve|formula|identity|satisf(?:y|ies)|denote|defined|let|obtain|substitute|calculate|compute|evaluate|algebraic|mathematical)\b/u.test(precedingSentence);
+    const hasFormulaStructure = /[+−\-*/^_{}²³√±×÷<>≤≥≠≈∑∫]/u.test(right);
+    if (!hasFormulaStructure && !hasMathematicalCue) return false;
     // Trim a natural-language continuation after a mathematical expression.
     const trimmed = expression.replace(/\s+(?:(?:relates|where|which|that|and|or|for|with|from|to|is|are|was|were|because|since|as|if|then)\b|[A-Z][a-z]+(?:['’]s)?\s+equation\b)[\s\S]*$/u, '').trim();
     if (trimmed.length < 3) return false;
@@ -198,16 +205,25 @@ export function markdownWithMathDelimiters(body: string): string {
         positions.push(index);
       }
       const unmatched = new Set<number>();
-      for (let index = 0; index < positions.length; index += 2) {
-        const open = positions[index];
-        const close = positions[index + 1];
-        const looksLikeCurrency = close !== undefined
-          && /^\d/u.test(segment[open + 1] ?? '')
-          && /^\d+\s/u.test(segment.slice(open + 1, close));
-        if (close === undefined || looksLikeCurrency) {
-          unmatched.add(open);
-          if (close !== undefined) unmatched.add(close);
-        }
+      // Currency markers are literal individually, before pairing math markers.
+      // This permits "$5 then $x+1$" and "$x+1$ costs $100" without allowing a
+      // price to consume the opening/closing delimiter of a neighboring formula.
+      const isCurrency = (position: number) => {
+        if (segment[position + 1] === '$' || !/^\d/u.test(segment[position + 1] ?? '')) return false;
+        const amount = segment.slice(position + 1).match(/^\d+(?:,\d{3})*(?:\.\d{1,2})?/u)?.[0];
+        if (!amount) return false;
+        const afterAmount = segment[position + 1 + amount.length] ?? '';
+        return !/[\d\w./\\^]/u.test(afterAmount);
+      };
+      const mathPositions = positions.filter(position => {
+        if (!isCurrency(position)) return true;
+        unmatched.add(position);
+        return false;
+      });
+      for (let index = 0; index < mathPositions.length; index += 2) {
+        const open = mathPositions[index];
+        const close = mathPositions[index + 1];
+        if (close === undefined) unmatched.add(open);
       }
       return [...segment].map((character, index) => unmatched.has(index) ? `\\${character}` : character).join('');
     };
