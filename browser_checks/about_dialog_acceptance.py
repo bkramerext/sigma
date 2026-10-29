@@ -67,7 +67,7 @@ def main() -> None:
                 page.screenshot(path=f"/tmp/sigma-about-collapsed-{width}.png", full_page=False)
                 expect(dialog.locator(".about-intro")).to_be_visible()
                 expect(dialog.locator(".about-terms")).to_be_visible()
-                expect(dialog.locator("details")).to_have_count(2)
+                expect(dialog.locator("details")).to_have_count(3)
                 region = dialog.locator("details").filter(
                     has=page.locator("summary", has_text="Key Features")
                 )
@@ -79,6 +79,43 @@ def main() -> None:
                 architecture.locator("summary").click()
                 expect(architecture).to_have_attribute("open", "")
                 expect(dialog.locator("#about-architecture-details")).to_be_visible()
+                provenance = dialog.locator(".about-provenance-disclosure")
+                expect(provenance).not_to_have_attribute("open", "")
+                provenance.locator("summary").click()
+                expect(provenance).to_have_attribute("open", "")
+                expect(dialog.locator("#about-provenance-details")).to_be_visible()
+                diagram = provenance.locator("svg.about-provenance-diagram")
+                expect(diagram).to_be_visible()
+                expect(diagram.locator("marker")).to_have_count(5)
+                assert diagram.locator("path[marker-end]").count() >= 11
+                expect(provenance).to_contain_text("The investigation is the enduring artifact.")
+                expect(provenance).to_contain_text("Understanding")
+                expect(provenance).to_contain_text("Published TeX")
+                expect(provenance).to_contain_text("Beyond a linear LLM conversation.")
+                expect(provenance).to_contain_text("Prompt → Response → Prompt → Response")
+                expect(provenance).to_contain_text("A branching, revisitable research record")
+                scrollport = provenance.locator(".about-provenance-diagram-scroll")
+                scroll_metrics = scrollport.evaluate(
+                    "e => ({scroll: e.scrollWidth, client: e.clientWidth})"
+                )
+                if width > 600:
+                    assert scroll_metrics["scroll"] <= scroll_metrics["client"] + 1, (
+                        width,
+                        "Desktop provenance diagram must fit without scrolling",
+                        scroll_metrics,
+                    )
+                else:
+                    assert scroll_metrics["scroll"] > scroll_metrics["client"], (
+                        width,
+                        "Narrow-screen provenance diagram remains scrollable for legibility",
+                        scroll_metrics,
+                    )
+                assert dialog.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), (
+                    width,
+                    "About dialog must not overflow horizontally",
+                )
+                provenance.locator("summary").click()
+                expect(provenance).not_to_have_attribute("open", "")
                 expect(dialog.locator(".about-intro")).to_contain_text(
                     "research workbench for exploring answers"
                 )
