@@ -1139,14 +1139,17 @@ async def _restart_work_locked(
         (auth["mode"] + "\0" + auth["identity"]).encode()
     ).hexdigest()
     history = list(state.get("prior_runs", []))
-    history.append(
-        {
-            "provider_calls_attempted": state.get("provider_calls", 0),
-            "snapshot_sha256": state["snapshot_sha256"],
-            "model": state["model"],
-            "reset_at": _now(),
-        }
-    )
+    # Repeated clicks or a retry of the reset request must not manufacture
+    # additional zero-call attempts or exhaust the bounded history ledger.
+    if not _can_rebase_explicit_restart(state, view.project.id):
+        history.append(
+            {
+                "provider_calls_attempted": state.get("provider_calls", 0),
+                "snapshot_sha256": state["snapshot_sha256"],
+                "model": state["model"],
+                "reset_at": _now(),
+            }
+        )
     restarted = _new_work(
         snapshot_hash,
         view.project.id,
