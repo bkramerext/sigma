@@ -1,3 +1,42 @@
+## PR #297 — Gate 3 corrections (2026-10-28)
+
+Implementation commit: `19821f010ac6620a3b259b25860a2721c76c509d` on
+`coordinator/signin-session-playback-stabilization`.
+
+First personal mode selection now requires a subject-bound authorization record
+written only after that Google user's local ChatGPT OAuth callback succeeds
+with both required plan scopes. This authorization record is separate from the
+persisted funding-mode preference, so an existing personal preference survives
+later token or provider failure. A legacy personal mode flag without OAuth
+proof remains visible as personal and cannot authorize a new personal switch;
+it never silently routes to sponsor billing.
+
+Selecting sponsored mode no longer reads the allowance ledger or rejects an
+empty balance. Sponsored Play admission still checks user and global budget
+before provider dispatch. Google sign-in remains visible for all signed-out
+states, while Invite Me is shown only for a verified denied Google identity
+with no existing invitation request.
+
+Focused API regressions cover a canceled initial sign-in, a forged legacy
+personal preference, missing OAuth plan scope, the successful real callback
+and persistence path, same-email personal and sponsor registrations, retained
+personal preference after provider failure, exhausted-budget sponsorship
+selection, sponsored Play denial, and Z/B/N identity and allowance boundaries.
+The full hosted Chromium regression covers signed-out guest, verified denied,
+pending-request, and authorized-admin Google pill states. A real-backend local
+Chromium run covers the same-email personal/sponsor OAuth sequence, restart,
+member privacy, and zero-budget Play denial.
+
+Verification: `./sigma test` passed all configured steps, including Ruff,
+format, Pyright, frontend typecheck, and production build. The graph-present
+local sandbox case was skipped because the existing Python sandbox image is
+unavailable. Both `browser_checks/hosted_sponsored_connection.py` and
+`browser_checks/local_auth_real_backend.py` passed using local Chromium and
+deterministic external OAuth/provider boundaries. No paid provider calls, CI
+wait, merge, or deployment occurred. Live OAuth/provider validation and the
+seven live Play acceptance scenarios remain unverified. See
+[`messages/pr297_green_gate3_r4r.md`](../messages/pr297_green_gate3_r4r.md).
+
 ## PR #297 — personal and sponsor credential ownership follow-up (2026-10-28)
 
 Local Google-authenticated ChatGPT registrations now use a credential directory
