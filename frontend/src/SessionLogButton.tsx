@@ -3,14 +3,13 @@ export default function SessionLogButton({ sessionId, sessionNumber, path }: {
   sessionNumber: number;
   path: string;
 }) {
-  return <button
-    type="button"
-    className="text-view-link session-remove-link"
+  const query = new URLSearchParams({ session_log: sessionId, path });
+  return <a
+    className="text-view-link secondary session-log-open-link"
     aria-label={`Open Session ${sessionNumber} log`}
-    title={`Open Session ${sessionNumber} log in a new window`}
-    onClick={() => {
-      const query = new URLSearchParams({ session_log: sessionId, path });
-      window.open(`/?${query}`, '_blank', 'noopener');
-    }}
-  >Log</button>;
+    title={`Open Session ${sessionNumber} log in a new tab`}
+    href={`/?${query}`}
+    target="_blank"
+    rel="noopener noreferrer"
+  >Log</a>;
 }

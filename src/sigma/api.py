@@ -659,10 +659,12 @@ def research_session_log_view(session_id: str, path: str, after: int = 0):
 @app.get("/api/projects/research-sessions/{session_id}/log/download")
 def research_session_log_download_view(session_id: str, path: str):
     try:
-        session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
-        target = session_log.log_path(path, inspect_project(path).project.id, session_id)
+        result = session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
+        body = session_log.markdown_export(
+            result["events"], result["session"], result["short_name"]
+        )
         return Response(
-            target.read_bytes(),
+            body,
             media_type="text/markdown; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="session-{session_id}.md"'},
         )

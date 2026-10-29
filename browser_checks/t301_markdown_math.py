@@ -16,6 +16,15 @@ MAX_RETRY_COUNT = 3
 ```
 
 Ordinary assignments stay ordinary: x = value, x = y, x = 3, and let x = value. The setting RETRY_LIMIT = 5 is prose too."""
+MALFORMED_SAVED_SESSION_MARKDOWN = r"""The sum of the first n positive integers is:
+
+\[
+\sum_{k=1}^{n} k = \frac{n(n+1)}{2}
+
+For example, when n = 10:
+
+\[
+1 + 2 + 3 + \cdots + 10 = \frac{10(11)}{2} = 55"""
 
 
 with sync_playwright() as playwright:
@@ -124,6 +133,29 @@ with sync_playwright() as playwright:
     expect(raw.locator(".katex").filter(has_text="MAX_RETRY_COUNT")).to_have_count(0)
     expect(raw.locator("code")).to_have_count(2)
     page.screenshot(path="docs/evaluations/t301/markdown-render-raw-math.png", full_page=True)
+
+    page.evaluate(
+        """async body => {
+          const React = (await import('/node_modules/.vite/deps/react.js')).default;
+          const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
+          const { default: RenderedMarkdown } = await import('/src/RenderedMarkdown.tsx');
+          const host = document.createElement('main');
+          host.id = 'session4-malformed-math';
+          host.style.cssText = 'max-width:900px;margin:30px auto;padding:28px;background:#fff;color:#222;font:17px/1.7 Georgia,serif';
+          document.body.append(host);
+          createRoot(host).render(React.createElement(RenderedMarkdown, { body }));
+        }""",
+        MALFORMED_SAVED_SESSION_MARKDOWN,
+    )
+    malformed = page.locator("#session4-malformed-math")
+    expect(malformed.locator(".katex")).to_have_count(2)
+    expect(malformed.locator(".katex-error")).to_have_count(0)
+    malformed_tex = malformed.locator(".katex").evaluate_all(
+        "nodes => nodes.map(node => node.querySelector('annotation')?.textContent || '')"
+    )
+    assert r"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}" in malformed_tex
+    assert r"1 + 2 + 3 + \cdots + 10 = \frac{10(11)}{2} = 55" in malformed_tex
+    page.screenshot(path="docs/evaluations/t301/session4-repaired-math.png", full_page=True)
     browser.close()
 
 print(

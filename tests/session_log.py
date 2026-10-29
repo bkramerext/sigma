@@ -163,6 +163,89 @@ def test_session_log_event_json_is_valid_for_multiline_and_markdown(tmp_path: Pa
     assert parsed == [json.loads(json.dumps(event))]
 
 
+def test_readable_markdown_pairs_provider_traffic_and_keeps_canonical_json(tmp_path: Path):
+    target = tmp_path / "readable.md"
+    target.write_text("# Project, Session 4\n", encoding="utf-8")
+    request = {
+        "seq": 1,
+        "type": "provider_request",
+        "timestamp": "2026-10-29T12:00:00+00:00",
+        "request_id": "call-4",
+        "role": "investigator",
+        "round": 2,
+        "turn": 4,
+        "provider": "fixture",
+        "model": "fixture-model",
+        "request": {
+            "instructions": "Investigate the saved project.\nKeep multiline context.\n<!-- SIGMA_JSON 1 -->",
+            "input": [{"role": "user", "content": "Explain $x_4$."}],
+        },
+    }
+    response = {
+        "seq": 2,
+        "type": "provider_response",
+        "timestamp": "2026-10-29T12:00:01+00:00",
+        "request_id": "call-4",
+        "role": "investigator",
+        "duration_seconds": 1.2,
+        "response_wire": "raw-wire-content-" * 1000,
+        "estimated_cost_usd": 0.001,
+        "usage": {"input_tokens": 12, "output_tokens": 8},
+        "response": {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": json.dumps(
+                                {
+                                    "claim": "The recurrence is:\n\n\\[\na_n = a_{n-1}+1",
+                                    "method": "Test the boundary. A raw $ total is $5.",
+                                }
+                            ),
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+    session_log._append_frame(target, request, session_log._event_markdown(request, []))
+    session_log._append_frame(target, response, session_log._event_markdown(response, [request]))
+    events, _ = session_log._frames(target)
+    assert events == [request, response]
+    source = target.read_text(encoding="utf-8")
+    assert "<!-- SIGMA_JSON 1 -->" not in source
+    assert "&lt;!-- SIGMA_JSON 1 -->" in source
+    assert source.count("Request + response") == 1
+    assert "#### Actual request" in source and "#### Provider response" in source
+    assert "## Canonical" not in source
+    assert "Canonical structured event data (JSON)" in source
+    assert '```json\n{\n  "seq": 1' in source
+    assert "\\\\[" in source  # The unterminated legacy opener is literal-safe.
+    assert "raw-wire-content-" in source
+    exported = session_log.markdown_export(events, {"number": 4}, "Project Name")
+    assert exported.startswith("# Project Name, Session 4")
+    assert exported.count("Request + response") == 1
+    assert "## Canonical event records" in exported
+    assert "The recurrence is:\n\n$$" in exported and "$a_n" not in exported
+    assert r"raw \$ total is \$5" in exported
+    assert "raw-wire-content-" not in exported
+    assert "17000 characters retained" in exported
+    assert max(map(len, exported.splitlines())) < 1000
+
+
+def test_legacy_and_markdown_frames_can_be_read_from_the_same_append_only_file(tmp_path: Path):
+    target = tmp_path / "mixed.md"
+    target.write_text("# Existing log\n", encoding="utf-8")
+    legacy = {"seq": 1, "type": "session_event", "message": "legacy frame"}
+    current = {"seq": 2, "type": "session_event", "message": "readable frame"}
+    session_log._append_frame(target, legacy)
+    session_log._append_frame(target, current, session_log._event_markdown(current, [legacy]))
+    events, _ = session_log._frames(target)
+    assert events == [legacy, current]
+
+
 def test_session_log_short_name_is_stable_and_delete_scoped(tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     project_file = tmp_path / "project.json"
@@ -293,11 +376,11 @@ def test_slow_storage_does_not_block_research_caller_and_keeps_order(tmp_path: P
     release = threading.Event()
     original_append = session_log._append_frame
 
-    def slow_append(path, value):
+    def slow_append(path, value, markdown=""):
         if value.get("type") == "event":
             entered.set()
             release.wait(timeout=3)
-        original_append(path, value)
+        original_append(path, value, markdown)
 
     with (
         patch.object(session_log, "_root", lambda _: tmp_path / "slow-logs"),
@@ -334,11 +417,11 @@ def test_delayed_session_a_write_does_not_block_session_b_read(tmp_path: Path):
     session_a = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
     session_b = "e0231c99-5425-4a20-8ff2-fc52c1800b8c"
 
-    def delayed(path, value):
+    def delayed(path, value, markdown=""):
         if value.get("message") == "slow A":
             entered_a.set()
             assert release_a.wait(3)
-        original_append(path, value)
+        original_append(path, value, markdown)
         if value.get("message") == "ready B":
             written_b.set()
 
@@ -427,6 +510,8 @@ def main() -> None:
         test_session_log_frames_preserve_multiline_content_and_recover_tail(root / "roundtrip")
         test_session_log_concurrent_appends_are_serialized_and_append_only(root / "parallel")
         test_session_log_event_json_is_valid_for_multiline_and_markdown(root)
+        test_readable_markdown_pairs_provider_traffic_and_keeps_canonical_json(root)
+        test_legacy_and_markdown_frames_can_be_read_from_the_same_append_only_file(root)
         test_session_log_short_name_is_stable_and_delete_scoped(root / "lifecycle")
         test_session_log_failure_is_best_effort(root / "failure")
         test_slow_storage_does_not_block_research_caller_and_keeps_order(root / "slow")

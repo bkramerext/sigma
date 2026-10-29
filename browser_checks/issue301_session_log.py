@@ -1,4 +1,4 @@
-"""Real Chromium check for the separate live session log window and polling UI."""
+"""Real Chromium check for the new-tab live session log and scroll controls."""
 
 from __future__ import annotations
 
@@ -35,8 +35,18 @@ def main() -> None:
             after = int(route.request.url.split("after=")[-1])
             events = [
                 {
-                    "seq": 1,
-                    "timestamp": "2026-10-29T12:00:00+00:00",
+                    "seq": index,
+                    "timestamp": f"2026-10-29T12:00:{index % 60:02d}+00:00",
+                    "type": "session_event",
+                    "message": f"Historical event {index:02d} with readable session status.",
+                    "round": 1,
+                }
+                for index in range(1, 31)
+            ]
+            events.append(
+                {
+                    "seq": 31,
+                    "timestamp": "2026-10-29T12:00:31+00:00",
                     "type": "provider_request",
                     "request_id": "fixture-request-1",
                     "role": "investigator",
@@ -45,11 +55,11 @@ def main() -> None:
                     "request": request,
                     "model": "fixture-model",
                 }
-            ]
+            )
             if state["polls"] >= 4:
                 events.append(
                     {
-                        "seq": 2,
+                        "seq": 32,
                         "timestamp": "2026-10-29T12:00:01+00:00",
                         "type": "provider_response",
                         "request_id": "fixture-request-1",
@@ -60,15 +70,50 @@ def main() -> None:
                         "usage": {"input_tokens": 123, "output_tokens": 9},
                     }
                 )
+                events.append(
+                    {
+                        "seq": 33,
+                        "timestamp": "2026-10-29T12:00:33+00:00",
+                        "type": "session_event",
+                        "message": "New event while scrolled away",
+                        "round": 1,
+                    }
+                )
+            if state["polls"] >= 6:
+                events.append(
+                    {
+                        "seq": 34,
+                        "timestamp": "2026-10-29T12:00:34+00:00",
+                        "type": "session_event",
+                        "message": "Newest event after Jump to end",
+                        "round": 1,
+                    }
+                )
+            if state["polls"] >= 8:
+                events.append(
+                    {
+                        "seq": 35,
+                        "timestamp": "2026-10-29T12:00:35+00:00",
+                        "type": "session_event",
+                        "message": "Latest event while following",
+                        "round": 1,
+                    }
+                )
             if after == 0:
                 new_events = events
-                cursor = 200 if len(events) > 1 else 100
-            elif state["polls"] >= 4 and after < 200:
-                new_events = events[1:]
-                cursor = 200
+                cursor = 31
+            elif state["polls"] >= 8 and after < 35:
+                new_events = events[34:]
+                cursor = 35
+            elif state["polls"] >= 6 and after < 34:
+                new_events = events[32:]
+                cursor = 34
+            elif state["polls"] >= 4 and after < 33:
+                new_events = events[31:]
+                cursor = 33
             else:
                 new_events = []
-                cursor = after
+                cursor = max(after, 31)
             route.fulfill(
                 json={
                     "events": new_events,
@@ -99,32 +144,54 @@ def main() -> None:
             }""",
             {"id": SESSION_ID, "path": PROJECT_PATH},
         )
-        with opener.expect_popup() as popup_info:
-            opener.get_by_role("button", name="Open Session 1 log").click()
-        page = popup_info.value
+        with context.expect_page() as page_info:
+            opener.get_by_role("link", name="Open Session 1 log").click()
+        page = page_info.value
         page.wait_for_load_state("domcontentloaded")
         expect(page.locator("h1")).to_have_text("Xenopus Tadpoles, Session 1")
         expect(page).to_have_title("Xenopus Tadpoles, Session 1")
         details = page.locator(".session-log-events details").first
         expect(details.locator("summary")).to_contain_text("in flight")
-        expect(details.locator("summary")).to_contain_text("1.25s", timeout=5000)
+        expect(details.locator("summary")).to_contain_text("1.25s", timeout=8000)
         details.locator("summary").click()
         expect(details.locator("pre").nth(0)).to_contain_text("multiline request")
         expect(details.locator("pre").nth(1)).to_contain_text("Fixture result")
+        listbox = page.locator(".session-log-events")
+        expect(page.get_by_role("button", name="Jump to end")).to_have_count(0)
+        listbox.evaluate("node => { node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); }")
+        jump = page.get_by_role("button", name="Jump to end")
+        expect(jump).to_be_visible()
+        expect(page.get_by_text("New event while scrolled away")).to_be_visible(timeout=5000)
+        assert listbox.evaluate("node => node.scrollTop") == 0
+        page.screenshot(
+            path="docs/evaluations/issue301/session-log-ui-scrolled-review.png",
+            full_page=True,
+        )
+        jump.click()
+        expect(jump).to_have_count(0)
+        expect(page.get_by_text("Newest event after Jump to end")).to_be_visible(timeout=5000)
+        expect(page.get_by_text("Latest event while following")).to_be_visible(timeout=6000)
+        page.wait_for_function(
+            "() => { const node = document.querySelector('.session-log-events'); "
+            "return node && node.scrollTop + node.clientHeight >= node.scrollHeight - 2; }"
+        )
+        page.screenshot(
+            path="docs/evaluations/issue301/session-log-ui-following-review.png",
+            full_page=True,
+        )
         with page.expect_download() as download_info:
-            page.get_by_role("link", name="Download Log").click()
+            page.get_by_role("link", name="Download", exact=True).click()
         assert download_info.value.suggested_filename == "session-fixture.md"
         page.reload(wait_until="domcontentloaded")
         expect(page.locator("h1")).to_have_text("Xenopus Tadpoles, Session 1")
         expect(page.locator(".session-log-events details summary")).to_contain_text("1.25s")
-        page.screenshot(path="docs/evaluations/issue301/session-log-chromium.png", full_page=True)
         assert state["polls"] >= 2
         page.close()
         expect(opener.locator("body")).to_be_visible()
         browser.close()
 
     print(
-        "PASS real Chromium: separate window, title, pending-to-paired live update, multiline request and independent close"
+        "PASS real Chromium: normal tab, stable title, paired live update, independent polling while scrolled, Jump to end, Download, and refresh"
     )
 
 

@@ -8045,3 +8045,25 @@ skipped because the configured image is unavailable. The in-memory queue may
 lose not-yet-written events on abrupt process kill; already persisted bytes are
 never truncated. No paid provider calls were made. PR #324 remains open and
 Ready for Review; see the issue handoff for final HEAD and exact commands.
+
+## Issue #301 human UI review iteration (2026-10-29)
+
+PR #324 was updated on the existing branch for the human UI review: Log uses a
+normal new tab, controls follow secondary button conventions, Play/Stop targets
+are equal, and off-bottom scrolling offers `Jump to end` without pausing
+polling. Markdown export now presents readable paired request/response events
+alongside collapsed canonical JSON. The append-only on-disk frames retain the
+complete event content; the downloadable presentation summarizes very long raw
+response-wire blobs. The app Markdown renderer handles legacy unclosed display
+math defensively.
+
+`./sigma test` passed all configured steps, including backend checks, Ruff,
+formatting, Pyright, frontend typecheck and build. Real Chromium passed the
+updated UI checks and full local FastAPI/storage integration with deterministic
+events. Actual saved Session 4 events (22 records) and mathematical project
+text were rendered in Chromium: 4 requests, 2 completed pairs, five KaTeX
+formula spans, no KaTeX errors. Native VS Code Markdown Preview visual layout
+was not independently captured and remains unverified. No paid provider calls
+were made. See [the issue handoff](../messages/issue_301_green_r4r.txt) for the
+current SHA, exact evidence, screenshots, and limitations. PR remains open and
+unmerged.

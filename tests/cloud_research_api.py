@@ -214,6 +214,17 @@ def main() -> None:
                     "Cloud research API", "A recurrence bound"
                 )
                 assert any(item["type"] == "session_event" for item in trace.json()["events"])
+                markdown_download = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log/download",
+                    params={"path": path},
+                )
+                assert markdown_download.status_code == 200, markdown_download.text
+                assert markdown_download.text.startswith(
+                    f"# {trace.json()['short_name']}, Session 1"
+                )
+                assert "## Canonical event records" in markdown_download.text
+                assert "```json\n{" in markdown_download.text
+                assert max(map(len, markdown_download.text.splitlines())) < 1000
                 no_new_events = client.get(
                     f"/api/projects/research-sessions/{session_id}/log",
                     params={"path": path, "after": trace.json()["cursor"]},

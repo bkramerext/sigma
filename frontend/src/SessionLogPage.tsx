@@ -17,6 +17,7 @@ export default function SessionLogPage() {
   const [shortName, setShortName] = useState('Research Project');
   const [filter, setFilter] = useState('all');
   const [following, setFollowing] = useState(true);
+  const [jumpVisible, setJumpVisible] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
@@ -65,10 +66,24 @@ export default function SessionLogPage() {
     if (filter === 'session_event') return event.type === 'session_event';
     return event.type === filter;
   });
-  return <main className="session-log-page" onWheel={() => setFollowing(false)} onTouchMove={() => setFollowing(false)}>
-    <header><h1>{shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div><label>Show <select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All events</option><option value="investigator">Investigator</option><option value="skeptic">Skeptic</option><option value="provider">Provider calls</option><option value="session_event">Session events</option></select></label> <button type="button" onClick={() => setFollowing(value => !value)}>{following ? 'Following' : 'Resume follow'}</button> <a href={`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path })}`}>Download Log</a></div></header>
+  const updateScrollState = () => {
+    const node = list.current;
+    if (!node) return;
+    const atBottom = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
+    setJumpVisible(!atBottom);
+    if (atBottom) setFollowing(true);
+    else setFollowing(false);
+  };
+  const jumpToEnd = () => {
+    const node = list.current;
+    if (node) node.scrollTop = node.scrollHeight;
+    setFollowing(true);
+    setJumpVisible(false);
+  };
+  return <main className="session-log-page">
+    <header><h1>{shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div><label>Show <select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All events</option><option value="investigator">Investigator</option><option value="skeptic">Skeptic</option><option value="provider">Provider calls</option><option value="session_event">Session events</option></select></label> {jumpVisible && <button type="button" onClick={jumpToEnd}>Jump to end</button>} <a className="secondary session-log-download" href={`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path })}`}>Download</a></div></header>
     {error && <p role="alert">{error}</p>}
-    <ol ref={list} className="session-log-events" aria-live="polite">{shown.map(event => {
+    <ol ref={list} onScroll={updateScrollState} className="session-log-events" aria-live="polite">{shown.map(event => {
       const paired = event.request_id ? calls.get(event.request_id) : undefined;
       if (event.type === 'provider_request') {
         const elapsed = Math.max(0, Math.floor((now - Date.parse(event.timestamp)) / 1000));

@@ -300,7 +300,7 @@ def _ensure(path: Path, project_id: str, session_id: str, session_number: int) -
         ):
             raise OSError("Session log file has unsafe ownership or permissions")
         return
-    header = f"# SIGMA Session {session_number} Log\n\nProject: `{project_id}`  \nSession: `{session_id}`\n\nEvents below are framed JSON records; payload strings preserve original multiline Markdown.\n"
+    header = f"# SIGMA Session {session_number} Log\n\nProject: `{project_id}`  \nSession: `{session_id}`\n\nEvents are appended as readable Markdown with canonical structured records in collapsible JSON sections.\n"
     temporary = path.with_name(f".session-header-{session_id}-{uuid4().hex}.tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as stream:
@@ -442,10 +442,17 @@ def _append_sync(
         try:
             fcntl.flock(lockfile_fd, fcntl.LOCK_EX)
             _ensure(target, project_id, session_id, int(session.get("session_number", 1)))
+            prior_events, _ = _frames(target)
             data = _redact(
-                {"seq": _next_sequence(target), "timestamp": datetime.now(UTC).isoformat(), **event}
+                {
+                    "seq": (prior_events[-1].get("seq", len(prior_events)) if prior_events else 0)
+                    + 1,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    **event,
+                }
             )
             body = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            markdown = _event_markdown(data, prior_events)
             if len(body) > MAX_EVENT_BYTES:
                 data = {
                     "seq": data["seq"],
@@ -454,7 +461,9 @@ def _append_sync(
                     "reason": "event exceeds 18 MiB bound",
                 }
                 body = json.dumps(data, separators=(",", ":")).encode()
-            if target.stat().st_size + len(body) + 32 > MAX_LOG_BYTES:
+                markdown = _event_markdown(data, prior_events)
+            growth = _frame_growth(data, markdown)
+            if target.stat().st_size + growth > MAX_LOG_BYTES:
                 if not _has_limit_marker(target):
                     _append_frame(
                         target,
@@ -466,20 +475,53 @@ def _append_sync(
                         },
                     )
                 return
-            _append_frame(target, data)
+            _append_frame(target, data, markdown)
         finally:
             fcntl.flock(lockfile_fd, fcntl.LOCK_UN)
             os.close(lockfile_fd)
 
 
-def _append_frame(path: Path, value: dict[str, Any]) -> None:
-    body = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+def _append_frame(path: Path, value: dict[str, Any], markdown: str = "") -> None:
+    body = _encoded_event(value, pretty=bool(markdown))
+    if markdown:
+        markdown = _escape_frame_markers(markdown)
     with path.open("ab") as stream:
         stream.write(f"\n<!-- SIGMA_EVENT {len(body)} -->\n".encode())
+        if markdown:
+            stream.write(markdown.encode("utf-8"))
+            stream.write(b"\n\n")
+            stream.write(b"<details><summary>Canonical structured event data (JSON)</summary>\n\n")
+            stream.write(f"<!-- SIGMA_JSON {len(body)} -->\n```json\n".encode())
         stream.write(body)
+        if markdown:
+            stream.write(b"\n```\n</details>")
         stream.write(b"\n<!-- END_SIGMA_EVENT -->")
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def _frame_growth(value: dict[str, Any], markdown: str) -> int:
+    body_size = len(_encoded_event(value, pretty=True))
+    return body_size + len(markdown.encode("utf-8")) + 256
+
+
+def _encoded_event(value: dict[str, Any], *, pretty: bool) -> bytes:
+    rendered = json.dumps(
+        value,
+        ensure_ascii=False,
+        indent=2 if pretty else None,
+        separators=None if pretty else (",", ":"),
+    )
+    # Prevent a provider-controlled string from impersonating a frame marker.
+    for marker in ("<!-- SIGMA_EVENT", "<!-- SIGMA_JSON", "<!-- END_SIGMA_EVENT"):
+        rendered = rendered.replace(marker, r"\u003c" + marker[1:])
+    return rendered.encode("utf-8")
+
+
+def _escape_frame_markers(markdown: str) -> str:
+    for marker in ("<!-- SIGMA_EVENT", "<!-- SIGMA_JSON", "<!-- END_SIGMA_EVENT"):
+        markdown = markdown.replace(marker, "&lt;!--" + marker[len("<!--") :])
+    return markdown
 
 
 def _frames(
@@ -508,8 +550,32 @@ def _frames(
         except ValueError:
             cursor = raw.find(marker, cursor + len(marker))
             continue
-        end = start + size
-        if end + len(terminator) > len(raw) or raw[end : end + len(terminator)] != terminator:
+        legacy_end = start + size
+        legacy = raw[legacy_end : legacy_end + len(terminator)] == terminator
+        if legacy:
+            end = legacy_end
+            terminator_start = legacy_end
+        else:
+            next_frame = raw.find(marker, cursor + len(marker))
+            json_marker = raw.find(b"<!-- SIGMA_JSON ", start)
+            if json_marker < 0 or (next_frame >= 0 and json_marker > next_frame):
+                cursor = raw.find(marker, cursor + len(marker))
+                continue
+            json_line_end = raw.find(b" -->\n", json_marker)
+            if json_line_end < 0 or not raw[json_line_end + 5 :].startswith(b"```json\n"):
+                cursor = raw.find(marker, cursor + len(marker))
+                continue
+            start = json_line_end + 5 + len(b"```json\n")
+            end = start + size
+            closing = b"\n```\n</details>"
+            if raw[end : end + len(closing)] != closing:
+                cursor = raw.find(marker, cursor + len(marker))
+                continue
+            terminator_start = end + len(closing)
+        if (
+            terminator_start + len(terminator) > len(raw)
+            or raw[terminator_start : terminator_start + len(terminator)] != terminator
+        ):
             cursor = raw.find(marker, cursor + len(marker))
             continue
         try:
@@ -519,8 +585,304 @@ def _frames(
             continue
         if isinstance(item, dict):
             events.append(item)
-        cursor = raw.find(marker, end + len(terminator))
+        cursor = raw.find(marker, terminator_start + len(terminator))
     return events, file_size
+
+
+def _event_role_label(event: dict[str, Any]) -> str:
+    role = str(event.get("role") or "Session")
+    return role.capitalize() if role.casefold() in {"investigator", "skeptic", "session"} else role
+
+
+def _response_text(value: Any) -> str:
+    """Extract provider-authored text from a captured Responses or Chat payload."""
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            return value
+        return _response_text(decoded) if isinstance(decoded, (dict, list)) else value
+    if isinstance(value, list):
+        return "\n\n".join(text for item in value if (text := _response_text(item)))
+    if not isinstance(value, dict):
+        return ""
+    output: list[str] = []
+    for item in value.get("output", []) if isinstance(value.get("output"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content", []) if isinstance(item.get("content"), list) else []:
+            if isinstance(content, dict) and isinstance(content.get("text"), str):
+                output.append(content["text"])
+    if output:
+        return "\n\n".join(output)
+    if isinstance(value.get("output_text"), str):
+        return str(value["output_text"])
+    choices = value.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if isinstance(choice, dict):
+                message = choice.get("message") or choice.get("delta") or {}
+                if isinstance(message, dict) and isinstance(message.get("content"), str):
+                    output.append(message["content"])
+    if output:
+        return "\n\n".join(output)
+    if isinstance(value.get("content"), str):
+        return str(value["content"])
+    return ""
+
+
+def _readable_response(value: Any) -> str:
+    raw = _response_text(value)
+    try:
+        decoded = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return raw
+    if not isinstance(decoded, dict):
+        return raw
+    parts: list[str] = []
+    for key, item in decoded.items():
+        label = key.replace("_", " ").capitalize()
+        if isinstance(item, str):
+            body = item.strip()
+        elif isinstance(item, list):
+            body = "\n".join(f"- {entry}" for entry in item if isinstance(entry, (str, int, float)))
+            if not body:
+                body = "```json\n" + json.dumps(item, ensure_ascii=False, indent=2) + "\n```"
+        elif isinstance(item, dict):
+            body = "```json\n" + json.dumps(item, ensure_ascii=False, indent=2) + "\n```"
+        else:
+            body = str(item)
+        parts.append(f"#### {label}\n\n{body}")
+    return "\n\n".join(parts)
+
+
+def _request_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return str(value) if isinstance(value, str) else ""
+    parts: list[str] = []
+    instructions = value.get("instructions")
+    if isinstance(instructions, str) and instructions.strip():
+        parts.append(instructions)
+    input_value = value.get("input")
+    if isinstance(input_value, str):
+        parts.append(input_value)
+    elif isinstance(input_value, list):
+        for item in input_value:
+            if isinstance(item, dict):
+                content = item.get("content", item.get("text", ""))
+                if isinstance(content, str):
+                    parts.append(content)
+                elif isinstance(content, list):
+                    parts.extend(
+                        str(part.get("text", "")) for part in content if isinstance(part, dict)
+                    )
+    return "\n\n".join(part for part in parts if part.strip())
+
+
+def _markdown_payload(text: str, label: str) -> str:
+    if not text:
+        return f"_{label} text was not present in the captured provider payload._"
+    # Preserve provider-authored Markdown and equations. Normalize only complete
+    # legacy TeX delimiter pairs, leaving unmatched delimiter characters literal.
+    text = re.sub(
+        r"(?<!\\)\\\[([\s\S]*?)(?<!\\)\\\]",
+        lambda match: "$$\n" + match.group(1).strip() + "\n$$",
+        text,
+    )
+    text = re.sub(
+        r"(?<!\\)\\\(([^\n]*?)(?<!\\)\\\)", lambda match: "$" + match.group(1) + "$", text
+    )
+    # A block opener on its own line is unambiguous. Close it at the paragraph
+    # boundary, before another opener, or at end-of-input for old malformed notes.
+    text = re.sub(
+        r"(?m)(?<!\\)\\\[[ \t]*\n([\s\S]*?)(?=\n[ \t]*\n|\n[ \t]*\\\[|\Z)",
+        lambda match: "$$\n" + match.group(1).strip() + "\n$$",
+        text,
+    )
+    # Unmatched legacy display delimiters are source text, not the start of
+    # math. Escape the bracket so Markdown/KaTeX previews cannot consume them.
+    text = re.sub(r"(?<!\\)\\(?=[\[\]])", lambda match: "\\" + match.group(0), text)
+    text = _escape_unmatched_dollars(text)
+    return text
+
+
+def _escape_unmatched_dollars(text: str) -> str:
+    """Escape unmatched math/currency markers outside Markdown code spans."""
+    escape_positions: set[int] = set()
+    fence: str | None = None
+    display_open: int | None = None
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        fence_match = re.match(r"^[ \t]*(`{3,}|~{3,})", line)
+        if fence_match:
+            marker = fence_match.group(1)[0]
+            if fence is None:
+                fence = marker
+            elif marker == fence:
+                fence = None
+            offset += len(line)
+            continue
+        if fence is not None:
+            offset += len(line)
+            continue
+        code_ranges = [match.span() for match in re.finditer(r"(`+)[^`\n]*?\1", line)]
+        inline_positions: list[int] = []
+        position = 0
+        while position < len(line):
+            if any(start <= position < end for start, end in code_ranges):
+                active = next(end for start, end in code_ranges if start <= position < end)
+                position = active
+                continue
+            if line[position] != "$":
+                position += 1
+                continue
+            prior_slashes = 0
+            prior = position - 1
+            while prior >= 0 and line[prior] == "\\":
+                prior_slashes += 1
+                prior -= 1
+            if prior_slashes % 2:
+                position += 1
+                continue
+            width = 2 if line[position : position + 2] == "$$" else 1
+            if width == 1 and line[position + 1 : position + 2].isdigit():
+                escape_positions.add(offset + position)
+            elif width == 2:
+                if display_open is None:
+                    display_open = offset + position
+                else:
+                    display_open = None
+            else:
+                inline_positions.append(position)
+            position += width
+        for index in range(0, len(inline_positions), 2):
+            if index + 1 >= len(inline_positions):
+                escape_positions.add(offset + inline_positions[index])
+        offset += len(line)
+    if display_open is not None:
+        escape_positions.add(display_open)
+    if not escape_positions:
+        return text
+    return "".join(
+        ("\\" if index in escape_positions else "") + char for index, char in enumerate(text)
+    )
+
+
+def _event_markdown(event: dict[str, Any], prior_events: list[dict[str, Any]]) -> str:
+    event_type = str(event.get("type", "event"))
+    role = _event_role_label(event)
+    round_label = str(event.get("round", "—"))
+    turn = str(event.get("turn", event.get("step_id", event.get("request_id", event.get("seq")))))
+    stamp = str(event.get("timestamp", ""))
+    if event_type == "provider_request":
+        return (
+            f"### Provider request dispatched · {role} · Round {round_label} · Turn {turn}\n\n"
+            f"`{stamp}` · Request `{event.get('request_id', 'unknown')}` · {event.get('provider', 'provider')} / {event.get('model', 'unknown')} · Awaiting response."
+        )
+    if event_type in {"provider_response", "provider_failure"}:
+        request = next(
+            (
+                row
+                for row in reversed(prior_events)
+                if row.get("type") == "provider_request"
+                and row.get("request_id") == event.get("request_id")
+            ),
+            None,
+        )
+        request = request or {}
+        role = _event_role_label(request or event)
+        request_text = _request_text(request.get("request"))
+        response_text = (
+            _readable_response(event.get("response"))
+            if event_type == "provider_response"
+            else str(event.get("provider_error", event.get("message", "Provider call failed.")))
+        )
+        result_heading = (
+            "Provider response" if event_type == "provider_response" else "Provider failure"
+        )
+        request_section = _markdown_payload(request_text, "Request")
+        response_section = _markdown_payload(response_text, result_heading)
+        usage = event.get("usage") if isinstance(event.get("usage"), dict) else {}
+        cost = event.get("estimated_cost_usd", "unavailable")
+        metadata = (
+            f"**{role} · Round {request.get('round', event.get('round', '—'))} · Turn {request.get('turn', request.get('step_id', event.get('seq')))}**  \n"
+            f"Request `{event.get('request_id', 'unknown')}` · {request.get('provider', 'provider')} / {request.get('model', event.get('model', 'unknown'))} · "
+            f"{event.get('duration_seconds', '—')} s · Usage `{json.dumps(usage, ensure_ascii=False, sort_keys=True)}` · Estimated cost `${cost}`"
+        )
+        return (
+            f"<details>\n<summary>{role} · Round {request.get('round', event.get('round', '—'))} · Turn {request.get('turn', request.get('step_id', event.get('seq')))} · Request + response</summary>\n\n"
+            f"{metadata}\n\n#### Actual request\n\n{request_section}\n\n#### {result_heading}\n\n{response_section}\n\n</details>"
+        )
+    if event_type == "session_event":
+        detail = str(event.get("message", event.get("event_kind", "Session event")))
+        return f"### {role} · Round {round_label} · {event.get('event_kind', 'Session event')}\n\n`{stamp}` · {detail}"
+    detail = str(event.get("message", event.get("status", event_type)))
+    return f"### {event_type.replace('_', ' ').capitalize()} · Round {round_label} · {role}\n\n`{stamp}` · {detail}"
+
+
+def markdown_export(events: list[dict[str, Any]], session: dict[str, Any], short_name: str) -> str:
+    """Render old or new canonical frames as a readable, disposable Markdown download."""
+    output = [
+        f"# {short_name}, Session {session.get('number', '—')}",
+        "",
+        "Provider requests, responses, and metadata are paired below. The persistent append-only log keeps complete structured events and raw response wire for retained events; this download summarizes duplicate raw-wire strings to keep Markdown previews readable.",
+        "",
+    ]
+    completed: set[str] = set()
+    by_request: dict[str, dict[str, Any]] = {
+        str(event["request_id"]): event
+        for event in events
+        if event.get("type") == "provider_request" and event.get("request_id")
+    }
+    for event in events:
+        if event.get("type") in {"provider_response", "provider_failure"}:
+            request_id = str(event.get("request_id", ""))
+            if request_id in completed:
+                continue
+            output.extend(
+                [
+                    _event_markdown(
+                        event, [by_request[request_id]] if request_id in by_request else []
+                    ),
+                    "",
+                ]
+            )
+            completed.add(request_id)
+            continue
+        if event.get("type") == "provider_request" and any(
+            row.get("request_id") == event.get("request_id")
+            and row.get("type") in {"provider_response", "provider_failure"}
+            for row in events
+        ):
+            continue
+        output.extend(
+            [
+                _event_markdown(
+                    event, [row for row in events if row.get("type") == "provider_request"]
+                ),
+                "",
+            ]
+        )
+    output.append("## Canonical event records\n")
+    for event in events:
+        display_event = dict(event)
+        wire = display_event.get("response_wire")
+        if isinstance(wire, str) and len(wire) > 4096:
+            display_event["response_wire"] = (
+                f"[{len(wire)} characters retained in the persistent append-only session log]"
+            )
+        output.extend(
+            [
+                f"<details><summary>Event {event.get('seq', '—')} · {event.get('type', 'event')} · canonical JSON</summary>",
+                "",
+                "```json",
+                json.dumps(display_event, ensure_ascii=False, indent=2),
+                "```",
+                "</details>",
+                "",
+            ]
+        )
+    return "\n".join(output).rstrip() + "\n"
 
 
 def _next_sequence(path: Path) -> int:

@@ -170,15 +170,43 @@ def main() -> None:
                       const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
                       const { default: SessionLogButton } = await import('/src/SessionLogButton.tsx');
                       const host = document.createElement('main'); document.body.replaceChildren(host);
-                      createRoot(host).render(React.createElement(SessionLogButton, { sessionId:id, sessionNumber:number, path }));
+                      const icon = d => React.createElement('svg', {viewBox:'0 0 20 20', 'aria-hidden':true}, React.createElement('path',{d}));
+                      const controls = React.createElement('div',{className:'session-heading-actions','aria-label':'Session 1 actions'},
+                        React.createElement('button',{type:'button',className:'text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control','aria-label':'Resume Session 1',title:'Resume session #1'},icon('M6 3.8v12.4L16 10 6 3.8Z')),
+                        React.createElement('button',{type:'button',className:'text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control','aria-label':'Stop Session 1',title:'Stop Session 1; it can be resumed later'},icon('M5 5h10v10H5z')),
+                        React.createElement(SessionLogButton, { sessionId:id, sessionNumber:number, path }));
+                      const shell=React.createElement('main',{className:'workspace-page'},React.createElement('div',{className:'session-summary'},React.createElement('div',{className:'session-title-line'},controls)));
+                      createRoot(host).render(shell);
                     }""",
                     {"id": session_id, "number": session["session_number"], "path": project.path},
                 )
-                with opener.expect_popup() as popup:
-                    opener.get_by_role(
-                        "button", name=f"Open Session {session['session_number']} log"
-                    ).click()
-                page = popup.value
+                resume_button = opener.get_by_role("button", name="Resume Session 1")
+                stop_button = opener.get_by_role("button", name="Stop Session 1")
+                resume_box = resume_button.bounding_box()
+                stop_box = stop_button.bounding_box()
+                assert resume_box and stop_box
+                assert (
+                    (resume_box["width"], resume_box["height"])
+                    == (
+                        stop_box["width"],
+                        stop_box["height"],
+                    )
+                    == (28, 28)
+                )
+                expect(resume_button).to_have_attribute("title", "Resume session #1")
+                stop_button.focus()
+                opener.keyboard.press("Tab")
+                link = opener.get_by_role(
+                    "link", name=f"Open Session {session['session_number']} log"
+                )
+                expect(link).to_be_focused()
+                assert link.evaluate("element => getComputedStyle(element).outlineWidth") == "2px"
+                opener.screenshot(
+                    path="docs/evaluations/issue301/session-log-project-controls-review.png"
+                )
+                with context.expect_page() as page_info:
+                    link.click()
+                page = page_info.value
                 page.wait_for_load_state("domcontentloaded")
                 title = "Xenopus Tadpoles, Session 1"
                 expect(page).to_have_title(title)
@@ -197,13 +225,17 @@ def main() -> None:
                     assert state["maximum_active"] == 1, state
                 assert item_count >= 1
                 with page.expect_download() as download:
-                    page.get_by_role("link", name="Download Log").click()
+                    page.get_by_role("link", name="Download", exact=True).click()
                 assert download.value.suggested_filename == f"session-{session_id}.md"
+                downloaded_markdown = Path(download.value.path()).read_text(encoding="utf-8")
+                assert "Investigator · Round 1 · Turn 1 · Request + response" in downloaded_markdown
+                assert "Actual response fixture" in downloaded_markdown
+                assert "## Canonical event records" in downloaded_markdown
                 page.reload(wait_until="domcontentloaded")
                 expect(page.locator("h1")).to_have_text(title)
                 expect(page.locator(".session-log-events > li")).to_have_count(item_count)
                 page.screenshot(
-                    path="docs/evaluations/issue301/session-log-full-app-chromium.png",
+                    path="docs/evaluations/issue301/session-log-full-app-review.png",
                     full_page=True,
                 )
                 browser.close()

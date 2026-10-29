@@ -389,9 +389,12 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .session-log-page header { position: sticky; top: 0; z-index: 2; padding: .5rem 0 1rem; background: #101315ed; border-bottom: 1px solid #534331; }
 .session-log-page h1 { margin: .2rem 0; color: #e4c08f; font-size: 1.4rem; }
 .session-log-page header p { margin: .25rem 0 .7rem; color: #b9afa2; }
-.session-log-page header div { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
-.session-log-page button, .session-log-page select, .session-log-page a { color: #e4c08f; background: #242321; border: 1px solid #6e573d; border-radius: 4px; padding: .35rem .6rem; }
-.session-log-page a { text-decoration: none; }
+.session-log-page header div { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; }
+.session-log-page header label { display: inline-flex; align-items: center; gap: .45rem; color: #c9c1b7; }
+.session-log-page button, .session-log-page select, .session-log-page a { box-sizing: border-box; min-height: 36px; color: #e4c08f; background: #242321; border: 1px solid #6e573d; border-radius: 4px; padding: .45rem .75rem; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; }
+.session-log-page button, .session-log-page a { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; }
+.session-log-page button:hover, .session-log-page a:hover { background: #302418; border-color: #c29661; color: #ffe1ad; }
+.session-log-page button:focus-visible, .session-log-page a:focus-visible, .session-log-page select:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .session-log-events { max-height: calc(100vh - 150px); overflow: auto; list-style: none; padding: 0; }
 .session-log-events > li { margin: .6rem 0; padding: .6rem .75rem; border-left: 2px solid #876743; background: #171918; overflow-wrap: anywhere; }
 .session-log-events summary { cursor: pointer; color: #e0c49d; }

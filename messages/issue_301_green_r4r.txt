@@ -1,65 +1,41 @@
-# Issue #301 — Live Session Log — Green review correction handoff
+# Issue #301 — Live Session Log — human UI review correction handoff
 
 ## Delivery
 
 - Branch: `green/issue-301-live-logging`
-- PR: [#324](https://github.com/bkramerext/sigma/pull/324), open, Ready for Review, not merged
+- PR: [#324](https://github.com/bkramerext/sigma/pull/324), keep open and unmerged
 - Base: `main` at `26628d549dbe11aad0c9f612633c08964ae9eb90`
-- Reviewed prior head: `ddb58e221d73197f089908e72ba18ae66390bb54`
-- Final implementation HEAD (code, tests, browser checks, and screenshot artifacts): `d179bb7353dc93c7f9b5853119e5ac5120b67684`
-- A docs-only handoff/tracker commit follows this implementation commit; the current branch ref remains the authoritative PR head.
+- Reviewed prior head: `2ecaf1af84fb83a5c7d2d18cc6102e48f7fbaa22`
+- Final HEAD: recorded after the correction commit is created below.
 
-## Corrections and architecture
+## Changes
 
-- `src/sigma/session_log.py`: replaced the single process-wide writer queue with independently ordered per-session queues. Append, scan, redaction, locks and `fsync` all run on writer threads. Reads no longer join any writer queue; they synchronize only on the requested file and its project deletion guard. Project deletion prevents new project log work, drains only that project's queues, waits for active readers, then removes its log tree. Torn frames are skipped read-only and retained byte-for-byte; later frames append after them.
-- `src/sigma/research_sessions.py`: after existing strict Investigator output validation, the isolated logger receives project title/problem and the validated AI claim. It persists a 2–4-word subject phrase only when that contiguous phrase appears in both project context and the claim. This adds no schema field or provider request. If there is no corroborated phrase yet, the read window shows a deterministic, title-derived display fallback. Once the validated subject name is persisted, later sessions reuse it.
-- `frontend/src/SessionLogPage.tsx`: polling remains recursive and single-flight; cursor advancement is monotone and event sequence IDs are deduplicated, including backend replay.
-- `tests/session_log.py`: delayed writes, independent-session reads, concurrent append ordering, read/deletion race, append-only recovery, multiline content, redaction, failure isolation, naming and cleanup.
-- `tests/research_sessions.py`: production provider-boundary request/response capture and validated-claim naming with deterministic provider fixtures.
-- `tests/cloud_research_api.py`, `tests/lifecycle.py`: owner/cross-user access, download, and project deletion with a queued session log.
-- `browser_checks/issue301_session_log.py`: real Chromium popup/poll/download check with mocked API responses.
-- `browser_checks/issue301_integrated.py`: Chromium polling against an HTTP fixture that calls the production log store.
-- `browser_checks/issue301_full_app.py`: Chromium through a running Vite frontend and the actual SIGMA FastAPI log read/download routes and production store; creates a real temporary project/session, inserts deterministic request/response events, delays retrieval, and replays an event. No research or provider call is started.
-- Screenshots: [standalone](../docs/evaluations/issue301/session-log-chromium.png), [storage integration](../docs/evaluations/issue301/session-log-integrated-chromium.png), [full FastAPI app](../docs/evaluations/issue301/session-log-full-app-chromium.png).
-- Tracking: `docs/STATUS.md`, `docs/TICKET_TRACKING.md`.
+- Log now opens via a normal new browser tab (`target=_blank`) with stable `<project>, Session <n>` title. The page continues independent single-flight polling.
+- Log controls use SIGMA secondary button styling. `Download` replaces “Download Log”; `Jump to end` appears only off-bottom and immediately returns to the latest entry, while polling continues at any scroll position.
+- Play/Stop share equal 28×28 hit targets; Resume tooltip is `Resume session #n`.
+- `src/sigma/session_log.py` writes human-readable Markdown events with request/response details grouped per provider turn and a collapsed canonical JSON record for durable debugging. Download uses a presentation rendering from canonical frames; raw event records remain intact and the on-disk log remains append-only. Long response-wire blobs are summarized in the downloadable presentation to avoid huge lines while full captured event data remains persisted.
+- Legacy malformed display math is normalized in the app Markdown renderer. Export rendering repairs unclosed math blocks and escapes unmatched currency delimiters. This does not mutate canonical stored event data.
+- Browser checks and focused tests cover tab/polling/scroll/download behavior, standard button accessibility and dimensions, real FastAPI/storage integration with deterministic events, and malformed math rendering.
 
-## Verification
+## Verification performed
 
-Exact results for this correction round:
+- `./sigma test` — PASS, all configured backend steps, Ruff, Ruff format check, Pyright, frontend typecheck, and production build. The suite reported its existing large-chunk advisory and skipped the optional graph-present sandbox case because the local image is unavailable.
+- `uv run --locked --no-sync python tests/session_log.py` — PASS (append-only recovery, delayed writes, concurrency, redaction, formatting/pairing, naming and cleanup).
+- `uv run --locked --no-sync python tests/cloud_research_api.py` — PASS.
+- `uv run --locked --no-sync python tests/research_sessions.py` — PASS with deterministic provider fixtures; no paid provider calls.
+- Real Chromium: `browser_checks/issue301_session_log.py` — PASS normal tab, live updates while scrolled, Jump to end, Download, title and reload.
+- Real Chromium full local app: `browser_checks/issue301_full_app.py` — PASS against running Vite + SIGMA FastAPI + production log storage; keyboard focus, equal Play/Stop dimensions, tooltip, paired details and download. Provider calls were not made.
+- Real Chromium math regression: `browser_checks/t301_markdown_math.py` — PASS malformed block fixture rendered formulas without `.katex-error`.
+- Actual saved Session 4 data was rendered in Chromium from the user's existing 22 stored events: 4 provider requests, 2 completed request/response pairs, stable tab title `Signaling Later, Session 4`; generated Markdown 352,930 bytes with maximum line length 17,287. Saved mathematical project text rendered five KaTeX spans with no `.katex-error`. No TeX delimiters were present in the inspected Session 4 provider events. The actual-data browser retrieval used the existing saved event data through a read interception; the actual user log files were not modified.
+- VS Code was opened on the generated Markdown, but a screenshot or automated inspection of the native Preview surface was not obtained. VS Code Preview layout is therefore **UNVERIFIED**. Chromium verified the actual-data rendering and collapsible event structure.
+- Screenshots: [full app](../docs/evaluations/issue301/session-log-full-app-review.png), [project controls](../docs/evaluations/issue301/session-log-project-controls-review.png), [following](../docs/evaluations/issue301/session-log-ui-following-review.png), [scrolled](../docs/evaluations/issue301/session-log-ui-scrolled-review.png), [math regression](../docs/evaluations/t301/session4-repaired-math.png).
+- No paid provider calls or deployments occurred.
 
-- `uv run --locked --no-sync python tests/session_log.py` — PASS. Includes delayed session A write while session B is read, concurrent appends, read/deletion synchronization, byte-prefix checks, simulated interrupted tail across subprocess restart and subsequent append, multiline Markdown, adverse secret redaction, best-effort writer failure, and project cleanup.
-- `uv run --locked --no-sync python tests/cloud_research_api.py` — PASS. Includes authenticated project/session access, cross-user isolation, provider-call accounting and workspace safety. Its delayed fixture call is not a provider request.
-- `uv run --locked --no-sync python tests/research_sessions.py` — PASS. Includes actual provider-boundary hook exercised with deterministic mocked transport, paired request/response, metadata and existing output validation.
-- `uv run --locked --no-sync python tests/lifecycle.py` — PASS. Real DELETE route stops a queued session, then confirms its session Markdown file and project log directory are removed.
-- `uv run --locked --no-sync ruff check ...` and `uv run --locked --no-sync pyright` — PASS (0 Pyright diagnostics).
-- `uv run --locked --no-sync --with playwright python browser_checks/issue301_session_log.py` — PASS in real Chromium; popup, heading/title, in-flight-to-paired request, multiline content, download, reload and independent close.
-- `uv run --locked --no-sync --with playwright python browser_checks/issue301_integrated.py` — PASS in real Chromium against HTTP handlers calling production storage; delayed responses, max one concurrent poll, monotone cursor, event replay/deduplication, pairing, refresh and download.
-- `uv run --locked --no-sync --with playwright python browser_checks/issue301_full_app.py` — PASS in real Chromium through running Vite and SIGMA FastAPI routes backed by production session-log storage; delayed and replayed deterministic events, one paired provider block, download and refresh persistence.
-- `./sigma test` — PASS after the final code changes; includes all configured backend suites, Ruff, formatting, Pyright, frontend typecheck and production build. Existing optional graph-present sandbox check skipped because the local image is unavailable; the suite reports its existing large frontend chunk advisory.
-- Project-name fixture results: mathematical `Does the harmonic series converge?` + `Evidence suggests that the harmonic series diverges.` → **Harmonic Series**; scientific Xenopus regeneration title + matching claim → **Xenopus Tadpoles**; general neighborhood-library question + matching claim → **Neighborhood Libraries**. Generic “Evidence suggests” / “Results indicate” framing does not enter the name. Unmatched/claim-irrelevant subject uses title-derived display fallback. No research schema change and no extra provider call.
-- No paid provider calls occurred.
+## Acceptance status and limitations
 
-## Acceptance status
+- **MET:** new tab behavior; independent live updates while scrolling; Jump to end; button sizing/accessibility; append-only readable Markdown export and canonical event retention; paired request/response display; saved actual-data Chromium rendering; malformed math regression; full test suite.
+- **UNVERIFIED:** native VS Code Markdown Preview visual layout. Inspected actual Session 4 log contained no math delimiters, so no actual log KaTeX error reproduced. Actual saved mathematical project text rendered without KaTeX errors in Chromium; the related React Markdown renderer now handles unclosed own-line display math defensively.
+- Best-effort logging can lose events still queued if the process is abruptly killed. Persisted and partial trailing bytes are never truncated or rewritten; recovery appends after retained bytes.
+- Full app browser verification uses deterministic events and does not initiate live research/provider calls. Existing user files under `projects/` were left untouched.
 
-### MET
-
-- Per-session background queues preserve write order without making reads wait for unrelated session work. Delayed storage remains off the research path. Read/deletion and active-project cleanup are serialized safely within the process.
-- Markdown writes are append-only. Recovery never truncates or rewrites; tests preserve the interrupted bytes across restart and append later complete events.
-- Frontend polling cannot overlap; delayed responses and duplicate event replay are checked in both storage-backed and full-FastAPI Chromium flows.
-- Existing owner authorization and cross-user denial, secret redaction before persistence, project export isolation, session request/response capture and cleanup regressions pass.
-- Context-grounded AI-claim subject matching yields the representative scientific, mathematical and general names above without changing response validation or adding a provider call. Stable assigned names are persisted and reused.
-
-### UNMET
-
-- None identified after this correction pass.
-
-### UNVERIFIED / limitations
-
-- Naming is conservative lexical corroboration, not semantic model-generated labeling: it uses a short contiguous project phrase only when the existing validated Investigator claim repeats it. If the claim paraphrases the subject without shared terms, the display uses the deterministic title fallback. No broad live-model naming quality evaluation was made; the fixtures establish the listed examples and reject generic lead-ins.
-- The full-app browser test exercises actual frontend, FastAPI routes, authorization code path in local mode, and production store, with manually inserted deterministic events. It does not launch a live research session or contact a provider. Cloud cross-user authorization is covered separately through API tests.
-- An abrupt process kill before queued events reach disk can lose those queued events. This is an explicit best-effort logging limitation; already-written data and interrupted trailing bytes are retained without mutation.
-- The graph-present optional sandbox test remains skipped because its local image is unavailable.
-
-## Review note
-
-The submitted request bytes are captured from the already-built provider payload. Logging remains isolated and failures are swallowed by the logger so they do not change prompts, validation, funding or research outcomes. PR #324 remains open and unmerged for independent review.
+PR #324 remains open and unmerged for human UI review.
