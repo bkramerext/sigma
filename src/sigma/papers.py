@@ -719,6 +719,8 @@ def _structured_evidence_index(
                 if len(fragment) > 500:
                     raise ProjectError("Structured evidence fragment exceeds note safety bound")
                 statement = f"{label}: {fragment}"
+                if len(statement) < 12:
+                    statement = f"Saved research field {label}: {fragment}"
                 note = EvidenceNote(
                     statement=statement, kind=note_kind, evidence_refs=[source_ref]
                 )
