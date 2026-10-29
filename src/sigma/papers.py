@@ -531,14 +531,12 @@ def _paper_long_form(
     )
     if not eligible:
         return True
-    if (
+    return bool(
         existing is not None
         and existing.get("snapshot_sha256") == hashlib.sha256(_json(package)).hexdigest()
         and existing.get("project_id") == package.get("project_id")
         and existing.get("kind") == "long_form"
-    ):
-        return True
-    return False
+    )
 
 
 def _utf8_fragments(value: str, limit: int) -> list[str]:
@@ -2875,6 +2873,7 @@ Return the complete plan JSON matching the schema."""
                     "to protect completed paper work."
                 ) from None
             state.pop("plan", None)
+            long_plan = None
             save_state(state)
     if long_plan is None:
         if progress:
@@ -3177,9 +3176,7 @@ async def _generate_impl(
             if previous_progress is not None:
                 elapsed_before = int(previous_progress["elapsed_seconds"])
             work = checkpoint
-        long_form = _paper_long_form(
-            package, force_long_form=force_long_form, existing=checkpoint
-        )
+        long_form = _paper_long_form(package, force_long_form=force_long_form, existing=checkpoint)
         expected_kind = "long_form" if long_form else "one_shot"
         compatible = checkpoint is not None and not any(
             checkpoint.get(key) != value
