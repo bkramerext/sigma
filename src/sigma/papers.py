@@ -193,6 +193,7 @@ FAST_MAX_SECTIONS = 8
 
 class FastLongPaperPlan(LongPaperPlan):
     """Bounded full-paper outline for fast synthesis (detailed, not sprawling)."""
+
     sections: list[LongSectionPlan] = Field(min_length=2, max_length=FAST_MAX_SECTIONS)
 
 
@@ -617,25 +618,73 @@ FAST_INDEX_MAX_BYTES = 150_000
 FAST_NOTE_TEXT_LENGTH = 410
 FAST_SECTION_CONCURRENCY = 4
 _FAST_RESEARCH_TERMS = (
-    "outcome", "conclusion", "finding", "result", "evidence", "proof",
-    "argument", "reasoning", "skeptic", "objection", "contradict",
-    "counterexample", "limitation", "caveat", "negative", "failure",
-    "failed", "unresolved", "open_obligation", "remaining_obligation",
-    "hypothesis", "method", "experiment", "construction", "assumption",
-    "invariant", "claim", "assessment", "verification", "uncertainty",
-    "approach", "observation",
+    "outcome",
+    "conclusion",
+    "finding",
+    "result",
+    "evidence",
+    "proof",
+    "argument",
+    "reasoning",
+    "skeptic",
+    "objection",
+    "contradict",
+    "counterexample",
+    "limitation",
+    "caveat",
+    "negative",
+    "failure",
+    "failed",
+    "unresolved",
+    "open_obligation",
+    "remaining_obligation",
+    "hypothesis",
+    "method",
+    "experiment",
+    "construction",
+    "assumption",
+    "invariant",
+    "claim",
+    "assessment",
+    "verification",
+    "uncertainty",
+    "approach",
+    "observation",
 )
 _FAST_NEGATIVE_TERMS = (
-    "skeptic", "objection", "contradict", "counterexample", "negative",
-    "failure", "failed", "limitation", "caveat", "unresolved", "obligation",
+    "skeptic",
+    "objection",
+    "contradict",
+    "counterexample",
+    "negative",
+    "failure",
+    "failed",
+    "limitation",
+    "caveat",
+    "unresolved",
+    "obligation",
 )
 _FAST_STRONG_TERMS = (
-    "proof", "argument", "reasoning", "outcome", "conclusion", "finding",
-    "result", "construction", "invariant", "verification",
+    "proof",
+    "argument",
+    "reasoning",
+    "outcome",
+    "conclusion",
+    "finding",
+    "result",
+    "construction",
+    "invariant",
+    "verification",
 )
 _FAST_CONTEXT_TERMS = ("title", "problem", "name", "description", "goal")
 _FAST_ARTIFACT_TEXT_TERMS = (
-    "content", "text", "body", "output", "summary", "report", "description"
+    "content",
+    "text",
+    "body",
+    "output",
+    "summary",
+    "report",
+    "description",
 )
 
 
@@ -676,11 +725,9 @@ def _structured_evidence_index(
                     child_path = f"{path}/{name}" if path else name
                     important = any(term in lower for term in _FAST_RESEARCH_TERMS)
                     context = (
-                        (kind in {"project", "strategy"} and lower in _FAST_CONTEXT_TERMS)
-                        or (
-                            kind in {"artifact", "agentic_step"}
-                            and lower in _FAST_ARTIFACT_TEXT_TERMS
-                        )
+                        kind in {"project", "strategy"} and lower in _FAST_CONTEXT_TERMS
+                    ) or (
+                        kind in {"artifact", "agentic_step"} and lower in _FAST_ARTIFACT_TEXT_TERMS
                     )
                     visit(child, child_path, meaningful or important or context)
                 return
@@ -707,13 +754,20 @@ def _structured_evidence_index(
             note_kind: Literal[
                 "result", "method", "negative", "limitation", "question", "context"
             ] = (
-                "negative" if negative and any(
-                    term in path_lower for term in ("negative", "failed", "failure", "counterexample", "contradict")
+                "negative"
+                if negative
+                and any(
+                    term in path_lower
+                    for term in ("negative", "failed", "failure", "counterexample", "contradict")
                 )
-                else "question" if any(term in path_lower for term in ("obligation", "unresolved", "objection"))
-                else "limitation" if any(term in path_lower for term in ("limitation", "caveat"))
-                else "method" if any(term in path_lower for term in ("method", "experiment", "construction"))
-                else "result" if strong
+                else "question"
+                if any(term in path_lower for term in ("obligation", "unresolved", "objection"))
+                else "limitation"
+                if any(term in path_lower for term in ("limitation", "caveat"))
+                else "method"
+                if any(term in path_lower for term in ("method", "experiment", "construction"))
+                else "result"
+                if strong
                 else "context"
             )
             if (source_ref, content) in seen:
@@ -735,9 +789,7 @@ def _structured_evidence_index(
                 statement = f"{label}: {fragment}"
                 if len(statement) < 12:
                     statement = f"Saved research field {label}: {fragment}"
-                note = EvidenceNote(
-                    statement=statement, kind=note_kind, evidence_refs=[source_ref]
-                )
+                note = EvidenceNote(statement=statement, kind=note_kind, evidence_refs=[source_ref])
                 locator = f"{source_ref}\\0{path}\\0{index}".encode()
                 omission = {
                     "field_ref": hashlib.sha256(locator).hexdigest(),
@@ -1633,7 +1685,8 @@ def _section_original_excerpts(
     if byte_limit < 1_000:
         return []
     query = {
-        word for word in re.findall(r"[a-z]{5,}", purpose.casefold())
+        word
+        for word in re.findall(r"[a-z]{5,}", purpose.casefold())
         if word not in {"research", "section", "evidence", "describe", "explain"}
     }
     eligible: list[tuple[int, int, dict[str, Any]]] = []
@@ -1644,10 +1697,25 @@ def _section_original_excerpts(
         text = json.dumps(record.get("content"), ensure_ascii=False)
         terms = set(re.findall(r"[a-z]{5,}", (field + " " + text[:1000]).casefold()))
         relevance = len(query.intersection(terms))
-        priority = 10 if any(term in field.casefold() for term in (
-            "proof", "reasoning", "argument", "objection", "negative", "contradict",
-            "failed", "conclusion", "obligation", "result",
-        )) else 0
+        priority = (
+            10
+            if any(
+                term in field.casefold()
+                for term in (
+                    "proof",
+                    "reasoning",
+                    "argument",
+                    "objection",
+                    "negative",
+                    "contradict",
+                    "failed",
+                    "conclusion",
+                    "obligation",
+                    "result",
+                )
+            )
+            else 0
+        )
         eligible.append((priority + relevance, index, record))
     eligible.sort(key=lambda item: (-item[0], item[1]))
     result: list[dict[str, Any]] = []
@@ -1768,7 +1836,8 @@ def _draft_text(draft: PaperDraft) -> str:
 _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
     # (opening section, methods section, findings label, authoring emphasis)
     "mathematical": (
-        "Introduction", "Evidence and scope",
+        "Introduction",
+        "Evidence and scope",
         "Arguments and claims",
         (
             "Distinguish proved statements from conjectures, failed arguments, and open proof obligations. "
@@ -1776,7 +1845,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "biology": (
-        "Introduction and biological context", "Methods and evidence",
+        "Introduction and biological context",
+        "Methods and evidence",
         "Findings and hypotheses",
         (
             "Distinguish observed biology from mechanistic hypotheses and proposed experiments. "
@@ -1784,7 +1854,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "chemistry": (
-        "Introduction and chemical context", "Methods and evidence",
+        "Introduction and chemical context",
+        "Methods and evidence",
         "Results and mechanistic interpretation",
         (
             "Distinguish measured outcomes, mechanistic hypotheses, and unperformed experiments. "
@@ -1792,7 +1863,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "physics": (
-        "Introduction and physical framework", "Methods and evidence",
+        "Introduction and physical framework",
+        "Methods and evidence",
         "Results and interpretation",
         (
             "Distinguish models and derivations from measurements and simulations; "
@@ -1800,7 +1872,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "computer_science": (
-        "Introduction and problem statement", "Methods and evidence",
+        "Introduction and problem statement",
+        "Methods and evidence",
         "Algorithms, results, and limitations",
         (
             "Distinguish algorithmic guarantees from tests, benchmarks and conjectures. "
@@ -1808,7 +1881,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "engineering": (
-        "Introduction and design objectives", "Methods and evidence",
+        "Introduction and design objectives",
+        "Methods and evidence",
         "Design analysis and tradeoffs",
         (
             "Distinguish simulated, measured and predicted performance, with operating "
@@ -1816,7 +1890,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "economics": (
-        "Introduction and economic question", "Methods and evidence",
+        "Introduction and economic question",
+        "Methods and evidence",
         "Findings and interpretation",
         (
             "Distinguish causal claims from associations and theoretical predictions; "
@@ -1824,7 +1899,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "law": (
-        "Question presented and background", "Authorities and analytical method",
+        "Question presented and background",
+        "Authorities and analytical method",
         "Analysis and competing interpretations",
         (
             "Distinguish verified authorities from speculative interpretations; "
@@ -1832,7 +1908,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "military": (
-        "Question and operational context", "Methods and evidence",
+        "Question and operational context",
+        "Methods and evidence",
         "Analysis and constraints",
         (
             "Distinguish historical evidence, scenarios, assumptions and speculation. "
@@ -1840,7 +1917,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "philosophy": (
-        "Question and conceptual framework", "Argument and sources",
+        "Question and conceptual framework",
+        "Argument and sources",
         "Arguments and objections",
         (
             "State definitions and premises, develop competing arguments, and preserve "
@@ -1848,7 +1926,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "religion": (
-        "Question and textual context", "Interpretive approach and sources",
+        "Question and textual context",
+        "Interpretive approach and sources",
         "Interpretations and counterarguments",
         (
             "Distinguish documented textual claims from interpretations; acknowledge "
@@ -1856,7 +1935,8 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
         ),
     ),
     "default": (
-        "Problem framing", "Methods and evidence",
+        "Problem framing",
+        "Methods and evidence",
         "Findings and interpretation",
         (
             "Match the genre to the available evidence and clearly distinguish "
@@ -1969,7 +2049,8 @@ def _tex(
 
     def claim_register() -> None:
         parts.append(
-            r"\section*{Claim status and evidence}" if math_style
+            r"\section*{Claim status and evidence}"
+            if math_style
             else r"\section{" + esc(findings_heading) + "}"
         )
         for claim in draft.claims:
@@ -2022,14 +2103,17 @@ def _tex(
     if integrity_records:
         parts += [
             r"\appendix",
-            (r"\section{Selected source-linked research excerpts}" if integrity_excerpts
-             else r"\section{Structured reasoning and review records}"),
+            (
+                r"\section{Selected source-linked research excerpts}"
+                if integrity_excerpts
+                else r"\section{Structured reasoning and review records}"
+            ),
             prose(
                 "The following are bounded, selected excerpts of original research records. "
                 "They are not exhaustive; consult the full frozen snapshot archived with this paper. "
                 "They do not constitute independent verification."
-                if integrity_excerpts else
-                "The following material is transcribed from the frozen research snapshot to "
+                if integrity_excerpts
+                else "The following material is transcribed from the frozen research snapshot to "
                 "preserve recorded reasoning, Skeptic assessments, negative findings, "
                 "contradictions, and unresolved objections that may not fit in the synthesized "
                 "narrative. These records are not independent verification."
@@ -2342,10 +2426,8 @@ async def _generate_long_draft(
     # deterministic batch layout. New/explicitly reset checkpoints select the
     # structured fast path; never silently invalidate a completed paid batch.
     legacy_checkpoint = bool(
-        state.get("next_batch", 0) or (
-            state.get("provider_calls", 0)
-            and state.get("evidence_strategy") != "structured_v1"
-        )
+        state.get("next_batch", 0)
+        or (state.get("provider_calls", 0) and state.get("evidence_strategy") != "structured_v1")
     )
     fast_path = structured_fast_path and not legacy_checkpoint
     batches = _evidence_batches(package) if not fast_path else []
@@ -2662,16 +2744,19 @@ that occur in the input. Do not add scientific claims or outside citations."""
     )
     project_type = (
         project_data.get("investigation_type", "default")
-        if isinstance(project_data, dict) else "default"
+        if isinstance(project_data, dict)
+        else "default"
     )
     plan_instructions = (
-        INSTRUCTIONS + "\n\nRESEARCH TYPE AND WRITING STYLE: "
+        INSTRUCTIONS
+        + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
         + (
             "\n\nProduce between 2 and 8 substantial, logically connected sections. "
             "Each section should provide enough space for a detailed argument; "
             "do not split every observation into its own section.\n"
-            if fast_path else ""
+            if fast_path
+            else ""
         )
         + """
 
@@ -2691,9 +2776,7 @@ Return the complete plan JSON matching the schema."""
     plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
     if fast_path:
         plan_input["index_origin"] = "deterministic_selection_from_structured_research"
-        plan_input["indexed_fragments_not_selected"] = len(
-            state.get("omitted_evidence", [])
-        )
+        plan_input["indexed_fragments_not_selected"] = len(state.get("omitted_evidence", []))
     if state.get("plan"):
         long_plan = LongPaperPlan.model_validate(state["plan"])
     else:
@@ -2809,7 +2892,9 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             if str(number) not in saved_sections
         ]
         if pending and progress:
-            await progress("sections", max(1, len(saved_sections)), len(long_plan.sections), "active")
+            await progress(
+                "sections", max(1, len(saved_sections)), len(long_plan.sections), "active"
+            )
         semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
 
         async def bounded_section(
@@ -2819,8 +2904,7 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
                 return section_number, await write_section(section_number, section)
 
         tasks = [
-            asyncio.create_task(bounded_section(number, section))
-            for number, section in pending
+            asyncio.create_task(bounded_section(number, section)) for number, section in pending
         ]
         try:
             if tasks:
@@ -3201,7 +3285,8 @@ async def _generate_impl(
                 math_style=math_style,
                 investigation_type=(
                     project_data.get("investigation_type", "default")
-                    if isinstance(project_data, dict) else "default"
+                    if isinstance(project_data, dict)
+                    else "default"
                 ),
                 obligation_reconciliation=obligation_reconciliation,
                 integrity_records=(
@@ -3223,7 +3308,8 @@ async def _generate_impl(
                     ]
                     if work.get("evidence_strategy") == "structured_v1"
                     else _long_paper_integrity_records(package, work)
-                    if long_form else None
+                    if long_form
+                    else None
                 ),
                 material_omissions=material_omissions,
                 integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
@@ -3363,7 +3449,8 @@ def preflight(
     )
     maximum_calls = (
         (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
-        if fast_preflight else min(
+        if fast_preflight
+        else min(
             MAX_LONG_PAPER_CALLS,
             len(batches)
             + MAX_LONG_PAPER_REDUCTION_CALLS
@@ -3377,7 +3464,8 @@ def preflight(
     )
     maximum_restart_calls = (
         (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
-        if fast_preflight else min(
+        if fast_preflight
+        else min(
             MAX_LONG_PAPER_CALLS,
             len(batches)
             + MAX_LONG_PAPER_REDUCTION_CALLS
@@ -3401,8 +3489,8 @@ def preflight(
     maximum_output_tokens = calls_remaining * 12_000 if mode == "api_key" else None
     maximum_structured_input_bytes = (
         (MAX_LONG_PAPER_OUTLINE_CALLS + FAST_MAX_SECTIONS) * 3 * 220_000
-        if fast_preflight else
-        sum(_evidence_input_limit(batch) for batch in batches)
+        if fast_preflight
+        else sum(_evidence_input_limit(batch) for batch in batches)
         + MAX_LONG_PAPER_REDUCTION_CALLS * MAX_PROVIDER_INPUT_BYTES
         + (MAX_LONG_PAPER_OUTLINE_CALLS + MAX_LONG_PAPER_SECTIONS) * 220_000
         if long_form
@@ -3418,7 +3506,9 @@ def preflight(
         "maximum_provider_calls": maximum_calls,
         "maximum_restart_provider_calls": maximum_restart_calls,
         "maximum_evidence_calls": len(batches),
-        "maximum_index_reduction_calls": 0 if fast_preflight else min(
+        "maximum_index_reduction_calls": 0
+        if fast_preflight
+        else min(
             MAX_LONG_PAPER_REDUCTION_CALLS,
             max(
                 0,
@@ -3429,9 +3519,9 @@ def preflight(
             ),
         ),
         "maximum_outline_calls": MAX_LONG_PAPER_OUTLINE_CALLS if long_form else 0,
-        "maximum_section_calls": (
-            FAST_MAX_SECTIONS if fast_preflight else MAX_LONG_PAPER_SECTIONS
-        ) if long_form else 0,
+        "maximum_section_calls": (FAST_MAX_SECTIONS if fast_preflight else MAX_LONG_PAPER_SECTIONS)
+        if long_form
+        else 0,
         "max_output_tokens_per_call": 12_000 if mode == "api_key" else None,
         "maximum_requested_output_tokens": maximum_output_tokens,
         "maximum_fresh_run_requested_output_tokens": (
