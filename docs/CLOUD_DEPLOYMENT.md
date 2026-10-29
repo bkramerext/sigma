@@ -1,10 +1,10 @@
 # SIGMA Cloud Deployment
 
-**Status:** Deployment planning and local package validation; provisioning, hosted OAuth, and public launch require separate operator approval and live verification.
+**Status (2026-10-29):** SIGMA v0.1.4 has been deployed to the selected GCE host. Public anonymous health and browser checks passed, but authenticated hosted acceptance remains incomplete. This document includes historical planning notes; it is **not** a validated end-to-end provisioning recipe. See [Status](STATUS.md) for current deployment evidence and [Operation Runbook](OPERATION_RUNBOOK.md) for routine operations. No infrastructure changes are authorized by these instructions.
 
-**Target hostname:** `sigma-research.duckdns.org`. **Hosting:** Google Compute Engine trial candidate. Budget alerts do not cap charges. OpenAI inference charges are separate. Do not execute provisioning commands without explicit authorization.
+**Hosted hostname:** `sigma-research.duckdns.org`. **Hosting:** Google Compute Engine. Budget alerts do not cap charges. OpenAI inference charges are separate. Do not execute provisioning commands without explicit authorization.
 
-This document consolidates deployment architecture, executable operator runbook, hosted authentication, and earlier hosting feasibility analysis. **Current implementation and operator instructions are in Parts 1–3. Parts 4–5 are historical alternatives, not approved deployment plans.**
+This document consolidates deployment architecture, executable operator runbook, hosted authentication, and earlier hosting feasibility analysis. **Parts 1–3 mix current architecture, dated operator observations, and original provisioning proposals. Verify commands against the actual deployed host and the current operation runbook before use. Parts 4–5 are historical alternatives, not approved deployment plans.**
 
 ## Cloud resource inventory (T127)
 
@@ -29,9 +29,9 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; project association and trial unverified |
 | Billing / trial / project budget | Both projects linked to `015C1D-E6B877-9913D6`; free trial $300 credit, $0 used (Oct 25); `SIGMA Production - Trial Budget`, $300 custom-range Oct 24 2026–Jan 22 2027, alerts at 50/75/90/100% | Operator screenshots and report Oct 25; trial expiry estimated from start+90 days, not independently confirmed |
 | Enabled project APIs | `compute.googleapis.com`, `iam.googleapis.com`, `cloudresourcemanager.googleapis.com`, `secretmanager.googleapis.com`, `iap.googleapis.com`, `billingbudgets.googleapis.com` | Enabled: operator screenshots/reports on 2026-10-25 |
-| Application release | Exact deployed Git SHA | Pending deployment |
+| Application release | v0.1.4, deployment SHA `6fa626bdfc1f07cb873103dfed2323864d4fb280` | Deployed and container health verified 2026-10-29; authenticated acceptance incomplete (see [Status](STATUS.md)) |
 
-**Cost decision (2026-10-25):** Operator rejected the 200 GiB initial disk and requested a leaner size. 30 GiB is now recommended (approximately $3/month), pending operator confirmation. Monitor usage and expand only if needed. This is a deliberate T127 deviation; older baseline estimates and provisioning command examples elsewhere in this document still specify 200 GiB and must be reconciled before executing them.
+**Actual state disk (operator-confirmed 2026-10-25; mounted and verified during v0.1.4 deployment):** 30 GB `pd-balanced`, not the original 200 GiB proposal. The running VM was configured as `e2-standard-2`, not the original `e2-standard-4`. The historical cost tables and provisioning examples below retain their original assumptions **for comparison only**; do not execute them or use their figures as the deployed cost baseline. Recalculate costs using actual resources and current GCP pricing before changing infrastructure.
 
 **Operator IAM checkpoint (2026-10-25):** The human operator confirmed their existing role is **Owner** on `sigma-research-prod`. Dedicated `roles/compute.osAdminLogin`, `roles/iap.tunnelResourceAccessor`, and runtime service-account-level `roles/iam.serviceAccountUser` grants are not yet verified. Preserve existing owner role during provisioning; review privileges after setup.
 
@@ -248,7 +248,7 @@ Pricing references (official Google sources, checked 2026-10-23):
 
 ## Google setup and operator commands
 
-These are proposed commands, **not run**. Replace all uppercase placeholders
+**Historical pre-provisioning proposal, not a current deployment procedure.** Several steps were subsequently performed with different resource sizes and settings. Do not rerun creation, formatting, or setup commands on the existing host. Replace all uppercase placeholders
 only in the operator's own approved terminal. The operator must approve each
 checkbox before the corresponding external action.
 
@@ -301,7 +301,7 @@ checkbox before the corresponding external action.
    and fake-provider failure/unknown-charge paths. No real inference is part of
    this readiness approval.
 
-The intended GCE shape, for operator editing and approval, is:
+**Historical, superseded example — do not run on the deployed project.** It specifies the rejected 200 GiB disk and e2-standard-4 VM. The deployed resources use a 30 GB disk and e2-standard-2 VM. Original example:
 
 ```sh
 gcloud compute instances create sigma-gce-01 \
@@ -1159,12 +1159,7 @@ below; use them on the actual Ubuntu VM before production launch.
 # Part 3: Cloud identity and access
 
 
-Cloud identity is opt-in. Local SIGMA keeps its existing ChatGPT sign-in and
-continues to use its current single-user API behavior when
-`SIGMA_CLOUD_AUTH_ENABLED` is unset or false. Hosted Google identity is not an
-AI-provider credential and does not authorize inference. The current cloud mode
-blocks `/api/ai/*`; a future hosted provider design must provide explicit user
-authorization and billing controls.
+Cloud identity is opt-in. Ordinary local SIGMA uses single-user behavior when cloud authentication is disabled. Hosted Google identity identifies the SIGMA account; it is not an AI-provider credential. Hosted research uses its separately configured provider and sponsorship controls. The local `/api/ai/*` route is not a substitute for hosted inference.
 
 Set these deployment environment values to enable cloud authentication:
 
@@ -1182,11 +1177,7 @@ Set these deployment environment values to enable cloud authentication:
 
 The current hosted Compose configuration also requires `SIGMA_INVITATION_SMTP_USERNAME` and `SIGMA_INVITATION_SMTP_PASSWORD_FILE`; deployment startup fails if either is absent. The password file must contain the owner-approved authenticated SMTP credential. Invitation notification delivery has not been verified until that credential is provisioned and exercised. Never put the credential in the repository or browser configuration.
 
-This setting supplies the public invitation contact. On a fresh auth database,
-the first verified sign-in matching the configured address establishes the
-initial administrator and binds its email to a Google subject. Once present,
-that database binding remains authoritative when the public contact changes;
-later administrator sign-ins must still match the original email and subject.
+This setting supplies the public invitation contact and initial bootstrap administrator email. On a fresh auth database, the first verified sign-in matching that email binds it to a Google subject; this is not a first-visitor-wins assignment. The original bootstrap identity remains an administrator after a contact change. The newly configured contact can also receive administrator access once its verified subject is bound. **Changing this variable does not revoke the original administrator.**
 
 When upgrading an existing deployment, remove the legacy
 `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` line from `/etc/sigma/deploy.env` and set
@@ -1248,6 +1239,8 @@ Reload the shell configuration, then run the requested command:
 source ~/.bashrc
 ./sigma start --nav
 ```
+
+The `--nav` launch option in this section is a historical spelling; the README documents the current `--navigate --signin` invocation. Verify the launcher help before using older command examples.
 
 The presence of the configured admin contact email opts this local launch into
 real Google sign-in; the launcher supplies the loopback-only auth settings and
