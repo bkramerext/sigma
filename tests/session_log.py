@@ -7,6 +7,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -43,9 +45,22 @@ def _verify_round_trip_and_recovery(project_file: Path) -> None:
             "request": {"input": content, "Authorization": "Bearer secret"},
         },
     )
+    session_log.flush()
     target = session_log.log_path(str(project_file), session["project_id"], session["id"])
+    session_log.append(
+        str(project_file),
+        session,
+        {
+            "type": "provider_failure",
+            "message": "Bearer supersecret api_key=othersecret sk-0123456789abcdefghijklmnop",
+        },
+    )
+    session_log.flush()
+    all_bytes = target.read_bytes()
+    assert b"supersecret" not in all_bytes and b"othersecret" not in all_bytes
+    assert b"sk-0123456789abcdefghijklmnop" not in all_bytes
     original = target.read_bytes()
-    events, offset = session_log._frames(target)
+    events, _offset = session_log._frames(target)
     assert events[0]["request"]["input"] == content
     assert events[0]["request"]["Authorization"] == "[REDACTED]"
     restart = subprocess.run(
@@ -61,13 +76,38 @@ def _verify_round_trip_and_recovery(project_file: Path) -> None:
         text=True,
         check=True,
     )
-    assert restart.stdout.strip() == "1"
+    assert restart.stdout.strip() == "2"
     with target.open("ab") as stream:
         stream.write(b"\n<!-- SIGMA_EVENT 55 -->\n{truncated")
     recovered, recovered_offset = session_log._frames(target, repair=True)
     assert recovered == events
-    assert recovered_offset == offset
-    assert target.read_bytes() == original
+    assert recovered_offset == len(target.read_bytes())
+    assert target.read_bytes().startswith(original)
+    interrupted = target.read_bytes()
+    restart_partial = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from sigma.session_log import _frames; from pathlib import Path; import sys; p=Path(sys.argv[1]); print(len(_frames(p, repair=True)[0]))",
+            str(target),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert restart_partial.stdout.strip() == "2"
+    assert target.read_bytes() == interrupted
+    torn_bytes = target.read_bytes()[len(original) :]
+    session_log.append(str(project_file), session, {"type": "event", "message": "after recovery"})
+    session_log.flush()
+    final_bytes = target.read_bytes()
+    assert final_bytes.startswith(original + torn_bytes)
+    recovered_again, _ = session_log._frames(target)
+    assert [row.get("message") for row in recovered_again if row["type"] == "event"] == [
+        "after recovery"
+    ]
 
 
 def test_session_log_concurrent_appends_are_serialized_and_append_only(tmp_path: Path):
@@ -97,9 +137,11 @@ def _verify_concurrent_appends(project_file: Path) -> None:
                 range(24),
             )
         )
+    session_log.flush()
     target = session_log.log_path(str(project_file), session["project_id"], session["id"])
     before = target.read_bytes()
     session_log.append(str(project_file), session, {"type": "event", "message": "later"})
+    session_log.flush()
     after = target.read_bytes()
     assert after.startswith(before)
     events, _ = session_log._frames(target)
@@ -132,23 +174,28 @@ def test_session_log_short_name_is_stable_and_delete_scoped(tmp_path: Path):
         second_project = "b12ca401-2210-4c88-8fe6-84a33b1e5eea"
         first_session = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
         second_session = "e0231c99-5425-4a20-8ff2-fc52c1800b8c"
-        session_log._short_name(project_file, first_project, "Xenopus Tadpoles Regeneration")
+        first_name = session_log.subject_name_from_claim(
+            "The evidence suggests Xenopus tadpole tail regeneration after injury."
+        )
+        assert first_name == "Xenopus Tadpole Tail Regeneration"
+        session_log._save_short_name(project_file, first_project, first_name)
         assert (
-            session_log._short_name(project_file, first_project, "Renamed Project")
-            == "Xenopus Tadpoles Regeneration"
+            session_log._short_name(project_file, first_project)
+            == "Xenopus Tadpole Tail Regeneration"
         )
         assert (
-            session_log._short_name(
-                project_file,
-                "c12ca401-2210-4c88-8fe6-84a33b1e5eea",
-                "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration",
+            session_log.subject_name_from_claim(
+                "We show that Xenopus tadpoles regenerate tails after injury."
             )
-            == "Xenopus Tadpoles Tail Regeneration"
+            == "Xenopus Tadpoles Regenerate Tails"
         )
         assert (
-            session_log._short_name(project_file, second_project, "Line Arrangement")
-            == "Line Arrangement"
+            session_log.subject_name_from_claim(
+                "The answer is that DNA mismatch repair limits mutation accumulation."
+            )
+            == "DNA Mismatch Repair Limits"
         )
+        assert session_log._short_name(project_file, second_project) == "Research Project"
         for project_id, session_id, name in (
             (first_project, first_session, "Xenopus Tadpoles Regeneration"),
             (first_project, second_session, "Xenopus Tadpoles Regeneration"),
@@ -164,7 +211,10 @@ def test_session_log_short_name_is_stable_and_delete_scoped(tmp_path: Path):
                 },
                 {"type": "session_event", "message": "started"},
             )
+        session_log.flush()
+        assert session_log._short_name(project_file, first_project) == first_name
         session_log.delete_session(str(project_file), first_project, first_session)
+        session_log.flush()
         assert not session_log.log_path(str(project_file), first_project, first_session).exists()
         session_log.delete_project(first_project, project_file)
         assert not (tmp_path / "logs" / first_project).exists()
@@ -192,6 +242,45 @@ def test_session_log_failure_is_best_effort(tmp_path: Path):
             },
             {"type": "session_event", "message": "research must continue"},
         )
+        session_log.flush()
+
+
+def test_slow_storage_does_not_block_research_caller_and_keeps_order(tmp_path: Path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    entered = threading.Event()
+    release = threading.Event()
+    original_append = session_log._append_frame
+
+    def slow_append(path, value):
+        if value.get("type") == "event":
+            entered.set()
+            release.wait(timeout=3)
+        original_append(path, value)
+
+    with (
+        patch.object(session_log, "_root", lambda _: tmp_path / "slow-logs"),
+        patch.object(session_log, "_append_frame", side_effect=slow_append),
+    ):
+        session = {
+            "project_id": "a12ca401-2210-4c88-8fe6-84a33b1e5eea",
+            "id": "d0231c99-5425-4a20-8ff2-fc52c1800b8c",
+            "session_number": 1,
+        }
+        start = time.monotonic()
+        session_log.append(str(project_file), session, {"type": "event", "message": "first"})
+        assert time.monotonic() - start < 0.15
+        assert entered.wait(timeout=1)
+        session_log.append(str(project_file), session, {"type": "event", "message": "second"})
+        release.set()
+        session_log.flush()
+        target = session_log.log_path(str(project_file), session["project_id"], session["id"])
+        events, _ = session_log._frames(target)
+        assert [item["message"] for item in events if item["type"] == "event"] == [
+            "first",
+            "second",
+        ]
 
 
 def main() -> None:
@@ -202,6 +291,7 @@ def main() -> None:
         test_session_log_event_json_is_valid_for_multiline_and_markdown(root)
         test_session_log_short_name_is_stable_and_delete_scoped(root / "lifecycle")
         test_session_log_failure_is_best_effort(root / "failure")
+        test_slow_storage_does_not_block_research_caller_and_keeps_order(root / "slow")
     print("Session log append, concurrency, redaction and recovery scenarios passed.")
 
 

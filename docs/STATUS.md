@@ -8022,15 +8022,18 @@ live Google OAuth callback or paid provider call was made.
 
 Implementation is complete on `green/issue-301-live-logging`, based on
 `26628d549dbe11aad0c9f612633c08964ae9eb90`. The isolated Markdown log store
-uses UUID-derived project/session directories, framed JSON events, serialized
-append with fsync, crash-tail repair, secret redaction, and a 32 MiB session
-limit. The provider hook captures complete request JSON and returned response
-wire content, paired by request ID. Authorized incremental read and Markdown
-download endpoints and the separate polling window are implemented. Focused
-store, deterministic research-session, cloud authorization, frontend typecheck,
-and real-Chromium window/polling/download checks passed. `./sigma test` passed
-all steps, including backend regression suites, Ruff check/format, Pyright,
-frontend typecheck and build. The graph-present local sandbox subcase skipped
-because the configured image is unavailable. See the issue handoff for criteria
-that remain unverified. No paid provider calls were made. The issue branch is
-being prepared for pull request review; see `messages/issue_301_green_r4r.txt`.
+uses UUID-derived project/session directories, framed JSON events, a serialized
+background writer with fsync, read-only torn-frame recovery, secret redaction,
+and a 32 MiB session limit. Validated Investigator claims supply stable,
+subject-based names without another provider request. The provider hook captures
+complete request JSON and returned response wire content, paired by request ID.
+Authorized incremental read and Markdown download endpoints and the separate
+polling window are implemented. Focused storage, active-project deletion,
+provider-capture, cloud authorization, and integrated real-Chromium/backend
+checks passed. The browser integration exercised delayed HTTP responses,
+monotone cursors, duplicate-event defense, and persisted download/refresh.
+`./sigma test` passed all steps, including backend regression suites, Ruff
+check/format, Pyright, frontend typecheck and build. The graph-present local
+sandbox subcase skipped because the configured image is unavailable. See the
+issue handoff for the force-termination queue durability limitation. No paid
+provider calls were made. PR #324 remains open and Ready for Review.

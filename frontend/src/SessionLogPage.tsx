@@ -11,7 +11,8 @@ export default function SessionLogPage() {
   const sessionId = params.get('session_log') ?? '';
   const path = params.get('path') ?? '';
   const [events, setEvents] = useState<SessionLogEvent[]>([]);
-  const [cursor, setCursor] = useState(0);
+  const cursor = useRef(0);
+  const seen = useRef(new Set<number>());
   const [session, setSession] = useState<{ number: number; status: string } | null>(null);
   const [shortName, setShortName] = useState('Research Project');
   const [filter, setFilter] = useState('all');
@@ -22,21 +23,31 @@ export default function SessionLogPage() {
   useEffect(() => {
     if (!sessionId || !path) { setError('Session log link is incomplete.'); return; }
     let alive = true;
-    const query = new URLSearchParams({ path, after: String(cursor) });
+    let timer = 0;
+    let fetching = false;
     const refresh = async () => {
+      if (!alive || fetching) return;
+      fetching = true;
       try {
+        const query = new URLSearchParams({ path, after: String(cursor.current) });
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin' });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session log.' : 'This session log is unavailable or access was denied.');
         const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; session: { number: number; status: string } };
         if (!alive) return;
-        if (data.events.length) setEvents(current => [...current, ...data.events]);
-        setCursor(data.cursor); setShortName(data.short_name); setSession(data.session); setError('');
+        const fresh = data.events.filter(event => !seen.current.has(event.seq));
+        fresh.forEach(event => seen.current.add(event.seq));
+        if (fresh.length) setEvents(current => [...current, ...fresh]);
+        cursor.current = Math.max(cursor.current, data.cursor);
+        setShortName(data.short_name); setSession(data.session); setError('');
       } catch (cause) { if (alive) setError(displayError(cause)); }
+      finally {
+        fetching = false;
+        if (alive) timer = window.setTimeout(() => { void refresh(); }, 1000);
+      }
     };
     void refresh();
-    const timer = window.setInterval(() => { void refresh(); }, 1000);
-    return () => { alive = false; window.clearInterval(timer); };
-  }, [sessionId, path, cursor]);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [sessionId, path]);
   useEffect(() => {
     if (!session) return;
     const title = `${shortName}, Session ${session.number}`;

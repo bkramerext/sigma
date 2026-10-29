@@ -5368,6 +5368,10 @@ async def _call_provider(
                 "Investigator returned a prior failure reference not present in the supplied history"
             )
     _validate_computation_citations(context, validated["computational_citations"])
+    if role == "investigator" and log_context and isinstance(validated.get("claim"), str):
+        session_log.record_ai_name(
+            record["project_path"], str(record["project_id"]), validated["claim"]
+        )
     return validated, _usage(raw)
 
 

@@ -572,6 +572,9 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert finished["backend_build_commit"] == "a" * 40
     assert all(step["backend_build_commit"] == "a" * 40 for step in finished["steps"])
     assert finished["status"] == "ended" and finished["calls_used"] == 6
+    from sigma import session_log
+
+    session_log.flush()
     from sigma.session_log import _frames as read_session_log_frames
     from sigma.session_log import log_path as session_log_path
 
@@ -586,6 +589,8 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert set(requests) == set(responses)
     assert [requests[key]["request"] for key in requests] == submitted_payloads
     assert all(event["response"]["status"] == "completed" for event in responses.values())
+    saved_name = session_log._short_name(path, view.project.id)
+    assert saved_name != "Research Project"
     assert "fixture-token" not in json.dumps(trace)
     assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
     assert [

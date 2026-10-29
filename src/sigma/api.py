@@ -1307,7 +1307,9 @@ async def delete_project_view(body: DeleteProjectRequest):
             if view.project.id != body.expected_project_id:
                 raise ProjectError("Project changed; refresh before deleting it")
             await research_sessions.stop_project_sessions(str(authorized))
-            session_log.delete_project(body.expected_project_id, authorized)
+            await asyncio.to_thread(
+                session_log.delete_project, body.expected_project_id, authorized
+            )
             if authorized.suffix == ".json":
                 authorized.unlink()
             elif authorized.suffix == ".sigma" and authorized.is_dir():
