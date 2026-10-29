@@ -966,9 +966,7 @@ def main() -> None:
                 )
                 # Exercise the real return destination used when sign-in began
                 # from a project. The invitation welcome must still appear.
-                page.evaluate(
-                    "sessionStorage.setItem('sigma.playSignInReturn', 'true')"
-                )
+                page.evaluate("sessionStorage.setItem('sigma.playSignInReturn', 'true')")
                 page.goto(origin + "/project", wait_until="domcontentloaded")
                 approved_status = page.evaluate(
                     "async () => (await (await fetch('/api/cloud-auth/status')).json())"
