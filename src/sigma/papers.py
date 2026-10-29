@@ -590,6 +590,148 @@ def _evidence_input_limit(batch: Mapping[str, Any]) -> int:
     )
 
 
+# Structured evidence is selected from typed SIGMA research records without
+# round-tripping every metadata field through a provider. This is deliberately
+# a *bounded index*, not a claim that every archived byte was model-reviewed.
+FAST_INDEX_MAX_BYTES = 150_000
+FAST_NOTE_TEXT_LENGTH = 410
+FAST_SECTION_CONCURRENCY = 4
+_FAST_RESEARCH_TERMS = (
+    "outcome", "conclusion", "finding", "result", "evidence", "proof",
+    "argument", "reasoning", "skeptic", "objection", "contradict",
+    "counterexample", "limitation", "caveat", "negative", "failure",
+    "failed", "unresolved", "open_obligation", "remaining_obligation",
+    "hypothesis", "method", "experiment", "construction", "assumption",
+    "invariant", "claim", "assessment", "verification", "uncertainty",
+    "approach", "observation",
+)
+_FAST_NEGATIVE_TERMS = (
+    "skeptic", "objection", "contradict", "counterexample", "negative",
+    "failure", "failed", "limitation", "caveat", "unresolved", "obligation",
+)
+_FAST_STRONG_TERMS = (
+    "proof", "argument", "reasoning", "outcome", "conclusion", "finding",
+    "result", "construction", "invariant", "verification",
+)
+_FAST_CONTEXT_TERMS = ("title", "problem", "name", "description", "goal")
+
+
+def _structured_evidence_index(
+    package: dict[str, Any],
+) -> tuple[list[EvidenceNote], list[dict[str, str]]]:
+    """Build a source-linked, bounded index from existing structured research.
+
+    Unlike field-wise model extraction, this is deterministic and free of
+    provider calls. Select all relevant saved research candidates *before*
+    enforcing the planner bound; record every candidate not carried forward
+    in the omission ledger. The complete frozen package remains archived and
+    an omitted material field never becomes evidence of a positive result.
+    """
+    sources = package.get("sources", [])
+    candidates: list[tuple[int, int, int, EvidenceNote, dict[str, str]]] = []
+    seen: set[tuple[str, str]] = set()
+    sequence = 0
+
+    for source_number, source in enumerate(sources):
+        source_ref = source["id"]
+        kind = source["kind"]
+
+        def visit(value: Any, path: str = "", meaningful: bool = False) -> None:
+            nonlocal sequence
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    name = str(key)
+                    lower = name.casefold()
+                    child_path = f"{path}/{name}" if path else name
+                    important = any(term in lower for term in _FAST_RESEARCH_TERMS)
+                    context = (
+                        kind in {"project", "strategy"}
+                        and lower in _FAST_CONTEXT_TERMS
+                    )
+                    visit(child, child_path, meaningful or important or context)
+                return
+            if isinstance(value, list):
+                for index, child in enumerate(value):
+                    visit(child, f"{path}/{index}", meaningful)
+                return
+            if not meaningful or not isinstance(value, str):
+                return
+            content = " ".join(value.split())
+            if len(content) < 12:
+                return
+            path_lower = path.casefold()
+            negative = any(term in path_lower for term in _FAST_NEGATIVE_TERMS)
+            strong = any(term in path_lower for term in _FAST_STRONG_TERMS)
+            priority = 3 if negative else 2 if strong else 1
+            note_kind: Literal[
+                "result", "method", "negative", "limitation", "question", "context"
+            ] = (
+                "negative" if negative and any(
+                    term in path_lower for term in ("negative", "failed", "failure", "counterexample", "contradict")
+                )
+                else "question" if any(term in path_lower for term in ("obligation", "unresolved", "objection"))
+                else "limitation" if any(term in path_lower for term in ("limitation", "caveat"))
+                else "method" if any(term in path_lower for term in ("method", "experiment", "construction"))
+                else "result" if strong
+                else "context"
+            )
+            if (source_ref, content) in seen:
+                return
+            seen.add((source_ref, content))
+            # Keep long proof and skepticism records as consecutive fragments,
+            # rather than silently truncating a logically significant argument.
+            label = path[-55:]
+            length = FAST_NOTE_TEXT_LENGTH - min(len(label), 55) - 3
+            fragments = [content[i : i + length] for i in range(0, len(content), length)]
+            if len(fragments) > 1 and len(fragments[-1]) < 12:
+                fragments[-2] += fragments.pop()
+            for index, fragment in enumerate(fragments):
+                if len(fragment) > 500:
+                    raise ProjectError("Structured evidence fragment exceeds note safety bound")
+                statement = f"{label}: {fragment}"
+                note = EvidenceNote(
+                    statement=statement, kind=note_kind, evidence_refs=[source_ref]
+                )
+                locator = f"{source_ref}\\0{path}\\0{index}".encode()
+                omission = {
+                    "field_ref": hashlib.sha256(locator).hexdigest(),
+                    "source_ref": source_ref,
+                    "field": path,
+                    "reason": "Structured evidence index capacity reached; original field remains archived.",
+                }
+                candidates.append((priority, source_number, sequence, note, omission))
+                sequence += 1
+
+        visit(source.get("data", {}))
+
+    if not candidates:
+        return [], []
+    # Prioritize failures and skeptical analysis, but rotate between sources
+    # within each priority band. This avoids one verbose session consuming the
+    # entire index before other sessions contribute their evidence.
+    queues: dict[tuple[int, int], list[tuple[EvidenceNote, dict[str, str]]]] = {}
+    for priority, source_number, _index, note, omission in candidates:
+        queues.setdefault((priority, source_number), []).append((note, omission))
+    ordered: list[tuple[EvidenceNote, dict[str, str]]] = []
+    for priority in (3, 2, 1):
+        source_numbers = sorted(k[1] for k in queues if k[0] == priority)
+        while any(queues[(priority, number)] for number in source_numbers):
+            for number in source_numbers:
+                if queues[(priority, number)]:
+                    ordered.append(queues[(priority, number)].pop(0))
+
+    accepted: list[EvidenceNote] = []
+    omitted: list[dict[str, str]] = []
+    for note, omission in ordered:
+        trial = [*accepted, note]
+        # Leave headroom for the project header and plan input envelope.
+        if len(_json([item.model_dump() for item in trial])) <= FAST_INDEX_MAX_BYTES:
+            accepted.append(note)
+        else:
+            omitted.append(omission)
+    return accepted, omitted
+
+
 def _long_plan_input(
     project_data: Mapping[str, Any],
     evidence_index: list[dict[str, Any]],
