@@ -1338,6 +1338,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [legacyCheckpoint, setLegacyCheckpoint] = useState<any>(null);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
+  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
@@ -1368,7 +1369,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setContinuationAvailable(false); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -1377,11 +1378,13 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         });
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
         const preflight = await preflightResponse.json();
-        setContinuationAvailable(Boolean(
+        const resumable = Boolean(
           preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available &&
           (preflight.completed_batches > 0 || preflight.evidence_indexed || preflight.outline_complete ||
            preflight.completed_sections > 0 || preflight.provider_calls_attempted > 0)
-        ));
+        );
+        setContinuationAvailable(resumable);
+        setResumeDetails(resumable ? preflight : null);
         if (preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
           setCheckpointMismatch(preflight);
         else setCheckpointMismatch(null);
@@ -1451,6 +1454,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setCheckpointMismatch(null);
       setLegacyCheckpoint(null);
       setContinuationAvailable(false);
+      setResumeDetails(null);
       setPaperProgress(null);
       setSuccess(result.evidence_updated_since_preflight
         ? 'Unfinished paper work cleared using the latest research evidence. No generation has started. Saved versions remain unchanged; choose Generate to start.'
@@ -1545,6 +1549,8 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       }
     } finally { finishProvider(); request.current = null; setBusy(false); }
   }
+  const planningRetry = continuationAvailable && resumeDetails !== null &&
+    !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available;
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
@@ -1554,16 +1560,22 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint">Paper planning and section writing use this project's selected AI model and Thinking level. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
       <p className="settings-hint ai-paper-model">Project AI model: <strong>{model || 'Loading…'}</strong> · Thinking level: <strong>{effort || 'Loading…'}</strong></p>
       {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
-        <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
-        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
+        <p>The research or AI settings changed since this unfinished paper was started, so SIGMA cannot safely continue it. To make a paper from the current research, clear the outdated unfinished work, then choose Generate. Previously saved paper versions and provider-call accounting are retained. Clearing does not call AI; Generate may use allowance.</p>
+        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Clear outdated paper work</button>
       </div>}
       {legacyCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Switch paper generation to fast pipeline">
-        <p>This unfinished paper uses the older batch-by-batch extractor. You can continue that attempt, or start fresh using faster structured evidence preparation. Switching clears unfinished paper work but preserves your saved papers and previous provider-call accounting.</p>
+        <p>This unfinished paper uses the older batch-by-batch extractor. You can continue that attempt, or start fresh using faster structured evidence preparation. Switching clears unfinished paper work but preserves saved papers and previous provider-call accounting.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start fresh with fast generation</button>
       </div>}
-      <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{continuationAvailable ? 'Continue' : 'Generate'}</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
+      <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
+      {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningRetry
+        ? 'The last planning response did not produce a saved outline. Research evidence preparation was retained. Retry paper planning makes a new AI request and may consume provider allowance; it does not replay completed evidence preparation.'
+        : resumeDetails?.draft_recovery_available
+          ? 'The completed paper draft is saved. Continue paper will retry PDF compilation without repeating AI authoring.'
+          : `SIGMA will reuse the completed outline and ${resumeDetails?.completed_sections ?? 0} saved section(s). Unfinished sections require AI calls and may consume provider allowance.`
+      }</p>}
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Still working — SIGMA is responding. The AI provider has not finished this stage; its intermediate reasoning progress is unknown.' : 'Waiting for another SIGMA status update. Intermediate AI reasoning progress is not available.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{continuationAvailable ? 'Saved work is available. Choose Continue to resume without repeating completed stages.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Still working — SIGMA is responding. The AI provider has not finished this stage; its intermediate reasoning progress is unknown.' : 'Waiting for another SIGMA status update. Intermediate AI reasoning progress is not available.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningRetry ? 'Saved evidence preparation can be reused; the failed planning request must be made again and may use allowance.' : continuationAvailable ? 'Completed paper stages are saved. Continue paper to finish the remaining stages; new AI calls may use allowance.' : checkpointMismatch ? 'The previous attempt cannot resume with the current research or AI settings. Clear outdated paper work, then Generate.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
