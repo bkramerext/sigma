@@ -27,6 +27,7 @@ from sigma import (
     papers,
     python_sandbox,
     research_sessions,
+    session_log,
 )
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
@@ -645,6 +646,30 @@ async def research_session_view(session_id: str, path: str):
     if not (principal and principal.role == "guest"):
         await research_sessions.ensure_queued_workers(path)
     return research_sessions.get_session(path, session_id)
+
+
+@app.get("/api/projects/research-sessions/{session_id}/log")
+def research_session_log_view(session_id: str, path: str, after: int = 0):
+    try:
+        return session_log.read(path, session_id, max(0, after))
+    except (ProjectError, ValueError, OSError) as exc:
+        raise HTTPException(404, "Session log not found or access denied.") from exc
+
+
+@app.get("/api/projects/research-sessions/{session_id}/log/download")
+def research_session_log_download_view(session_id: str, path: str):
+    try:
+        result = session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
+        body = session_log.markdown_export(
+            result["events"], result["session"], result["project_title"]
+        )
+        return Response(
+            body,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="session-{session_id}.md"'},
+        )
+    except (ProjectError, ValueError, OSError) as exc:
+        raise HTTPException(404, "Session log not found or access denied.") from exc
 
 
 class MockResearchStartRequest(OpenRequest):
@@ -1284,6 +1309,9 @@ async def delete_project_view(body: DeleteProjectRequest):
             if view.project.id != body.expected_project_id:
                 raise ProjectError("Project changed; refresh before deleting it")
             await research_sessions.stop_project_sessions(str(authorized))
+            await asyncio.to_thread(
+                session_log.delete_project, body.expected_project_id, authorized
+            )
             if authorized.suffix == ".json":
                 authorized.unlink()
             elif authorized.suffix == ".sigma" and authorized.is_dir():

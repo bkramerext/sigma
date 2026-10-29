@@ -990,7 +990,7 @@ with sync_playwright() as playwright:
         or remove_box["y"] + remove_box["height"] <= resume_box["y"]
     ), (resume_box, remove_box)
     actions_box.get_by_role("button", name="Resume", exact=True).hover()
-    expect(page.get_by_role("tooltip")).to_have_text("Resume Session 2")
+    expect(page.get_by_role("tooltip")).to_have_text("Resume session #2")
     pause_row.locator(".session-row-heading").screenshot(
         path="/tmp/sigma-a177-after-session-stopped-actions-mobile.png"
     )

@@ -572,6 +572,28 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert finished["backend_build_commit"] == "a" * 40
     assert all(step["backend_build_commit"] == "a" * 40 for step in finished["steps"])
     assert finished["status"] == "ended" and finished["calls_used"] == 6
+    from sigma import session_log
+
+    session_log.flush()
+    from sigma.session_log import _frames as read_session_log_frames
+    from sigma.session_log import log_path as session_log_path
+
+    trace, _ = read_session_log_frames(session_log_path(str(path), view.project.id, finished["id"]))
+    requests = {
+        event["request_id"]: event for event in trace if event["type"] == "provider_request"
+    }
+    responses = {
+        event["request_id"]: event for event in trace if event["type"] == "provider_response"
+    }
+    assert len(requests) == len(responses) == 6
+    assert set(requests) == set(responses)
+    assert [requests[key]["request"] for key in requests] == submitted_payloads
+    assert all(event["response"]["status"] == "completed" for event in responses.values())
+    saved_name = session_log._short_name(path, view.project.id)
+    # The fixture claim does not mention the project subject, so it must not
+    # produce a misleading label from generic result wording.
+    assert saved_name == "Research Project"
+    assert "fixture-token" not in json.dumps(trace)
     assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
     assert [
         step["provider_input_audit"]["request_body"] for step in finished["steps"]
@@ -605,6 +627,7 @@ async def test_three_cycles_and_idempotency(path: Path):
     exported = export_project_view(str(path))
     exported_session = exported["research_sessions"][0]
     assert exported["export_version"] == 2
+    assert "session_log" not in json.dumps(exported)
     assert exported_session["strategy_text"] == strategy.approach
     assert exported_session["problem"] == view.project.problem
     assert exported_session["backend_build_commit"] == "a" * 40
@@ -4735,6 +4758,21 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
         in {item["id"] for item in finished["artifacts"]}
         for artifact in finished["artifacts"]
         if artifact["strategy_cycle"] == 2
+    )
+    from sigma.session_log import _frames as read_session_log_frames
+    from sigma.session_log import log_path as session_log_path
+
+    trace, _ = read_session_log_frames(session_log_path(str(path), view.project.id, finished["id"]))
+    assert any(event["type"] == "cross_strategy_artifact_availability" for event in trace)
+    peer_requests = [
+        event
+        for event in trace
+        if event["type"] == "provider_request" and event.get("peer_evidence_available")
+    ]
+    assert peer_requests
+    assert all(
+        event["peer_evidence_available"] == event["peer_evidence_in_actual_request"]
+        for event in peer_requests
     )
     decision = finished["portfolio_decision"]
     assert len(decision["strategy_actions"]) == 2

@@ -8048,3 +8048,52 @@ and follows a deterministic OAuth redirect fixture. `./sigma test`, frontend
 typecheck, `browser_checks/local_auth_real_backend.py`, and
 `browser_checks/guest_samples.py` passed with this update in the worktree. No
 live Google OAuth callback or paid provider call was made.
+## Issue #301 live session log (2026-10-29)
+
+PR #324 review corrections are implemented on `green/issue-301-live-logging`,
+based on `26628d549dbe11aad0c9f612633c08964ae9eb90`. The isolated Markdown log
+store uses UUID-derived project/session directories, one ordered background
+queue per session, framed JSON events, fsync, read-only torn-frame recovery,
+secret redaction, and a 32 MiB session limit. Reads synchronize only on the
+requested session; project cleanup prevents new writes, drains that project's
+queues, waits for readers, then removes the log tree. The provider hook captures
+complete request JSON and returned response wire content, paired by request ID.
+Validated Investigator output supplies a persisted short project phrase only
+when it shares a contiguous subject phrase with the title/problem; otherwise the
+window uses a deterministic title-derived display fallback. This uses no extra
+provider request and does not change research validation.
+
+Focused storage, active-session log deletion, provider-capture, authorization,
+redaction, and concurrency tests passed. Real Chromium passed against both an
+HTTP fixture calling the production storage service and the running SIGMA
+FastAPI routes/store with deterministic project/session events; the latter is
+full frontend/API/storage integration, not a live research/provider run. Delayed
+responses, single-flight polling, duplicate-event defense, download and refresh
+were checked. `./sigma test` passed all steps, including backend suites, Ruff,
+format, Pyright, frontend typecheck and build. The graph-present sandbox case
+skipped because the configured image is unavailable. The in-memory queue may
+lose not-yet-written events on abrupt process kill; already persisted bytes are
+never truncated. No paid provider calls were made. PR #324 remains open and
+Ready for Review; see the issue handoff for final HEAD and exact commands.
+
+## Issue #301 human UI review iteration (2026-10-29)
+
+PR #324 was updated on the existing branch for the human UI review: Log uses a
+normal new tab, controls follow secondary button conventions, Play/Stop targets
+are equal, and off-bottom scrolling offers `Jump to end` without pausing
+polling. Markdown export now presents readable paired request/response events
+alongside collapsed canonical JSON. The append-only on-disk frames retain the
+complete event content; the downloadable presentation summarizes very long raw
+response-wire blobs. The app Markdown renderer handles legacy unclosed display
+math defensively.
+
+`./sigma test` passed all configured steps, including backend checks, Ruff,
+formatting, Pyright, frontend typecheck and build. Real Chromium passed the
+updated UI checks and full local FastAPI/storage integration with deterministic
+events. Actual saved Session 4 events (22 records) and mathematical project
+text were rendered in Chromium: 4 requests, 2 completed pairs, five KaTeX
+formula spans, no KaTeX errors. Native VS Code Markdown Preview visual layout
+was not independently captured and remains unverified. No paid provider calls
+were made. See [the issue handoff](../messages/issue_301_green_r4r.txt) for the
+current SHA, exact evidence, screenshots, and limitations. PR remains open and
+unmerged.
