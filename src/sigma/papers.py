@@ -865,10 +865,18 @@ def _structured_evidence_index(
     for priority, source_number, _index, note, omission in candidates:
         queues.setdefault((priority, source_number), []).append((note, omission))
     ordered: list[tuple[EvidenceNote, dict[str, str]]] = []
-    for priority in (3, 2, 1):
-        source_numbers = sorted(k[1] for k in queues if k[0] == priority)
-        while any(queues[(priority, number)] for number in source_numbers):
-            for number in source_numbers:
+    # Mix skeptical/negative and constructive evidence *before* enforcing the
+    # shared 150 KB planner bound. Selecting every objection first can crowd a
+    # whole proof or experimental result out of the index; selecting positive
+    # results first would hide failures. Both must survive heavy histories.
+    priorities = (3, 2, 3, 2, 1)
+    source_numbers_by_priority = {
+        priority: sorted(number for p, number in queues if p == priority)
+        for priority in (3, 2, 1)
+    }
+    while any(queues.values()):
+        for priority in priorities:
+            for number in source_numbers_by_priority[priority]:
                 if queues[(priority, number)]:
                     ordered.append(queues[(priority, number)].pop(0))
 
