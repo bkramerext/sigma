@@ -2786,9 +2786,7 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 assert reset["provider_calls_attempted"] == 0
                 assert calls == 1  # Starting over makes no provider request.
                 reject = False
-                result = await papers.generate(
-                    str(path), account["identity"], view.project.id
-                )
+                result = await papers.generate(str(path), account["identity"], view.project.id)
                 assert calls == 2
                 record = papers.get_paper(str(path), result["paper_id"])
                 assert record["generation"]["provider_calls_attempted"] == 1
