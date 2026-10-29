@@ -52,8 +52,7 @@ async def sign_in(fixture, account_id=None, error=None, override=None):
 
 
 def reset_connection():
-    connection._cached, connection._identity, connection._known = None, "", set()
-    connection._pending = None
+    connection.clear_cache_for_tests()
 
 
 async def checks(root):

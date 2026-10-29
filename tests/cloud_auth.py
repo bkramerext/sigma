@@ -1826,7 +1826,6 @@ class CloudAuthTests(TestCase):
                     "checked_at": "2026-10-28T00:00:00Z",
                     "ttl_seconds": 60,
                 }
-                openai_connection._cached = result
                 return result
 
             with patch.object(
@@ -2119,7 +2118,6 @@ class CloudAuthTests(TestCase):
                     "checked_at": "2026-10-28T00:00:00Z",
                     "ttl_seconds": 60,
                 }
-                openai_connection._cached = result
                 return result
 
             with patch.object(openai_connection, "_check", AsyncMock(side_effect=checked_catalog)):
@@ -2394,6 +2392,91 @@ class CloudAuthTests(TestCase):
             response.json()["error"],
             "AI provider authorization is unavailable in cloud mode.",
         )
+
+    def test_hosted_default_and_explicit_sponsored_selection_match_provider_routing(self):
+        import asyncio
+
+        from sigma import ai_store, chatgpt_auth, openai_connection
+
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "false",
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "admin@example.org",
+                "SIGMA_CLOUD_CHATGPT_AUTH_HOME": str(Path(self.temp.name) / "hosted-sponsor"),
+            },
+        ):
+            signed_in = self.finish()
+            self.client.cookies.set(
+                cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+            )
+            initial = self.client.get("/api/cloud-auth/status")
+            self.assertEqual(initial.status_code, 200, initial.text)
+            self.assertEqual(initial.json()["account"]["model_access"]["mode"], "sponsored")
+
+            account = {
+                "client_id": "fixture-chatgpt-client",
+                "subject": "hosted-sponsor-subject",
+                "email": "admin@example.org",
+                "issuer": chatgpt_auth.ISSUER,
+                "access_token": "hosted-sponsor-token",
+                "refresh_token": "hosted-sponsor-refresh",
+                "id_token": "hosted-sponsor-id",
+                "token_type": "Bearer",
+                "scopes": list(chatgpt_auth.PLAN_SCOPES),
+                "expires_at": time.time() + 3600,
+            }
+
+            async def save_sponsor():
+                async with ai_store.sponsor_transaction() as state:
+                    state["accounts"] = {"hosted-sponsor": account}
+                    state["active"] = "hosted-sponsor"
+
+            asyncio.run(save_sponsor())
+            provider_keys = []
+
+            async def validated_provider(key, mode):
+                provider_keys.append((key, mode))
+                return openai_connection._CatalogResult(
+                    {"status": "connected", "checked_at": "fixture", "ttl_seconds": 60},
+                    set(),
+                    {},
+                    [],
+                )
+
+            with patch.object(openai_connection, "_check", side_effect=validated_provider):
+                first = self.client.get("/api/ai/connection?refresh=true")
+                self.assertEqual(first.status_code, 200, first.text)
+                self.assertEqual(first.json()["status"], "connected")
+                self.assertEqual(provider_keys[-1], ("hosted-sponsor-token", "chatgpt"))
+
+                personal = self.client.post(
+                    "/api/ai/mode", json={"mode": "personal"}, headers={"Origin": ORIGIN}
+                )
+                self.assertEqual(personal.status_code, 200, personal.text)
+                self.assertEqual(personal.json()["status"], "unavailable")
+                self.assertEqual(
+                    self.client.get("/api/cloud-auth/status").json()["account"]["model_access"][
+                        "mode"
+                    ],
+                    "personal",
+                )
+                self.assertEqual(
+                    len(provider_keys), 1, "personal mode must not borrow sponsor credentials"
+                )
+
+                sponsored = self.client.post(
+                    "/api/ai/mode", json={"mode": "sponsored"}, headers={"Origin": ORIGIN}
+                )
+                self.assertEqual(sponsored.status_code, 200, sponsored.text)
+                self.assertEqual(sponsored.json()["status"], "connected")
+                self.assertEqual(provider_keys[-1], ("hosted-sponsor-token", "chatgpt"))
+                self.assertEqual(
+                    self.client.get("/api/cloud-auth/status").json()["account"]["model_access"][
+                        "mode"
+                    ],
+                    "sponsored",
+                )
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)

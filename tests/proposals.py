@@ -432,10 +432,7 @@ async def check(path):
             assert synthetic_credential not in str(exc)
         else:
             raise AssertionError("Expected synthetic provider credential rejection")
-    openai_connection._identity = ""
-    openai_connection._cached = None
-    openai_connection._known = set()
-    openai_connection._pending = None
+        openai_connection.clear_cache_for_tests()
     with patch("sigma.proposals.httpx.AsyncClient", side_effect=client):
         await proposals.configuration(str(path))
 

@@ -7673,6 +7673,34 @@ and no merge or deployment occurred. This initial validation did not reproduce
 the pill's local-admin click path; see the refined correction below. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
 
+## PR #297 Gate 2 adversarial corrections (2026-10-28)
+
+Provider validation and model-catalog state now live in a bounded cache keyed
+by the credential fingerprint. Same-credential checks coalesce; a different
+credential cannot cancel a pending check or replace its status/catalog. An
+inference failure updates only the matching guarded credential entry. Zero
+member allowance no longer replaces the ChatGPT pill: reload is separate and
+sponsored session admission still rejects zero-budget Play. Hosted personal
+mode is shown as unavailable until the user explicitly selects real sponsored
+mode; forced sponsorship remains enforced by the backend. Getting Started now
+documents the personal pill action and administrator-only sponsor maintenance.
+
+Focused evidence: `tests/model_connection.py` passes independent concurrent
+Z/B catalogs and failures plus same-sponsor coalescing; the hosted API contract
+test verifies default sponsored selection, unavailable personal mode, explicit
+sponsored selection, and actual sponsor credential routing. Chromium against
+the real local API passes N's zero-allowance Play denial while the pill still
+starts personal OAuth. The focused hosted Chromium path passes non-forced
+personal-unavailable/sponsored selection, zero-balance reload separation, and
+forced sponsorship. Full `./sigma test`, Ruff, Pyright, frontend typecheck and
+build pass; the graph-present sandbox remains skipped because its local image
+is unavailable. Live Google/OpenAI OAuth/provider checks, hosted personal OAuth,
+and the seven live play-session scenarios remain unverified/deferred. A broader
+legacy hosted browser script still has an unrelated Invite Me! fixture failure
+after its focused hosted connection checks; that segment is not evidence for
+the ChatGPT connection contract. See
+[`messages/pr297_green_gate2_r4r.md`](../messages/pr297_green_gate2_r4r.md).
+
 ## PR #297 sponsored-member disconnected pill correction (2026-10-28)
 
 The local disconnected sponsor state now distinguishes verified admins from

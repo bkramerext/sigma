@@ -262,7 +262,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const hostedPillLabel = 'Sponsored ChatGPT';
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored';
   const adminSponsored = sponsoredSelected && !!cloudFunding?.sponsorshipUnlimited;
-  const sponsoredPill = !!hosted || (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
+  const hostedPersonalUnavailable = !!hosted && !!cloudFunding?.authorized
+    && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored;
+  const sponsoredPill = hosted
+    ? !!cloudFunding?.authorized && sponsoredSelected
+    : (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
@@ -275,12 +279,16 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = sponsoredPill
+  const visibleLabel = hostedPersonalUnavailable
+    ? 'Personal ChatGPT unavailable'
+    : sponsoredPill
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
     : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
-  const connectionTooltip = connected && !sponsoredPill
+  const connectionTooltip = hostedPersonalUnavailable
+    ? 'Personal ChatGPT is unavailable in hosted SIGMA. Click to use sponsored ChatGPT.'
+    : connected && !sponsoredPill
     ? ai.info?.account_label ? `Connected as ${ai.info.account_label}.` : 'ChatGPT connected.'
     : undefined;
   const globalRemaining = cloudFunding?.budget?.global_remaining_usd;
@@ -355,16 +363,17 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // The connection error is shown beside the pill by the AI provider state.
     }
   }
-  if (sponsoredPill && !adminSponsored && cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0) {
-    return zeroAllowanceAction ?? null;
-  }
-  return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
-    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} title={sponsoredPill ? sponsorTooltip : connectionTooltip} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+  const zeroAllowance = sponsoredPill && !adminSponsored && cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0;
+  return <>
+  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
+    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} title={sponsoredPill ? sponsorTooltip : connectionTooltip} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" title="Click to show sponsorship details." aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip="Click to show sponsorship details." onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>
     {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>}
     {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}
     {cloudFunding?.connectionError && <p className="connection-pill-message" role="alert">{cloudFunding.connectionError}</p>}
-  </details>;
+  </details>
+  {zeroAllowance && zeroAllowanceAction}
+  </>;
 }

@@ -54,7 +54,7 @@ async def _validate(
     }
 
 
-async def _check(key: str, mode: str = "api_key") -> dict:
+async def _check(key: str, mode: str = "api_key") -> openai_connection._CatalogResult:
     # The token value is a test sentinel only. Log routing, never credentials.
     import asyncio
     import os
@@ -69,10 +69,9 @@ async def _check(key: str, mode: str = "api_key") -> dict:
         "checked_at": datetime.now(UTC).isoformat(),
         "ttl_seconds": 3600,
     }
-    openai_connection._cached = result
-    openai_connection._at = time.monotonic()
-    openai_connection._known = set(openai_connection.CATALOG)
-    return result
+    return openai_connection._CatalogResult(
+        result, set(openai_connection.CATALOG), {}, list(openai_connection.CATALOG)
+    )
 
 
 chatgpt_auth.discovery = _discovery

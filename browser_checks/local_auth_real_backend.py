@@ -139,6 +139,10 @@ def main() -> None:
         auth_db.mkdir(mode=0o700)
         credential_home = root / "credentials"
         credential_home.mkdir(mode=0o700)
+        project_home = root / "projects"
+        project_home.mkdir(mode=0o700)
+        workspace_home = root / "workspaces"
+        workspace_home.mkdir(mode=0o700)
         audit = root / "provider-audit.log"
         audit.touch(mode=0o600)
         env = os.environ.copy()
@@ -149,6 +153,8 @@ def main() -> None:
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": origin,
                 "SIGMA_CLOUD_AUTH_HOME": str(auth_db),
                 "SIGMA_AUTH_HOME": str(credential_home),
+                "SIGMA_PROJECTS_ROOT": str(project_home),
+                "SIGMA_CLOUD_WORKSPACES_ROOT": str(workspace_home),
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": Z,
                 "GOOGLE_OIDC_CLIENT_ID": "fixture-google-client",
                 "GOOGLE_OIDC_CLIENT_SECRET": "fixture-google-secret",
@@ -416,9 +422,91 @@ def main() -> None:
                 details_text = page.locator("#sponsored-allowance-tooltip").inner_text()
                 assert Z not in details_text
                 assert not requests, requests
+                from sigma import cloud_research, cloud_workspaces
+
+                workspace = cloud_workspaces.workspace_for_subject("google-subject-n")
+                assert workspace is not None
+                now = cloud_research._now()
+                session_id, idempotency = "fixture-zero-allowance-session", secrets.token_hex(16)
+                with cloud_research._connect() as db:
+                    db.execute(
+                        "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at) VALUES(?,?,?,?,'terminal',?,?)",
+                        (
+                            session_id,
+                            workspace.workspace_id,
+                            "fixture-project",
+                            idempotency,
+                            now,
+                            now,
+                        ),
+                    )
+                    db.execute(
+                        "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,0.25,'usage_estimated',0,0,0,?,?)",
+                        (
+                            "fixture-zero-allowance-call",
+                            session_id,
+                            workspace.workspace_id,
+                            now,
+                            now,
+                        ),
+                    )
+                page.reload(wait_until="domcontentloaded")
+                member_pill = page.locator(".api-connection > summary")
+                # The member's exhausted allowance blocks real sponsored Play,
+                # while the Sponsored ChatGPT pill still starts personal OAuth.
+                assert member_pill.get_by_role("status").inner_text() == "Sponsored ChatGPT"
+                expect(member_pill.locator(".sponsored-allowance-inline")).to_have_text(
+                    "0.00", timeout=10000
+                )
+                play_attempt = page.evaluate(
+                    """async () => {
+                      const post = async (url, body) => { const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); return {status:r.status,body:await r.json()}; };
+                      const created = await post('/api/projects/create',{title:'Zero allowance browser regression '+crypto.randomUUID(),problem:'Verify budget admission before sponsored Play.'});
+                      if (created.status !== 201) return {stage:'create',...created};
+                      const path=created.body.path, project=created.body.project;
+                      const strategy = await post('/api/projects/strategies',{path,title:'Check admission',approach:'Attempt the session only after budget admission.'});
+                      if (strategy.status !== 201) return {stage:'strategy',...strategy};
+                      const strategiesResponse=await fetch('/api/projects/strategies?'+new URLSearchParams({path}));
+                      const strategyId=(await strategiesResponse.json()).strategies[0].id;
+                      const [configResponse,limitsResponse]=await Promise.all([
+                        fetch('/api/projects/proposals/config?'+new URLSearchParams({path})),
+                        fetch('/api/projects/research-limits?'+new URLSearchParams({path}))
+                      ]);
+                      const config=await configResponse.json(), limits=await limitsResponse.json();
+                      return await post('/api/projects/research-sessions/start',{
+                        path,strategy_id:strategyId,strategy_ids:[strategyId],
+                        idempotency_key:crypto.randomUUID(),expected_project_id:project.id,
+                        expected_binding:config.binding,expected_limits:limits
+                      });
+                    }"""
+                )
+                assert play_attempt["status"] in {400, 409, 503}, play_attempt
+                assert any(
+                    word in json.dumps(play_attempt).casefold()
+                    for word in ("allowance", "budget", "ceiling")
+                ), play_attempt
+                requests.clear()
+                with page.expect_popup() as member_personal_popup:
+                    member_pill.click(position={"x": 25, "y": 14})
+                member_personal_popup.value.wait_for_timeout(100)
+                expect(member_pill.get_by_role("status")).to_have_text(
+                    "Disconnect from ChatGPT", timeout=15000
+                )
+                assert ("POST", "/api/ai/auth/begin") in requests, requests
+                assert not any(path == "/api/ai/sponsor-auth/begin" for _, path in requests), (
+                    requests
+                )
+                assert (
+                    "0.00" not in member_pill.inner_text()
+                    and "Unlimited" not in member_pill.inner_text()
+                )
+                selected_member = page.evaluate(
+                    "async () => (await (await fetch('/api/cloud-auth/status')).json()).account.model_access.mode"
+                )
+                assert selected_member == "personal", selected_member
                 browser.close()
             print(
-                "PASS local Chromium ↔ real SIGMA API: same-email personal/sponsor OAuth, persistence, server restart, and member identity redaction"
+                "PASS local Chromium ↔ real SIGMA API: same-email personal/sponsor OAuth, persistence, server restart, member privacy, zero-budget Play denial, and personal authorization"
             )
         finally:
             if api is not None and api.poll() is None:

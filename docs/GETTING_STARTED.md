@@ -13,10 +13,9 @@ On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.
 
 Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop SIGMA with **Ctrl+C**, or use `./sigma shutdown` from another terminal. Running `./sigma start` again replaces a verified local instance; unrelated services using the ports are left alone.
 
-To preview sponsored mode locally for the Google account you sign in with, run
-`./sigma start --sponsored`. For eligible accounts, the pill shows the
-remaining allowance from the local sponsored ledger and forces sponsored
-provider selection. Sponsored inference uses SIGMA's designated
+For an eligible Google account, normal `./sigma start` sign-in selects
+sponsored mode by default. The pill shows the remaining allowance from the
+local sponsored ledger. Sponsored inference uses SIGMA's designated
 `zetacontinuation@gmail.com` ChatGPT account, never the signed-in member's
 ChatGPT session. For local use, SIGMA reads that account from the private
 `SIGMA_AUTH_HOME` store and pins it to the designated sponsor email. Local
@@ -46,7 +45,7 @@ is explicitly selected**. For example, after approving a $5 *cumulative*
 local ceiling:
 
 ```sh
-SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=5.00 ./sigma start --sponsored
+SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=5.00 ./sigma start
 ```
 
 The ledger is never reset by changing these settings. A production-hosted
@@ -61,7 +60,7 @@ SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
 ```bash
 SIGMA_CLOUD_INFERENCE_PROVIDER=api_key
 SIGMA_CLOUD_OPENAI_API_KEY_FILE=/absolute/path/to/sigma-sponsored-api-key
-./sigma start --sponsored
+./sigma start
 ```
 
 The key file must contain the sponsored project's API key. A direct
@@ -93,18 +92,20 @@ fixed failure categories. Endpoint-specific `sponsor_sessions_api`,
 record failed project requests, including whether the error body was unusually
 large. No prompt, response, provider message, identity, or credential is
 written to this log.
-`credential_missing` means the server has no usable sponsor session. The
-eligible local member can click the sponsored pill to start the pinned sponsor
-reconnect flow and complete ChatGPT sign-in as `zetacontinuation@gmail.com`;
-local administrators can also start it from **Admin Settings**. The OAuth flow
-is bound to SIGMA's saved sponsor account, and an eligible member cannot access
-admin settings. The same log records
+`credential_missing` means the server has no usable sponsor session. Only a
+verified local administrator can renew the shared sponsor credential through
+the admin-only `/api/ai/sponsor-auth/begin` maintenance flow. The member-facing
+Sponsored ChatGPT pill never starts that flow. A sponsored member is not asked
+to authorize or reconnect the sponsor account. The OAuth flow is bound to
+SIGMA's saved sponsor account. The same log records
 `sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
 the operator can tell whether renewal completed. A member's Google sign-in
-alone does not renew the server's sponsor credential. A failed or temporarily
-unavailable personal ChatGPT connection stays in personal mode and does not
-spend the sponsored allowance. Click **ChatGPT connected** to intentionally
-return to sponsorship after a successful personal connection.
+alone does not renew the server's sponsor credential. Clicking **Sponsored
+ChatGPT** starts authorization for the user's own personal ChatGPT account.
+After connection, the pill reads **Disconnect from ChatGPT**; disconnecting
+returns to sponsored mode without changing shared sponsor credentials. If
+personal authorization fails or is cancelled, **Connect to ChatGPT** remains
+available and the selected funding mode is preserved.
 
 To test with mock identities and controls, use `./sigma start --mock-auth`.
 The mock member's $25 allowance is simulated. For its sponsored presentation,

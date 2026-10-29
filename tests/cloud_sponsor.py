@@ -202,7 +202,6 @@ class SponsorTests(IsolatedAsyncioTestCase):
                     "checked_at": "2026-10-28T00:00:00Z",
                     "ttl_seconds": 60,
                 }
-                openai_connection._cached = result
                 return result
 
             with patch.object(
@@ -466,8 +465,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
                 },
             )
 
-        openai_connection._identity = ""
-        openai_connection._cached = None
+        openai_connection.clear_cache_for_tests()
         with patch.object(
             openai_connection.httpx,
             "AsyncClient",
