@@ -8122,3 +8122,11 @@ Verification: focused bearer-cookie auth test and full `tests/cloud_auth.py`
 `tests/make_sample.py`, `tests/test_sample_copies.py` (9 tests), Ruff,
 formatting, Pyright, and sample import smoke all passed. No ONP rerun, live
 provider call, or external AI generation was performed.
+
+The next GitHub Actions run found two regressions because the funding-recovery
+fixture opened the now evidence-bearing ONP sample and treated its historical
+obligations as a fresh project. The fixture now removes saved session records
+only from its disposable copy before starting the isolated funding scenario;
+the catalog sample and its saved evidence remain intact. Both
+`tests/cloud_research.py` and the nested persistent-storage integration in
+`tests/storage.py` pass locally with deterministic provider fixtures.
