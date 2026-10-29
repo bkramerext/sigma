@@ -254,3 +254,65 @@ recovery-browser CI failure. T249 integrated verification run `40811468856`
 remained in progress at the final check snapshot (sandbox image build step), so
 its final result is **UNVERIFIED**. The locally executed `./sigma test` and
 focused deterministic Chrome lifecycle both passed.
+
+## Reconciliation and adversarial review follow-up
+
+### Reconciliation with current main
+
+- Fetched `origin/main` at `4cff1e544bc30f14096073ee6c7440c45bb5e499` (T314,
+  Blue Markdown work) and merged it into this branch without overwriting its
+  files. Blue's renderer, fixtures, browser checks, ticket, and evidence remain
+  in the merged tree. Current branch includes the T314 changes.
+- Merge base before reconciliation: `6ecc0df23127f4f1f920943331ff43afcc399682`.
+  The reconciled base/main SHA is `4cff1e544bc30f14096073ee6c7440c45bb5e499`.
+
+### Deterministic Chrome scope and security limits
+
+The Maximum Regions acceptance runs the scripted four-turn role sequence and
+checks application persistence, report generation, and fixture-simulated usage
+and cost reconciliation. Provider outputs and token counts are predetermined.
+It is evidence for deterministic UI/backend orchestration and persistence; it
+is not evidence of live model quality, real provider usage, or real provider
+cost. The acceptance launches Chrome with `--disable-web-security` and routes
+`/api` calls from the UI origin to the separate local fixture origin. Therefore
+it does not verify normal same-origin behavior, CORS enforcement, or browser
+security boundaries. No production-origin acceptance is claimed.
+
+### 8 MB response bound risk statement
+
+The per-response body and completed-stream limit remains finite at 8,000,000
+bytes. The oversized-response regression still accepts a 1,010,000-byte
+successful response and rejects a response/stream that crosses the 8 MB bound.
+No evidence from a live provider establishes that 8 MB payloads are needed; live
+payload size, parsing peak memory, and production concurrency memory impact
+remain **UNVERIFIED**. The bound applies to each response. Local portfolio
+execution can have three provider calls in flight, so raw response buffers can
+approach 24 MB in aggregate before JSON/SSE parsing and object allocations;
+this is not a total process-memory ceiling. Hosted sponsored execution serializes
+provider concurrency to one. Keep the bound finite and do not increase it absent
+measured provider evidence.
+
+### T201 pointer interception correction
+
+On the reconciled code, the T201 guest-sample workflow reproduced the Cancel
+click failure. The header-controls grid's transparent box covered part of the
+workspace hit-test region, even after the status span itself was made
+pointer-transparent. The project header control container now passes pointer
+events through its empty grid area while explicit interactive controls retain
+pointer events. This is a narrow functional hit-test correction; it does not
+change labels, layout, authentication, or other workstream behavior.
+`browser_checks/guest_samples.py` then passed in real Chrome locally (68
+transient guest workspaces observed). The complete GitHub T201 workflow on the
+final pushed HEAD is the acceptance gate and remains to be observed after push.
+
+### Final reconciliation disposition
+
+- **MET:** issue #306 terminology, defaults, validation, currency normalization,
+  fair shared-turn scheduling, pending-Skeptic final-turn dispatch, explicit
+  deferred outcomes, 8 MB finite transport cap and oversized regression; local
+  deterministic happy-path lifecycle; and targeted T201 pointer hit-test fix.
+- **UNMET:** none in local execution after the targeted T201 browser correction.
+- **UNVERIFIED:** terminal T201/T249 GitHub results on the final reconciled
+  branch, live provider-backed Play session, live provider response sizes and
+  memory behavior, live model quality, actual provider usage/cost, and normal
+  same-origin/CORS behavior of the deterministic Chrome harness.

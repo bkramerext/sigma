@@ -7747,3 +7747,26 @@ Python sandbox image is unavailable. The deterministic two-round Maximum
 Regions Chrome test also passed. No live provider calls were made.
 
 GitHub Actions snapshot for correction implementation `a651a96622340e4a4c8cd9aa66fa5ca839cfa7ee`: SIGMA verification, Research Outcome, T92, and T200 succeeded; T201 recovery run `40811468962` failed again in its browser recovery exercise; T249 run `40811468856` was still running the sandbox image build at the last observation (**UNVERIFIED**). Local `./sigma test` and the two-round deterministic Chrome lifecycle passed. No paid provider calls were made.
+
+## PR #317 reconciliation and T201 correction (2026-10-28)
+
+Merged current `origin/main` at `4cff1e544bc30f14096073ee6c7440c45bb5e499`,
+preserving the T314 Markdown renderer, browser checks, ticket and evidence.
+The T201 guest-sample Cancel obstruction reproduced locally on the merged tree.
+A narrow workspace-header hit-testing fix lets the empty grid area pass pointer
+events through while retaining events on interactive controls. Real Chrome
+`browser_checks/guest_samples.py` passed after the fix (68 transient guest
+workspaces observed).
+
+The Maximum Regions four-turn deterministic Chrome test verifies scripted
+orchestration, storage, report and simulated usage/cost reconciliation only.
+It launches Chrome with `--disable-web-security` and routes API calls to a
+separate fixture origin; it is not normal same-origin/CORS or browser-security
+acceptance, and does not test live model quality, actual provider usage, or real
+provider cost. The research response limit remains a finite 8,000,000 bytes.
+The retained oversized-response regression accepts a 1,010,000-byte response
+and rejects payloads/streams above 8 MB. Production payload sizes, parsing peak
+memory, and live provider behavior remain **UNVERIFIED**. Local portfolio
+execution can buffer three 8 MB responses concurrently (24 MB raw bodies in
+theoretical aggregate, excluding parser/object overhead); hosted execution
+serializes calls. This is not a total process-memory ceiling.
