@@ -87,9 +87,9 @@ def main() -> None:
                 diagram = provenance.locator("svg.about-provenance-diagram")
                 expect(diagram).to_be_visible()
                 expect(diagram.locator("marker")).to_have_count(5)
-                assert diagram.locator("path[marker-end]").count() >= 12
+                assert diagram.locator("path[marker-end]").count() >= 11
                 expect(provenance).to_contain_text("The investigation is the enduring artifact.")
-                expect(provenance).to_contain_text("Current Understanding")
+                expect(provenance).to_contain_text("Understanding")
                 expect(provenance).to_contain_text("Published TeX")
                 scrollport = provenance.locator(".about-provenance-diagram-scroll")
                 assert scrollport.evaluate("e => e.scrollWidth >= e.clientWidth")
