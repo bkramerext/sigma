@@ -1,3 +1,58 @@
+## Issue #310 — cancellation-aware session removal (2026-10-28)
+
+Removing a queued, running, or paused research session now requests execution
+cancellation and awaits the owning task's cleanup before deleting its saved
+record. The session remains counted as active until the task exits, so another
+session cannot reuse its project slot during cancellation. The delete action is
+available from every session row and asks for confirmation that active work and
+its saved artifacts will be removed. A project-wide stop helper gives project
+deletion code a way to stop and await all active sessions before removing data.
+
+Regression scenarios cover removal while the provider call is in flight,
+removal racing with normal completion, slot reuse after cancellation, and
+stopping all active sessions before deleting the project directory. `./sigma
+test` passed for the final implementation, including Ruff, formatting, Pyright,
+frontend typecheck, and production build; the build reports the existing large
+main JavaScript chunk advisory. The focused research-session suite and targeted
+Ruff/Pyright/frontend typecheck also passed. Real Chrome on an isolated local
+fixture verified a queued simulated session's stop-and-remove confirmation,
+successful DELETE, removed row, and absent backend record. Active execution
+cancellation was verified through deterministic service regressions. No live
+or paid provider calls were made.
+
+The branch merged `origin/main` at `dc3d2574` before this follow-up; semantic
+integration was verified with the full suite and browser acceptance below.
+
+## Issue #310 — Authoritative execution slots and project deletion (2026-10-29)
+
+Hosted concurrency admission now names the session IDs occupying project
+slots. Startup reconciliation inspects prior-process queued, running, and
+stopping reservations under the project admission lock; a per-session OS worker
+lock preserves legitimate slow work, while a missing worker recovers the saved
+session and marks dispatched calls' completion unknown without removing spend
+history. Terminal saved sessions repair stale running ledger rows, covering the
+reported invisible-occupant failure. Completed task objects no longer prevent
+recovery.
+
+`DELETE /api/projects` validates project identity and workspace/root ownership,
+takes the project lock used for admission, stops and awaits active sessions,
+removes directory or JSON-bundle project data, and forgets the recent entry.
+Cancellation reaches the worker cleanup `finally` block before project
+removal. The endpoint retains hosted call/spend ledger history. Regression
+coverage includes deterministic invisible-slot recovery after a provider
+disconnect, concurrent admission with visible occupants, slow-worker lock
+preservation, abandoned running worker recovery, session removal during
+execution, completion races, and the real project-delete endpoint.
+
+Verification: `tests/cloud_research.py`, `tests/research_sessions.py`, and
+`tests/lifecycle.py` passed. `./sigma test` passed in full, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. Real Chrome
+`browser_checks/issue286_concurrent_sessions.py` passed against an isolated
+provider fixture and Vite on port 5174. No paid provider calls were made. The
+suite emitted its existing large frontend chunk advisory; epistemic continuity
+skipped the optional graph-present sandbox case because the local Python
+sandbox image is unavailable.
+
 ## Issue #306 and happy-path reliability (#302) (2026-10-28)
 
 Research limits now say **Research rounds** and **Maximum agent turns**. A round

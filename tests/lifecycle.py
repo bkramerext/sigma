@@ -9,11 +9,13 @@ from unittest.mock import patch
 import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
+from sigma import research_sessions
 from sigma.api import app
 from sigma.projects import (
     STATE,
     ProjectError,
     close_project,
+    create_strategy,
     initialize_project,
     inspect_project,
     list_events,
@@ -43,6 +45,32 @@ def main() -> None:
             assert inspect_project(seed) == first
             assert list_events(seed) == first.project.events
             assert (seed / STATE).read_bytes() == before
+
+        # Exercise the real project deletion route with a queued session. The
+        # deletion endpoint must stop it through stop_project_sessions before
+        # removing the project directory.
+        project_root = root / "projects"
+        project_root.mkdir()
+        project = initialize_project(project_root / "delete-me.sigma", "Delete me", "Fixture")
+        strategy = create_strategy(project.path, "Bounded", "Inspect one case.").project.strategies[
+            0
+        ]
+        session = research_sessions.mock_session(
+            project.path, strategy.id, "7c5e5792-4657-4214-9f85-b9ad4ac759b7", "completed"
+        )
+        with (
+            patch("sigma.projects.projects_root", return_value=project_root),
+            TestClient(app) as client,
+        ):
+            response = client.request(
+                "DELETE",
+                "/api/projects",
+                json={"path": project.path, "expected_project_id": project.project.id},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json() == {"deleted": True, "project_id": project.project.id}
+        assert not Path(project.path).exists()
+        assert session["id"] not in research_sessions._tasks
         assert first.project.title == "Riemann Hypothesis"
         assert [e.sequence for e in first.project.events] == [1]
         print("PASS seed initialization, close/reopen, identity, ordered immutable reads")

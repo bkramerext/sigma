@@ -3230,7 +3230,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _recover(record: dict[str, Any]) -> dict[str, Any]:
-    if record["status"] not in {"queued", "running"} or record["id"] in _tasks:
+    task = _tasks.get(record["id"])
+    if record["status"] not in {"queued", "running"} or (task is not None and not task.done()):
         return record
     # Queued cloud sessions have not crossed a provider-dispatch boundary and
     # can be safely picked up when an owner reconnects. Running calls are never
@@ -3863,22 +3864,57 @@ async def submit_intervention(
         return _public(record)
 
 
-def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict[str, Any]:
-    """Delete one confirmed terminal session; leave the monotonic sequence intact."""
+async def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict[str, Any]:
+    """Stop and delete one confirmed session; leave the monotonic sequence intact."""
     try:
         UUID(session_id)
     except ValueError as exc:
         raise ProjectError("Invalid research session identifier") from exc
+
+    # Cancellation is serialized with worker state transitions. Keep the
+    # record present until the worker has observed cancellation and released
+    # its local/cloud execution resources.
+    with _project_manager_lock(path):
+        record = _read(path, session_id)
+        if record.get("updated_at") != expected_updated_at:
+            raise ProjectError("Session changed; refresh its status before removing it")
+        if record.get("status") == "paused":
+            raise ProjectError("Paused sessions must be resumed or stopped before removal")
+        active = record.get("status") in {"queued", "running"}
+    if active:
+        task = _tasks.get(session_id)
+        if task is not None and not task.done():
+            event = _control.get(session_id)
+            if event is not None:
+                event.set()
+            # Keep the persisted status active while the execution owner exits,
+            # so concurrent admission cannot reuse its slot prematurely.
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        stopped = await control_session(path, session_id, "stop")
+        expected_updated_at = stopped["updated_at"]
+    else:
+        task = _tasks.get(session_id)
+        if task is not None and not task.done():
+            await asyncio.gather(task, return_exceptions=True)
+
+    return _remove_terminal_session(path, session_id, expected_updated_at)
+
+
+def _remove_terminal_session(
+    path: str, session_id: str, expected_updated_at: str
+) -> dict[str, Any]:
+    """Delete a stopped session after its execution owner has exited."""
     with _project_manager_lock(path):
         record = _read(path, session_id)
         if record.get("updated_at") != expected_updated_at:
             raise ProjectError("Session changed; refresh its status before removing it")
         if record.get("status") not in {"completed", "ended", "stopped", "failed"}:
-            raise ProjectError("Only ended, stopped, or failed sessions can be removed")
+            raise ProjectError("Session could not be stopped; its record was retained")
         task = _tasks.get(session_id)
         if task is not None and not task.done():
             raise ProjectError(
-                "Session work is still active; refresh its status before removing it"
+                "Session execution is still releasing resources; its record was retained"
             )
         if project_path(path).suffix == ".json":
             from sigma.project_bundle import delete_file
@@ -3906,6 +3942,31 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
                 "Research session was removed but the directory sync failed; refresh to confirm"
             ) from exc
     return {"removed": True, "id": session_id, "session_number": number}
+
+
+async def stop_project_sessions(path: str) -> list[str]:
+    """Stop every active execution before a caller removes project data."""
+    stopped: list[str] = []
+    for record in _all(path):
+        if record.get("status") not in {"queued", "running", "paused"}:
+            continue
+        session_id = record["id"]
+        await control_session(path, session_id, "stop")
+        task = _tasks.get(session_id)
+        if task is not None and not task.done():
+            event = _control.get(session_id)
+            if event is not None:
+                event.set()
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        # A worker may have completed between the snapshot and stop request.
+        # Re-read after its execution owner exits so callers only proceed when
+        # the persisted state is terminal and no worker can write again.
+        final = _read(path, session_id)
+        if final.get("status") not in {"stopped", "completed", "ended", "failed"}:
+            await control_session(path, session_id, "stop")
+        stopped.append(session_id)
+    return stopped
 
 
 def _snapshot(path: str) -> tuple[Any, str]:
@@ -4325,8 +4386,12 @@ async def start_session(
             active = [_recover(r) for r in records]
             active = [r for r in active if r["status"] in {"queued", "running"}]
             if len(active) >= limits["max_concurrent_sessions"]:
+                occupants = ", ".join(
+                    f"#{item.get('session_number')} ({item['id']})" for item in active
+                )
                 raise ProjectError(
-                    f"This project already has {len(active)} active research session(s), its maximum concurrent sessions limit. Stop, resume, or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                    "This project is at its maximum concurrent sessions limit. "
+                    f"Sessions occupying slots: {occupants}. Open Research Sessions to inspect or stop them."
                 )
             credential = await auth_context()
             if credential["identity"] != expected_binding:

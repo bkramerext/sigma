@@ -598,6 +598,7 @@ def prepare_job(record: dict[str, Any]) -> None:
     try:
         with _transaction() as db:
             if session_slot:
+                assert session_limit is not None
                 legacy_rows = db.execute(
                     "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? AND (project_relpath=? OR project_relpath='') AND session_slot=0 AND status IN ('queued','running','stopping') AND session_id<>?",
                     (owner, record["project_id"], project_relpath, record["id"]),
@@ -626,13 +627,15 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "UPDATE jobs SET session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
                             (project_relpath, now, legacy["session_id"], owner),
                         )
-                active_for_project = db.execute(
-                    "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>?",
+                occupants = db.execute(
+                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>? ORDER BY created_at,session_id",
                     (owner, record["project_id"], record["id"]),
-                ).fetchone()[0]
-                if active_for_project >= session_limit:
+                ).fetchall()
+                if len(occupants) >= session_limit:
+                    occupant_ids = ", ".join(row["session_id"] for row in occupants)
                     raise CloudResearchUnavailable(
-                        "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                        "This project is at its maximum concurrent sessions limit. "
+                        f"Sessions occupying slots: {occupant_ids}. Open Research Sessions to inspect or stop them."
                     )
             existing = db.execute(
                 "SELECT * FROM jobs WHERE session_id=? OR (workspace_id=? AND idempotency_key=?)",
@@ -979,7 +982,7 @@ def sync_job(record: dict[str, Any]) -> None:
 
 
 def reconcile_orphaned_jobs() -> list[str]:
-    """Delete prior-process queued rows proven to have no session or call.
+    """Reconcile prior-process queued and running session reservations.
 
     The project admission lock closes the prepare_job/_save crash window. If a
     publisher is still live, recovery waits and observes its session file. Any
@@ -993,7 +996,7 @@ def reconcile_orphaned_jobs() -> list[str]:
     try:
         with _connect() as db:
             candidates = db.execute(
-                "SELECT session_id,project_id,project_relpath FROM jobs WHERE workspace_id=? AND status='queued' AND process_epoch<>?",
+                "SELECT session_id,project_id,project_relpath,status FROM jobs WHERE workspace_id=? AND status IN ('queued','running','stopping') AND process_epoch<>?",
                 (owner, _PROCESS_EPOCH),
             ).fetchall()
     except sqlite3.Error as exc:
@@ -1062,12 +1065,44 @@ def reconcile_orphaned_jobs() -> list[str]:
                     from sigma.project_bundle import read_bundle
 
                     members = read_bundle(str(project))["files"]
-                    if f"research-sessions/{session_id}.json" in members:
-                        continue
+                    has_session = f"research-sessions/{session_id}.json" in members
                 else:
                     session_record = project / "research-sessions" / f"{session_id}.json"
-                    if session_record.exists() or session_record.is_symlink():
-                        continue
+                    has_session = session_record.exists() or session_record.is_symlink()
+                if candidate["status"] in {"running", "stopping"}:
+                    # The per-session OS lock, not elapsed time, distinguishes
+                    # a legitimate slow worker from an abandoned process.
+                    if has_session:
+                        try:
+                            saved = research_sessions._read(str(project), session_id)
+                        except (OSError, ValueError, ProjectError):
+                            continue
+                        research_sessions._recover(saved)
+                        if saved.get("status") == "running":
+                            continue
+                        if saved.get("status") in {"ended", "completed", "failed", "stopped"}:
+                            recovered_state = "terminal"
+                        elif saved.get("status") == "paused":
+                            recovered_state = "paused"
+                        else:
+                            # _recover handles an abandoned running record and
+                            # marks its uncertain calls interrupted. Any other
+                            # ambiguous state remains occupied for inspection.
+                            if saved.get("status") in {"queued", "running"}:
+                                continue
+                            recovered_state = "interrupted"
+                        with _transaction() as db:
+                            db.execute(
+                                "UPDATE jobs SET status=?,updated_at=? WHERE session_id=? AND workspace_id=? AND status IN ('queued','running','stopping')",
+                                (recovered_state, _now(), session_id, owner),
+                            )
+                    else:
+                        # Keep the job and call ledger as spending history;
+                        # recover_job marks uncertain reservations unknown.
+                        recover_job(session_id)
+                    continue
+                if has_session:
+                    continue
                 with _transaction() as db:
                     current = db.execute(
                         "SELECT workspace_id,status,project_id,project_relpath,process_epoch FROM jobs WHERE session_id=?",
