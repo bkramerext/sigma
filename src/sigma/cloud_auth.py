@@ -514,6 +514,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
         except WorkspaceUnavailable as exc:
             raise RuntimeError("Private workspace is unavailable.") from exc
     with _db(cfg) as db:
+        first_member_session = principal.role == "member" and db.execute(
+            "SELECT 1 FROM user_state WHERE subject=?", (principal.subject,)
+        ).fetchone() is None
         sponsorship_eligible = _sponsorship_eligibility_in_db(
             db, cfg, principal.subject, principal.email, principal.role
         )
@@ -529,6 +532,14 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             sponsorship_eligible,
             model_access,
         )
+        if first_member_session:
+            # A local guest session can become a member when an administrator
+            # adds the grant. That path has no new OAuth callback to set the
+            # one-time welcome flag, so initialize it on first member access.
+            db.execute(
+                "UPDATE user_state SET invitation_welcome_pending=1 WHERE subject=? AND role='member'",
+                (principal.subject,),
+            )
         if not sponsored_access_enabled():
             db.execute(
                 "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",

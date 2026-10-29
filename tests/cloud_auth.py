@@ -1808,6 +1808,18 @@ class CloudAuthTests(TestCase):
                 headers={"Origin": local_origin},
             )
             self.assertEqual(approved.status_code, 200, approved.text)
+            # The existing guest session becomes an authorized member without
+            # another OAuth callback. Its first member status read must still
+            # queue the one-time welcome dialog.
+            promoted = guest.get("/api/cloud-auth/status").json()
+            self.assertEqual(
+                promoted["user"], {"email": "new-member@example.org", "role": "member"}
+            )
+            self.assertTrue(promoted["account"]["invitation_welcome_pending"])
+            dismissed = guest.post(
+                "/api/cloud-auth/welcome", headers={"Origin": local_origin}
+            )
+            self.assertEqual(dismissed.status_code, 200, dismissed.text)
             signed_in_again = self.finish(
                 email="new-member@example.org", subject="onboard-member", client=guest
             )
@@ -1815,6 +1827,7 @@ class CloudAuthTests(TestCase):
             guest.cookies.set("sigma_session", signed_in_again.cookies["sigma_session"])
             member = guest.get("/api/cloud-auth/status").json()
             self.assertEqual(member["user"]["role"], "member")
+            self.assertFalse(member["account"]["invitation_welcome_pending"])
             self.assertTrue(member["account"]["sponsorship"]["eligible"])
             self.assertIsNone(member["account"].get("invitation_status"))
             allowance = guest.get("/api/cloud-auth/local-sponsored-allowance")

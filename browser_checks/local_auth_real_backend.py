@@ -971,6 +971,16 @@ def main() -> None:
                 assert approved_status["user"] == {"email": UNINVITED, "role": "member"}, (
                     approved_status
                 )
+                assert approved_status["account"]["invitation_welcome_pending"], (
+                    approved_status
+                )
+                invited_welcome = page.get_by_role("dialog", name="You have been invited!")
+                expect(invited_welcome).to_be_visible()
+                invited_welcome.get_by_role("button", name="Let's get started").click()
+                expect(invited_welcome).to_have_count(0)
+                assert not page.evaluate(
+                    "async () => (await (await fetch('/api/cloud-auth/status')).json()).account.invitation_welcome_pending"
+                )
                 expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
                 login_cookie(Z)
                 page.reload(wait_until="domcontentloaded")
