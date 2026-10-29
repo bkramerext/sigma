@@ -142,8 +142,12 @@ def main() -> None:
                 expect(details).to_be_hidden()
                 expect(details.locator(".about-exploration-space")).to_be_hidden()
                 expect(details.locator(".about-shared-budget")).to_be_hidden()
-                expect(dialog.locator(".about-session-frame > .about-exploration-space")).to_have_count(0)
-                expect(dialog.locator(".about-session-frame > .about-shared-budget")).to_have_count(0)
+                expect(
+                    dialog.locator(".about-session-frame > .about-exploration-space")
+                ).to_have_count(0)
+                expect(dialog.locator(".about-session-frame > .about-shared-budget")).to_have_count(
+                    0
+                )
                 session_toggle.hover()
                 agent_toggle_style = session_toggle.evaluate(
                     "e => ({background: getComputedStyle(e).backgroundImage, text: getComputedStyle(e).color})"
@@ -167,9 +171,7 @@ def main() -> None:
                 expect(session_toggle).to_have_attribute("aria-expanded", "true")
                 expect(session_toggle).to_have_text("Hide")
                 details = dialog.locator("#about-session-details")
-                expect(details.locator(".about-multi-agent-intro")).to_contain_text(
-                    "one strategy"
-                )
+                expect(details.locator(".about-multi-agent-intro")).to_contain_text("one strategy")
                 expect(details.locator(".about-multi-agent-intro")).to_contain_text(
                     "instead of ending after the first answer"
                 )
@@ -202,9 +204,7 @@ def main() -> None:
                 expect(details.locator(".about-round-definition")).to_contain_text(
                     "One research round"
                 )
-                expect(details.locator(".about-round-definition")).to_contain_text(
-                    "One agent turn"
-                )
+                expect(details.locator(".about-round-definition")).to_contain_text("One agent turn")
                 expect(details.locator(".about-agent-instantiation h5")).to_have_text(
                     "One strategy · Three rounds · Six turns"
                 )
@@ -213,9 +213,9 @@ def main() -> None:
                         f"TURN {turn}"
                     )
                 for round_number in range(1, 4):
-                    expect(details.locator(".about-agent-round-heading").nth(round_number - 1)).to_contain_text(
-                        f"Round {round_number}"
-                    )
+                    expect(
+                        details.locator(".about-agent-round-heading").nth(round_number - 1)
+                    ).to_contain_text(f"Round {round_number}")
                 expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
                     "9 possible rounds, or 18 agent turns"
                 )
