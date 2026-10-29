@@ -514,7 +514,10 @@ def _paper_long_form(
     if size > MAX_EASY_ONE_SHOT_CONTEXT_BYTES:
         return True
     sources = package.get("sources", [])
-    project = next((source.get("data", {}) for source in sources if source.get("kind") == "project"), {})
+    project = next(
+        (source.get("data", {}) for source in sources if source.get("kind") == "project"),
+        {},
+    )
     research_sessions = sum(source.get("kind") == "session" for source in sources)
     artifacts = sum(source.get("kind") == "artifact" for source in sources)
     agentic = any(source.get("kind") in {"agentic_run", "agentic_step"} for source in sources)
