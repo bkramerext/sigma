@@ -1076,6 +1076,32 @@ class ProposalRequest(OpenRequest):
     request_id: UUID | None = None
 
 
+@app.post("/api/projects/strategies/infer", status_code=201)
+async def infer_strategy_view(body: ProposalRequest):
+    """One opted-in inference, immediately persisted as an ordinary strategy.
+
+    A failed or duplicate inference never appends to project history.
+    The provider response is bound to the same project evidence and signed
+    receipt as a reviewed Generate draft; no separate acceptance click.
+    """
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    inferred = await generate_proposal(
+        body.path,
+        expected_binding=body.expected_binding,
+        expected_project_id=body.expected_project_id,
+        infer_strategy=True,
+    )
+    draft = inferred["draft"]
+    provenance = accepted_provenance(inferred["receipt"], body.path)
+    return asdict(
+        create_strategy(
+            body.path, draft["title"], draft["approach"], draft["summary"], provenance
+        )
+    )
+
+
 @app.post("/api/projects/strategy-suggestions")
 async def strategy_suggestion_view(body: ProposalRequest):
     await require_cloud_inference_binding(
