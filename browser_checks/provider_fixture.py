@@ -15,12 +15,50 @@ os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
 
-from sigma import proposals, samples
+from sigma import papers, proposals, samples
 from sigma.api import app
 
 # The fixture's project workspace is temporary and private, while sample
 # projects are immutable repository source data that the UI must still list.
 samples.SAMPLES = Path(__file__).resolve().parents[1] / "samples"
+
+# Mutable controls are exposed only by this isolated deterministic fixture.
+# They let browser acceptance exercise recovery states without contacting a
+# provider endpoint or spending an account allowance.
+_paper_failures: dict[str, dict[str, int]] = {}
+_real_provider_structured = papers._provider_structured
+
+
+@app.post("/api/__fixture/paper-failure")
+def set_paper_failure(body: dict[str, object]):
+    schema_name = body.get("schema_name")
+    mode = body.get("mode")
+    count = body.get("count")
+    if (
+        not isinstance(schema_name, str)
+        or schema_name not in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+        or mode not in {"pre_dispatch", "provider_error"}
+        or type(count) is not int
+        or not 0 <= count <= 3
+    ):
+        return {"error": "Invalid deterministic paper-fixture control"}, 400
+    _paper_failures[schema_name] = {"mode": str(mode), "count": count}
+    return {"configured": True}
+
+
+async def fixture_provider_structured(input_value, *args, schema_name: str, **kwargs):
+    control = _paper_failures.get(schema_name)
+    if control and control["count"]:
+        control["count"] -= 1
+        if control["mode"] == "pre_dispatch":
+            raise papers.PaperConnectionFailure(
+                "Deterministic fixture connection failure before provider dispatch"
+            )
+        raise papers.ProjectError("Deterministic fixture provider returned HTTP 500")
+    return await _real_provider_structured(input_value, *args, schema_name=schema_name, **kwargs)
+
+
+papers._provider_structured = fixture_provider_structured
 
 # Optional test-only origin normalization lets real-browser acceptance use a
 # separate Vite port while preserving the local API's production origin guard.
