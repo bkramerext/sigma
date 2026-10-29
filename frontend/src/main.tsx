@@ -1479,7 +1479,8 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     <header className="settings-header"><h2 id="ai-paper-heading">Generate paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
-      <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
+      <p className="settings-hint">SIGMA draws on the entire project’s research history as an evidence base, not a collection of winning and losing sessions. Even an unsuccessful session may contain useful findings, counterexamples, or unresolved questions that strengthen the paper.</p>
+      <p className="settings-hint">Paper generation may take a while, especially for projects with extensive research. Sit tight while SIGMA works.</p>
       <p className="settings-hint">This feature is experimental. The paper is AI-generated and has not been independently verified. Generation uses your selected provider and may consume allowance or incur charges. It does not start a research session.</p>
       <p className="settings-hint ai-paper-model">Selected model: <strong>{model || 'Loading…'}</strong></p>
       {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
