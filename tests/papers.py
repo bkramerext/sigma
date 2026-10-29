@@ -2393,7 +2393,11 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         )
         assert len(mock_calls) == 3
         assert elapsed_seconds < 300
-        compiler_label = "real Tectonic compilation" if tectonic_available else "stub PDF (Tectonic unavailable)"
+        compiler_label = (
+            "real Tectonic compilation"
+            if tectonic_available
+            else "stub PDF (Tectonic unavailable)"
+        )
         print(
             f"PASS mocked five-session Tadpoles paper-to-PDF E2E in {elapsed_seconds:.2f}s "
             f"({compiler_label}; deterministic provider; live <5-minute target remains unverified)."
