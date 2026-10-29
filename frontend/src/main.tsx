@@ -12,6 +12,7 @@ import './text-views.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
+import AboutProvenanceVision from './about-provenance';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // Prospective navigation rail; keep implementation available for later activation.
@@ -2186,6 +2187,10 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <details className="about-disclosure about-architecture-disclosure">
         <summary>How SIGMA Works: Multi-Agentic Research</summary>
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
+      </details>
+      <details className="about-disclosure about-provenance-disclosure">
+        <summary>Vision for Investigation Provenance</summary>
+        <div id="about-provenance-details" className="about-disclosure-content"><AboutProvenanceVision/></div>
       </details>
       {cloud?.enabled && cloud.ready && <FeedbackForm/>}
     </div>
