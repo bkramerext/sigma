@@ -1,3 +1,40 @@
+## T301 — Context-aware mathematical Markdown (2026-10-28)
+
+The existing AI conversion prompt now explicitly distinguishes math from prose
+using sentence meaning and preserves code identifiers, environment variables,
+URLs, paths, dates, versions, currency, escaped delimiters and Markdown
+structure. `RenderedMarkdown` now applies conservative recognition to Markdown
+text nodes, so equations, context-labeled fractions and indexed variables can
+typeset inside paragraphs, emphasis, lists, blockquotes and GFM tables while
+inline code, fences and link labels remain protected. Paired legacy `\(...\)`
+and `\[...\]` delimiters convert safely; unmatched dollars are treated as
+literal text. GFM table parsing uses the existing unified/remark pipeline with
+the small `remark-gfm` plugin; KaTeX remains the renderer.
+
+`tests/text_views.py` passed through the real
+`POST /api/projects/text/convert` route using one deterministic mocked provider
+response. It verifies the prompt, exact stored Markdown and unchanged source
+project bytes. `browser_checks/t301_markdown_math.py` passed against the real
+React Markdown component in Chrome, checking 20 KaTeX spans, GFM table/list
+structure, source-code preservation, identifiers, dates, paths, URLs, currency
+and delimiters. The captured result is
+[markdown-render.png](evaluations/t301/markdown-render.png); the shared output
+fixture and reproduction notes are in [T301 evidence](evaluations/t301/README.md).
+`./sigma test` passed every step, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. Vite emitted its existing advisory for a
+JavaScript chunk above 500 kB. The final run is archived at
+[full-test.txt](evaluations/t301/full-test.txt).
+
+No live or paid provider calls were made. Live AI classification therefore
+remains **UNVERIFIED**. One optional call through the existing text-conversion
+path would evaluate the representative corpus. At the default `gpt-6.1-sol`
+API standard rate ($2/M input and $10/M output tokens), the corpus-sized call is
+expected to be around one cent; the current 8,000 output-token limit puts the
+visible output portion below $0.08, with input under one cent at the 24,000
+character request cap. Actual usage and the active billing path can differ;
+see [current OpenAI API pricing](https://developers.openai.com/api/docs/pricing).
+No math claim is verified by formatting.
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the

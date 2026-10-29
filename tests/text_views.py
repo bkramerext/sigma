@@ -1006,6 +1006,67 @@ async def main_async(root: Path):
         "PASS strategy approach shares the service and ChatGPT-plan preserves the selected billing path"
     )
 
+    # Exercise the real API conversion route with representative mixed prose.
+    # The provider response is deterministic fixture data; no live inference runs.
+    math_path = root / "markdown-math-api.sigma"
+    math_source = (
+        "The probability is 1/2. We obtain f(x) = x^2 + 3x. Einstein's equation "
+        "E = mc^2 relates mass and energy. The sequence has terms a_n = a_(n-1) + d.\n\n"
+        "The value of x_i is stored in MAX_RETRY_COUNT. Keep DATABASE_URL and "
+        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL unchanged. Date 2026/10/28, version v1/2, "
+        "path /var/data/a_b, URL https://example.com/a_b, and price $5 stay literal.\n\n"
+        "| Kind | Value |\n| --- | --- |\n| Probability | 3/4 |\n\n"
+        "Inline `a_n = 2` and fenced identifiers remain literal.\n\n"
+        "```python\nMAX_RETRY_COUNT = 3\n```\n\n"
+        r"Escaped \(x_i\); unmatched $x_i stays text."
+    )
+    math_markdown = (
+        Path("docs/evaluations/t301/markdown-regression-output.md")
+        .read_text(encoding="utf-8")
+        .rstrip()
+    )
+    initialize_project(math_path, "Markdown math pipeline", math_source)
+    math_original = (math_path / "project.json").read_bytes()
+    math_calls = []
+
+    async def math_handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        math_calls.append(context)
+        assert context["text"] == math_source and context["target_format"] == "markdown"
+        assert "UPPER_SNAKE_CASE" in payload["instructions"]
+        assert "sentence meaning supports that reading" in payload["instructions"]
+        return httpx.Response(200, json=provider_output(math_markdown))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(math_handler), **kwargs
+            ),
+        ),
+        TestClient(app) as api,
+    ):
+        math_response = api.post(
+            "/api/projects/text/convert",
+            json={
+                "path": str(math_path),
+                "scope": "project",
+                "target": "markdown",
+                "expected_digest": digest(math_source),
+            },
+        )
+    assert math_response.status_code == 200, math_response.text
+    assert math_response.json()["markdown"]["body"] == math_markdown
+    assert inspect_text(math_path, "project")["markdown"]["body"] == math_markdown
+    assert (math_path / "project.json").read_bytes() == math_original
+    assert len(math_calls) == 1
+    print(
+        "PASS actual Markdown conversion API route with mixed math/prose regression corpus (mock provider)"
+    )
+
     # The actual ASGI endpoint cancels its provider transport on browser disconnect.
     started.clear()
     release.clear()
