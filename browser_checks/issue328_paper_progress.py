@@ -46,6 +46,7 @@ with sync_playwright() as playwright:
     generate.click()
     status = dialog.locator(".ai-paper-progress")
     expect(status).to_contain_text("Writing the paper", timeout=10000)
+    expect(dialog.get_by_role("button", name="Generate", exact=True)).to_have_count(0)
     expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_have_css(
         "text-decoration-line", "underline"
     )
@@ -54,7 +55,7 @@ with sync_playwright() as playwright:
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(status).to_contain_text("Generation cancelled", timeout=10000)
     expect(status).to_contain_text("Writing the paper")
-    generate = dialog.locator(".ai-paper-controls .settings-submit")
+    generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=10000)
     generate.click()
     expect(status).to_contain_text("Writing the paper", timeout=10000)

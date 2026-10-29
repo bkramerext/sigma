@@ -745,6 +745,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "evidence_indexed",
         "one_shot_draft",
         "progress",
+        "explicit_restart_pending",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
@@ -756,6 +757,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
     value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
     value.setdefault("reduction_note_compaction_events", 0)
     value.setdefault("reduction_source_refs_omitted", [])
+    if type(value.get("explicit_restart_pending", False)) is not bool:
+        raise ProjectError("Long-paper checkpoint restart state is invalid")
     value["schema_version"] = 2
     if value["kind"] not in {"long_form", "one_shot"}:
         raise ProjectError("Paper checkpoint kind is invalid")
@@ -1033,6 +1036,52 @@ def _new_work(
     }
 
 
+def _can_rebase_explicit_restart(checkpoint: Mapping[str, Any], project_id: str) -> bool:
+    """Rebind only an explicitly reset checkpoint that has no new research work."""
+    return bool(
+        checkpoint.get("explicit_restart_pending") is True
+        and checkpoint.get("project_id") == project_id
+        and checkpoint.get("provider_calls") == 0
+        and checkpoint.get("one_shot_draft") is None
+        and not checkpoint.get("section_drafts")
+        and checkpoint.get("next_batch") == 0
+        and not checkpoint.get("evidence_indexed")
+        and not checkpoint.get("evidence_notes")
+        and not checkpoint.get("preserved_evidence_notes")
+        and not checkpoint.get("omitted_evidence")
+        and not checkpoint.get("conflict_notes")
+        and not checkpoint.get("plan")
+        and not checkpoint.get("reduction_input")
+        and not checkpoint.get("reduction_output")
+        and checkpoint.get("reduction_next_group", 0) == 0
+    )
+
+
+def _rebase_explicit_restart(
+    checkpoint: Mapping[str, Any],
+    snapshot_sha256: str,
+    project_id: str,
+    binding_fingerprint: str,
+    model: str,
+    reasoning_effort: str,
+    kind: str,
+) -> dict[str, Any]:
+    if not _can_rebase_explicit_restart(checkpoint, project_id):
+        raise ProjectError(
+            "Only an untouched, explicitly restarted paper checkpoint can be rebound"
+        )
+    return _new_work(
+        snapshot_sha256,
+        project_id,
+        binding_fingerprint,
+        model,
+        reasoning_effort,
+        provider_calls_total=int(checkpoint.get("provider_calls_total", 0)),
+        prior_runs=list(checkpoint.get("prior_runs", [])),
+        kind=kind,
+    )
+
+
 async def _restart_work_locked(
     path: str,
     expected_project_id: str,
@@ -1080,6 +1129,7 @@ async def _restart_work_locked(
             else "one_shot"
         ),
     )
+    restarted["explicit_restart_pending"] = True
     _save_work(path, restarted)
     return {
         "provider_calls_attempted": 0,
@@ -2376,9 +2426,22 @@ async def _generate_impl(
             )
         )
         if checkpoint is not None and not compatible:
-            raise ProjectError(
-                "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
-            )
+            if _can_rebase_explicit_restart(checkpoint, view.project.id):
+                checkpoint = _rebase_explicit_restart(
+                    checkpoint,
+                    snapshot_hash,
+                    view.project.id,
+                    binding_fingerprint,
+                    config["model"],
+                    config["reasoning_effort"],
+                    expected_kind,
+                )
+                _save_work(path, checkpoint)
+                work = checkpoint
+            else:
+                raise ProjectError(
+                    "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
+                )
         one_shot_validation_started = False
         if not long_form:
             if checkpoint is not None and checkpoint.get("one_shot_draft") is not None:
@@ -2667,6 +2730,8 @@ def preflight(
         and work_state.get("reasoning_effort") == reasoning_effort
         and (long_form or one_shot_draft_available or work_state.get("provider_calls", 0) == 0)
     )
+    if not resume_available and _can_rebase_explicit_restart(work_state, view.project.id):
+        resume_available = True
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
     )

@@ -6,7 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 import httpx
@@ -547,6 +547,91 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
             }
 
     asyncio.run(check())
+
+
+def test_explicit_restart_checkpoint_migrates_and_rebinds_safely() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "restart.sigma"
+        view = initialize_project(path, "Restarted paper", "A saved evidence question")
+        current_snapshot = papers._snapshot(str(path))[1]
+        prior_runs = [
+            {
+                "provider_calls_attempted": 5,
+                "snapshot_sha256": "a" * 64,
+                "model": "old-model",
+                "reset_at": "2026-10-29T00:00:00+00:00",
+            }
+        ]
+        checkpoint = papers._new_work(
+            "b" * 64,
+            view.project.id,
+            "c" * 64,
+            "old-model",
+            "low",
+            provider_calls_total=5,
+            prior_runs=prior_runs,
+        )
+        checkpoint["explicit_restart_pending"] = True
+        papers._save_work(str(path), checkpoint)
+        loaded = papers._load_work(str(path))
+        assert loaded is not None and loaded["explicit_restart_pending"] is True
+
+        credential = {"identity": "fixture-credential", "mode": "api_key", "token": "unused"}
+        config = {
+            "available": True,
+            "model": "gpt-fixture",
+            "reasoning_effort": "high",
+        }
+        preview = papers.preflight(
+            str(path),
+            force_long_form=True,
+            expected_project_id=view.project.id,
+            expected_binding=credential["identity"],
+            mode=credential["mode"],
+            model=config["model"],
+            reasoning_effort=config["reasoning_effort"],
+        )
+        assert preview["resume_available"] is True
+        assert preview["provider_calls_attempted"] == 0
+        assert preview["provider_calls_previous_runs"] == 5
+
+        rebound: dict[str, Any] = {}
+
+        async def fake_long_draft(_package, _binding, _config, state, _save_state, *args, **kwargs):
+            rebound.update(state)
+            return draft(f"project:{view.project.id}"), 0, 0
+
+        async def current_credential():
+            return credential
+
+        async def current_configuration(*_args, **_kwargs):
+            return config
+
+        with (
+            patch.object(papers, "auth_context", new=current_credential),
+            patch.object(papers, "configuration", new=current_configuration),
+            patch.object(papers, "_generate_long_draft", new=fake_long_draft),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            result = asyncio.run(
+                papers.generate(
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
+                    force_long_form=True,
+                    expected_snapshot_sha256=current_snapshot,
+                )
+            )
+
+        assert result["title"] == "An evidence-bound exploratory note"
+        assert rebound["snapshot_sha256"] == current_snapshot
+        assert rebound["model"] == config["model"]
+        assert rebound["reasoning_effort"] == config["reasoning_effort"]
+        assert rebound["provider_calls"] == 0
+        assert rebound["provider_calls_total"] == 5
+        assert rebound["prior_runs"] == prior_runs
+        assert not rebound.get("explicit_restart_pending")
+        assert papers._load_work(str(path)) is None
 
 
 def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog() -> None:
@@ -1173,6 +1258,7 @@ def main() -> None:
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_paper_progress_endpoint_recovers_interrupted_checkpoint()
+    test_explicit_restart_checkpoint_migrates_and_rebinds_safely()
     test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:
