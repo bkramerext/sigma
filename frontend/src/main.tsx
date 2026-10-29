@@ -1299,7 +1299,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 }
 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
-type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'validation' | 'compile' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'compile' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function paperProgressOperation(progress: PaperProgress): string {
@@ -1314,6 +1314,7 @@ function paperProgressOperation(progress: PaperProgress): string {
     case 'sections': return `${milestone ? 'Section written' : 'Writing sections'}${count}`;
     case 'validation': return milestone ? 'Paper validated' : 'Validating the paper';
     case 'compile': return 'Compiling PDF';
+    case 'retry': return `Retrying provider connection${count}`;
     case 'complete': return 'Complete';
   }
 }
@@ -1335,6 +1336,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
+  const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
@@ -1358,7 +1360,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setContinuationAvailable(false); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -1367,6 +1369,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         });
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
         const preflight = await preflightResponse.json();
+        setContinuationAvailable(Boolean(
+          preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available &&
+          (preflight.completed_batches > 0 || preflight.evidence_indexed || preflight.outline_complete ||
+           preflight.completed_sections > 0 || preflight.provider_calls_attempted > 0)
+        ));
         if (preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
           setCheckpointMismatch(preflight);
         else setCheckpointMismatch(null);
@@ -1428,6 +1435,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
       setCheckpointMismatch(null);
+      setContinuationAvailable(false);
       setPaperProgress(null);
       setSuccess(result.evidence_updated_since_preflight
         ? 'Unfinished paper work cleared using the latest research evidence. No generation has started. Saved versions remain unchanged; choose Generate to start.'
@@ -1528,9 +1536,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
       </div>}
-      <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>Generate</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
+      <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{continuationAvailable ? 'Continue' : 'Generate'}</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>Saved work is available; retry to continue where possible.</span>}</p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{continuationAvailable ? 'Saved work is available. Choose Continue to resume without repeating completed stages.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
