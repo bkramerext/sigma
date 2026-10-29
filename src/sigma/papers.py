@@ -8,6 +8,7 @@ import json
 import os
 import re
 import stat
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -861,9 +862,9 @@ def _structured_evidence_index(
     # Prioritize failures and skeptical analysis, but rotate between sources
     # within each priority band. This avoids one verbose session consuming the
     # entire index before other sessions contribute their evidence.
-    queues: dict[tuple[int, int], list[tuple[EvidenceNote, dict[str, str]]]] = {}
+    queues: dict[tuple[int, int], deque[tuple[EvidenceNote, dict[str, str]]]] = {}
     for priority, source_number, _index, note, omission in candidates:
-        queues.setdefault((priority, source_number), []).append((note, omission))
+        queues.setdefault((priority, source_number), deque()).append((note, omission))
     ordered: list[tuple[EvidenceNote, dict[str, str]]] = []
     # Mix skeptical/negative and constructive evidence *before* enforcing the
     # shared 150 KB planner bound. Selecting every objection first can crowd a
@@ -878,7 +879,7 @@ def _structured_evidence_index(
         for priority in priorities:
             for number in source_numbers_by_priority[priority]:
                 if queues[(priority, number)]:
-                    ordered.append(queues[(priority, number)].pop(0))
+                    ordered.append(queues[(priority, number)].popleft())
 
     accepted: list[EvidenceNote] = []
     omitted: list[dict[str, str]] = []
