@@ -25,16 +25,38 @@ The production pin observed was `2761c0e12190807bafabe58445d6beac479140c4`.
 Schema review found additive tables/columns and no destructive table/column
 drops; session call reservations and unknown spend entries remain durable.
 
-**Deployment and authenticated acceptance have not been completed.** The backup
-timer and `/etc/sigma/backup.env` are absent. The latest READY snapshot is
-`sigma-state-issue265-20261027-0855` (2026-10-27); the separately restored
-`sigma-state-issue265-20261027-075405` verified three SQLite databases, two
-identities/mappings, three projects, ten artifacts, and a reserved/unknown call.
-A current, consistent recovery point is required before upgrade. Signed-in
-Google OAuth, existing project/session loading, and session controls also need
-an authorized production browser identity; no such interactive session was
-used here. No production files, databases, accounts, project records, or spend
-ledgers were changed.
+**Production deployment completed; hosted acceptance is partial.** PR #321
+merged at `6fa626bdfc1f07cb873103dfed2323864d4fb280`; the merged commit is a
+descendant of `6a0c1621`. PR verification and the merged main verification
+passed. The guarded GCE helper deployed the exact full SHA; host checkout,
+`SIGMA_RELEASE`, and backend/frontend OCI source labels match. All three
+containers are healthy and `sigma.service` is active. The post-deploy public
+probe passed; the consolidated acceptance report remains incomplete because
+nine authenticated/operator checks are still `NOT RUN`.
+
+Before cutover, the operator created READY snapshot
+`sigma-state-v014-20261029-0606` from the mounted `sigma-state` disk. The
+snapshot itself was not cloned for a new restore drill; the prior
+`sigma-state-issue265-20261027-075405` clone had passed the read-only restore
+verifier. The routine backup timer and `/etc/sigma/backup.env` are still absent.
+After deployment, all three SQLite databases passed `PRAGMA integrity_check`.
+Read-only aggregate records were 3 identities/grants/workspaces, 11 project
+records, 14 saved session files, 1 paused and 35 terminal jobs, and 5 unknown
+plus 10 estimated calls. Job and call status counts match the pre-snapshot
+check. Unknown and estimated spending history was retained; no provider calls
+were made.
+
+Hosted auth status reports ready, hosted mode, `mock_auth=false`, and anonymous
+state. Unauthenticated project and research-session APIs return 401, as
+expected. Anonymous production Chrome loaded the Projects home, Google sign-in
+link, and guest welcome. A signed-in Google browser and existing project/session
+controls were unavailable for acceptance, so identity-based loading and session
+operations remain **UNVERIFIED**; no account was authenticated and no research
+session was started. Production About displays `Version 0.1.4`, while its build
+field shows `unknown`; host checkout and image labels independently verify the
+exact deployed SHA. The missing frontend build SHA is a remaining provenance
+presentation defect. Do not tag `v0.1.4` until the owner reviews the outstanding
+hosted acceptance and build-identity limitation.
 
 ## Issue #310 — cancellation-aware session removal (2026-10-28)
 
