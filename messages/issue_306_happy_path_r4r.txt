@@ -241,3 +241,16 @@ Maximum Regions Chrome lifecycle passed on the same working tree.
 - The handoff/status documentation update is committed after this tested code
   tree; the branch's current HEAD includes this handoff update.
 - PR #317: https://github.com/bkramerext/sigma/pull/317 (open; not merged).
+
+### CI snapshot for tested correction implementation
+
+On branch head `a651a96622340e4a4c8cd9aa66fa5ca839cfa7ee`:
+SIGMA verification run `40811468896` succeeded; Research Outcome browser run
+`40811468824` succeeded; T92 run `40811468849` succeeded; T200 run
+`40811468798` succeeded. T201 run `40811468962` failed in its recovery job;
+its workflow step reached the browser recovery exercise after setup, and the
+same intercepting status-span failure remains the previously documented
+recovery-browser CI failure. T249 integrated verification run `40811468856`
+remained in progress at the final check snapshot (sandbox image build step), so
+its final result is **UNVERIFIED**. The locally executed `./sigma test` and
+focused deterministic Chrome lifecycle both passed.
