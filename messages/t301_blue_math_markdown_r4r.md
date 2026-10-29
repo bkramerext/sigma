@@ -3,8 +3,9 @@
 **State:** R4R  
 **Branch:** `blue/t301-math-markdown` → `main`  
 **Base:** `2cf878a3290e697b408ebdb5d58871690e2c030b`  
-**Head:** to be filled after commit  
-**PR:** to be filled after opening  
+**Head:** `c3c0dcbc589f90bb3dfa428e48743bcc291f1169`
+
+**PR:** [#314](https://github.com/bkramerext/sigma/pull/314) — open, not merged
 **Ticket:** [T301](../tickets/t301.md)
 
 ## Implementation
