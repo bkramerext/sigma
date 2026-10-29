@@ -1,0 +1,51 @@
+{
+  "issue": 289,
+  "classification": "deterministic local accounting regression; no paid calls",
+  "source_project": "samples/operation-narrow-passage",
+  "project_title": "Operation Narrow Passage v2 (fixture copy)",
+  "project_id": "9141e4ee-8ecc-4196-b1f9-8fe2c8b993c5",
+  "capture_commit": "26628d54 baseline plus issue #289 working changes",
+  "publishing_commit": "pending",
+  "provider": "mocked fixture; provider network was not called",
+  "model_configuration": {
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "activities": [
+    "Used SIGMA's sample-copy and complete-project export paths.",
+    "Ran an Investigator/Skeptic fixture pair through the normal research-session worker and real SQLite cloud inference ledger.",
+    "Settled two calls at $0.025 each, then denied the third $0.03 reservation against a $0.06 isolated global ceiling.",
+    "Exported the funding-paused session before replenishment.",
+    "Raised only the isolated test ceiling to $0.20, resumed the same session, and exported its terminal session after completing the remaining pair.",
+    "Asserted first two saved calls remain and are not replayed."
+  ],
+  "exports": [
+    {
+      "file": "deterministic-funding-denied.json",
+      "phase": "funding-denied, before resume",
+      "importable": true,
+      "size_bytes": 129257,
+      "sha256": "a4a531b93f2ec8100e467c6419c67c35efa1ae8ad43a5a4b02c287e63bee18c6"
+    },
+    {
+      "file": "deterministic-funding-resumed.json",
+      "phase": "resumed and terminal",
+      "importable": true,
+      "size_bytes": 186351,
+      "sha256": "3cbac8a16f09eb999e5367d8f685a8db29b6df235faee0648c37e35bbb2989a2"
+    }
+  ],
+  "omissions": [
+    "Original production Session #1 complete project export is not available in the repository or connected Drive; production ledger rows were not accessible from this workspace.",
+    "The screenshots/description in issue #289 do not expose session reservation fields, provider error diagnostics, or ledger call rows. Therefore the exact production denial boundary is unverified.",
+    "No live Google sign-in or paid Sol/High inference was performed."
+  ],
+  "sensitivity_review": "Checked bundle contents for emails and credential values; the only api_key reference is the provider mode label. Fixture key/token is not serialized.",
+  "limits": {
+    "fixture_global_ceiling_usd": 0.06,
+    "fixture_call_reservation_usd": 0.03,
+    "fixture_settled_call_estimate_usd": 0.025,
+    "fixture_ceiling_after_replenishment_usd": 0.2
+  },
+  "session_id": "e86473ee-660c-4be9-a6ee-1e8119570bcf"
+}

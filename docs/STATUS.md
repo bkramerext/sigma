@@ -8018,3 +8018,29 @@ and follows a deterministic OAuth redirect fixture. `./sigma test`, frontend
 typecheck, `browser_checks/local_auth_real_backend.py`, and
 `browser_checks/guest_samples.py` passed with this update in the worktree. No
 live Google OAuth callback or paid provider call was made.
+
+## Issue #289 follow-up — funding pause and resume (2026-10-28)
+
+A deterministic copy of Operation Narrow Passage v2 now exercises the actual
+sponsored session worker and isolated SQLite inference ledger. With a $0.06
+global ceiling, two calls settle at $0.025 each; the next $0.03 reservation is
+refused while $0.01 remains. The refusal occurs before provider dispatch. Cloud
+funding denials now persist as a visible paused session with the exact ledger
+reason, stop further queued-branch dispatch under the session lock, and can be
+resumed after replenishment without replaying completed calls or losing evidence.
+Per-session hard cost limits remain terminal.
+
+Portable complete-project snapshots are preserved in
+`docs/evaluations/issue_289/exports/`: the funding-denied state and the resumed
+terminal state. Both are importable through SIGMA Home → Import. The terminal
+fixture outcome is partial/incomplete and does not claim a mathematical
+solution. See the evaluation README for the reproduction, IDs and import steps.
+
+Focused cloud accounting and research-session tests passed. `./sigma test`
+passed all steps; the pre-existing graph-present sandbox check skipped because
+the Docker image is unavailable. The real Chrome paused-session guidance check
+and frontend build passed. The original production Session #1 export and ledger
+rows remain unavailable, so its exact denial boundary is unverified. No
+production settings were changed, no Google production sign-in was performed,
+and no paid provider calls were made; explicit paid-call approval and the
+source production export are still required for production acceptance.

@@ -7913,9 +7913,31 @@ async def _portfolio_role_call(
                             "finished_at": _now(),
                         }
                     )
-                    branch["status"] = "ended"
+                    # The cloud ledger refused this reservation before dispatch.
+                    # Keep it retryable after allowance/ceiling replenishment.
+                    branch["status"] = "paused"
+                    branch["funding_resume_allowed"] = True
                     branch["current_action"] = "Budget limit"
                     branch["reason"] = str(exc)
+                    # Publish the pause while still holding the session lock so
+                    # another queued branch cannot dispatch after this refusal.
+                    for sibling in record.get("strategy_runs", []):
+                        if sibling is not branch and sibling.get("status") in {"queued", "running"}:
+                            sibling["status"] = "paused"
+                            sibling["reason"] = (
+                                "Deferred while a provider-call funding reservation is unavailable."
+                            )
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · funding limit"
+                    record["message"] = (
+                        "Research paused before provider dispatch because a required funding reservation was refused. "
+                        "Completed research and findings are saved. Replenish the applicable allowance or global ceiling, then resume this session. "
+                        + str(exc)
+                    )
+                    record["terminal_reason"] = str(exc)
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
                     _event(record, "call.not_dispatched", str(exc), role)
                     record["current_step"] = None
                     record["current_steps"] = [
