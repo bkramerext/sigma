@@ -184,7 +184,7 @@ def main() -> None:
                 expect(dialog.locator(".about-exploration-row")).to_have_count(3)
                 expect(dialog.locator(".about-exploration-round")).to_have_count(9)
                 expect(dialog.locator(".about-exploration-space")).to_contain_text(
-                    "maximum of agent turns for the whole session"
+                    "maximum number of turns for the whole session"
                 )
                 expect(dialog.locator(".about-evidence-report-note")).to_contain_text(
                     "Export the research or write a report"
@@ -217,7 +217,7 @@ def main() -> None:
                         f"Round {round_number}"
                     )
                 expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
-                    "9 possible rounds = 18 agent turns"
+                    "9 possible rounds, or 18 agent turns"
                 )
                 expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
                     "12-turn limit"
@@ -241,7 +241,7 @@ def main() -> None:
                 )
                 expect(details.locator(".about-agent-return svg path")).to_have_count(2)
                 expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
-                    "arguments, objections and saved results remain available to inspect"
+                    "arguments, challenges, and results for review"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
                     "revisit a strategy with new evidence"

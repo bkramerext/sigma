@@ -52,3 +52,7 @@ Updated `browser_checks/about_dialog_acceptance.py` to cover all six turns, thre
 ## Additional user direction — communicate to a first-time visitor
 
 The human requested less abstract copy and an understandable **total exploration space**, not just a definition of rounds/turns. The default diagram now reads question → different approaches → Play → proposal/critique/revision → a visual 3-by-3 grid of possible rounds → saved evidence. Each grid cell is a round of 2 agent turns. The example shows 9 possible rounds (18 turns), while a 12-turn session-wide limit would allow at most 6 complete rounds. The expanded example depicts three consecutive Investigator–Skeptic exchanges within **one** strategy, labelled turns 1–6. Terms are introduced through the journey rather than assuming the visitor knows what a session is. Mobile grid uses compact responsive cells. CI and Chrome verification still must be rerun for this new head.
+
+## Final copy polish
+
+The exploration grid is labelled for assistive technology. The worked limit example now says "maximum number of turns for the whole session" and "9 possible rounds, or 18 agent turns"; the browser assertions match the copy and the six-turn example. Build and actual browser acceptance remain to be verified on this final SHA.

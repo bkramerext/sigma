@@ -2090,7 +2090,7 @@ function AboutArchitecture() {
         </div>
         <div className="about-round-feedback"><span aria-hidden="true">↶</span> The Investigator can revise the idea and try again</div>
         <p className="about-shared-budget"><strong>Why repeat?</strong> A Skeptic may find a flaw the Investigator can fix or a question worth testing. Each new attempt can build on the last one.</p>
-        <div className="about-exploration-space" aria-label="Example of how much research fits into one session">
+        <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
           <p className="about-exploration-title">How much can one session explore?</p>
           <p>Suppose you select all three strategies and allow <strong>three rounds per strategy</strong>:</p>
           <div className="about-exploration-grid">
@@ -2099,7 +2099,7 @@ function AboutArchitecture() {
               {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>2 turns</small></span>)}
             </div>)}
           </div>
-          <p className="about-session-exploration-example">That's <strong>9 possible rounds = 18 agent turns</strong>. You also set a <strong>maximum of agent turns for the whole session</strong>. At a 12-turn limit, at most 6 complete rounds could run across the three strategies. Some might stop earlier or never start.</p>
+          <p className="about-session-exploration-example">That's <strong>9 possible rounds, or 18 agent turns</strong>. You also choose a <strong>maximum number of turns for the whole session</strong>. With a 12-turn limit, SIGMA could run at most 6 complete rounds across the three strategies. Some strategies might stop early or never start.</p>
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
