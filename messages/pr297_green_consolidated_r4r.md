@@ -2,7 +2,7 @@
 
 Repository: `bkramerext/sigma`
 Branch: `coordinator/signin-session-playback-stabilization`
-Tested implementation HEAD: `f0075789aeb6ef787c16512a21fdea8548a01c3d`
+Tested implementation HEAD: `f56f3c98cfbf6350ae7d32ef19b0bea8bd648d04`
 Integration merge commit: `681fe09648c223119fa5022c63bc06b0ef93c634`
 Integrated `origin/main`: `2d4368adf341aca105f5b645c676909da71ed5fb`
 PR #297 remains open and unmerged. No deployment or paid provider calls.
@@ -19,7 +19,7 @@ The real-Chromium reproduction showed the first-visit `Welcome to SIGMA!` modal 
 
 `browser_checks/local_auth_real_backend.py` uses two deterministic Google identities against a separate real SIGMA API process and durable local auth database. It:
 
-- Submits an uninvited guest's request through the real API and confirms it is persisted. Email delivery is deliberately unconfigured; the test stubs the delivery boundary after verifying the persisted request, so no email is sent.
+- Submits an uninvited guest's request through the real API with SMTP deliberately unconfigured. The API returns a successful pending response after persisting the request; Chrome confirms the user sees success instead of a retry error. No email is sent.
 - Signs in as the built-in admin, opens the actual Administrator Settings dialog, confirms the guest request appears, adds the guest, and verifies the request leaves the queue. A fresh deterministic session then resolves as a member, matching the required subsequent-sign-in behavior.
 - Exercises **Reload me!** on the member pill. It is hidden at `$0.05`, visible at `$0.04`, and sends a real API reload request at `$0.03`. The admin dialog displays the persisted request as an allowance reload request.
 - Retains a guest cookie while switching Google identities and verifies project, saved-session, and artifact reads are isolated. Guest reads include `no-store`, `no-referrer`, `nosniff`, and `frame-ancestors 'none'` headers.
@@ -43,6 +43,13 @@ in**; the redundant email beneath message text is removed. **Remove** deletes
 the feedback record and leaves an audit action; **Close** and **Mark reviewed**
 retain rows. Chrome verifies both account labels, action styling, and removal.
 
+Administrator Settings now has no tab bar. Invitation/reload requests, Product
+feedback, Authorized users, and Account usage each have an independent
+collapsible section in the same scrollable dialog. The dialog is larger; table
+headers and disclosure triangles are larger; feedback action buttons align on
+one line and use the same color. Real Chrome verifies collapse behavior,
+feedback action alignment/color, and the updated header/triangle sizes.
+
 ## Security and spending checks
 
 Guest middleware retains server-side default denial and an explicit method/path allowlist. Direct API tests exercise actual guest-safe handlers and deny cross-owner/member data, writes, exports, research dispatch, provider operations, and admin routes. Monthly spending tests cover settled usage across rollover under monthly and cumulative policies, unresolved reserved/unknown obligations, and concurrent reservations against the global ceiling.
@@ -52,7 +59,7 @@ Guest middleware retains server-side default denial and an explicit method/path 
 - `./sigma test` — PASS on this integrated source tree, including cloud auth, monthly research windows, Red's research-session tests, Ruff, Pyright, frontend typecheck, and production build. The existing graph-present sandbox subcase was skipped because its local Python sandbox image is unavailable; the graph-withheld branch passed.
 - `browser_checks/local_auth_real_backend.py` — PASS: both Google sign-in entry points; new and reviewed/revoked invitation flows; admin visibility/approval and subsequent member session; `$0.03` Reload me! request/admin visibility; guest response headers and two-identity project/session/artifact isolation; feedback account display/removal and Send Feedback styling.
 - `browser_checks/guest_samples.py` — PASS: public sample flow and welcome dialog.
-- `browser_checks/issue279_invite_me.py` — PASS: invitation request/retry, reload threshold at `$0.05`/`$0.04`, and member access.
+- `browser_checks/issue279_invite_me.py` — PASS: invitation saved-request acknowledgement, reload threshold at `$0.05`/`$0.04`, and member access.
 - `browser_checks/happy_path_reliability.py` — PASS: Red's deterministic Maximum Regions lifecycle, report, usage fixture, and reopen.
 - `browser_checks/t301_markdown_math.py` — PASS: Blue #314 Markdown math rendering and semantic preservation.
 - `browser_checks/about_dialog_acceptance.py` — PASS at 1440/390/320px and touch help at 390px.
@@ -75,6 +82,8 @@ The product feedback API, administrator authorization, removal audit, and displa
 | Red scheduler/session, Blue Markdown, approved About diagram | MET (automated + Chrome) | Full suite and real-Chrome checks |
 | N's live Google → invitation → approval → Easy sponsored session with usage attribution | UNVERIFIED (human release gate) | Not run; deterministic provider fixtures do not establish a live provider call or N's real spend attribution |
 | Feedback account labels, Send Feedback style, and row removal | MET (deterministic real API/browser) | Signed-in/anonymous row display, action position/style, Remove route/UI/audit verified |
+| Saved invitation remains acknowledged when email delivery is unavailable | MET (deterministic real API/browser) | Email delivery failure leaves a durable pending request and returns success; UI suppresses repeat prompts |
+| Admin dialog sections, sizing, headers, and action alignment | MET (deterministic real API/browser) | Four independent collapsible sections; Chrome checks shared action color, no wrapping, and larger headers/arrows |
 
 ## Manual release acceptance steps
 
