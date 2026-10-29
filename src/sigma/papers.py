@@ -875,8 +875,7 @@ def _structured_evidence_index(
     # results first would hide failures. Both must survive heavy histories.
     priorities = (3, 2, 3, 2, 1)
     source_numbers_by_priority = {
-        priority: sorted(number for p, number in queues if p == priority)
-        for priority in (3, 2, 1)
+        priority: sorted(number for p, number in queues if p == priority) for priority in (3, 2, 1)
     }
     while any(queues.values()):
         for priority in priorities:
