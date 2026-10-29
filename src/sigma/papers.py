@@ -3643,6 +3643,18 @@ def preflight(
         "provider_calls_lifetime_total": work_state.get("provider_calls_total", 0),
         "provider_calls_remaining": calls_remaining,
         "checkpoint_can_restart": work is not None,
+        # A previous long-form planning attempt should not trap an eligible
+        # small-scope project in repeated paid planning calls. Offer an
+        # explicit, no-provider reset only before a valid plan or section exists.
+        "single_call_restart_available": bool(
+            work is not None
+            and long_form
+            and work_state.get("kind") == "long_form"
+            and same_project_and_snapshot
+            and not work_state.get("plan")
+            and not work_state.get("section_drafts")
+            and not _paper_long_form(package)
+        ),
     }
 
 
