@@ -30,7 +30,8 @@ deterministic provider fixture, browser acceptance, and this report only.
 - `browser_checks/issue329_fast_paper.py` — PASS in real Chrome against the
   deterministic local fixture: normal long-form progress and PDF, safe retry,
   narrow-screen provider failure with Continue, changed-snapshot restart, and
-  PDF completion. No provider service was contacted.
+  PDF completion. No provider service was contacted. The incompatible-restart
+  screen is preserved as [`browser-incompatible-restart.png`](browser-incompatible-restart.png).
 - `./sigma test` — FAIL on the updated target branch because `ruff format
   --check` reports `src/sigma/papers.py` would be reformatted. The prior
   `tests/cloud_research_api.py` failure is resolved by the target branch's
