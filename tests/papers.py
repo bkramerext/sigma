@@ -166,6 +166,14 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
                     schema_name="fixture_long_paper_stage",
                     response_model=papers.PaperDraft,
                 ),
+                papers._provider_structured(
+                    {"fixture": "input"},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                    instructions="fixture instructions",
+                    schema_name="sigma_paper_evidence_batch",
+                    response_model=papers.EvidenceBatchResult,
+                ),
             ]
             for call in calls:
                 try:
@@ -179,7 +187,7 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
 
         asyncio.run(exercise())
 
-    assert len(requests) == 2  # one attempt per path; no retry/fallback
+    assert len(requests) == 3  # one attempt per path/stage; no retry/fallback
     for request in requests:
         assert request["model"] == "gpt-6.1-sol"
         assert request["reasoning"] == {"effort": "high"}
@@ -188,6 +196,49 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         assert request["text"]["format"]["type"] == "json_schema"
         assert request["text"]["format"]["strict"] is True
         assert request["text"]["format"]["schema"]
+        schema = request["text"]["format"]["schema"]
+        assert set(schema["required"]) == set(schema["properties"])
+    assert set(requests[-1]["text"]["format"]["schema"]["required"]) == {
+        "notes", "conflicts_or_gaps", "covered_field_refs", "omitted_fields"
+    }
+
+
+def test_strict_paper_schemas_require_all_properties() -> None:
+    # Pydantic's default_factory fields are optional in its validation schema;
+    # Responses strict JSON rejects them unless they are marked required.
+    raw = papers.EvidenceBatchResult.model_json_schema()
+    assert "covered_field_refs" not in raw["required"]
+    assert "omitted_fields" not in raw["required"]
+
+    for model in (
+        papers.PaperDraft,
+        papers.EvidenceBatchResult,
+        papers.LongPaperPlan,
+        papers.LongSectionDraft,
+    ):
+        schema = papers._paper_response_schema(model)
+
+        def validate(node: Any) -> None:
+            if isinstance(node, dict):
+                assert "default" not in node
+                if node.get("type") == "object" and "properties" in node:
+                    assert set(node["required"]) == set(node["properties"])
+                    assert node["additionalProperties"] is False
+                for value in node.values():
+                    validate(value)
+            elif isinstance(node, list):
+                for item in node:
+                    validate(item)
+
+        validate(schema)
+
+    normalized = papers._paper_response_schema(papers.EvidenceBatchResult)
+    assert set(normalized["required"]) == set(normalized["properties"])
+    # Do not change the application's Pydantic parsing/default semantics.
+    parsed = papers.EvidenceBatchResult(
+        notes=[], conflicts_or_gaps=[]
+    )
+    assert parsed.covered_field_refs == [] and parsed.omitted_fields == []
 
 
 def test_long_tex_compiler_source_bound_is_configurable() -> None:
@@ -1253,6 +1304,9 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
+    test_api_provider_failure_classification_is_safe_and_actionable()
+    test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once()
+    test_strict_paper_schemas_require_all_properties()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
