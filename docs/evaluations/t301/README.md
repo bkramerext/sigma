@@ -8,12 +8,15 @@ unchanged. The provider transport is mocked; this is not live AI verification.
 
 `browser_checks/t301_markdown_math.py` imports the production
 `frontend/src/RenderedMarkdown.tsx` component from the running Vite app and
-renders that same fixture in real Chrome. It checks KaTeX nodes across prose,
-lists, a nested list, a GFM table, blockquotes, inline code and a code fence,
-plus preservation of identifiers, dates, paths, URLs, currency, and malformed
-or escaped delimiters.
+renders both the API output fixture and a bare-notation input in real Chrome.
+It checks the KaTeX TeX annotations for the expected formulas, as well as math
+in prose, lists, a nested list, a GFM table, blockquotes, inline code and a code
+fence. It also checks preservation of identifiers, dates, paths, URLs, currency,
+and malformed or escaped delimiters.
 
 ![Real Chrome rendering of the regression Markdown](markdown-render.png)
+
+![Real Chrome rendering of bare math inside source prose](markdown-render-raw-math.png)
 
 Run the browser check with the frontend development server on port 5193:
 

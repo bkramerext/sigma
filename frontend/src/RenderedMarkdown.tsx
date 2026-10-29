@@ -31,10 +31,11 @@ function isTechnicalIdentifier(value: string): boolean {
 
 function mathSource(value: string): string {
   return value
-    .replace(/[α-ωΑ-Ω−≠≤≥≈∞∫∑√±×÷]/gu, symbol => unicodeMathCommands[symbol] ?? symbol)
-    .replace(/²/g, '^{2}').replace(/³/g, '^{3}')
     .replace(/√\s*\(([^()]+)\)/g, '\\sqrt{$1}')
     .replace(/√([\p{L}\d]+)/gu, '\\sqrt{$1}')
+    .replace(/[α-ωΑ-Ω−≠≤≥≈∞∫∑√±×÷]/gu, symbol => unicodeMathCommands[symbol] ?? symbol)
+    .replace(/²/g, '^{2}').replace(/³/g, '^{3}')
+    .replace(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*\/\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/gu, '\\frac{$1}{$2}')
     .replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/gu, '\\frac{$1}{$2}')
     .replace(/_\(([^()]+)\)/gu, '_{$1}')
     .replace(/([\p{L}\d)]+)\s*\/\s*([\p{L}\d(][^\s,;.!?)]*)/gu, (_match, numerator: string, denominator: string) => {
@@ -69,7 +70,7 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
   add(/\([a-zA-Zα-ωΑ-Ω\d+−*^²³\s]{1,50}\)\s*\/\s*\([a-zA-Zα-ωΑ-Ω\d+−*^²³\s]{1,50}\)/gu, 5, () => true);
 
   // A local equation is a mathematical span even when ordinary prose follows it.
-  add(/\b(?:[a-zα-ω]|[A-Z])(?:_[a-zA-Zα-ωΑ-Ω\d{}+-]+)?(?:\([^()\s]{1,24}\))?\s*=\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+(?:\s*[=+−*/]\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+)*/gu, 6, match => {
+  add(/\b(?:[a-zα-ω]|[A-Z])(?:_[a-zA-Zα-ωΑ-Ω\d{}+-]+)?(?:\([^()\s]{1,24}\))?\s*=\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+(?:\s*[=+−*/±]\s*[\p{L}\p{N}²³√±−+*/^_{}()\[\]\-]+)*/gu, 6, match => {
     const expression = match[0].trim().replace(/[.,;:!?]+$/u, '');
     if (!/[\p{L}\d]/u.test(expression.slice(expression.indexOf('=') + 1))) return false;
     // Trim a natural-language continuation after a mathematical expression.

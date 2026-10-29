@@ -9,6 +9,11 @@ BASE_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5193")
 BODY = (
     Path("docs/evaluations/t301/markdown-regression-output.md").read_text(encoding="utf-8").rstrip()
 )
+RAW_BODY = r"""The probability is 1/2. We obtain f(x) = x² + 3x and E = mc². The roots satisfy x = (-b ± √(b²-4ac))/(2a). The sequence has terms a_n = a_(n-1) + d. The value of x_i is stored in MAX_RETRY_COUNT. The fraction is (a+b)/(c+d). Inline `MAX_RETRY_COUNT` and fenced code remain literal.
+
+```python
+MAX_RETRY_COUNT = 3
+```"""
 
 
 with sync_playwright() as playwright:
@@ -69,6 +74,41 @@ with sync_playwright() as playwright:
     expect(root.locator(".katex").filter(has_text="DATABASE_URL")).to_have_count(0)
     expect(root.locator(".katex").filter(has_text="2026")).to_have_count(0)
     page.screenshot(path="docs/evaluations/t301/markdown-render.png", full_page=True)
+
+    page.evaluate(
+        """async body => {
+          const React = (await import('/node_modules/.vite/deps/react.js')).default;
+          const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
+          const { default: RenderedMarkdown } = await import('/src/RenderedMarkdown.tsx');
+          const host = document.createElement('main');
+          host.id = 't301-raw-math-regression';
+          host.style.cssText = 'max-width:900px;margin:30px auto;padding:28px;background:#fff;color:#222;font:17px/1.7 Georgia,serif';
+          document.body.append(host);
+          createRoot(host).render(React.createElement(RenderedMarkdown, { body }));
+        }""",
+        RAW_BODY,
+    )
+    raw = page.locator("#t301-raw-math-regression")
+    expect(raw.locator(".katex")).to_have_count(7)
+    raw_tex = raw.locator(".katex").evaluate_all(
+        "nodes => nodes.map(node => node.querySelector('annotation')?.textContent || '')"
+    )
+    for expression in (
+        r"\frac{1}{2}",
+        "f(x) = x^{2} + 3x",
+        "E = mc^{2}",
+        r"x = \frac{-b \pm \sqrt{b^{2}-4ac}}{2a}",
+        r"a_n = a_{n-1} + d",
+        "x_i",
+        r"\frac{a+b}{c+d}",
+    ):
+        assert expression in raw_tex, f"Bare notation was not recognized: {expression}"
+    expect(raw).to_contain_text("MAX_RETRY_COUNT")
+    expect(raw.locator(".katex").filter(has_text="MAX_RETRY_COUNT")).to_have_count(0)
+    expect(raw.locator("code")).to_have_count(2)
+    page.screenshot(path="docs/evaluations/t301/markdown-render-raw-math.png", full_page=True)
     browser.close()
 
-print("PASS real Chrome Markdown rendering, semantic preservation and screenshot capture")
+print(
+    "PASS real Chrome rendered conversion fixture and recognized bare math with semantic preservation"
+)

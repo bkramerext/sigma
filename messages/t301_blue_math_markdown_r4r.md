@@ -3,7 +3,7 @@
 **State:** R4R  
 **Branch:** `blue/t301-math-markdown` → `main`  
 **Base:** `2cf878a3290e697b408ebdb5d58871690e2c030b`  
-**Head:** `c3c0dcbc589f90bb3dfa428e48743bcc291f1169`
+**Implementation commit:** `c3c0dcbc589f90bb3dfa428e48743bcc291f1169` (initial implementation; subsequent verification refinements are on the same branch)
 
 **PR:** [#314](https://github.com/bkramerext/sigma/pull/314) — open, not merged
 **Ticket:** [T301](../tickets/t301.md)
@@ -43,7 +43,10 @@ The sequence has terms $a_n = a_{n-1} + d$. The value of $x_i$ is stored in MAX_
 The full shared fixture is
 [`markdown-regression-output.md`](../docs/evaluations/t301/markdown-regression-output.md).
 The Chrome evidence is
-[`markdown-render.png`](../docs/evaluations/t301/markdown-render.png).
+[`markdown-render.png`](../docs/evaluations/t301/markdown-render.png) for the
+converted fixture and
+[`markdown-render-raw-math.png`](../docs/evaluations/t301/markdown-render-raw-math.png)
+for bare notation inside source prose.
 
 ## Verification actually run
 
@@ -53,9 +56,12 @@ The Chrome evidence is
   stored output and unchanged source bytes.
 - `uv run --with playwright python browser_checks/t301_markdown_math.py` —
   passed in real Chrome against the production `RenderedMarkdown` component
-  served by Vite. Verified 20 KaTeX spans and preserved identifiers, inline
-  and fenced code, GFM table/list, blockquote, URL/path/date/version, currency,
-  escaped and unmatched delimiters. Captured the screenshot linked above.
+  served by Vite. Verified the TeX annotations for 20 KaTeX spans in the
+  converted fixture and seven bare math expressions in source prose, including
+  the quadratic roots' grouped square root and fraction. Also checked
+  identifiers, inline and fenced code, GFM table/list, blockquote,
+  URL/path/date/version, currency, escaped and unmatched delimiters. Captured
+  both screenshots linked above.
 - `npm ci --no-audit --no-fund`, `npm run typecheck`, and `npm run build` —
   passed. Vite emitted the existing advisory for a chunk over 500 kB.
 - `./sigma test` — all steps passed, including Ruff, formatting, Pyright,

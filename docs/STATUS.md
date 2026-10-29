@@ -15,11 +15,15 @@ the small `remark-gfm` plugin; KaTeX remains the renderer.
 `POST /api/projects/text/convert` route using one deterministic mocked provider
 response. It verifies the prompt, exact stored Markdown and unchanged source
 project bytes. `browser_checks/t301_markdown_math.py` passed against the real
-React Markdown component in Chrome, checking 20 KaTeX spans, GFM table/list
-structure, source-code preservation, identifiers, dates, paths, URLs, currency
-and delimiters. The captured result is
-[markdown-render.png](evaluations/t301/markdown-render.png); the shared output
-fixture and reproduction notes are in [T301 evidence](evaluations/t301/README.md).
+React Markdown component in Chrome, checking 20 KaTeX spans and exact TeX
+annotations for formulas, fractions, subscripts and the quadratic root formula.
+It also checks GFM table/list structure, source-code preservation, identifiers,
+dates, paths, URLs, currency and delimiters. Screenshots of the converted
+fixture and bare math are
+[markdown-render.png](evaluations/t301/markdown-render.png) and
+[markdown-render-raw-math.png](evaluations/t301/markdown-render-raw-math.png).
+The shared fixture and reproduction notes are in
+[T301 evidence](evaluations/t301/README.md).
 `./sigma test` passed every step, including Ruff, formatting, Pyright, frontend
 typecheck, and production build. Vite emitted its existing advisory for a
 JavaScript chunk above 500 kB. The final run is archived at
