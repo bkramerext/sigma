@@ -408,3 +408,8 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page { position: relative; z-index: 1; box-sizing: border-box; width: 100%; min-height: 100vh; }
 .session-log-page .session-log-secondary-action { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 5px 12px; border: 1px solid #82694b; border-radius: 4px; background: transparent; box-shadow: none; color: #e4c08f; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: none; cursor: pointer; }
 .session-log-page .session-log-secondary-action:hover { background: #302418; border-color: #c29661; color: #ffe1ad; }
+
+/* Session-log actions use the same understated underlined text treatment as workspace actions. */
+.session-log-page .session-log-secondary-action,
+.session-log-page .session-log-secondary-action:hover { min-height: 0; padding: 1px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1c58d; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
+.session-log-page .session-log-secondary-action:hover { color: #ffe1ad; }
