@@ -202,6 +202,117 @@ def main() -> None:
                 assert saved["status"] == "ended"
                 assert len(saved["steps"]) == 10
                 assert calls.await_count == 10
+                trace = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log", params={"path": path}
+                )
+                assert trace.status_code == 200, trace.text
+                # This workflow substitutes _call, so no validated provider claim
+                # is available; the title-derived display fallback is shown.
+                from sigma.session_log import fallback_project_name
+
+                assert trace.json()["short_name"] == fallback_project_name(
+                    "Cloud research API", "A recurrence bound"
+                )
+                assert any(item["type"] == "session_event" for item in trace.json()["events"])
+                markdown_download = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log/download",
+                    params={"path": path},
+                )
+                assert markdown_download.status_code == 200, markdown_download.text
+                assert markdown_download.text.startswith(
+                    f"# {trace.json()['project_title']}, Session 1"
+                )
+                assert "## Canonical event records" in markdown_download.text
+                assert "```json\n{" in markdown_download.text
+                assert max(map(len, markdown_download.text.splitlines())) < 1000
+                no_new_events = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log",
+                    params={"path": path, "after": trace.json()["cursor"]},
+                )
+                assert no_new_events.status_code == 200 and no_new_events.json()["events"] == []
+                client.headers.update(
+                    {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
+                )
+                hidden_log = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log", params={"path": path}
+                )
+                assert hidden_log.status_code == 404, hidden_log.text
+                hidden_download = client.get(
+                    f"/api/projects/research-sessions/{session_id}/log/download",
+                    params={"path": path},
+                )
+                assert hidden_download.status_code == 404, hidden_download.text
+                client.headers.update(
+                    {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
+                )
+
+                # Project deletion stops a live worker before removing its log tree.
+                active_project = client.post(
+                    "/api/projects/create",
+                    json={"title": "Active deletion", "problem": "A cancellation fixture."},
+                )
+                assert active_project.status_code == 201, active_project.text
+                active_path = active_project.json()["path"]
+                active_project_id = active_project.json()["project"]["id"]
+                active_strategy_response = client.post(
+                    "/api/projects/strategies",
+                    json={"path": active_path, "title": "Parked", "approach": "Wait."},
+                )
+                assert active_strategy_response.status_code == 201, active_strategy_response.text
+                active_strategy = client.get(
+                    "/api/projects/strategies", params={"path": active_path}
+                ).json()["strategies"][0]
+                active_limits = client.put(
+                    "/api/projects/research-limits", json={"path": active_path, **settings}
+                )
+                assert active_limits.status_code == 200, active_limits.text
+                active_call_started = threading.Event()
+
+                async def parked_call(*_args, **_kwargs):
+                    active_call_started.set()
+                    await asyncio.sleep(60)
+
+                with patch.object(
+                    research_sessions, "_call", new=AsyncMock(side_effect=parked_call)
+                ):
+                    active_start = client.post(
+                        "/api/projects/research-sessions/start",
+                        json={
+                            "path": active_path,
+                            "strategy_id": active_strategy["id"],
+                            "idempotency_key": str(uuid4()),
+                            "expected_project_id": active_project_id,
+                            "expected_binding": credential["identity"],
+                            "expected_limits": active_limits.json(),
+                        },
+                    )
+                    assert active_start.status_code == 200, active_start.text
+                    active_session_id = active_start.json()["id"]
+                    assert active_call_started.wait(timeout=5), (
+                        "active session did not reach provider"
+                    )
+                    active_log = client.get(
+                        f"/api/projects/research-sessions/{active_session_id}/log",
+                        params={"path": active_path},
+                    )
+                    assert active_log.status_code == 200 and active_log.json()["events"]
+                    deleted = client.request(
+                        "DELETE",
+                        "/api/projects",
+                        json={"path": active_path, "expected_project_id": active_project_id},
+                    )
+                    assert deleted.status_code == 200, deleted.text
+                assert not Path(active_path).exists()
+                assert not (
+                    Path(active_path).parents[1] / ".sigma-session-logs" / active_project_id
+                ).exists()
+                # Cancellation's uncertain dispatch is now part of the fixture baseline.
+                db = cloud_research._connect()
+                unknown_attempt_baseline = db.execute(
+                    "SELECT COUNT(*) FROM calls WHERE status='unknown' AND workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                ).fetchone()[0]
+                db.close()
 
                 # Standalone strategy generation uses the same sponsored
                 # credential and durable ledger as research sessions.
@@ -763,7 +874,7 @@ def main() -> None:
                     (session_id,),
                 ).fetchone()[0]
                 db.close()
-                assert unknown_attempts == 1, (
+                assert unknown_attempts == unknown_attempt_baseline + 1, (
                     unknown_attempts,
                     failed_proposal.status_code,
                     failed_proposal.text,
@@ -798,7 +909,7 @@ def main() -> None:
                     (session_id,),
                 ).fetchone()[0]
                 db.close()
-                assert unknown_attempts == 2
+                assert unknown_attempts == unknown_attempt_baseline + 2
 
                 # A completed HTTP response with malformed structured content
                 # has uncertain provider billing and keeps its reservation.
@@ -827,7 +938,7 @@ def main() -> None:
                     (session_id,),
                 ).fetchone()[0]
                 db.close()
-                assert unknown_attempts == 3
+                assert unknown_attempts == unknown_attempt_baseline + 3
 
                 # Cancel after provider dispatch. The request is deliberately
                 # left awaiting its simulated response while the authenticated
@@ -890,7 +1001,7 @@ def main() -> None:
                     (session_id,),
                 ).fetchone()[0]
                 db.close()
-                assert unknown_attempts == 4
+                assert unknown_attempts == unknown_attempt_baseline + 4
 
                 # Leave only enough budget for the dynamic text reservation.
                 # Instructions and the response schema push the complete

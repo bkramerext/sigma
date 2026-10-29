@@ -160,7 +160,7 @@ function semanticMath(): (tree: MarkdownNode) => void {
   };
 }
 
-/** Translate legacy TeX delimiters while leaving escaped and unmatched text alone. */
+/** Normalize legacy TeX delimiters and safely close block math at paragraph boundaries. */
 export function markdownWithMathDelimiters(body: string): string {
   const code = /(^|\n)([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n[ \t]*\3[^\n]*(?=\n|$)|(`+)[^`\n]*\4/g;
   const replaceOutsideCode = (source: string, pattern: RegExp, replacement: (match: RegExpExecArray) => string) => {
@@ -183,6 +183,10 @@ export function markdownWithMathDelimiters(body: string): string {
     return cursor ? result + source.slice(cursor) : source;
   };
   let normalized = replaceOutsideCode(body, /(?<!\\)\\\[([\s\S]*?)(?<!\\)\\\]/g, item => `$$\n${item[1]}\n$$`);
+  // Legacy research notes sometimes have an unclosed display opener at the
+  // start of a paragraph. Its paragraph boundary provides a safe local close.
+  normalized = replaceOutsideCode(normalized, /(^|\n)([ \t]*)\\\[[ \t]*\n([\s\S]*?)(?=\n[ \t]*\n|\n[ \t]*\\\[|$)/g,
+    match => `${match[1]}${match[2]}$$\n${match[3].trim()}\n$$`);
   // Apply the inline legacy form only to complete, unescaped pairs.
   normalized = replaceOutsideCode(normalized, /(?<!\\)\\\(([^\n]*?)(?<!\\)\\\)/g, item => `$${item[1]}$`);
 

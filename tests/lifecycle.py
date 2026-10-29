@@ -9,7 +9,7 @@ from unittest.mock import patch
 import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
-from sigma import research_sessions
+from sigma import research_sessions, session_log
 from sigma.api import app
 from sigma.projects import (
     STATE,
@@ -58,6 +58,14 @@ def main() -> None:
         session = research_sessions.mock_session(
             project.path, strategy.id, "7c5e5792-4657-4214-9f85-b9ad4ac759b7", "completed"
         )
+        session_log.append(
+            project.path,
+            session,
+            {"type": "session_event", "event_kind": "session.started", "message": "fixture"},
+        )
+        session_log.flush()
+        saved_log = session_log.log_path(project.path, project.project.id, session["id"])
+        assert saved_log.is_file()
         with (
             patch("sigma.projects.projects_root", return_value=project_root),
             TestClient(app) as client,
@@ -70,6 +78,8 @@ def main() -> None:
         assert response.status_code == 200, response.text
         assert response.json() == {"deleted": True, "project_id": project.project.id}
         assert not Path(project.path).exists()
+        assert not saved_log.exists()
+        assert not saved_log.parent.exists()
         assert session["id"] not in research_sessions._tasks
         assert first.project.title == "Riemann Hypothesis"
         assert [e.sequence for e in first.project.events] == [1]
