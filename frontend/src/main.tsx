@@ -1418,7 +1418,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         : 'Generating paper…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, long_form: false }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
