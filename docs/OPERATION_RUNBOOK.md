@@ -6,20 +6,20 @@ The detailed configuration and exact provisioning parameters live in [CLOUD_DEPL
 
 ## Deployment inventory and operator evidence (T127)
 
-This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-inventory-t127) are the maintained records. The deployment coordinator records actual IDs, resource creation, verification results, dates, and deviations as the operator supplies evidence. **The operator should not need to maintain a separate checklist or remember identifiers.** Proposed resource names must not be presented as live resources.
+This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) are the maintained records. The deployment coordinator records actual IDs, resource creation, verification results, dates, and deviations as the operator supplies evidence. **The operator should not need to maintain a separate checklist or remember identifiers.** Proposed resource names must not be presented as live resources.
 
 | Item | Current record | Verification |
 | --- | --- | --- |
 | Google OAuth project | `SIGMA Auth`; ID `sigma-auth-512601`; number `665111821572` | Operator read from Cloud Console, 2026-10-25 |
-| Infrastructure project | `SIGMA Production`; ID `sigma-research-prod`; number `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
+| Infrastructure project | `SIGMA Production`; ID `sigma-research-prod`; number `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; current billing and effective IAM not independently audited |
 | DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | A resolves to `136.66.128.82`; public HTTPS/API probe passed 2026-10-26 |
 | Zone and VM | `us-west1-b`; `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-2` | RUNNING; IAP/OS Login verified 2026-10-26 |
 | Disk | `sigma-state` 30 GB `pd-balanced`, zonal `us-west1-b`; boot disk 100 GiB `pd-standard` | Attached, mounted with approved UUID/options; one-off recovery snapshot READY 2026-10-26 |
 | Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | Attached to VM; public DNS and HTTPS routing verified 2026-10-26 |
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
-| Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; production project association unverified |
-| Billing / alert | Trial/billing link and $300 project budget | Not yet verified |
-| Production release | `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` | Deployed and endpoint-verified 2026-10-26; formal acceptance pending |
+| Billing account / current spend | Unknown | October 25 console screenshot is historical; current association, available credit, alert delivery and spend not verified |
+| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Snapshot observed; exact snapshot not restore-tested. Daily backup timer and `/etc/sigma/backup.env` absent. |
+| Production release | `2761c0e12190807bafabe58445d6beac479140c4` (v0.1.4 source SHA) | Host checkout, configured release and backend/frontend labels match; all containers healthy and public probe passed 2026-10-29. PR #321 merge SHA differs; hosted acceptance remains partial. See [Status](STATUS.md). |
 
 **Change log**
 
@@ -86,9 +86,20 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 
 ## 1. Provision a new host (once per VM)
 
+**Replacement-host procedure only.** SIGMA is already deployed on
+`sigma-gce-01`; do not rerun these provisioning steps on that VM. For current
+production operations, use the diagnosis, release, backup, and rollback
+sections below. This procedure does not update application code on the existing
+host.
+
 **Prerequisites:** Explicit approved GCP project/resources, IAM, static IP, state disk, Secret Manager configuration, production Google OAuth Web client and DuckDNS access.
 
-1. Follow [Cloud Deployment: Google setup and operator commands](CLOUD_DEPLOYMENT.md#google-setup-and-operator-commands) and the provisioning runbook there. Provision Ubuntu 24.04 amd64 in `us-west1-b` with a separately retained state disk (`auto-delete=no`). Restrict SSH to approved IAP path, public ingress to 80/443 when ready.
+1. Review [T128 host readiness](T128_HOST_READINESS.md) and the historical
+   [hosting decisions](CLOUD_DEPLOYMENT.md#historical-hosting-and-external-host-notes).
+   Obtain separate approval for each new resource, size, billing exposure, and
+   network rule. Provision Ubuntu 24.04 amd64 in `us-west1-b` with a separately
+   retained state disk (`auto-delete=no`). Restrict SSH to the approved IAP
+   path, and enable public ingress only when the launch gates are satisfied.
 2. Confirm the attached `sigma-state` disk identity before initial filesystem
    setup. **Never format an existing disk**. If the owner-confirmed new disk is
    blank, perform any required one-time formatting only after verifying its
