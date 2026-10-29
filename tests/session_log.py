@@ -11,6 +11,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sigma import session_log
@@ -174,31 +175,70 @@ def test_session_log_short_name_is_stable_and_delete_scoped(tmp_path: Path):
         second_project = "b12ca401-2210-4c88-8fe6-84a33b1e5eea"
         first_session = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
         second_session = "e0231c99-5425-4a20-8ff2-fc52c1800b8c"
-        first_name = session_log.subject_name_from_claim(
-            "The evidence suggests Xenopus tadpole tail regeneration after injury."
+        title = "Why do Xenopus tadpoles temporarily lose tail regeneration?"
+        claim = "The evidence suggests Xenopus tadpoles can regenerate a tail after injury."
+        first_name = session_log.subject_name_from_context(
+            title,
+            title,
+            claim,
         )
-        assert first_name == "Xenopus Tadpole Tail Regeneration"
-        session_log._save_short_name(project_file, first_project, first_name)
-        assert (
-            session_log._short_name(project_file, first_project)
-            == "Xenopus Tadpole Tail Regeneration"
+        assert first_name == "Xenopus Tadpoles"
+        session_log.record_ai_name(str(project_file), first_project, title, title, claim)
+        session_log.flush()
+        assert session_log._short_name(project_file, first_project) == "Xenopus Tadpoles"
+        session_log.record_ai_name(
+            str(project_file),
+            first_project,
+            title,
+            title,
+            "Xenopus tadpoles temporarily lose tail regeneration during early development.",
         )
+        session_log.flush()
+        assert session_log._short_name(project_file, first_project) == "Xenopus Tadpoles"
         assert (
-            session_log.subject_name_from_claim(
-                "We show that Xenopus tadpoles regenerate tails after injury."
+            session_log.subject_name_from_context(
+                "Does the harmonic series converge?",
+                "Does the harmonic series converge?",
+                "Evidence suggests that the harmonic series diverges.",
             )
-            == "Xenopus Tadpoles Regenerate Tails"
+            == "Harmonic Series"
         )
         assert (
-            session_log.subject_name_from_claim(
-                "The answer is that DNA mismatch repair limits mutation accumulation."
+            session_log.subject_name_from_context(
+                "How can neighborhood libraries reduce social isolation for older adults?",
+                "How can neighborhood libraries reduce social isolation for older adults?",
+                "Results indicate neighborhood libraries can reduce isolation among older adults.",
             )
-            == "DNA Mismatch Repair Limits"
+            == "Neighborhood Libraries"
+        )
+        assert (
+            session_log.fallback_project_name(
+                "Why do Xenopus tadpoles temporarily lose tail regeneration?"
+            )
+            == "Xenopus Tadpoles"
+        )
+        assert (
+            session_log.fallback_project_name("Does the harmonic series converge?")
+            == "Harmonic Series"
+        )
+        assert (
+            session_log.fallback_project_name(
+                "How can neighborhood libraries reduce social isolation for older adults?"
+            )
+            == "Neighborhood Libraries"
+        )
+        assert (
+            session_log.subject_name_from_context(
+                "Does the harmonic series converge?",
+                "",
+                "Evidence suggests the claim is unsupported.",
+            )
+            is None
         )
         assert session_log._short_name(project_file, second_project) == "Research Project"
         for project_id, session_id, name in (
-            (first_project, first_session, "Xenopus Tadpoles Regeneration"),
-            (first_project, second_session, "Xenopus Tadpoles Regeneration"),
+            (first_project, first_session, "Xenopus Tadpoles"),
+            (first_project, second_session, "Xenopus Tadpoles"),
             (second_project, "f0231c99-5425-4a20-8ff2-fc52c1800b8c", "Line Arrangement"),
         ):
             session_log.append(
@@ -283,6 +323,104 @@ def test_slow_storage_does_not_block_research_caller_and_keeps_order(tmp_path: P
         ]
 
 
+def test_delayed_session_a_write_does_not_block_session_b_read(tmp_path: Path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    root = tmp_path / "logs"
+    entered_a, written_b, release_a = threading.Event(), threading.Event(), threading.Event()
+    original_append = session_log._append_frame
+    project_id = "a12ca401-2210-4c88-8fe6-84a33b1e5eea"
+    session_a = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
+    session_b = "e0231c99-5425-4a20-8ff2-fc52c1800b8c"
+
+    def delayed(path, value):
+        if value.get("message") == "slow A":
+            entered_a.set()
+            assert release_a.wait(3)
+        original_append(path, value)
+        if value.get("message") == "ready B":
+            written_b.set()
+
+    view = SimpleNamespace(
+        project=SimpleNamespace(
+            id=project_id, title="Session Isolation", problem="Session isolation"
+        )
+    )
+    with (
+        patch.object(session_log, "_root", lambda _: root),
+        patch.object(session_log, "_append_frame", side_effect=delayed),
+        patch.object(session_log, "inspect_project", return_value=view),
+        patch.object(session_log, "project_path", return_value=project_file),
+        patch(
+            "sigma.research_sessions.get_session",
+            side_effect=lambda _path, sid: {"id": sid, "session_number": 2, "status": "running"},
+        ),
+    ):
+        session_log.append(
+            str(project_file),
+            {"project_id": project_id, "id": session_a, "session_number": 1},
+            {"type": "event", "message": "slow A"},
+        )
+        assert entered_a.wait(1)
+        session_log.append(
+            str(project_file),
+            {"project_id": project_id, "id": session_b, "session_number": 2},
+            {"type": "event", "message": "ready B"},
+        )
+        assert written_b.wait(1)
+        start = time.monotonic()
+        data = session_log.read(str(project_file), session_b)
+        assert time.monotonic() - start < 0.5
+        assert [event["message"] for event in data["events"] if event.get("type") == "event"] == [
+            "ready B"
+        ]
+        assert not release_a.is_set()
+        release_a.set()
+        session_log.flush()
+
+
+def test_project_deletion_waits_for_read_and_cleans_logs(tmp_path: Path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    project_file = tmp_path / "project.json"
+    project_file.touch()
+    root = tmp_path / "logs"
+    project_id = "a12ca401-2210-4c88-8fe6-84a33b1e5eea"
+    session_id = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
+    session = {"project_id": project_id, "id": session_id, "session_number": 1}
+    view = SimpleNamespace(
+        project=SimpleNamespace(id=project_id, title="Read Delete", problem="Read Delete")
+    )
+    with patch.object(session_log, "_root", lambda _: root):
+        session_log.append(str(project_file), session, {"type": "event", "message": "saved"})
+        session_log.flush()
+    entered, release = threading.Event(), threading.Event()
+    original_frames = session_log._frames
+
+    def delayed_frames(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return original_frames(*args, **kwargs)
+
+    with (
+        patch.object(session_log, "_root", lambda _: root),
+        patch.object(session_log, "_frames", side_effect=delayed_frames),
+        patch.object(session_log, "inspect_project", return_value=view),
+        patch.object(session_log, "project_path", return_value=project_file),
+        patch("sigma.research_sessions.get_session", return_value=session),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        reader = pool.submit(session_log.read, str(project_file), session_id)
+        assert entered.wait(1)
+        deletion = pool.submit(session_log.delete_project, project_id, project_file)
+        time.sleep(0.05)
+        assert not deletion.done()
+        release.set()
+        assert reader.result(timeout=2)["events"]
+        deletion.result(timeout=2)
+    assert not (root / project_id).exists()
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -292,6 +430,8 @@ def main() -> None:
         test_session_log_short_name_is_stable_and_delete_scoped(root / "lifecycle")
         test_session_log_failure_is_best_effort(root / "failure")
         test_slow_storage_does_not_block_research_caller_and_keeps_order(root / "slow")
+        test_delayed_session_a_write_does_not_block_session_b_read(root / "isolated-read")
+        test_project_deletion_waits_for_read_and_cleans_logs(root / "delete-race")
     print("Session log append, concurrency, redaction and recovery scenarios passed.")
 
 

@@ -34,7 +34,11 @@ def main() -> None:
             "status": "running",
         }
         view = SimpleNamespace(
-            project=SimpleNamespace(id=PROJECT_ID, title="Untrusted Project Title")
+            project=SimpleNamespace(
+                id=PROJECT_ID,
+                title="Why do Xenopus tadpoles temporarily lose tail regeneration?",
+                problem="Why do Xenopus tadpoles temporarily lose tail regeneration?",
+            )
         )
         state = {"requests": 0, "active": 0, "maximum_active": 0, "cursors": []}
         guard = threading.Lock()
@@ -128,6 +132,8 @@ def main() -> None:
         session_log.record_ai_name(
             str(project_file),
             PROJECT_ID,
+            "Why do Xenopus tadpoles temporarily lose tail regeneration?",
+            "Why do Xenopus tadpoles temporarily lose tail regeneration?",
             "The analysis demonstrates Xenopus tadpole tail regeneration after injury.",
         )
         session_log.append(str(project_file), session, request_event)
@@ -194,10 +200,8 @@ def main() -> None:
                     opener.get_by_role("button", name="Open Session 2 log").click()
                 page = popup_info.value
                 page.wait_for_load_state("domcontentloaded")
-                expect(page).to_have_title("Xenopus Tadpole Tail Regeneration, Session 2")
-                expect(page.locator("h1")).to_have_text(
-                    "Xenopus Tadpole Tail Regeneration, Session 2"
-                )
+                expect(page).to_have_title("Xenopus Tadpoles, Session 2")
+                expect(page.locator("h1")).to_have_text("Xenopus Tadpoles, Session 2")
                 details = page.locator(".session-log-events details").first
                 expect(details.locator("summary").first).to_contain_text("in flight", timeout=5000)
                 expect(details.locator("summary").first).to_contain_text("2.5s", timeout=10000)
@@ -214,7 +218,7 @@ def main() -> None:
                     page.get_by_role("link", name="Download Log").click()
                 assert download_info.value.suggested_filename == "session-integration.md"
                 page.reload(wait_until="domcontentloaded")
-                expect(page.locator("h1")).to_contain_text("Xenopus Tadpole Tail Regeneration")
+                expect(page.locator("h1")).to_contain_text("Xenopus Tadpoles")
                 expect(page.locator(".session-log-events > li")).to_have_count(1)
                 page.screenshot(
                     path="docs/evaluations/issue301/session-log-integrated-chromium.png",

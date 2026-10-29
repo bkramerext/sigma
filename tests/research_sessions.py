@@ -590,7 +590,9 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert [requests[key]["request"] for key in requests] == submitted_payloads
     assert all(event["response"]["status"] == "completed" for event in responses.values())
     saved_name = session_log._short_name(path, view.project.id)
-    assert saved_name != "Research Project"
+    # The fixture claim does not mention the project subject, so it must not
+    # produce a misleading label from generic result wording.
+    assert saved_name == "Research Project"
     assert "fixture-token" not in json.dumps(trace)
     assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
     assert [

@@ -207,8 +207,12 @@ def main() -> None:
                 )
                 assert trace.status_code == 200, trace.text
                 # This workflow substitutes _call, so no validated provider claim
-                # is available to supply the AI-derived project label.
-                assert trace.json()["short_name"] == "Research Project"
+                # is available; the title-derived display fallback is shown.
+                from sigma.session_log import fallback_project_name
+
+                assert trace.json()["short_name"] == fallback_project_name(
+                    "Cloud research API", "A recurrence bound"
+                )
                 assert any(item["type"] == "session_event" for item in trace.json()["events"])
                 no_new_events = client.get(
                     f"/api/projects/research-sessions/{session_id}/log",

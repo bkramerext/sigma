@@ -8020,20 +8020,28 @@ typecheck, `browser_checks/local_auth_real_backend.py`, and
 live Google OAuth callback or paid provider call was made.
 ## Issue #301 live session log (2026-10-29)
 
-Implementation is complete on `green/issue-301-live-logging`, based on
-`26628d549dbe11aad0c9f612633c08964ae9eb90`. The isolated Markdown log store
-uses UUID-derived project/session directories, framed JSON events, a serialized
-background writer with fsync, read-only torn-frame recovery, secret redaction,
-and a 32 MiB session limit. Validated Investigator claims supply stable,
-subject-based names without another provider request. The provider hook captures
+PR #324 review corrections are implemented on `green/issue-301-live-logging`,
+based on `26628d549dbe11aad0c9f612633c08964ae9eb90`. The isolated Markdown log
+store uses UUID-derived project/session directories, one ordered background
+queue per session, framed JSON events, fsync, read-only torn-frame recovery,
+secret redaction, and a 32 MiB session limit. Reads synchronize only on the
+requested session; project cleanup prevents new writes, drains that project's
+queues, waits for readers, then removes the log tree. The provider hook captures
 complete request JSON and returned response wire content, paired by request ID.
-Authorized incremental read and Markdown download endpoints and the separate
-polling window are implemented. Focused storage, active-project deletion,
-provider-capture, cloud authorization, and integrated real-Chromium/backend
-checks passed. The browser integration exercised delayed HTTP responses,
-monotone cursors, duplicate-event defense, and persisted download/refresh.
-`./sigma test` passed all steps, including backend regression suites, Ruff
-check/format, Pyright, frontend typecheck and build. The graph-present local
-sandbox subcase skipped because the configured image is unavailable. See the
-issue handoff for the force-termination queue durability limitation. No paid
-provider calls were made. PR #324 remains open and Ready for Review.
+Validated Investigator output supplies a persisted short project phrase only
+when it shares a contiguous subject phrase with the title/problem; otherwise the
+window uses a deterministic title-derived display fallback. This uses no extra
+provider request and does not change research validation.
+
+Focused storage, active-session log deletion, provider-capture, authorization,
+redaction, and concurrency tests passed. Real Chromium passed against both an
+HTTP fixture calling the production storage service and the running SIGMA
+FastAPI routes/store with deterministic project/session events; the latter is
+full frontend/API/storage integration, not a live research/provider run. Delayed
+responses, single-flight polling, duplicate-event defense, download and refresh
+were checked. `./sigma test` passed all steps, including backend suites, Ruff,
+format, Pyright, frontend typecheck and build. The graph-present sandbox case
+skipped because the configured image is unavailable. The in-memory queue may
+lose not-yet-written events on abrupt process kill; already persisted bytes are
+never truncated. No paid provider calls were made. PR #324 remains open and
+Ready for Review; see the issue handoff for final HEAD and exact commands.
