@@ -971,9 +971,7 @@ def main() -> None:
                 assert approved_status["user"] == {"email": UNINVITED, "role": "member"}, (
                     approved_status
                 )
-                assert approved_status["account"]["invitation_welcome_pending"], (
-                    approved_status
-                )
+                assert approved_status["account"]["invitation_welcome_pending"], approved_status
                 invited_welcome = page.get_by_role("dialog", name="You have been invited!")
                 expect(invited_welcome).to_be_visible()
                 invited_welcome.get_by_role("button", name="Let's get started").click()

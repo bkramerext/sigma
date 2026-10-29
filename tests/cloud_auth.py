@@ -1816,9 +1816,7 @@ class CloudAuthTests(TestCase):
                 promoted["user"], {"email": "new-member@example.org", "role": "member"}
             )
             self.assertTrue(promoted["account"]["invitation_welcome_pending"])
-            dismissed = guest.post(
-                "/api/cloud-auth/welcome", headers={"Origin": local_origin}
-            )
+            dismissed = guest.post("/api/cloud-auth/welcome", headers={"Origin": local_origin})
             self.assertEqual(dismissed.status_code, 200, dismissed.text)
             signed_in_again = self.finish(
                 email="new-member@example.org", subject="onboard-member", client=guest

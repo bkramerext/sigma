@@ -514,9 +514,13 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
         except WorkspaceUnavailable as exc:
             raise RuntimeError("Private workspace is unavailable.") from exc
     with _db(cfg) as db:
-        first_member_session = principal.role == "member" and db.execute(
-            "SELECT 1 FROM user_state WHERE subject=?", (principal.subject,)
-        ).fetchone() is None
+        first_member_session = (
+            principal.role == "member"
+            and db.execute(
+                "SELECT 1 FROM user_state WHERE subject=?", (principal.subject,)
+            ).fetchone()
+            is None
+        )
         sponsorship_eligible = _sponsorship_eligibility_in_db(
             db, cfg, principal.subject, principal.email, principal.role
         )
