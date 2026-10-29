@@ -29,7 +29,7 @@ from sigma.projects import (
     project_path,
 )
 
-TIMEOUT_SECONDS = 60
+TIMEOUT_SECONDS = 300
 MAX_CONTEXT = 48000
 MAX_RESPONSE = 128000
 _gate = threading.Lock()
@@ -717,7 +717,7 @@ async def generate_proposal(
         raise
     except (TimeoutError, httpx.TimeoutException) as exc:
         raise ProjectError(
-            "Proposal timed out after 60 seconds. Retry explicitly; no strategy was saved."
+            f"Proposal timed out after {TIMEOUT_SECONDS} seconds. Retry explicitly; no strategy was saved."
         ) from exc
     except httpx.HTTPError as exc:
         raise ProjectError(
