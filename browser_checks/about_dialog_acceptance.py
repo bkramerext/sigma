@@ -139,8 +139,18 @@ def main() -> None:
                     "aria-expanded", "false"
                 )
                 session_toggle = dialog.locator(".about-session-toggle")
-                expect(session_toggle).to_contain_text("Show Me")
+                expect(session_toggle).to_have_text("Show")
                 expect(session_toggle).to_have_count(1)
+                details = dialog.locator("#about-session-details")
+                expect(details).to_be_hidden()
+                expect(details.locator(".about-exploration-space")).to_be_hidden()
+                expect(details.locator(".about-shared-budget")).to_be_hidden()
+                expect(
+                    dialog.locator(".about-session-frame > .about-exploration-space")
+                ).to_have_count(0)
+                expect(dialog.locator(".about-session-frame > .about-shared-budget")).to_have_count(
+                    0
+                )
                 session_toggle.hover()
                 agent_toggle_style = session_toggle.evaluate(
                     "e => ({background: getComputedStyle(e).backgroundImage, text: getComputedStyle(e).color})"
@@ -164,41 +174,83 @@ def main() -> None:
                 expect(session_toggle).to_have_attribute("aria-expanded", "true")
                 expect(session_toggle).to_have_text("Hide")
                 details = dialog.locator("#about-session-details")
+                expect(details.locator(".about-multi-agent-intro")).to_contain_text("one strategy")
                 expect(details.locator(".about-multi-agent-intro")).to_contain_text(
-                    "specialist AI agents"
-                )
-                expect(details.locator(".about-multi-agent-intro")).to_contain_text(
-                    "Investigators return with the critique"
+                    "instead of ending after the first answer"
                 )
                 expect(dialog.locator(".about-strategy-parallel-note")).to_contain_text(
-                    "advance side by side"
+                    "Press Play"
+                )
+                strategy_rounds = dialog.locator(".about-strategy-round")
+                expect(strategy_rounds).to_have_count(3)
+                for i in range(3):
+                    expect(strategy_rounds.nth(i)).to_contain_text("Investigator")
+                    expect(strategy_rounds.nth(i)).to_contain_text("Skeptic")
+                expect(details.locator(".about-shared-budget")).to_be_visible()
+                expect(details.locator(".about-shared-budget")).to_contain_text("Why repeat?")
+                expect(details.locator(".about-exploration-space")).to_be_visible()
+                expect(details.locator(".about-exploration-row")).to_have_count(3)
+                expect(details.locator(".about-exploration-round")).to_have_count(9)
+                expect(details.locator(".about-exploration-space")).to_contain_text(
+                    "maximum number of turns for the whole session"
+                )
+                expect(dialog.locator(".about-evidence-report-note")).to_contain_text(
+                    "Export the research or write a report"
                 )
                 expect(
-                    details.get_by_role("heading", name="One investigation. Multiple agent turns.")
+                    details.get_by_role("heading", name="How an idea grows over six agent turns")
                 ).to_be_visible()
-                expect(details.locator(".about-agent-turn")).to_have_count(3)
+                expect(details.locator(".about-agent-round")).to_have_count(3)
+                expect(details.locator(".about-agent-turn")).to_have_count(6)
+                expect(details.locator(".about-agent-round-pair")).to_have_count(3)
+                expect(details.locator(".about-agent-round-heading")).to_have_count(3)
+                expect(details.locator(".about-round-definition")).to_contain_text(
+                    "One research round"
+                )
+                expect(details.locator(".about-round-definition")).to_contain_text("One agent turn")
+                expect(details.locator(".about-agent-instantiation h5")).to_have_text(
+                    "One strategy · Three rounds · Six turns"
+                )
+                for turn in range(1, 7):
+                    expect(details.locator(".about-turn-number").nth(turn - 1)).to_have_text(
+                        f"TURN {turn}"
+                    )
+                for round_number in range(1, 4):
+                    expect(
+                        details.locator(".about-agent-round-heading").nth(round_number - 1)
+                    ).to_contain_text(f"Round {round_number}")
+                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
+                    "9 possible rounds, or 18 agent turns"
+                )
+                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
+                    "12-turn limit"
+                )
+                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
+                    "at most 6 complete rounds"
+                )
                 expect(
                     details.locator(
                         ".about-agent-turn .about-diagram-node-title", has_text="Investigator"
                     )
-                ).to_have_count(2)
+                ).to_have_count(3)
                 expect(
                     details.locator(
                         ".about-agent-turn .about-diagram-node-title", has_text="Skeptic"
                     )
-                ).to_have_count(1)
-                expect(details.locator(".about-agent-return")).to_contain_text(
-                    "critique feeds the next Investigator turn"
+                ).to_have_count(3)
+                expect(details.locator(".about-agent-return")).to_have_count(2)
+                expect(details.locator(".about-agent-return").nth(0)).to_contain_text(
+                    "feedback shapes the next attempt"
                 )
-                expect(details.locator(".about-agent-return svg path")).to_have_count(1)
+                expect(details.locator(".about-agent-return svg path")).to_have_count(2)
                 expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
-                    "complete recoverability and auditing"
+                    "arguments, challenges, and results for review"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
                     "revisit a strategy with new evidence"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
-                    "compare results over time"
+                    "compare what changed"
                 )
                 expect(details.get_by_text("Coordinator", exact=False)).to_have_count(0)
                 expanded_style = details.evaluate(
@@ -213,6 +265,9 @@ def main() -> None:
                 )
                 session_toggle.click()
                 expect(session_toggle).to_have_attribute("aria-expanded", "false")
+                expect(session_toggle).to_have_text("Show")
+                expect(details).to_be_hidden()
+                expect(details.locator(".about-exploration-space")).to_be_hidden()
                 # Help affordances are separate from expansion controls.
                 strategy_a = dialog.locator('[data-about-info-node="strategyA"]')
                 page.mouse.move(5, 5)
