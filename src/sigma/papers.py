@@ -1819,6 +1819,7 @@ def _tex(
     obligation_reconciliation: list[dict[str, Any]] | None = None,
     integrity_records: list[dict[str, Any]] | None = None,
     material_omissions: list[dict[str, Any]] | None = None,
+    integrity_excerpts: bool = False,
 ) -> str:
     esc = _latex
     prose = _latex_prose
@@ -1960,8 +1961,13 @@ def _tex(
     if integrity_records:
         parts += [
             r"\appendix",
-            r"\section{Structured reasoning and review records}",
+            (r"\section{Selected source-linked research excerpts}" if integrity_excerpts
+             else r"\section{Structured reasoning and review records}"),
             prose(
+                "The following are bounded, selected excerpts of original research records. "
+                "They are not exhaustive; consult the full frozen snapshot archived with this paper. "
+                "They do not constitute independent verification."
+                if integrity_excerpts else
                 "The following material is transcribed from the frozen research snapshot to "
                 "preserve recorded reasoning, Skeptic assessments, negative findings, "
                 "contradictions, and unresolved objections that may not fit in the synthesized "
@@ -2593,7 +2599,7 @@ that occur in the input. Do not add scientific claims or outside citations."""
         if isinstance(project_data, dict) else "default"
     )
     plan_instructions = (
-        INSTRUCTIONS + "\\n\\nRESEARCH TYPE AND WRITING STYLE: "
+        INSTRUCTIONS + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
         + """
 
@@ -3126,10 +3132,29 @@ async def _generate_impl(
                     if isinstance(project_data, dict) else "default"
                 ),
                 obligation_reconciliation=obligation_reconciliation,
-                integrity_records=_long_paper_integrity_records(package, work)
-                if long_form
-                else None,
+                integrity_records=(
+                    [
+                        {
+                            "source_ref": item["source_ref"],
+                            "field": item["field"],
+                            "content": {
+                                "excerpt": item["content_excerpt"],
+                                "truncated": item["truncated"],
+                            },
+                        }
+                        for item in _section_original_excerpts(
+                            _research_integrity_records(package),
+                            {source["id"] for source in package["sources"]},
+                            "reasoning proof argument skeptic objection contradiction failure obligation results",
+                            90_000,
+                        )
+                    ]
+                    if work.get("evidence_strategy") == "structured_v1"
+                    else _long_paper_integrity_records(package, work)
+                    if long_form else None
+                ),
                 material_omissions=material_omissions,
+                integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
             )
             await report("compile", None, None)
             pdf = await asyncio.to_thread(
