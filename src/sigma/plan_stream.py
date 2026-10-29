@@ -143,35 +143,47 @@ def failure(
             # This makes strict-schema failures actionable without exposing
             # provider-supplied strings or changing retry/billing behavior.
             safe_request_codes = {
-                "invalid_json_schema", "invalid_request_error",
-                "invalid_parameter", "unsupported_parameter", "unsupported_value",
-                "model_not_found", "model_access_denied",
+                "invalid_json_schema",
+                "invalid_request_error",
+                "invalid_parameter",
+                "unsupported_parameter",
+                "unsupported_value",
+                "model_not_found",
+                "model_access_denied",
             }
             safe_request_params = {
-                "text.format", "text.format.schema", "reasoning.effort",
-                "max_output_tokens", "model",
+                "text.format",
+                "text.format.schema",
+                "reasoning.effort",
+                "max_output_tokens",
+                "model",
             }
             safe_code = code if isinstance(code, str) and code in safe_request_codes else None
             raw_param = error.get("param") if isinstance(error, dict) else None
             safe_param = (
-                raw_param if isinstance(raw_param, str) and raw_param in safe_request_params
+                raw_param
+                if isinstance(raw_param, str) and raw_param in safe_request_params
                 else None
             )
             if safe_code == "invalid_json_schema" or safe_param in {
-                "text.format", "text.format.schema"
+                "text.format",
+                "text.format.schema",
             }:
                 description += "The structured-output schema was rejected. "
             elif safe_param == "model" or safe_code in {
-                "model_not_found", "model_access_denied"
+                "model_not_found",
+                "model_access_denied",
             }:
                 description += "The selected model or model access was rejected. "
             elif safe_code or safe_param:
                 description += "A request parameter was rejected. "
             diagnostics = [
-                item for item in (
+                item
+                for item in (
                     f"code={safe_code}" if safe_code else None,
                     f"param={safe_param}" if safe_param else None,
-                ) if item
+                )
+                if item
             ]
             if diagnostics:
                 description += f"({', '.join(diagnostics)}) "
