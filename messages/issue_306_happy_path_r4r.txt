@@ -157,3 +157,78 @@ cost: zero.
 - The PR was synchronized with the intervening `main` update and reported
   mergeable at the time of handoff. The coordinator should independently
   review both requirement sets and rerun integration checks after merge.
+
+## PR #317 adversarial correction pass (2026-10-28)
+
+### SECTION A — ISSUE #306 correction evidence
+
+- **MET:** additional scheduler regressions exercise an active strategy set
+  changing from A/B/C/D to B/C/D/E, round-robin fairness when a strategy is
+  skipped by budget, a pending Skeptic receiving the final turn, no orphaned
+  Investigator dispatch, and a precise `Deferred:` reason for branches that
+  receive no pair. An exhausted queued branch is no longer reported as though
+  an incomplete pair had been retried.
+- **MET:** adversarial completion regressions cover a productive Skeptic stop
+  with open obligations, contradictory achieved claims with a next question,
+  and a challenged result exactly at the two-call/one-round ceiling. All end
+  terminally without an achieved or positive outcome.
+- Focused scheduling/completion tests pass. The final full `./sigma test` result
+  is recorded below after its completed run.
+
+### SECTION B — HAPPY-PATH RELIABILITY correction evidence
+
+- **MET:** deterministic real-Chrome run uses the actual Maximum Regions
+  sample copy, actual SIGMA settings/session/report/storage surfaces, and a
+  deterministic local provider fixture. It dispatched exactly
+  `Investigator → Skeptic → Investigator → Skeptic` over cycles 1 and 2.
+  Round 1 saved the deliberately flawed `n^2+1` claim and Skeptic objection;
+  round 2 saved the revised `R(n) = 1 + n(n+1)/2` proof candidate and Skeptic
+  review. Both artifacts remained in sequence.
+- The fixture's four calls reported 3,600 input tokens (400 cached) and 4,800
+  output tokens; the normal reservation/reconciliation path produced an
+  available estimated cost below the saved $2 limit. These are fixture values,
+  not provider usage or charges. Session status was `ended`; TXT report
+  contained the result and unverified status. Refresh and reopening returned
+  the identical session, artifacts, steps, and estimated cost.
+- Measured copied project JSON: 3,801 bytes; assembled context: 5,410 bytes.
+- **UNVERIFIED:** live provider-backed Play execution and live usage/cost; no
+  paid provider calls were authorized or made.
+
+### T201 CI browser failure investigation
+
+The failed T201 workflow run `40809905085` on pre-correction PR head
+`59a0ad9abc735f7c2d3485f30408b29eb981ca86` passed `t201_overflow.py` and
+`t81_public_legal_pages.py`, then failed `browser_checks/guest_samples.py:409`
+when clicking Cancel. Playwright's hit-test log identifies the existing
+`.project-controls-message` status span (“Model availability requires an
+authorized session…”) as intercepting the click. This is a genuine transient
+pointer obstruction, not a bad locator target. The status component and guest
+sample script are unchanged from base `6ecc0df23127f4f1f920943331ff43afcc399682`;
+this PR does not change their UI or test code. The same guest-sample script
+passed twice on detached, unchanged `origin/main` and failed once on the PR
+head, so the observed failure is intermittent. Evidence supports a pre-existing
+UI hit-test defect with a fixture/timing-sensitive trigger; it does not
+establish that this PR introduced it. It was left unchanged to avoid editing
+another workstream's UI polish. Aggregate T201 CI is **UNMET** until rerun
+passes; coordinator should route the status-span obstruction through the
+human to the UI owner.
+
+### Correction pass disposition
+
+- **MET:** offline scheduling/completion checks and two-round browser lifecycle
+  described above.
+- **UNMET:** T201 aggregate browser workflow on the observed run; its failing
+  guest-samples Cancel click must pass in a later CI rerun. No production
+  deployment or merge occurred.
+- **UNVERIFIED:** post-correction GitHub Actions results until the pushed head's
+  workflow run completes; live provider-backed Play and live cost remain
+  unverified.
+- PR #317 remains open at the correction commit noted in the delivery record
+  after push. The base SHA remains
+  `6ecc0df23127f4f1f920943331ff43afcc399682`.
+
+Final correction verification: `./sigma test` passed all steps on the correction
+working tree, including Ruff, format, Pyright, frontend typecheck, and frontend
+production build. One unrelated sandbox graph-present case explicitly skipped
+because its local Python sandbox image is unavailable. The deterministic
+Maximum Regions Chrome lifecycle passed on the same working tree.

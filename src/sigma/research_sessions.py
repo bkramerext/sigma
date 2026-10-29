@@ -7278,6 +7278,8 @@ def _commit_portfolio_review(
     reviewed_argument = _reviewed_argument(investigation, output)
     objective_candidate = (
         output["objective_status"] == "achieved"
+        and output["assessment"] == "stop"
+        and not output["next_question"].strip()
         and output["verification_status"] == "convincing_unverified"
         and bool(output["solution_claim"].strip())
         and bool(output["argument_summary"].strip())
@@ -8443,12 +8445,19 @@ def _affordable_portfolio_branches(
     rotated = active[offset:] + active[:offset]
     selected: list[dict[str, Any]] = []
     allocated = 0
-    for branch in rotated:
+    last_selected_index: int | None = None
+    for index, branch in enumerate(rotated):
         cost = 1 if branch.get("pending_investigation") else 2
         if allocated + cost <= remaining:
             selected.append(branch)
             allocated += cost
-    return selected, (offset + len(selected)) % len(active)
+            last_selected_index = index
+    next_cursor = (
+        (offset + last_selected_index + 1) % len(active)
+        if last_selected_index is not None
+        else offset
+    )
+    return selected, next_cursor
 
 
 async def _portfolio_worker(session_id: str, path: str) -> None:
@@ -8539,6 +8548,12 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     for branch in runs
                     if branch.get("current_action") == "Incomplete · output limit"
                 ]
+                deferred_branches = [
+                    str(branch.get("strategy_title") or "Strategy")
+                    for branch in runs
+                    if branch.get("current_action") == "Budget exhausted"
+                    and str(branch.get("reason") or "").startswith("Deferred:")
+                ]
                 record["message"] = (
                     _portfolio_failure_message(runs)
                     if record["status"] == "failed"
@@ -8546,7 +8561,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     if incomplete_branches
                     else "All enabled strategy branches reached a terminal review before the shared turn ceiling was used."
                     if not active and remaining > 0
-                    else "The shared turn ceiling prevented another complete Investigator/Skeptic pair. Saved findings and unserved branch reasons are shown in the Outcome."
+                    else "The shared turn ceiling prevented another complete Investigator/Skeptic pair. Deferred branches: "
+                    + ", ".join(deferred_branches)
+                    + ". Saved findings and each branch's stopping reason are shown in the Outcome."
                 )
                 if record.get("provider_usage_limited") is True:
                     record["current_action"] = "Provider usage limit"
@@ -8691,7 +8708,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     branch["status"] = "ended"
                     branch["current_action"] = "Budget exhausted"
                     branch["reason"] = (
-                        "Shared model-call budget reached; no incomplete pair was retried."
+                        "Deferred: shared turn ceiling exhausted before another complete "
+                        "Investigator/Skeptic pair."
                     )
             record["cycle"] = max(
                 (branch["cycle"] for branch in record["strategy_runs"]), default=0
@@ -9541,6 +9559,8 @@ async def _worker(session_id: str, path: str) -> None:
             reviewed_argument = _reviewed_argument(investigation, output)
             objective_candidate = (
                 output["objective_status"] == "achieved"
+                and output["assessment"] == "stop"
+                and not output["next_question"].strip()
                 and verification_status == "convincing_unverified"
                 and bool(output["solution_claim"].strip())
                 and bool(output["argument_summary"].strip())

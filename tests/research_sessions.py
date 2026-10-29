@@ -2986,6 +2986,178 @@ def test_shared_turn_schedule_accepts_strategy_count_changes():
     assert [item["strategy_id"] for item in first] == ["0", "1", "2"]
     assert [item["strategy_id"] for item in second] == ["3"]
 
+    # A changing active set preserves round-robin progress and serves every
+    # remaining strategy before repeating one when each wave has one pair.
+    active = [{"strategy_id": value} for value in "ABCD"]
+    selected, cursor = research_sessions._affordable_portfolio_branches(active, 2, 0)
+    assert [item["strategy_id"] for item in selected] == ["A"]
+    active = [{"strategy_id": value} for value in "BCDE"]
+    order = []
+    for _ in active:
+        selected, cursor = research_sessions._affordable_portfolio_branches(active, 2, cursor)
+        order.extend(item["strategy_id"] for item in selected)
+    assert order == ["C", "D", "E", "B"]
+
+    # A pending Skeptic costs one final turn. An unstarted Investigator still
+    # costs a pair and must not be selected when only one turn remains.
+    mixed = [
+        {"strategy_id": "investigator"},
+        {"strategy_id": "skeptic", "pending_investigation": {"claim": "saved"}},
+    ]
+    selected, _ = research_sessions._affordable_portfolio_branches(mixed, 1, 0)
+    assert [item["strategy_id"] for item in selected] == ["skeptic"]
+    mixed = [
+        {"strategy_id": "I0"},
+        {"strategy_id": "I1"},
+        {"strategy_id": "S2", "pending_investigation": {"claim": "saved"}},
+    ]
+    selected, cursor = research_sessions._affordable_portfolio_branches(mixed, 3, 0)
+    assert [item["strategy_id"] for item in selected] == ["I0", "S2"]
+    assert cursor == 0  # cursor advances past the last selected branch, not by count
+
+
+async def test_pending_skeptic_uses_final_turn_and_deferred_outcome_is_specific(path: Path):
+    view, first, credential, config = await setup(path)
+    second_view = create_strategy(path, "Deferred route", "Check an independent argument.")
+    second = next(item for item in second_view.project.strategies if item.id != first.id)
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=2, model_calls=2)
+    limits = research_sessions.save_limits(str(path), limits)
+    dispatched = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        dispatched.append((context["strategy"]["id"], role, context["cycle"]))
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"], "stop", "productive_conclusion")
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended" and finished["calls_used"] == 2
+    assert [role for _, role, _ in dispatched] == ["research_investigator", "research_skeptic"]
+    assert dispatched[0][0] == dispatched[1][0] == first.id
+    assert dispatched[0][2] == dispatched[1][2] == 1
+    by_strategy_round = {}
+    for step in finished["steps"]:
+        by_strategy_round.setdefault((step["strategy_id"], step["cycle"]), set()).add(step["role"])
+    assert all(roles == {"investigator", "skeptic"} for roles in by_strategy_round.values())
+    deferred = next(run for run in finished["strategy_runs"] if run["strategy_id"] == second.id)
+    assert deferred["calls_used"] == 0 and deferred["current_action"] == "Budget exhausted"
+    assert deferred["reason"].startswith("Deferred:"), deferred
+    assert second.title in finished["message"]
+    assert deferred["status"] == "ended" and "Deferred:" in deferred["reason"]
+    assert finished["outcome"]["solution_review"]["status"] != "achieved"
+
+
+async def test_adversarial_achieved_reviews_never_publish_unsupported_solution(path: Path):
+    async def run_case(case: str, skeptic_output: dict, turns: int, rounds: int):
+        case_path = path.with_name(f"{case}.sigma")
+        view, strategy, credential, config = await setup(case_path)
+        limits = research_sessions.get_limits(str(case_path))
+        limits.update(research_rounds=rounds, model_calls=turns)
+        limits = research_sessions.save_limits(str(case_path), limits)
+        calls = []
+
+        async def handler(request):
+            payload = json.loads(request.content)
+            role = payload["text"]["format"]["name"]
+            calls.append(role)
+            output = (
+                {**investigation(1), "claim": "Claim 1 is contradicted by the reviewed result."}
+                if role == "research_investigator"
+                else skeptic_output
+            )
+            return httpx.Response(200, json=provider_response(output))
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(case_path),
+                strategy.id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+            )
+            finished = await wait_for(case_path, started["id"])
+        assert finished["status"] == "ended"
+        assert finished["calls_used"] == turns == 2
+        assert calls == ["research_investigator", "research_skeptic"]
+        assert finished["outcome"]["solution_review"]["status"] != "achieved", case
+        assert finished["outcome"]["assessment"] != "positive", case
+        assert "Complete reviewed candidate answer" not in finished["outcome"]["conclusion"], case
+        return finished
+
+    productive_with_gap = skeptic(1, "stop", "productive_conclusion")
+    productive = await run_case("productive-with-gap", productive_with_gap, 2, 1)
+    assert productive["artifacts"][0]["skeptic_output"]["remaining_obligations"]
+
+    contradictory = {
+        **skeptic(1, "continue", "productive_conclusion"),
+        "objective_status": "achieved",
+        "solution_claim": "A different claim: the result is 17.",
+        "remaining_obligations": [],
+        "unresolved_objections": [],
+        "next_question": "Reconcile the conflicting claims before finalizing.",
+        "objections": [],
+    }
+    conflict = await run_case("contradictory-achieved", contradictory, 2, 1)
+    assert conflict["artifacts"][0]["objective_review"]["status"] == "partial"
+
+    unsupported_at_limit = {
+        **skeptic(1, "stop", "productive_conclusion"),
+        "objective_status": "achieved",
+        "remaining_obligations": [],
+        "unresolved_objections": [],
+        "next_question": "",
+        "objections": [],
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "challenged",
+                "rationale": "The conclusion does not follow from the stated local step.",
+                "objection": "The reasoning omits the argument needed to establish the objective.",
+                "basis_artifact_ids": [],
+            }
+        ],
+    }
+    bounded = await run_case("achieved-at-turn-limit", unsupported_at_limit, 2, 1)
+    assert bounded["terminal_reason"] == "stop_budget_exhausted"
+    assert bounded["artifacts"][0]["objective_review"]["status"] == "partial"
+
 
 async def test_legacy_limits_are_preserved(path: Path):
     view, strategy, credential, _ = await setup(path)
@@ -6146,6 +6318,9 @@ async def test_incomplete_productive_stop_uses_remaining_round(path: Path):
         finished = await wait_for(path, started["id"])
     assert finished["status"] == "ended"
     assert finished["calls_used"] == 4
+    assert finished["outcome"]["solution_review"]["status"] != "achieved"
+    assert finished["outcome"]["assessment"] != "positive"
+    assert "Complete reviewed candidate answer" not in finished["outcome"]["conclusion"]
     assert [artifact["strategy_cycle"] for artifact in finished["artifacts"]] == [1, 2]
     assert finished["artifacts"][0]["coordinator_decision"] == "continue"
     assert any(
@@ -8007,6 +8182,16 @@ def main():
         )
         test_limits_validation(root / "invalid-limits.sigma")
         test_shared_turn_schedule_accepts_strategy_count_changes()
+        asyncio.run(
+            test_pending_skeptic_uses_final_turn_and_deferred_outcome_is_specific(
+                root / "portfolio-final-skeptic-turn.sigma"
+            )
+        )
+        asyncio.run(
+            test_adversarial_achieved_reviews_never_publish_unsupported_solution(
+                root / "adversarial-achievement.sigma"
+            )
+        )
         asyncio.run(test_legacy_limits_are_preserved(root / "legacy-limits.sigma"))
         asyncio.run(test_single_project_admission(root / "single-session.sigma"))
         asyncio.run(test_response_transport_and_parsed_bounds(root / "parsed.sigma"))

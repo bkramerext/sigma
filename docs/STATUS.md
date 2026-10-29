@@ -7664,3 +7664,30 @@ authentication ownership and were not changed. Session playback/progress,
 results, and research-output browser states therefore remain unverified.
 No paid provider calls were made. R4R is open as
 [PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.
+
+## PR #317 adversarial correction pass (2026-10-28)
+
+Added adversarial regressions for changing shared-turn strategy sets, fairness,
+final-turn Skeptic dispatch, deferred branch reasons, and unsupported completion
+claims at the exact budget boundary. The deterministic Maximum Regions Chrome
+acceptance now runs two rounds: flawed Investigator claim, Skeptic objection,
+revised proof, final Skeptic review, saved artifacts, usage/cost reconciliation,
+report export, refresh and reopen. It passed with four fixture calls, 3,600
+input / 400 cached / 4,800 output tokens, 3,801-byte copied project JSON, and
+5,410-byte assembled context. These usage/cost values are simulated; no paid
+provider calls were made.
+
+T201 workflow run `40809905085` passed `t201_overflow.py` and
+`t81_public_legal_pages.py` but failed at `guest_samples.py:409`: the existing
+model-availability status span intercepted the Cancel button. The same guest
+sample script passed twice on unchanged base `6ecc0df23127f4f1f920943331ff43afcc399682`
+and failed once on the PR head; evidence indicates an intermittent, pre-existing
+UI hit-test defect, not a changed locator or status component. The aggregate
+T201 result remains UNMET pending a clean rerun. See
+`messages/issue_306_happy_path_r4r.txt` for exact disposition and evidence.
+
+Correction-pass `./sigma test` completed successfully, including backend tests,
+Ruff check/format, Pyright, frontend typecheck, and production build. Its
+existing graph-present sandbox subcase explicitly skipped because the local
+Python sandbox image is unavailable. The deterministic two-round Maximum
+Regions Chrome test also passed. No live provider calls were made.

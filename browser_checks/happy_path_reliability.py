@@ -94,13 +94,28 @@ with sync_playwright() as playwright:
         project_path,
     )
     assert opened["status"] == "ended", opened["status"]
-    assert opened["calls_used"] == 2 and opened["calls_used"] <= opened["call_limit"]
-    assert opened["steps"][0]["role"] == "investigator"
-    assert opened["steps"][1]["role"] == "skeptic"
-    assert len(opened["artifacts"]) == 1
-    assert "R(n) = 1 + n(n+1)/2" in opened["artifacts"][0]["objective_review"]["claim"]
+    assert opened["calls_used"] == 4 and opened["calls_used"] <= opened["call_limit"]
+    assert [step["role"] for step in opened["steps"]] == [
+        "investigator",
+        "skeptic",
+        "investigator",
+        "skeptic",
+    ]
+    assert [step["cycle"] for step in opened["steps"]] == [1, 1, 2, 2]
+    assert len(opened["artifacts"]) == 2
+    first, final = opened["artifacts"]
+    assert "n^2+1" in first["investigator_output"]["claim"]
+    assert first["skeptic_output"]["objections"]
+    assert "R(n) = 1 + n(n+1)/2" in final["objective_review"]["claim"]
+    assert final["sequence"] == 2 and final["strategy_cycle"] == 2
+    assert "two-line" in final["skeptic_response"]
     assert opened["outcome"]["solution_review"]["status"] == "achieved"
     assert opened["estimated_cost_usd"] is not None and opened["cost_status"] == "available"
+    usage = [step["token_usage"] for step in opened["steps"]]
+    assert sum(item["input_tokens"] for item in usage) == 3600
+    assert sum(item["cached_input_tokens"] for item in usage) == 400
+    assert sum(item["output_tokens"] for item in usage) == 4800
+    assert 0 < opened["estimated_cost_usd"] < 2
     project_json_bytes = page.evaluate(
         """async path => {
           const response = await fetch('/api/projects/audit?' + new URLSearchParams({path}));
@@ -123,11 +138,15 @@ with sync_playwright() as playwright:
         project_path,
     )
     assert reopened["id"] == opened["id"] and reopened["artifacts"] == opened["artifacts"]
+    assert (
+        reopened["steps"] == opened["steps"]
+        and reopened["estimated_cost_usd"] == opened["estimated_cost_usd"]
+    )
     assert not errors, errors
     browser.close()
 
 print(
-    "PASS deterministic Maximum Regions lifecycle: sample copy, Investigator/Skeptic, accounting, terminal outcome, report, reload and reopen"
+    "PASS deterministic Maximum Regions lifecycle: sample copy, flawed result, objection, revised result, final review, accounting, terminal outcome, report, reload and reopen"
 )
 print(
     f"MEASURED Maximum Regions copy: project payload {project_json_bytes} bytes; assembled provider context {context_bytes} bytes"
