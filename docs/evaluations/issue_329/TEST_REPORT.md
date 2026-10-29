@@ -17,7 +17,7 @@ deterministic provider fixture, browser acceptance, and this report only.
 | Five-session Tadpoles-shaped mock project to PDF under five minutes | MET (mock only) | local deterministic run completed in 0.37 s during full-suite run; Tectonic PDF produced |
 | Tadpoles representative live-provider five-session target | UNVERIFIED | no live representative run was authorized or made |
 | ONP mathematical argument fidelity on the actual production project | UNVERIFIED | synthetic ONP-shaped evidence was used; no project export or live model run was used |
-| Full suite on implementation HEAD | UNMET | `./sigma test` has failures described below |
+| Full suite on updated implementation branch | UNMET | `./sigma test` has one formatting check failure described below |
 
 ## Commands and actual results
 
@@ -31,23 +31,17 @@ deterministic provider fixture, browser acceptance, and this report only.
   deterministic local fixture: normal long-form progress and PDF, safe retry,
   narrow-screen provider failure with Continue, changed-snapshot restart, and
   PDF completion. No provider service was contacted.
-- `./sigma test` — FAIL, with three failures on the supplied implementation
-  HEAD:
-  1. `tests/cloud_research_api.py` expects the pre-fast-path long-paper mock
-     response shape; the actual `/api/projects/papers/generate` response ends
-     with `Provider returned malformed long-paper stage content. No paper was
-     published.` This is an existing integration fixture incompatibility with
-     the fast synthesis path and requires implementation-owner review.
-  2. Ruff check reports violations in `src/sigma/papers.py` (including
-     formatting/style diagnostics). Production source is outside this testing
-     assignment and was not edited.
-  3. `ruff format --check` reports `src/sigma/papers.py` would be reformatted.
-     Production source was not edited.
+- `./sigma test` — FAIL on the updated target branch because `ruff format
+  --check` reports `src/sigma/papers.py` would be reformatted. The prior
+  `tests/cloud_research_api.py` failure is resolved by the target branch's
+  structured-path fixture update. Ruff check, Pyright, cloud research API
+  tests, and frontend typecheck passed. The production frontend build was
+  skipped by `./sigma test` after the formatting failure. Production source is
+  outside this testing assignment and was not edited.
 
-The remaining suite steps completed where safe. Pyright and frontend typecheck
-passed. The production frontend build was skipped by `./sigma test` after the
-earlier failures. The optional graph-present epistemic-continuity scenario was
-skipped because the required local Python sandbox image is unavailable.
+The remaining suite steps completed where safe. The optional graph-present
+epistemic-continuity scenario was skipped because the required local Python
+sandbox image is unavailable.
 
 ## Gaps and handoff
 

@@ -144,6 +144,8 @@ def fast_package(section_count: int = 2) -> tuple[dict[str, Any], papers.FastLon
         validation_warnings=["No independent proof checker was run."],
     )
     return package, plan
+
+
 def test_structured_evidence_short_tail_does_not_crash() -> None:
     """Two fragments with a short tail must merge without IndexError.
 
@@ -151,9 +153,7 @@ def test_structured_evidence_short_tail_does_not_crash() -> None:
     before indexing [-2]; this case is deterministic and provider-free.
     """
     field = "reasoning_steps"
-    fragment_width = (
-        papers.FAST_NOTE_TEXT_LENGTH - min(len(field), 55) - 3
-    )
+    fragment_width = papers.FAST_NOTE_TEXT_LENGTH - min(len(field), 55) - 3
     research = "x" * (fragment_width + 5)
     package = {
         "sources": [
@@ -1827,7 +1827,7 @@ def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> N
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
         "biology": ("Introduction and biological context", "cross-species limitations"),
-        "mathematical": ("Introduction and definitions", "bridges between logical steps"),
+        "mathematical": ("Introduction", "bridges between logical steps"),
         "military": ("Question and operational context", "alternative interpretations"),
     }
     for research_type, (heading, guidance) in expected.items():
@@ -1835,8 +1835,8 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
         assert rf"\section{{{heading}}}" in tex
         assert guidance in tex
     math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
-    assert r"\section{Introduction and definitions}" in math_tex
-    assert r"\section*{Proof and claim status}" in math_tex
+    assert r"\section{Introduction}" in math_tex
+    assert r"\section*{Claim status and evidence}" in math_tex
 
 
 def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None:
@@ -2851,7 +2851,7 @@ def main() -> None:
     assert r"\section{Verification status and limitations}" in math_tex
     assert r"\section{Conclusion}" in math_tex
     assert math_tex.index(r"\section{Conclusion}") < math_tex.index(
-        r"\section*{Proof and claim status}"
+        r"\section*{Claim status and evidence}"
     )
     injected_section = parsed.sections[0].model_copy(
         update={"paragraphs": [r"Run \input{host-file} now."]}
