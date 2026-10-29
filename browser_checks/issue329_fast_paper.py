@@ -110,13 +110,33 @@ with sync_playwright() as playwright:
     expect(dialog.locator(".ai-paper-progress")).to_contain_text(
         "Total active time across attempts"
     )
-    expect(dialog).to_contain_text("makes a new AI request and may consume provider allowance")
+    expect(dialog.get_by_role("button", name="Start over", exact=True)).to_be_enabled()
+    expect(dialog).to_contain_text("may repeat the failure")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     dialog.get_by_role("button", name="Retry paper planning", exact=True).click()
     expect(dialog.locator(".saved-paper-card").first).to_be_visible(timeout=60_000)
     expect(
         dialog.locator(".saved-paper-card").first.get_by_role("link", name="Download PDF")
     ).to_be_visible()
+
+    # A failed plan must also provide a no-AI Start over path, independent of
+    # whether a retry might repeat the failure. Reset does not publish a paper
+    # or dispatch another provider request.
+    restart_path = create_long_project("T329 no-AI start over")
+    configure_failure("sigma_long_paper_plan", "provider_error")
+    page.set_viewport_size({"width": 1440, "height": 960})
+    dialog = open_paper(restart_path)
+    dialog.get_by_role("button", name="Generate", exact=True).click()
+    expect(dialog.get_by_role("alert")).to_contain_text(
+        "Deterministic fixture provider returned HTTP 500", timeout=30_000
+    )
+    expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled()
+    dialog.get_by_role("button", name="Start over", exact=True).click()
+    expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_enabled(
+        timeout=20_000
+    )
+    expect(dialog.locator(".saved-paper-card")).to_have_count(0)
+    expect(dialog).to_contain_text("No generation has started")
 
     # A changed source snapshot invalidates Continue. The dialog must identify
     # the mismatch and offer a deliberate Start over, without auto-dispatching.
