@@ -1826,6 +1826,27 @@ def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> N
     assert any("No independent proof checker was run." in item.statement for item in bounded)
 
 
+def test_bounded_index_keeps_constructive_proof_amid_many_objections() -> None:
+    """Large skeptical transcripts must not crowd proof evidence out of the paper."""
+    package, _ = fast_package()
+    package["sources"][1]["data"] = {
+        "objections": [
+            f"Objection {number}: " + "An unresolved counterexample requires review. " * 8
+            for number in range(900)
+        ],
+        "proof": (
+            "Construct a line arrangement with each new line meeting all earlier "
+            "lines at distinct points; it contributes the maximum number of regions."
+        ),
+    }
+    notes, omitted = papers._structured_evidence_index(package)
+    assert omitted
+    assert len(papers._json([note.model_dump() for note in notes])) <= papers.FAST_INDEX_MAX_BYTES
+    assert any(note.kind == "question" for note in notes)
+    assert any("Construct a line arrangement" in note.statement for note in notes)
+    assert any("unresolved counterexample" in note.statement for note in notes)
+
+
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
         "biology": ("Introduction and biological context", "cross-species limitations"),
@@ -2931,6 +2952,7 @@ def main() -> None:
     test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     test_structured_fast_index_preserves_math_review_and_bounds_omissions()
+    test_bounded_index_keeps_constructive_proof_amid_many_objections()
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
