@@ -311,7 +311,7 @@ Domain ownership, billing approvals, Cloudflare account creation, target VM/regi
 
 ## Purpose and guiding constraint
 
-Make SIGMA accessible to a small number of outside users as a **genuine, interactive, polished research showcase**, while retaining a useful locally running application. The intended audience includes people evaluating the product and engineering approach, particularly Onebrief. This is not a plan to launch a production SaaS business.
+Make SIGMA accessible to a small number of outside users as a **genuine, interactive, polished research showcase**, while retaining a useful locally running application. The intended audience includes people evaluating the product and engineering approach. This is not a plan to launch a production SaaS business.
 
 **Design test:** Does a decision make the demonstration more compelling, trustworthy during ordinary use, or simpler to deliver? If not, defer it. Showcase quality is not the same as production infrastructure complexity. We should spend effort on a pleasing experience and avoid preventable loss of users' specifications, strategies, or results.
 
