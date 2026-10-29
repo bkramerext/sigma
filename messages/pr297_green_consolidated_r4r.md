@@ -2,7 +2,8 @@
 
 Repository: `bkramerext/sigma`
 Branch: `coordinator/signin-session-playback-stabilization`
-Final integrated HEAD: `681fe09648c223119fa5022c63bc06b0ef93c634`
+Tested implementation HEAD: `f0075789aeb6ef787c16512a21fdea8548a01c3d`
+Integration merge commit: `681fe09648c223119fa5022c63bc06b0ef93c634`
 Integrated `origin/main`: `2d4368adf341aca105f5b645c676909da71ed5fb`
 PR #297 remains open and unmerged. No deployment or paid provider calls.
 
@@ -23,6 +24,25 @@ The real-Chromium reproduction showed the first-visit `Welcome to SIGMA!` modal 
 - Exercises **Reload me!** on the member pill. It is hidden at `$0.05`, visible at `$0.04`, and sends a real API reload request at `$0.03`. The admin dialog displays the persisted request as an allowance reload request.
 - Retains a guest cookie while switching Google identities and verifies project, saved-session, and artifact reads are isolated. Guest reads include `no-store`, `no-referrer`, `nosniff`, and `frame-ancestors 'none'` headers.
 
+The manual N blocker was traced to durable state: N's invitation row was
+`reviewed`, the email grant existed but was inactive, and the audit showed a
+later administrator revoke. N had no pending invitation and no active member
+authorization. The UI treated every non-null request status as pending and hid
+**Invite me!**; the server treated the reviewed row as a permanent duplicate.
+Only open states (`pending`, `sending`, `notified`) now suppress the button.
+Reviewed or declined rows can be resubmitted by an uninvited guest, at which
+point the current request row reopens and is visible to the admin. Active-member
+authorization remains enforced server-side. The real-Chrome regression seeds
+the reviewed/revoked state and verifies the button, resubmission, and admin
+visibility.
+
+Feedback UI corrections: **Send Feedback** is a left-aligned yellow, underlined
+action directly below the message editor with no background. The admin table's
+**Google account** column is wider and shows the verified email or **Not signed
+in**; the redundant email beneath message text is removed. **Remove** deletes
+the feedback record and leaves an audit action; **Close** and **Mark reviewed**
+retain rows. Chrome verifies both account labels, action styling, and removal.
+
 ## Security and spending checks
 
 Guest middleware retains server-side default denial and an explicit method/path allowlist. Direct API tests exercise actual guest-safe handlers and deny cross-owner/member data, writes, exports, research dispatch, provider operations, and admin routes. Monthly spending tests cover settled usage across rollover under monthly and cumulative policies, unresolved reserved/unknown obligations, and concurrent reservations against the global ceiling.
@@ -30,7 +50,7 @@ Guest middleware retains server-side default denial and an explicit method/path 
 ## Verification
 
 - `./sigma test` — PASS on this integrated source tree, including cloud auth, monthly research windows, Red's research-session tests, Ruff, Pyright, frontend typecheck, and production build. The existing graph-present sandbox subcase was skipped because its local Python sandbox image is unavailable; the graph-withheld branch passed.
-- `browser_checks/local_auth_real_backend.py` — PASS: both Google sign-in entry points, durable invitation, admin visibility/approval, subsequent member session, `$0.03` Reload me! request/admin visibility, guest response headers, and two-identity project/session/artifact isolation.
+- `browser_checks/local_auth_real_backend.py` — PASS: both Google sign-in entry points; new and reviewed/revoked invitation flows; admin visibility/approval and subsequent member session; `$0.03` Reload me! request/admin visibility; guest response headers and two-identity project/session/artifact isolation; feedback account display/removal and Send Feedback styling.
 - `browser_checks/guest_samples.py` — PASS: public sample flow and welcome dialog.
 - `browser_checks/issue279_invite_me.py` — PASS: invitation request/retry, reload threshold at `$0.05`/`$0.04`, and member access.
 - `browser_checks/happy_path_reliability.py` — PASS: Red's deterministic Maximum Regions lifecycle, report, usage fixture, and reopen.
@@ -38,7 +58,7 @@ Guest middleware retains server-side default denial and an explicit method/path 
 - `browser_checks/about_dialog_acceptance.py` — PASS at 1440/390/320px and touch help at 390px.
 - `git diff --check` — PASS.
 
-The product feedback API and administrator handling have existing coverage in `tests/cloud_auth.py`, which passed in the full suite. This pass did not add a dedicated product-feedback browser acceptance.
+The product feedback API, administrator authorization, removal audit, and display actions pass `tests/cloud_auth.py` and the dedicated real-Chrome checks above.
 
 ## Acceptance state
 
@@ -48,12 +68,13 @@ The product feedback API and administrator handling have existing coverage in `t
 | Google sign-in controls reach the real local OAuth-start endpoint | MET (automated) | Welcome CTA and actual pill clicked in real Chrome; redirect URL validated by fixture |
 | Live Google OAuth with account N | UNVERIFIED | No live OAuth callback was performed |
 | Durable guest invitation, real admin dialog visibility/approval, and subsequent member role | MET (deterministic real API/browser) | Shared auth DB, real admin dialog/API, fresh post-approval session |
+| Reviewed request plus revoked grant allows uninvited N to re-request | MET (deterministic real API/browser) | Persisted N state checked; Chrome shows Invite me, records fresh request, admin sees it |
 | Reload me! threshold below `$0.05` and admin visibility | MET (deterministic real API/browser) | Hidden at `$0.05`, visible at `$0.04`, request recorded at `$0.03` and shown to admin |
 | Guest identity isolation, cache protection, default-deny route audit | MET | Direct API and real-backend Chrome checks |
 | Monthly rollover and global reservation limits | MET | Adversarial unit tests |
 | Red scheduler/session, Blue Markdown, approved About diagram | MET (automated + Chrome) | Full suite and real-Chrome checks |
 | N's live Google → invitation → approval → Easy sponsored session with usage attribution | UNVERIFIED (human release gate) | Not run; deterministic provider fixtures do not establish a live provider call or N's real spend attribution |
-| Dedicated product-feedback browser acceptance | UNMET / not in this pass | Existing feedback API/admin tests pass; no feature-specific browser acceptance was added |
+| Feedback account labels, Send Feedback style, and row removal | MET (deterministic real API/browser) | Signed-in/anonymous row display, action position/style, Remove route/UI/audit verified |
 
 ## Manual release acceptance steps
 
