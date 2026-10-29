@@ -1664,18 +1664,105 @@ def _draft_text(draft: PaperDraft) -> str:
     return json.dumps(draft.model_dump(), ensure_ascii=False)
 
 
+_PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
+    # (opening section, methods section, findings label, authoring emphasis)
+    "mathematical": (
+        "Introduction and definitions", "Proof strategy and evidence",
+        "Arguments and claims",
+        "Distinguish proved statements from conjectures, failed arguments, and open proof obligations. "
+        "State assumptions and explain bridges between logical steps.",
+    ),
+    "biology": (
+        "Introduction and biological context", "Methods and evidence",
+        "Findings and hypotheses",
+        "Distinguish observed biology from mechanistic hypotheses and proposed experiments. "
+        "Identify organisms, developmental stages, controls, and cross-species limitations.",
+    ),
+    "chemistry": (
+        "Introduction and chemical context", "Methods and evidence",
+        "Results and mechanistic interpretation",
+        "Distinguish measured outcomes, mechanistic hypotheses, and unperformed experiments. "
+        "Report conditions, measurements and uncertainty only when recorded.",
+    ),
+    "physics": (
+        "Introduction and physical framework", "Methods and evidence",
+        "Results and interpretation",
+        "Distinguish models and derivations from measurements and simulations; "
+        "identify assumptions, units, uncertainties and verification gaps.",
+    ),
+    "computer_science": (
+        "Introduction and problem statement", "Methods and evidence",
+        "Algorithms, results, and limitations",
+        "Distinguish algorithmic guarantees from tests, benchmarks and conjectures. "
+        "Document counterexamples, complexity assumptions and reproducibility.",
+    ),
+    "engineering": (
+        "Introduction and design objectives", "Methods and evidence",
+        "Design analysis and tradeoffs",
+        "Distinguish simulated, measured and predicted performance, with operating "
+        "constraints, failure modes and validation gaps.",
+    ),
+    "economics": (
+        "Introduction and economic question", "Methods and evidence",
+        "Findings and interpretation",
+        "Distinguish causal claims from associations and theoretical predictions; "
+        "state assumptions, data limitations and competing explanations.",
+    ),
+    "law": (
+        "Question presented and background", "Authorities and analytical method",
+        "Analysis and competing interpretations",
+        "Distinguish verified authorities from speculative interpretations; "
+        "represent jurisdictional limits, contrary arguments and unanswered questions.",
+    ),
+    "military": (
+        "Question and operational context", "Methods and evidence",
+        "Analysis and constraints",
+        "Distinguish historical evidence, scenarios, assumptions and speculation. "
+        "Describe uncertainties and alternative interpretations.",
+    ),
+    "philosophy": (
+        "Question and conceptual framework", "Argument and sources",
+        "Arguments and objections",
+        "State definitions and premises, develop competing arguments, and preserve "
+        "objections and unresolved disagreements.",
+    ),
+    "religion": (
+        "Question and textual context", "Interpretive approach and sources",
+        "Interpretations and counterarguments",
+        "Distinguish documented textual claims from interpretations; acknowledge "
+        "traditions, counterarguments, and open questions.",
+    ),
+    "default": (
+        "Introduction", "Methods and evidence",
+        "Findings and interpretation",
+        "Match the genre to the available evidence and clearly distinguish "
+        "findings, hypotheses, negative results and unresolved questions.",
+    ),
+}
+
+
+def _paper_style(investigation_type: str) -> tuple[str, str, str, str]:
+    return _PAPER_TYPE_STYLES.get(investigation_type, _PAPER_TYPE_STYLES["default"])
+
+
 def _tex(
     draft: PaperDraft,
     warnings: list[str],
     snapshot_hash: str,
     *,
     math_style: bool = False,
+    investigation_type: str = "default",
     obligation_reconciliation: list[dict[str, Any]] | None = None,
     integrity_records: list[dict[str, Any]] | None = None,
     material_omissions: list[dict[str, Any]] | None = None,
 ) -> str:
     esc = _latex
     prose = _latex_prose
+    if math_style:
+        investigation_type = "mathematical"
+    opening_heading, methods_heading, findings_heading, style_note = _paper_style(
+        investigation_type
+    )
     parts = [
         r"\documentclass[11pt]{article}",
         r"\usepackage[T1]{fontenc}",
@@ -1712,6 +1799,7 @@ def _tex(
         prose(
             "Readers should evaluate its arguments, supporting evidence, and stated limitations before relying on its conclusions."
         ),
+        prose("Research style: " + style_note),
     ]
     if material_omissions:
         affected_sources = sorted(
@@ -1737,15 +1825,13 @@ def _tex(
         ]
     if draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
-    parts.append(r"\section{Introduction}" if math_style else r"\section{Problem framing}")
+    parts.append(r"\section{" + esc(opening_heading) + "}")
     parts += [prose(text) for text in draft.problem_framing]
     if draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
-    parts.append(
-        r"\section{Evidence and scope}" if math_style else r"\section{Methods and evidence}"
-    )
+    parts.append(r"\section{" + esc(methods_heading) + "}")
     parts += [prose(text) for text in draft.methods]
     if draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
@@ -1757,7 +1843,8 @@ def _tex(
 
     def claim_register() -> None:
         parts.append(
-            r"\section*{Claim status and evidence}" if math_style else r"\section{Claim register}"
+            r"\section*{Proof and claim status}" if math_style
+            else r"\section{" + esc(findings_heading) + "}"
         )
         for claim in draft.claims:
             parts.extend(
@@ -2383,8 +2470,16 @@ that occur in the input. Do not add scientific claims or outside citations."""
         save_state(state)
 
     index = [note.model_dump() for note in notes]
+    project_data = next(
+        (source["data"] for source in package["sources"] if source["kind"] == "project"), {}
+    )
+    project_type = (
+        project_data.get("investigation_type", "default")
+        if isinstance(project_data, dict) else "default"
+    )
     plan_instructions = (
-        INSTRUCTIONS
+        INSTRUCTIONS + "\\n\\nRESEARCH TYPE AND WRITING STYLE: "
+        + _paper_style(project_type)[3]
         + """
 
 You are planning a long-form paper, not writing its full section prose. The evidence index is a
@@ -2398,9 +2493,6 @@ proof from an unverified proof candidate, preserve definitions, constructions, c
 and gaps, and do not invent bridging steps. For experimental research, distinguish observations,
 analyses, hypotheses and proposed experiments; never present an unrun experiment as a result.
 Return the complete plan JSON matching the schema."""
-    )
-    project_data = next(
-        (source["data"] for source in package["sources"] if source["kind"] == "project"), {}
     )
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
     plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
@@ -2916,6 +3008,10 @@ async def _generate_impl(
                 warnings,
                 snapshot_hash,
                 math_style=math_style,
+                investigation_type=(
+                    project_data.get("investigation_type", "default")
+                    if isinstance(project_data, dict) else "default"
+                ),
                 obligation_reconciliation=obligation_reconciliation,
                 integrity_records=_long_paper_integrity_records(package, work)
                 if long_form
