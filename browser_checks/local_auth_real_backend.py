@@ -414,16 +414,9 @@ def main() -> None:
 
                 page.route("**/api/cloud-auth/login**", login_redirect_fixture)
 
-                welcome_sign_in = welcome.get_by_role("link", name="Sign in with Google")
-                expect(welcome_sign_in).to_be_visible()
-                assert welcome_sign_in.get_attribute("href") == "/api/cloud-auth/login"
-                requests.clear()
-                with page.expect_navigation(url=re.compile(r"/api/cloud-auth/login")):
-                    welcome_sign_in.click()
-                assert ("GET", "/api/cloud-auth/login") in requests, requests
-                assert len(oauth_redirects) == 1, oauth_redirects
-                assert urllib.parse.urlsplit(page.url).path == "/api/cloud-auth/login"
-                assert "Deterministic Google OAuth fixture" in page.title()
+                expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
+                welcome.get_by_role("button", name="Let's get started").click()
+                expect(welcome).to_have_count(0)
 
                 page.goto(origin, wait_until="domcontentloaded")
                 page.evaluate("sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true')")
@@ -437,7 +430,7 @@ def main() -> None:
                 with page.expect_navigation(url=re.compile(r"/api/cloud-auth/login")):
                     google_sign_in.click()
                 assert ("GET", "/api/cloud-auth/login") in requests, requests
-                assert len(oauth_redirects) == 2, oauth_redirects
+                assert len(oauth_redirects) == 1, oauth_redirects
                 assert urllib.parse.urlsplit(page.url).path == "/api/cloud-auth/login"
                 assert "Deterministic Google OAuth fixture" in page.title()
 

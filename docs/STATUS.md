@@ -7895,3 +7895,11 @@ invitation, admin, feedback, cache-header, and identity-isolation checks. A
 full `./sigma test` passed on the immediately prior SHA; it has not yet been
 rerun after this frontend condition and browser-check update. No live Google
 OAuth callback or paid provider call was made.
+
+The guest welcome dialog no longer contains a Google sign-in link; users sign
+in with the persistent Google account pill. Updated real-Chrome coverage
+asserts the link is absent, dismisses the welcome, then clicks the actual pill
+and follows a deterministic OAuth redirect fixture. `./sigma test`, frontend
+typecheck, `browser_checks/local_auth_real_backend.py`, and
+`browser_checks/guest_samples.py` passed with this update in the worktree. No
+live Google OAuth callback or paid provider call was made.

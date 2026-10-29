@@ -194,9 +194,7 @@ def exercise(ui_url: str, root: Path) -> None:
             )
             == "italic"
         )
-        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_attribute(
-            "href", "/api/cloud-auth/login"
-        )
+        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
         welcome.get_by_role("button", name="Let's get started").click()
         expect(welcome).to_have_count(0)
         page.route(
