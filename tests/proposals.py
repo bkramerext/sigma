@@ -249,6 +249,76 @@ async def check(path):
                 == 400
             )
         assert len(calls) == 6
+
+        # Infer is one opted-in Current Understanding call that immediately
+        # saves an ordinary strategy. It does not require a second accept/save.
+        infer_draft = {
+            **DRAFT,
+            "title": "Independent boundary verification",
+            "approach": "Compare the unresolved boundary condition against independently generated finite-moment examples, citing the saved session evidence.",
+        }
+        infer_calls = []
+
+        async def inferred_handler(request):
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "object": "list",
+                        "data": [{"id": "gpt-6.1-sol"}, {"id": "gpt-6-luna"}],
+                    },
+                )
+            payload = json.loads(request.content)
+            assert payload["text"]["format"]["name"] == "strategy_inference"
+            assert "automatically added" in payload["instructions"]
+            assert payload["store"] is False
+            context = json.loads(payload["input"])
+            assert context["current_understanding"]["session_count"] == 2
+            assert context["selected_session_evidence"]
+            assert any(
+                item["title"] == "Existing direction"
+                for item in context["existing_strategies_including_disabled"]
+            )
+            infer_calls.append(payload)
+            return httpx.Response(200, json=response(infer_draft))
+
+        def inferred_client(**kwargs):
+            return REAL_CLIENT(
+                transport=httpx.MockTransport(inferred_handler), **kwargs
+            )
+
+        with (
+            patch("sigma.proposals.httpx.AsyncClient", side_effect=inferred_client),
+            TestClient(app) as infer_api,
+        ):
+            before_infer = inspect_project(path).project
+            added = infer_api.post(
+                "/api/projects/strategies/infer",
+                json={
+                    "path": str(path),
+                    "expected_project_id": before_infer.id,
+                },
+            )
+            assert added.status_code == 201, added.text
+            created = inspect_project(path).project
+            assert len(created.strategies) == len(before_infer.strategies) + 1
+            assert created.strategies[-1].title == infer_draft["title"]
+            assert created.strategies[-1].provenance is not None
+            assert created.strategies[-1].provenance.provider == "openai"
+            assert added.json()["project"]["strategies"][-1]["title"] == infer_draft["title"]
+            assert created.events[-1].kind == "strategy.created"
+            # Duplication is rejected even on explicit re-inference; history is
+            # unchanged if the model returns the same strategy.
+            already_added = (path / "project.json").read_bytes()
+            duplicate_infer = infer_api.post(
+                "/api/projects/strategies/infer",
+                json={"path": str(path), "expected_project_id": before_infer.id},
+            )
+            assert duplicate_infer.status_code == 400, duplicate_infer.text
+            assert "repeats an existing direction" in duplicate_infer.json()["error"]
+            assert (path / "project.json").read_bytes() == already_added
+            assert len(infer_calls) == 2
+
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",
