@@ -1538,8 +1538,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
-      <p className="settings-hint">The paper is AI-generated and has not been independently verified. Generation uses your selected provider and may consume allowance or incur charges. It does not start a research session.</p>
-      <p className="settings-hint ai-paper-model">Selected model: <strong>{model || 'Loading…'}</strong></p>
+      <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
+      <p className="settings-hint">Paper planning and section writing use this project's selected AI model and Thinking level. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
+      <p className="settings-hint ai-paper-model">Project AI model: <strong>{model || 'Loading…'}</strong> · Thinking level: <strong>{effort || 'Loading…'}</strong></p>
       {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
