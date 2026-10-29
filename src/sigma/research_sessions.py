@@ -2469,6 +2469,23 @@ def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
     return round((input_cost + cached_cost + output_cost) / 1_000_000, 9)
 
 
+def _retain_unknown_cost_reservation(record: dict[str, Any], step: dict[str, Any]) -> None:
+    """Keep a bounded unknown call in the session budget as a held reserve."""
+    if step.get("cost_reserve") is None:
+        record["cost_status"] = "unavailable"
+        record["estimated_cost_usd"] = None
+        return
+    known_cost = 0.0
+    for saved_step in record.get("steps", []):
+        usage = saved_step.get("token_usage")
+        if isinstance(usage, dict):
+            estimate = _estimate_cost(record["model"], usage)
+            if estimate is not None:
+                known_cost += estimate
+    record["cost_status"] = "available"
+    record["estimated_cost_usd"] = round(known_cost, 9)
+
+
 def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     """Persist bounded response classification without storing provider bodies."""
     if isinstance(exc, ChatGPTProviderRejection):
@@ -3352,11 +3369,15 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 branch["current_action"] = "Interrupted after backend restart"
                 branch["reason"] = record["message"]
         record["current_action"] = "Paused after backend restart"
-        if (record.get("mode") == "api_key" or record.get("cloud_sponsored") is True) and any(
-            step.get("failure_kind") == "interrupted" for step in record.get("steps", [])
-        ):
-            record["cost_status"] = "unavailable"
-            record["estimated_cost_usd"] = None
+        if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
+            unknown_steps = [
+                step
+                for step in record.get("steps", [])
+                if step.get("failure_kind") == "interrupted"
+            ]
+            if unknown_steps:
+                for step in unknown_steps:
+                    _retain_unknown_cost_reservation(record, step)
         _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
         if cloud_research.billing_enabled():
@@ -4818,6 +4839,16 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record["guard_hash"] = guard
             record["guard_state_hash"] = guard_state_hash
             current_limits = get_limits(path)
+            previous_cost_limit = record.get("maximum_estimated_cost_usd")
+            resumed_cost_limit = current_limits["maximum_estimated_cost_usd"]
+            if previous_cost_limit != resumed_cost_limit:
+                record["maximum_estimated_cost_usd"] = resumed_cost_limit
+                _event(
+                    record,
+                    "session.limits_updated",
+                    "The project cost limit was updated for this resumed session: "
+                    f"{previous_cost_limit!r} → {resumed_cost_limit!r} USD.",
+                )
             others = [
                 recovered
                 for item in _all(path)
@@ -7816,11 +7847,24 @@ async def _portfolio_role_call(
                         record["tokens_reserved"] = max(
                             0, int(record.get("tokens_reserved", 0)) - token_reserve
                         )
-                    branch["status"] = "ended"
+                    branch["status"] = "paused"
                     branch["reason"] = (
                         "A conservative cost reserve prevented another provider call."
                     )
                     branch["current_action"] = "Cost limit"
+                    branch["funding_resume_allowed"] = True
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · cost limit"
+                    record["message"] = (
+                        "Research paused before provider dispatch because the configured session cost limit cannot cover another call. "
+                        "Completed research and cost reservations are preserved. Review the limit, then resume."
+                    )
+                    record["terminal_reason"] = branch["reason"]
+                    record["updated_at"] = _now()
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
+                    _event(record, "cost.limit", record["message"])
                     _save(path, record)
                     return False
                 record["estimated_cost_reserved_usd"] = reserved_cost + reserve
@@ -8064,15 +8108,14 @@ async def _portfolio_role_call(
                     budget_error = _settle_request_budget(record, step, exc.usage)
                     if budget_error:
                         step["hard_budget_error"] = budget_error
-                    if step.get("cost_reserve") is not None:
+                    if step.get("cost_reserve") is not None and estimate is not None:
                         record["estimated_cost_reserved_usd"] = max(
                             0.0,
                             float(record.get("estimated_cost_reserved_usd", 0.0))
                             - float(step["cost_reserve"]),
                         )
                     if estimate is None:
-                        record["cost_status"] = "unavailable"
-                        record["estimated_cost_usd"] = None
+                        _retain_unknown_cost_reservation(record, step)
                     elif record.get("cost_status") == "available":
                         record["estimated_cost_usd"] = round(
                             float(record.get("estimated_cost_usd", 0.0)) + estimate, 9
@@ -8201,8 +8244,7 @@ async def _portfolio_role_call(
                             record.get("estimated_cost_usd") or 0.0
                         )
                 elif step.get("cost_reserve") is not None:
-                    record["cost_status"] = "unavailable"
-                    record["estimated_cost_usd"] = None
+                    _retain_unknown_cost_reservation(record, step)
                 branch["status"] = "failed"
                 branch["current_action"] = "Failed"
                 failure_message = str(exc).strip()[:1000]
@@ -8331,15 +8373,14 @@ async def _portfolio_role_call(
             _refresh_token_accounting(record)
             if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
-                if step.get("cost_reserve") is not None:
+                if step.get("cost_reserve") is not None and estimate is not None:
                     record["estimated_cost_reserved_usd"] = max(
                         0.0,
                         float(record.get("estimated_cost_reserved_usd", 0.0))
                         - float(step["cost_reserve"]),
                     )
                 if estimate is None:
-                    record["cost_status"] = "unavailable"
-                    record["estimated_cost_usd"] = None
+                    _retain_unknown_cost_reservation(record, step)
                 elif record.get("cost_status") == "available":
                     record["estimated_cost_usd"] = round(
                         record.get("estimated_cost_usd", 0.0) + estimate, 9
@@ -8923,6 +8964,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         )
         async with state_lock:
             record = _read(path, session_id)
+            if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return
             for branch in record["strategy_runs"]:
                 if branch.get("pending_skeptic") is not None:
                     _commit_portfolio_review_safely(record, session_id, branch)

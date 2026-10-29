@@ -262,8 +262,14 @@ async def completed(
                     raise ValueError("plan_stream:done_before_terminal")
                 continue
             event_count += 1
-            if event_count > MAX_EVENTS or terminal is not None:
+            if event_count > MAX_EVENTS:
                 raise ValueError("plan_stream:event_after_terminal")
+            if terminal is not None:
+                # A completed response is authoritative. Some hosted bridges
+                # append bounded bookkeeping events after response.completed;
+                # never let those events replace or invalidate the response
+                # whose usage and output were already finalized.
+                continue
             event = json.loads(data)
             kind = event.get("type")
             seq = event.get("sequence_number")
@@ -329,7 +335,7 @@ async def completed(
             elif kind.startswith("response.refusal."):
                 refused = True
     buffer += decoder.decode(b"", final=True)
-    if buffer.strip() or terminal is None:
+    if terminal is None:
         raise ProjectError(
             "ChatGPT stream ended without a valid response.completed. No strategy was saved."
         )

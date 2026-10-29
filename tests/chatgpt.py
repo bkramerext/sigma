@@ -296,7 +296,21 @@ async def checks(root):
             inspect_project(path).project.reasoning_effort == "high"
             and (path / "project.json").read_bytes() == before
         )
-        assert fixture.generated == 1
+        # A hosted bridge can emit bounded bookkeeping after its terminal
+        # response. SIGMA must retain the completed response and ignore that
+        # tail rather than turning a completed paid call into an unknown one.
+        trailing_events = [
+            *fixture.events(),
+            {"type": "response.usage", "sequence_number": 3, "usage": {"input_tokens": 1}},
+        ]
+        fixture.stream_override = "".join(
+            "data: " + json.dumps(event) + "\n\n" for event in trailing_events
+        ).encode()
+        reset_connection()
+        trailing_result = await generate_proposal(str(path))
+        assert trailing_result["draft"] == DRAFT
+        fixture.stream_override = None
+        assert fixture.generated == 2
         await rejection(generate_proposal(str(path), expected_project_id="changed"), "identity")
         await rejection(generate_proposal(str(path), expected_binding="api_key"), "billing mode")
         # SSE malformed/failed/incomplete/refusal/truncated/oversized/out-of-order streams.

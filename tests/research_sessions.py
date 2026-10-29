@@ -6353,13 +6353,13 @@ async def test_incomplete_productive_stop_uses_remaining_round(path: Path):
     ]
 
 
-async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
-    """A completed Investigator followed by a refused Skeptic reports the real 1/6 stop."""
+async def test_configured_cost_cap_pauses_and_resumes_after_replenishment(path: Path):
+    """A cost-denied Skeptic pauses and resumes without replaying the Investigator."""
     view, strategy, credential, config = await setup(path)
     limits = {
         **research_sessions.DEFAULT_LIMITS,
         "model_calls": 6,
-        "research_rounds": 3,
+        "research_rounds": 1,
         "maximum_estimated_cost_usd": 0.05,
     }
     limits = research_sessions.save_limits(str(path), limits)
@@ -6378,7 +6378,7 @@ async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
-        patch.object(research_sessions, "_reserve_cost", side_effect=[0.03, 0.05]),
+        patch.object(research_sessions, "_reserve_cost", side_effect=[0.03, 0.05, 0.05]),
         patch.object(research_sessions, "_estimate_cost", return_value=0.02),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
@@ -6390,15 +6390,25 @@ async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
         started = await research_sessions.start_session(
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
         )
-        finished = await wait_for(path, started["id"])
+        paused = await wait_for(path, started["id"])
+        assert paused["status"] == "paused", paused
+        assert paused["calls_used"] == 1 and paused["call_limit"] == 6
+        assert paused["steps"][0]["role"] == "investigator"
+        assert "session cost limit" in paused["message"], paused
+        assert calls == ["research_investigator"]
 
-    assert calls == ["research_investigator"]
-    assert finished["calls_used"] == 1 and finished["call_limit"] == 6, finished
+        replenished = research_sessions.save_limits(
+            str(path), {**limits, "maximum_estimated_cost_usd": 0.20}
+        )
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert replenished["maximum_estimated_cost_usd"] == 0.20
+    assert calls == ["research_investigator", "research_skeptic"], calls
+    assert finished["calls_used"] == 2 and finished["call_limit"] == 6, finished
     assert finished["status"] == "ended"
-    assert "round 1 of 3, after 1/6 agent turns" in finished["message"]
-    assert "configured session cost limit" in finished["message"]
-    assert "No Skeptic agent turn was dispatched" in finished["message"]
-    assert "conservative cost reserve" in finished["outcome"]["summary"]
+    assert [step["role"] for step in finished["steps"]] == ["investigator", "skeptic"]
+    assert finished["steps"][0]["output"] == paused["steps"][0]["output"]
 
 
 async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
@@ -8180,6 +8190,35 @@ def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
     assert "conservative cost reserve" in outcome["caveats"][-1]
 
 
+def test_unknown_provider_attempt_keeps_held_session_cost() -> None:
+    record = {
+        "model": MODEL,
+        "cost_status": "unavailable",
+        "estimated_cost_usd": None,
+        "estimated_cost_reserved_usd": 0.24,
+        "steps": [
+            {
+                "status": "completed",
+                "token_usage": {
+                    "input_tokens": 10_000,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 4_000,
+                },
+            },
+            {"status": "failed", "attempt_status": "unknown"},
+        ],
+    }
+    step = {"cost_reserve": 0.24}
+
+    research_sessions._retain_unknown_cost_reservation(record, step)
+
+    assert record["cost_status"] == "available"
+    assert record["estimated_cost_usd"] == research_sessions._estimate_cost(
+        MODEL, record["steps"][0]["token_usage"]
+    )
+    assert record["estimated_cost_reserved_usd"] == 0.24
+
+
 def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     record = {
         "mode": "chatgpt",
@@ -8254,6 +8293,7 @@ def main():
     test_project_cost_denial_reports_affordable_first_call()
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
+    test_unknown_provider_attempt_keeps_held_session_cost()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
@@ -8482,7 +8522,7 @@ def main():
             )
         )
         asyncio.run(
-            test_configured_cost_cap_reports_second_call_refusal(
+            test_configured_cost_cap_pauses_and_resumes_after_replenishment(
                 root / "portfolio-cost-cap-second-call.sigma"
             )
         )
