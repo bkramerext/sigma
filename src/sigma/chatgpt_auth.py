@@ -185,6 +185,7 @@ class Attempt:
     sponsor: bool = False
     hosted: bool = False
     store_directory: Path | None = None
+    owner_subject: str | None = None
     client_id: str = "dynamic_agent_client"
     redirect_uri: str = ""
     status: str = "connecting"
@@ -198,6 +199,42 @@ class Attempt:
 
 
 _attempts: dict[str, Attempt] = {}
+
+
+def _owner_subject() -> str | None:
+    from sigma import cloud_auth
+
+    principal = cloud_auth.current_principal()
+    return principal.subject if principal is not None else None
+
+
+def _attempt_store_directory(sponsor: bool) -> Path:
+    return sponsor_directory() if sponsor else directory()
+
+
+def _owned_attempt(identifier: str) -> Attempt:
+    attempt = _attempts.get(identifier)
+    if attempt is None:
+        raise ProjectError("Sign-in attempt expired or belongs to another user.")
+    if (
+        attempt.owner_subject != _owner_subject()
+        or attempt.store_directory is None
+        or attempt.store_directory.resolve() != _attempt_store_directory(attempt.sponsor).resolve()
+    ):
+        raise ProjectError("Sign-in attempt expired or belongs to another user.")
+    return attempt
+
+
+def _cancel_attempt(attempt: Attempt) -> None:
+    if attempt.status != "connecting":
+        return
+    if attempt.task:
+        attempt.task.cancel()
+    finish(
+        attempt,
+        "cancelled",
+        "Sign-in cancelled. Your existing account and research were retained.",
+    )
 
 
 def finish(attempt: Attempt, status: str, message: str) -> None:
@@ -235,12 +272,21 @@ async def begin(
             account_id=account_id,
             sponsor=sponsor,
             hosted=cloud_workspaces.enabled(),
-            store_directory=sponsor_directory() if sponsor else directory(),
+            store_directory=_attempt_store_directory(sponsor),
+            owner_subject=_owner_subject(),
         )
+        attempt_store = attempt.store_directory
+        if attempt_store is None:
+            raise ProjectError("Personal ChatGPT storage is unavailable.")
         if retry_attempt_id:
             failed = _attempts.get(retry_attempt_id)
+            failed_store = failed.store_directory if failed else None
             if (
                 not failed
+                or failed.owner_subject != attempt.owner_subject
+                or failed_store is None
+                or failed_store.resolve() != attempt_store.resolve()
+                or failed.sponsor != attempt.sponsor
                 or failed.account_id != account_id
                 or not failed.retry_client_id
                 or failed.status != "failed"
@@ -250,8 +296,7 @@ async def begin(
                     "Previous sign-in can no longer be retried. Start a new sign-in."
                 )
             attempt.client_id = failed.retry_client_id
-        assert attempt.store_directory is not None
-        async with transaction_at(attempt.store_directory) as state:
+        async with transaction_at(attempt_store) as state:
             previous = state["accounts"].get(account_id) if account_id else None
             if account_id and not previous:
                 raise ProjectError("Saved account was not found. Choose Connect another account.")
@@ -330,13 +375,9 @@ _urls: dict[str, str] = {}
 
 
 def attempt_status(identifier: str) -> dict:
-    attempt = _attempts.get(identifier)
-    if not attempt:
-        raise ProjectError(
-            "Sign-in attempt expired or belongs to another server session. Retry sign-in."
-        )
+    attempt = _owned_attempt(identifier)
     if attempt.status == "connecting" and time.monotonic() > attempt.expires:
-        cancel(identifier)
+        _cancel_attempt(attempt)
     return {
         "id": attempt.id,
         "status": attempt.status,
@@ -346,21 +387,14 @@ def attempt_status(identifier: str) -> dict:
 
 
 def cancel(identifier: str) -> None:
-    attempt = _attempts.get(identifier)
-    if attempt and attempt.status == "connecting":
-        if attempt.task:
-            attempt.task.cancel()
-        finish(
-            attempt,
-            "cancelled",
-            "Sign-in cancelled. Your existing account and research were retained.",
-        )
+    attempt = _owned_attempt(identifier)
+    _cancel_attempt(attempt)
     _urls.pop(identifier, None)
 
 
 def authorization_url(identifier: str) -> str:
-    attempt = _attempts.get(identifier)
-    if not attempt or attempt.status != "connecting" or attempt.consumed:
+    attempt = _owned_attempt(identifier)
+    if attempt.status != "connecting" or attempt.consumed:
         raise ProjectError("Sign-in attempt is no longer active. Retry sign-in.")
     url = _urls.pop(identifier, None)
     if url is None:
@@ -656,8 +690,16 @@ async def welcome_seen() -> None:
 
 
 async def disconnect() -> dict:
+    owner_subject = _owner_subject()
+    current_store = _attempt_store_directory(sponsor=False).resolve()
     for attempt in list(_attempts.values()):
-        cancel(attempt.id)
+        if (
+            not attempt.sponsor
+            and attempt.owner_subject == owner_subject
+            and attempt.store_directory is not None
+            and attempt.store_directory.resolve() == current_store
+        ):
+            _cancel_attempt(attempt)
     confirmed = False
     async with transaction() as state:
         had_api_key = bool(state.pop("api_key", None))

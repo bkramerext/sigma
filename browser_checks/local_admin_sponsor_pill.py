@@ -212,7 +212,7 @@ def exercise(origin: str) -> None:
         expect(pill.get_by_role("status")).to_have_text("Connect to ChatGPT")
         expect(pill).to_have_attribute("aria-label", "Connect to ChatGPT")
         expect(pill).not_to_contain_text("Unlimited")
-        assert pill.get_attribute("data-tooltip") in (None, "")
+        assert pill.get_attribute("title") in (None, "")
         posts.clear()
         with page.expect_request("**/api/ai/auth/begin") as begin:
             pill.click()
@@ -243,11 +243,25 @@ def exercise(origin: str) -> None:
             url.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for url, body in posts
         ), posts
         tip = page.locator("#sponsored-allowance-tooltip")
-        expect(tip).to_contain_text("Sponsor Connected · zetacontinuation@gmail.com · Unlimited")
-        expect(tip).to_contain_text("Click to connect your own ChatGPT account.")
-        assert len(tip.inner_text()) < 150
-        page.locator(".sponsored-allowance-trigger").hover()
+        assert pill.get_attribute("title") == (
+            "Sponsor Connected · zetacontinuation@gmail.com · Unlimited. "
+            "Click to connect your own ChatGPT account."
+        )
+        pill.hover(position={"x": 20, "y": 15})
+        expect(tip).not_to_be_visible()
+        allowance_trigger = page.locator(".sponsored-allowance-trigger")
+        expect(allowance_trigger).to_have_attribute("aria-label", "Show sponsorship details")
+        expect(allowance_trigger).to_have_attribute("title", "Click to show sponsorship details.")
+        allowance_trigger.hover()
+        assert allowance_trigger.get_attribute("title") == "Click to show sponsorship details."
+        posts.clear()
+        allowance_trigger.click()
+        expect(allowance_trigger).to_have_attribute("aria-expanded", "true")
         expect(tip).to_be_visible()
+        expect(tip).to_have_text("Sponsor Connected · zetacontinuation@gmail.com · Unlimited.")
+        assert not posts, posts
+        allowance_trigger.click()
+        expect(tip).not_to_be_visible()
 
         # A sponsored member sees only their allowance and provider state.
         # Even if an upstream fixture includes a sponsor label, no member UI
@@ -261,11 +275,25 @@ def exercise(origin: str) -> None:
         expect(member_pill.locator(".sponsored-allowance-inline")).to_have_text("0.37")
         expect(member_pill).to_have_attribute("aria-label", "Sponsored ChatGPT")
         member_tip = page.locator("#sponsored-allowance-tooltip")
-        expect(member_tip).to_contain_text("$0.37 remaining · Unavailable")
-        expect(member_tip).to_contain_text("Click to connect your own ChatGPT account.")
+        member_pill.hover(position={"x": 20, "y": 17})
+        assert member_pill.get_attribute("title") == (
+            "$0.37 remaining · Unavailable. Click to connect your own ChatGPT account."
+        )
+        assert "zetacontinuation@gmail.com" not in (member_pill.get_attribute("aria-label") or "")
+        member_tip = page.locator("#sponsored-allowance-tooltip")
+        expect(member_tip).to_have_text("$0.37 remaining · Unavailable.")
         expect(member_tip).not_to_contain_text("zetacontinuation@gmail.com")
-        page.locator(".sponsored-allowance-trigger").hover()
+        member_allowance_trigger = page.locator(".sponsored-allowance-trigger")
+        member_allowance_trigger.hover()
+        expect(member_allowance_trigger).to_have_attribute(
+            "title", "Click to show sponsorship details."
+        )
+        member_allowance_trigger.click()
+        expect(member_allowance_trigger).to_have_attribute("aria-expanded", "true")
         expect(member_tip).to_be_visible()
+        expect(member_tip).not_to_contain_text("zetacontinuation@gmail.com")
+        member_allowance_trigger.click()
+        expect(member_tip).not_to_be_visible()
         posts.clear()
         attempt_complete["value"] = True
         with page.expect_request("**/api/ai/auth/begin") as member_personal_begin:

@@ -1882,6 +1882,95 @@ class CloudAuthTests(TestCase):
             self.assertEqual(mode_response.status_code, 200, mode_response.text)
             self.assertNotIn("zetacontinuation@gmail.com", mode_response.text)
 
+    def test_personal_disconnect_cannot_cancel_other_users_or_sponsor_oauth_attempts(self):
+        from sigma import chatgpt_auth
+
+        local_origin = "http://127.0.0.1:5173"
+        b_client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 23461))
+        self.addCleanup(b_client.close)
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_AUTH_HOME": str(Path(self.temp.name) / "auth-db"),
+                "SIGMA_AUTH_HOME": str(Path(self.temp.name) / "auth-home"),
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_SPONSOR_EMAIL", None)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,'admin',1,?)",
+                    ("brian.kramer.personal@gmail.com", cloud_auth._now()),
+                )
+            z_login = self.finish(email="zetacontinuation@gmail.com", subject="attempt-owner-z")
+            b_login = self.finish(
+                email="brian.kramer.personal@gmail.com",
+                subject="attempt-owner-b",
+                client=b_client,
+            )
+            self.assertEqual(z_login.status_code, 303)
+            self.assertEqual(b_login.status_code, 303)
+            self.client.cookies.update(z_login.cookies)
+            b_client.cookies.update(b_login.cookies)
+            headers = {"Origin": local_origin}
+            endpoint = "https://auth.openai.com/authorize"
+            with patch.object(
+                chatgpt_auth,
+                "discovery",
+                AsyncMock(return_value={"authorization_endpoint": endpoint}),
+            ):
+                z_personal = self.client.post("/api/ai/auth/begin", json={}, headers=headers)
+                self.assertEqual(z_personal.status_code, 200, z_personal.text)
+                z_sponsor = self.client.post("/api/ai/sponsor-auth/begin", json={}, headers=headers)
+                self.assertEqual(z_sponsor.status_code, 200, z_sponsor.text)
+                personal_id = z_personal.json()["id"]
+                sponsor_id = z_sponsor.json()["id"]
+
+                # B disconnects B's own personal store while both Z flows are
+                # pending. Neither pending flow may be cancelled as a side effect.
+                disconnected = b_client.post("/api/ai/disconnect", json={}, headers=headers)
+                self.assertEqual(disconnected.status_code, 200, disconnected.text)
+                for attempt_id in (personal_id, sponsor_id):
+                    self.assertEqual(
+                        self.client.get(f"/api/ai/auth/attempt/{attempt_id}").json()["status"],
+                        "connecting",
+                    )
+                    self.assertEqual(
+                        b_client.get(f"/api/ai/auth/attempt/{attempt_id}").status_code, 400
+                    )
+                    self.assertEqual(
+                        b_client.post(
+                            f"/api/ai/auth/cancel/{attempt_id}", json={}, headers=headers
+                        ).status_code,
+                        400,
+                    )
+
+                # A failed attempt can be retried only by its owner, against
+                # the same personal/sponsor store in which it began.
+                for attempt_id in (personal_id, sponsor_id):
+                    attempt = chatgpt_auth._attempts[attempt_id]
+                    chatgpt_auth.finish(attempt, "failed", "Fixture failure.")
+                    attempt.retry_client_id = "fixture-client"
+                    self.assertEqual(
+                        b_client.post(
+                            "/api/ai/auth/begin",
+                            json={"retry_attempt_id": attempt_id},
+                            headers=headers,
+                        ).status_code,
+                        400,
+                    )
+                self.assertEqual(
+                    self.client.post(
+                        "/api/ai/auth/begin",
+                        json={"retry_attempt_id": sponsor_id},
+                        headers=headers,
+                    ).status_code,
+                    400,
+                    "a personal OAuth retry must not consume a sponsor-store attempt ID",
+                )
+
     def test_local_existing_cookie_keeps_same_email_personal_and_sponsor_credentials_separate(self):
         import asyncio
         import time

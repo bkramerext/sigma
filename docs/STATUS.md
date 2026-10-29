@@ -7769,3 +7769,36 @@ passed at implementation commit
 `794ae30f27f82e83758c4002a214b86d1fd3c8c9`. The seven play-session cases
 remain explicitly deferred to the next round. See
 [`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).
+
+## PR #297 OAuth attempt ownership and real-backend regressions (2026-10-28)
+
+Personal disconnect previously iterated the process-global OAuth attempt map
+and cancelled every pending entry. Attempts are now bound to the verified
+Google subject, resolved credential store, and personal/sponsor intent.
+Disconnect only cancels this user's personal attempts; attempt status, cancel,
+authorization handoff, and retry reject another subject or store. Sponsor
+maintenance attempts remain unaffected by personal disconnect.
+
+The sponsored pill's primary native hover now includes “Click to connect your
+own ChatGPT account.” The nested allowance control has its own concise
+“Click to show sponsorship details.” hover and only toggles allowance details.
+The browser regression checks both targets and click effects. A second Chromium
+regression drives the UI through Vite to the real local API subprocess, performs
+same-email personal OAuth and sponsor maintenance OAuth using simulated
+external token/catalog responses, checks distinct durable stores, restarts the
+API subprocess against the same auth DB and credential home, then checks the
+existing cookie, explicit mode, personal connection, sponsor persistence, and
+member sponsor-email redaction.
+
+Fixture findings were baseline-confirmed at `846848e`: cloud research first
+failed because its API-key assertions inherited the ChatGPT provider default;
+with explicit API-key mode it next failed because the JSON orphan fixture
+helper did not create missing parent directories. Deployment-package checks
+also inherited the provider default. These are now explicit fixture settings
+and safe parent creation; no production billing behavior changed. The storage
+runner passes at baseline in this environment and passes in the updated tree.
+Full local `./sigma test` now passes; one graph-present sandbox scenario remains
+skipped because the Docker image is unavailable. Hosted personal OAuth remains
+unsupported and was not enabled. Real Google/OpenAI account OAuth and the seven
+live session-playback scenarios are deferred/unverified. See the current
+[`messages/pr297_green_r4r.md`](../messages/pr297_green_r4r.md).

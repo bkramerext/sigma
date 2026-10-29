@@ -118,6 +118,7 @@ def main() -> None:
         cloud_environment = {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
             "SIGMA_CLOUD_AUTH_LOCAL": "false",
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
             "SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.example.test",
             "SIGMA_CLOUD_AUTH_HOME": str(auth_root),
             "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.test",

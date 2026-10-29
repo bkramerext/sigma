@@ -301,9 +301,12 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : cloudFunding?.loading ? 'Allowance loading' : 'Allowance unavailable';
   const sponsorStatus = connected ? 'Connected' : ['disconnected', 'reauth_required', 'unauthorized', 'forbidden', 'unavailable', 'unconfigured', 'plan_not_permitted'].includes(ai.info?.status ?? '') ? 'Unavailable' : 'Checking';
   const personalAction = 'Click to connect your own ChatGPT account.';
-  const sponsorTooltip = adminSponsored
-    ? `Sponsor ${sponsorStatus}${ai.info?.account_label ? ` · ${ai.info.account_label}` : ''} · Unlimited${globalFundingDetail}${providerWarning}. ${personalAction}`
-    : `${memberAllowance} · ${sponsorStatus}${providerWarning}. ${personalAction}`;
+  const sponsorDetails = adminSponsored
+    ? `Sponsor ${sponsorStatus}${ai.info?.account_label ? ` · ${ai.info.account_label}` : ''} · Unlimited${globalFundingDetail}${providerWarning}.`
+    : `${memberAllowance} · ${sponsorStatus}${providerWarning}.`;
+  const sponsorTooltip = hosted
+    ? `SIGMA-sponsored ChatGPT · ${sponsorStatus}${adminSponsored ? ` · Unlimited${ai.info?.account_label ? ` · ${ai.info.account_label}` : ''}` : ''}.`
+    : `${sponsorDetails} ${personalAction}`;
   const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode required' : ''}${connected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
   const allowanceText = !sponsoredSelected
     ? 'Personal'
@@ -356,9 +359,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     return zeroAllowanceAction ?? null;
   }
   return <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!!ai.error || !!cloudFunding?.connectionError || (!sponsoredPill && (ai.connecting || !!ai.handoff))}>
-    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={connectionTooltip} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} title={sponsoredPill ? sponsorTooltip : connectionTooltip} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled || (forcedSponsored && sponsoredSelected) || (connected && hosted)} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
-      {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Sponsored allowance details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip-disabled onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorTooltip}</span></button></> : <span role="status">{visibleLabel}</span>}
+      {sponsoredPill ? <><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" title="Click to show sponsorship details." aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip="Click to show sponsorship details." onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></> : <span role="status">{visibleLabel}</span>}
     </summary>
     {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>}
     {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}

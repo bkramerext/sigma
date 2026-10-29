@@ -74,7 +74,7 @@ def job(workspace: str, *, session: str | None = None, key: str | None = None) -
 
 def workspace(root: Path, identifier: str, email: str | None = None) -> cloud_workspaces.Workspace:
     path = root / identifier
-    path.mkdir(mode=0o700, exist_ok=True)
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
     return cloud_workspaces.Workspace(identifier, identifier, path, email)
 
 
@@ -456,6 +456,8 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
     second_project = initialize_project(owner.path / "budget-two.sigma", "Budget two", "Question")
     env = {
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "cloud-research-fixture-key",
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
         "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
@@ -1440,6 +1442,10 @@ def test_hosted_deployment_forwards_global_spend_window() -> None:
 
 
 def main() -> None:
+    # This suite validates the explicitly configured API-key admission path;
+    # never inherit the repository's local ChatGPT provider default.
+    os.environ.setdefault("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    os.environ.setdefault("SIGMA_CLOUD_OPENAI_API_KEY", "cloud-research-fixture-key")
     test_hosted_deployment_forwards_global_spend_window()
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
@@ -1461,6 +1467,11 @@ def main() -> None:
         b = workspace(root, "b" * 32)
         settings = {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            # These admission tests exercise the API-key funding path. Keep
+            # ambient repository defaults (which may select ChatGPT) out of
+            # their deterministic provider assertions.
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+            "SIGMA_CLOUD_OPENAI_API_KEY": "cloud-research-fixture-key",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
             "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
@@ -1482,6 +1493,7 @@ def main() -> None:
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
                 "OPENAI_API_KEY": "local-operator-key-must-not-be-used",
                 "SIGMA_CLOUD_OPENAI_API_KEY": "",
             },
@@ -1494,6 +1506,7 @@ def main() -> None:
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
                 "SIGMA_CLOUD_OPENAI_API_KEY": "explicit-cloud-fixture",
             },
             clear=False,
