@@ -288,7 +288,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = connected && !sponsoredPill
-    ? `${ai.info?.account_label ? `ChatGPT connected as ${ai.info.account_label}. ` : 'ChatGPT is connected. '}Click to return to sponsorship.`
+    ? 'ChatGPT is connected. Click to return to sponsorship.'
     : undefined;
   const allowanceDescription = !cloudFunding?.authorized
     ? 'Sign in to view your sponsored allowance.'

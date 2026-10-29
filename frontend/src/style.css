@@ -355,6 +355,10 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
 
 @media (max-width: 900px) {
+  .home-page .home-slogan { display: none; }
+  .home-page .home-atmosphere {
+    background: linear-gradient(#020711d9, #020711d9), url('/sigma-home-background-copper.png') 35% top / cover no-repeat;
+  }
   .home-page .home-projects {
     position: relative;
     top: auto;
