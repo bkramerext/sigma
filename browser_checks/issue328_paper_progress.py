@@ -39,9 +39,16 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     generate = dialog.get_by_role("button", name="Generate paper", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
+    expect(generate).to_have_css("text-decoration-line", "underline")
+    expect(dialog.get_by_role("button", name="Close", exact=True)).to_have_css(
+        "text-decoration-line", "underline"
+    )
     generate.click()
     status = dialog.locator(".ai-paper-progress")
     expect(status).to_contain_text("Writing the paper", timeout=10000)
+    expect(dialog.get_by_role("button", name="Cancel generation", exact=True)).to_have_css(
+        "text-decoration-line", "underline"
+    )
     expect(status).to_contain_text("Elapsed")
     page.screenshot(path="/tmp/sigma-issue328-short-progress.png", full_page=True)
     dialog.get_by_role("button", name="Cancel generation", exact=True).click()

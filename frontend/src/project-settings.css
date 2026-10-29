@@ -227,6 +227,19 @@
 .ai-paper-body > p { margin: 0; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-body > p.settings-hint { font-size: 14px; line-height: 1.55; }
 .ai-paper-body .ai-paper-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.project-settings-dialog.ai-paper-dialog .settings-body button:not(.saved-paper-expand) {
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: #d9b17e; font: 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body button:not(.saved-paper-expand):hover:not(:disabled) {
+  border-color: transparent; background: transparent; box-shadow: none; color: #f3cd9e;
+}
+.project-settings-dialog.ai-paper-dialog .settings-body button.destructive-action { color: #e6a092; }
+.project-settings-dialog.ai-paper-dialog .settings-body button.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
+.project-settings-dialog.ai-paper-dialog .settings-body button:disabled { opacity: .5; cursor: default; }
+.project-settings-dialog.ai-paper-dialog .saved-paper-expand h4 { text-decoration: underline; text-underline-offset: 3px; }
 .ai-paper-body select { width: 100%; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-long-form,
 .project-settings-dialog.ai-paper-dialog .ai-paper-open-tab { display: flex; align-items: center; gap: 8px; margin: 0; color: #dce7f0; font-size: 14px; line-height: 1.4; }
