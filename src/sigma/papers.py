@@ -76,6 +76,9 @@ PaperStageCallback = Callable[
     Awaitable[None],
 ]
 CALL_SECONDS = 120
+# A complex paper outline can take longer than an ordinary provider call.
+# This is an upper bound, not a measure of model progress or a retry policy.
+PLANNING_CALL_SECONDS = 300
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
 _active_progress: dict[str, dict[str, Any]] = {}
@@ -2175,6 +2178,10 @@ async def _provider(
                 pass
 
 
+def _long_paper_call_timeout(schema_name: str) -> int:
+    return PLANNING_CALL_SECONDS if schema_name == "sigma_long_paper_plan" else CALL_SECONDS
+
+
 async def _provider_structured(
     input_value: Any,
     binding: Mapping[str, Any],
@@ -2189,6 +2196,7 @@ async def _provider_structured(
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
+    stage_timeout_seconds = _long_paper_call_timeout(schema_name)
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
@@ -2227,9 +2235,9 @@ async def _provider_structured(
         if attempt is not None:
             attempt.dispatched = True
         async with (
-            asyncio.timeout(CALL_SECONDS),
+            asyncio.timeout(stage_timeout_seconds),
             httpx.AsyncClient(
-                timeout=CALL_SECONDS, trust_env=False, follow_redirects=False
+                timeout=stage_timeout_seconds, trust_env=False, follow_redirects=False
             ) as client,
             client.stream(
                 "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
