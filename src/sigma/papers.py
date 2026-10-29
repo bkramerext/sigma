@@ -509,6 +509,16 @@ def _paper_long_form(
     """
     if force_long_form:
         return True
+    # Earlier versions (and explicit long-form requests) may have already
+    # spent provider calls on a small snapshot. Reuse that compatible work
+    # regardless of which fast-path size rule the current version applies.
+    if (
+        existing is not None
+        and existing.get("kind") == "long_form"
+        and existing.get("project_id") == package.get("project_id")
+        and existing.get("snapshot_sha256") == hashlib.sha256(_json(package)).hexdigest()
+    ):
+        return True
     size = len(_json(package))
     if size <= MAX_ONE_SHOT_CONTEXT_BYTES:
         return False
@@ -530,14 +540,7 @@ def _paper_long_form(
         and not agentic
         and len(sources) <= 12
     )
-    if not eligible:
-        return True
-    return bool(
-        existing is not None
-        and existing.get("snapshot_sha256") == hashlib.sha256(_json(package)).hexdigest()
-        and existing.get("project_id") == package.get("project_id")
-        and existing.get("kind") == "long_form"
-    )
+    return not eligible
 
 
 def _utf8_fragments(value: str, limit: int) -> list[str]:
