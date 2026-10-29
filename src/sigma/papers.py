@@ -54,6 +54,7 @@ PaperProgressStage = Literal[
     "sections",
     "validation",
     "compile",
+    "retry",
     "complete",
 ]
 PaperProgressState = Literal["active", "milestone", "failed", "cancelled", "complete"]
@@ -87,6 +88,14 @@ class PaperSnapshotConflict(ProjectError):
     """A changed evidence snapshot rejected before this attempt used a provider."""
 
     provider_calls_attempted = 0
+
+
+class PaperConnectionFailure(ProjectError):
+    """Only a connection-phase failure, before request bytes were delivered.
+
+    It is safe to retry this error; read/write timeouts, HTTP status failures,
+    malformed provider output and lost streams are NOT automatically retried.
+    """
 
 
 class PaperClaim(BaseModel):
@@ -1093,6 +1102,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 "sections",
                 "validation",
                 "compile",
+                "retry",
                 "complete",
             }
             or type(progress_state.get("elapsed_seconds")) is not int
@@ -2151,6 +2161,11 @@ async def _provider_structured(
         return response_model.model_validate_json(texts[0]), config["model"]
     except ProjectError:
         raise
+    except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
+        raise PaperConnectionFailure(
+            "Could not establish a provider connection for a paper stage. "
+            "The request was not delivered; automatic connection retries are bounded."
+        ) from exc
     except (TimeoutError, httpx.TimeoutException) as exc:
         raise ProjectError(
             "A long-paper stage timed out. No paper was published; retry explicitly."
@@ -2238,6 +2253,52 @@ async def _generate_long_draft(
         state["provider_calls"] = calls
         state["provider_calls_total"] = int(state.get("provider_calls_total", calls - 1)) + 1
         save_state(state)
+
+    async def call_with_safe_retry(
+        input_value: Any,
+        *,
+        reserve: int,
+        instructions: str,
+        schema_name: str,
+        response_model: type[BaseModel],
+        max_input_bytes: int,
+        legacy: bool = False,
+    ) -> tuple[BaseModel, str]:
+        """Retry only connection failures known to precede provider delivery.
+
+        Every attempt is accounted for before dispatch. A timeout after a
+        request may have been delivered, a refused response, invalid JSON or
+        a provider 429 are deliberately NOT retried: allowance consumption
+        cannot be assumed to be zero.
+        """
+        maximum = 1 if legacy else 3
+        for attempt_number in range(1, maximum + 1):
+            before_provider_call(
+                reserve,
+                input_value=input_value,
+                schema_name=schema_name,
+                max_input_bytes=max_input_bytes,
+            )
+            try:
+                return await _provider_structured(
+                    input_value,
+                    binding,
+                    config,
+                    instructions=instructions,
+                    schema_name=schema_name,
+                    response_model=response_model,
+                    max_input_bytes=max_input_bytes,
+                    project_id=project_id,
+                    project_path_value=project_path_value,
+                )
+            except PaperConnectionFailure:
+                if attempt_number == maximum:
+                    raise
+                if progress:
+                    await progress("retry", attempt_number, maximum, "active")
+                # A short bounded backoff; cancellation remains responsive.
+                await asyncio.sleep(0.4 * attempt_number)
+        raise AssertionError("Safe retry loop exhausted without raising")
 
     if fast_path and not state.get("evidence_indexed"):
         if progress:
@@ -2505,22 +2566,14 @@ Return the complete plan JSON matching the schema."""
     else:
         if progress:
             await progress("planning", None, None, "active")
-        before_provider_call(
-            MAX_LONG_PAPER_SECTIONS,
-            input_value=plan_input,
-            schema_name="sigma_long_paper_plan",
-            max_input_bytes=220_000,
-        )
-        plan, _ = await _provider_structured(
+        plan, _ = await call_with_safe_retry(
             plan_input,
-            binding,
-            config,
+            reserve=MAX_LONG_PAPER_SECTIONS,
             instructions=plan_instructions,
             schema_name="sigma_long_paper_plan",
             response_model=LongPaperPlan,
             max_input_bytes=220_000,
-            project_id=project_id,
-            project_path_value=project_path_value,
+            legacy=not fast_path,
         )
         long_plan = LongPaperPlan.model_validate(plan)
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
@@ -2576,22 +2629,14 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             "section_plan": section.model_dump(),
             "evidence_notes": relevant,
         }
-        before_provider_call(
-            len(long_plan.sections) - len(saved_sections) - 1,
-            input_value=section_input,
-            schema_name="sigma_long_paper_section",
-            max_input_bytes=220_000,
-        )
-        body, _ = await _provider_structured(
+        body, _ = await call_with_safe_retry(
             section_input,
-            binding,
-            config,
+            reserve=len(long_plan.sections) - len(saved_sections) - 1,
             instructions=section_instructions,
             schema_name="sigma_long_paper_section",
             response_model=LongSectionDraft,
             max_input_bytes=220_000,
-            project_id=project_id,
-            project_path_value=project_path_value,
+            legacy=not fast_path,
         )
         section_draft = LongSectionDraft.model_validate(body)
         encoded_section = _json(section_draft.model_dump())
