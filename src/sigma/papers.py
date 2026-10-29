@@ -722,11 +722,15 @@ def _structured_evidence_index(
 
     accepted: list[EvidenceNote] = []
     omitted: list[dict[str, str]] = []
+    used_bytes = 2  # opening and closing brackets
     for note, omission in ordered:
-        trial = [*accepted, note]
-        # Leave headroom for the project header and plan input envelope.
-        if len(_json([item.model_dump() for item in trial])) <= FAST_INDEX_MAX_BYTES:
+        # Incremental accounting avoids O(n^2) serialization of a growing
+        # planner index when sessions contain thousands of research fragments.
+        item_bytes = len(_json(note.model_dump()))
+        next_size = used_bytes + item_bytes + (1 if accepted else 0)
+        if next_size <= FAST_INDEX_MAX_BYTES:
             accepted.append(note)
+            used_bytes = next_size
         else:
             omitted.append(omission)
     return accepted, omitted
