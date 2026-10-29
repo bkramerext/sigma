@@ -2959,14 +2959,28 @@ def preflight(
     package, fingerprint = _snapshot(path)
     size = len(_json(package))
     long_form = size > MAX_ONE_SHOT_CONTEXT_BYTES or force_long_form
-    batches = _evidence_batches(package) if long_form else []
     view = inspect_project(path)
+    existing = _load_work(path)
+    fast_preflight = bool(
+        long_form
+        and (
+            existing is None
+            or existing.get("evidence_strategy") == "structured_v1"
+            or _can_rebase_explicit_restart(existing, view.project.id)
+            or (
+                existing.get("provider_calls", 0) == 0
+                and existing.get("next_batch", 0) == 0
+                and not existing.get("evidence_notes")
+            )
+        )
+    )
+    batches = _evidence_batches(package) if long_form and not fast_preflight else []
     binding_fingerprint = (
         hashlib.sha256(((mode or "") + "\0" + expected_binding).encode()).hexdigest()
         if expected_binding and mode
         else None
     )
-    work = _load_work(path)
+    work = existing
     work_state = work if work is not None else {}
     same_project_and_snapshot = bool(
         work_state
@@ -3041,6 +3055,7 @@ def preflight(
         "source_count": len(package["sources"]),
         "long_form": long_form,
         "evidence_batches": len(batches),
+        "evidence_strategy": "structured_v1" if fast_preflight else "legacy_field_extraction",
         "maximum_provider_calls": maximum_calls,
         "maximum_restart_provider_calls": maximum_restart_calls,
         "maximum_evidence_calls": len(batches),
