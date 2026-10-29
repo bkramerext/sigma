@@ -1,0 +1,32 @@
+# Issue #332 handoff — Gray (R4R)
+
+## Assignment
+
+Implement [SIGMA issue #332](https://github.com/bkramerext/sigma/issues/332) on a fresh branch from `main`. This work is on `gray/issue-332-infer-strategy`, based on `origin/main` at `0253b2a`. PR #330 and its branch were not modified.
+
+## Delivered
+
+Current Understanding now offers **Infer strategy #n**. The ordinal counts the full persisted strategy history, including removed strategies. Inference uses the bounded Current Understanding and evidence context, returns a strict title/summary/approach structure, rejects a nonnovel direction, and immediately saves a valid result through the shared strategy service with model/reasoning provenance. Account binding, project identity, expected mode, current context, and expected strategy history are checked before save; request IDs make replay idempotent, and the UI exposes cancellation. The result is shown as a real strategy and remains subject to existing strategy removal behavior.
+
+Generate remains the existing separate proposal, review, and acceptance workflow. Infer and Generate both have accessible in-app tooltip guidance. The ephemeral Markdown/copy-only suggestion is removed. Backend and deterministic real-Chrome regressions cover persistence, provenance, duplicate replay, invalid/no-novel results, account/mode and stale-context protection, removal/reopen, count/reveal behavior, keyboard access, tooltip guidance, and mobile visibility.
+
+## Verification actually run
+
+- `./sigma setup` — passed in this worktree.
+- `uv run --locked --no-sync python tests/proposals.py` — passed with structured inference, provenance, idempotency, nonmutation, removal-history, invalid-output, and stale mode cases.
+- `uv run --locked --no-sync pyright src/sigma/api.py src/sigma/proposals.py src/sigma/projects.py` — passed, 0 diagnostics.
+- `uv run --locked --no-sync ruff format src/sigma/api.py src/sigma/proposals.py src/sigma/projects.py tests/proposals.py browser_checks/issue332_infer_strategy.py` — passed.
+- `npm --prefix frontend run typecheck` — passed.
+- `./sigma test` — passed all steps, including Ruff, formatting, Pyright, frontend typecheck, and production build. The optional graph-present Python sandbox check was skipped because its configured local image is unavailable.
+- `browser_checks/issue332_infer_strategy.py` — passed in real Chrome against a temporary local API and Vite UI on isolated ports 8002/5174, with a deterministic inference fixture and real strategy save/removal APIs. Covered keyboard inference, count/reveal, removal/reopen, persistence and ordinal advancement, tooltips, and 390px layout. Both temporary processes were stopped by the command cleanup trap.
+- `git diff --check` — passed before commit.
+
+The first repeat browser launch attempted ports 8000/5173, which were already occupied, so it timed out waiting for the mock-auth selector. Those listeners were left untouched. The browser acceptance then passed on isolated ports 8002/5174. The services started for that successful browser run were stopped afterward.
+
+No live provider calls, paid calls, or secrets were used. No worker coordination occurred. No merge was performed.
+
+Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.
+
+## Review
+
+Implementation commit: to be filled after commit. PR: to be linked after opening. This branch is ready for review and has not been self-merged.

@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any, Literal
@@ -25,6 +26,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     papers,
+    proposals,
     python_sandbox,
     research_sessions,
     session_log,
@@ -1072,6 +1074,7 @@ def reorder_view(body: ReorderRequest):
 class ProposalRequest(OpenRequest):
     seed: str = ""
     expected_binding: str | None = None
+    expected_mode: str | None = None
     expected_project_id: str | None = None
     request_id: UUID | None = None
 
@@ -1087,6 +1090,58 @@ async def strategy_suggestion_view(body: ProposalRequest):
         expected_project_id=body.expected_project_id,
         suggestion_only=True,
     )
+
+
+@app.post("/api/projects/strategy-inference")
+async def strategy_inference_view(body: ProposalRequest):
+    if not body.expected_binding or not body.expected_mode or not body.expected_project_id:
+        raise ProjectError(
+            "Inference requires the current AI account and project identity; reopen the project and retry."
+        )
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    credential = await auth_context()
+    if body.expected_binding != credential["identity"] or body.expected_mode != credential["mode"]:
+        raise ProjectError(
+            "AI account or billing mode changed. Review the current connection and retry; no request was sent."
+        )
+    if body.request_id is None:
+        raise ProjectError("Inference request identifier is required; no request was sent.")
+    request_id = str(body.request_id)
+    cached = proposals._inference_results.get(
+        proposals.inference_cache_key(body.expected_project_id, request_id)
+    )
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    task = asyncio.create_task(
+        generate_proposal(
+            body.path,
+            expected_binding=body.expected_binding,
+            expected_mode=body.expected_mode,
+            expected_project_id=body.expected_project_id,
+            infer_strategy=True,
+            request_id=request_id,
+        )
+    )
+    try:
+        register_request(request_id, task)
+    except ProjectError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+    try:
+        try:
+            return await task
+        except asyncio.CancelledError:
+            return JSONResponse(
+                {"error": "Inference cancelled; no strategy was saved."}, status_code=499
+            )
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        unregister_request(request_id, task)
 
 
 class ProposalCancelRequest(BaseModel):

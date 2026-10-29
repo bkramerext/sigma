@@ -806,6 +806,7 @@ def create_strategy(
     provenance: Provenance | None = None,
     *,
     _continuation_writer: Callable[[Project, Strategy], None] | None = None,
+    _expected_strategy_snapshot: tuple[tuple[str, str, str, bool, str | None], ...] | None = None,
 ) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
@@ -815,6 +816,15 @@ def create_strategy(
         raise ProjectError("Summary must be one line, at most 300 characters")
 
     def append(project: Project) -> Project:
+        if _expected_strategy_snapshot is not None:
+            current = tuple(
+                (item.id, item.title, item.approach, item.enabled, item.removed_at)
+                for item in project.strategies
+            )
+            if current != _expected_strategy_snapshot:
+                raise ProjectError(
+                    "Strategy history changed during inference. Reopen the project and retry."
+                )
         timestamp = _next_timestamp(project)
         strategy = Strategy(
             str(uuid4()),

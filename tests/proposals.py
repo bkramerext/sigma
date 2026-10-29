@@ -112,6 +112,11 @@ async def check(path):
     suggestion_output: dict[str, str | None] = {
         "markdown": "## Independent boundary test\n\nCompare the boundary case with the saved moment positivity approach.\n\n**Rationale:** Session evidence leaves the boundary obligation open."
     }
+    inference_output = {
+        "title": "Boundary compactness transfer",
+        "summary": "Test whether a compactness argument controls the unresolved boundary case.",
+        "approach": "Formalize a compactness hypothesis from the unresolved boundary findings and test it on the extremal parameter family. Treat any successful computation as evidence, not proof.",
+    }
 
     async def handler(request):
         if request.method == "GET":
@@ -128,6 +133,12 @@ async def check(path):
         assert payload["reasoning"] == {"effort": "high"}
         assert payload["model"] == "gpt-6.1-sol"
         assert payload["max_output_tokens"] == 8000
+        if "Infer exactly one useful" in payload["instructions"]:
+            context = json.loads(payload["input"])
+            assert context["current_understanding"]["session_count"] == 2
+            assert len(context["existing_strategies_including_disabled"]) >= 1
+            calls.append(payload)
+            return httpx.Response(200, json=response(inference_output))
         if "ready-to-copy strategy description in Markdown" in payload["instructions"]:
             context = json.loads(payload["input"])
             assert context["project_question"] == "A real mathematical question"
@@ -231,6 +242,93 @@ async def check(path):
             assert (
                 accepted.json()["project"]["strategies"][-1]["provenance"]["provider"] == "openai"
             )
+            inferred = api.post(
+                "/api/projects/strategy-inference",
+                json={
+                    "path": str(path),
+                    "expected_project_id": inspect_project(path).project.id,
+                    "expected_binding": api.get(
+                        "/api/projects/proposals/config", params={"path": str(path)}
+                    ).json()["binding"],
+                    "expected_mode": "api_key",
+                    "request_id": "00000000-0000-4000-8000-000000000332",
+                },
+            )
+            assert inferred.status_code == 200, inferred.text
+            inferred_data = inferred.json()
+            assert inferred_data["strategy"]["title"] == inference_output["title"]
+            assert inferred_data["strategy"]["provenance"]["provider"] == "openai"
+            assert (
+                len(inferred_data["project"]["project"]["strategies"])
+                == len(accepted.json()["project"]["strategies"]) + 1
+            )
+            replay = api.post(
+                "/api/projects/strategy-inference",
+                json={
+                    "path": str(path),
+                    "expected_project_id": inspect_project(path).project.id,
+                    "expected_binding": api.get(
+                        "/api/projects/proposals/config", params={"path": str(path)}
+                    ).json()["binding"],
+                    "expected_mode": "api_key",
+                    "request_id": "00000000-0000-4000-8000-000000000332",
+                },
+            )
+            assert replay.status_code == 200 and replay.json() == inferred_data
+            removed = api.post(
+                "/api/projects/strategies/remove",
+                json={"path": str(path), "strategy_id": inferred_data["strategy"]["id"]},
+            )
+            assert removed.status_code == 200
+            assert any(
+                row["id"] == inferred_data["strategy"]["id"] and row["removed_at"]
+                for row in removed.json()["project"]["strategies"]
+            )
+            unchanged_after_remove = (path / "project.json").read_bytes()
+            no_novel = api.post(
+                "/api/projects/strategy-inference",
+                json={
+                    "path": str(path),
+                    "expected_project_id": inspect_project(path).project.id,
+                    "expected_binding": api.get(
+                        "/api/projects/proposals/config", params={"path": str(path)}
+                    ).json()["binding"],
+                    "expected_mode": "api_key",
+                    "request_id": "00000000-0000-4000-8000-000000000333",
+                },
+            )
+            assert no_novel.status_code == 200 and no_novel.json()["strategy"] is None
+            assert (path / "project.json").read_bytes() == unchanged_after_remove
+            inference_output.clear()
+            inference_output["title"] = "Incomplete structured output"
+            invalid = api.post(
+                "/api/projects/strategy-inference",
+                json={
+                    "path": str(path),
+                    "expected_project_id": inspect_project(path).project.id,
+                    "expected_binding": api.get(
+                        "/api/projects/proposals/config", params={"path": str(path)}
+                    ).json()["binding"],
+                    "expected_mode": "api_key",
+                    "request_id": "00000000-0000-4000-8000-000000000334",
+                },
+            )
+            assert invalid.status_code != 200, invalid.text
+            assert (path / "project.json").read_bytes() == unchanged_after_remove
+            stale_mode = api.post(
+                "/api/projects/strategy-inference",
+                json={
+                    "path": str(path),
+                    "expected_project_id": inspect_project(path).project.id,
+                    "expected_binding": api.get(
+                        "/api/projects/proposals/config", params={"path": str(path)}
+                    ).json()["binding"],
+                    "expected_mode": "chatgpt",
+                    "request_id": "00000000-0000-4000-8000-000000000335",
+                },
+            )
+            assert stale_mode.status_code == 400
+            assert (path / "project.json").read_bytes() == unchanged_after_remove
             stale = api.post(
                 "/api/projects/strategies",
                 json={
@@ -248,7 +346,7 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(calls) == 6
+        assert len(calls) == 9
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",
