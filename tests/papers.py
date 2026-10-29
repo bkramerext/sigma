@@ -2394,15 +2394,12 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         assert len(mock_calls) == 3
         assert elapsed_seconds < 300
         compiler_label = (
-            "real Tectonic compilation"
-            if tectonic_available
-            else "stub PDF (Tectonic unavailable)"
+            "real Tectonic compilation" if tectonic_available else "stub PDF (Tectonic unavailable)"
         )
         print(
             f"PASS mocked five-session Tadpoles paper-to-PDF E2E in {elapsed_seconds:.2f}s "
             f"({compiler_label}; deterministic provider; live <5-minute target remains unverified)."
         )
-
 
 
 def test_long_paper_planning_timeout_is_stage_specific() -> None:
@@ -2441,7 +2438,6 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
     with patch("sigma.papers.httpx.AsyncClient", side_effect=client_factory):
         asyncio.run(check())
     assert observed == [300, papers.CALL_SECONDS]
-
 
 
 def main() -> None:
