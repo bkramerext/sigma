@@ -50,19 +50,25 @@ from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
-MAX_RECORD = 2_000_000
+# A long session may retain each exact provider-input audit alongside its
+# artifacts and turns. Keep the per-session ceiling bounded but large enough
+# for complex, multi-round projects to continue safely.
+MAX_RECORD = 4_000_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 32_000
 MAX_PRIOR_FAILURES = 12
 MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
 MAX_DEFERRED_PEER_HANDOFFS = 24
 MAX_RECORDED_HANDOFF_OVERFLOW = 8
-MAX_AGENT_CONTEXT_BYTES = 256_000
+MAX_AGENT_CONTEXT_BYTES = 512_000
 MAX_CONTEXT_ARTIFACTS = 24
 MAX_CONCLUSION_CHARACTERS = 20_000
 MAX_CONTEXT_STRATEGIES = 24
 MAX_PEER_CONTEXT_ARTIFACTS = 12
-MAX_CONTEXT_OBLIGATIONS = 128
+# Keep the prompt bounded by the independent UTF-8 byte guard while
+# allowing complex projects to carry a substantial open-obligation ledger.
+MAX_CONTEXT_OBLIGATIONS = 512
+MAX_PROMPT_OBLIGATIONS = 96
 MAX_CONTEXT_OMISSION_POINTERS = 32
 MAX_CONTEXT_MANIFEST_BYTES = 12_000
 MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
@@ -1106,7 +1112,7 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
         for item in (open_obligations if isinstance(open_obligations, list) else [])
         if str(item).strip()
     )
-    if not unresolved and outcome.get("assessment") == "mixed":
+    if not unresolved and outcome.get("assessment") in {"mixed", "partial"}:
         unresolved = [
             str(item)
             for artifact in artifacts
@@ -1320,7 +1326,10 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             or "Saved evidence presents a solution candidate for the stated objective."
         )
     elif objective_review:
-        assessment, label = "mixed", "Mixed · partial progress, unresolved"
+        if record.get("terminal_reason") == "configured_research_round_limit":
+            assessment, label = "partial", "Partial · rounds complete, objective unresolved"
+        else:
+            assessment, label = "mixed", "Mixed · partial progress, unresolved"
         summary = str(
             objective_review.get("claim")
             or objective_review.get("argument_summary")
@@ -2212,6 +2221,11 @@ INVESTIGATOR_GUIDANCE = (
     "Do not install packages or spawn processes. Treat its output "
     "as evidence to be reviewed, not as proof. Do not claim external checking or formal verification. "
     "Review obligation_ledger entries and make the next test address unresolved obligations; unknown is not resolved. "
+    "When obligation_batch is present, the ledger is one saved-history batch, not the complete ledger. "
+    "The omitted count and IDs remain saved and are not resolved by omission. Address the supplied batch, "
+    "but still give the strongest provisional answer supported by the supplied evidence; prioritize "
+    "decision-critical unknowns, state confidence and decision triggers, and do not claim completeness. "
+    "When an obligation has scope_assumptions_ref, read its shared assumptions from obligation_scope_assumptions. "
     "An obligation with source_artifact_availability=pointer_only_original_not_supplied is only a pointer: "
     "you have not received its original source, so do not claim to have inspected or verified it. "
     "Use only supplied_source_artifact_ids as evidence and plan inspection of the original. "
@@ -2525,6 +2539,18 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     return result
 
 
+def _is_resumable_stream_failure(exc: Exception) -> bool:
+    """A malformed/incomplete provider stream is retryable only by explicit resume."""
+    return isinstance(exc, ValueError) and str(exc).startswith("plan_stream:")
+
+
+def _is_resumable_output_limit_failure(exc: Exception) -> bool:
+    """A completed response that exceeded a local output cap can be retried explicitly."""
+    return isinstance(exc, ProjectError) and str(exc).startswith(
+        "Provider output exceeded the configured per-call token limit"
+    )
+
+
 def _research_schema(model: type[BaseModel]) -> dict[str, Any]:
     schema = model.model_json_schema()
     # Provider strict JSON requires every property, including nullable fields.
@@ -2569,7 +2595,7 @@ def _role_request_payload(
     input_text = json.dumps(context, ensure_ascii=False)
     if len(input_text.encode("utf-8")) > MAX_AGENT_CONTEXT_BYTES:
         raise ResearchContextLimitError(
-            "Research context exceeded the 256 KB UTF-8 byte limit; no provider call was made."
+            f"Research context exceeded the {MAX_AGENT_CONTEXT_BYTES // 1000} KB UTF-8 byte limit; no provider call was made."
         )
     payload: dict[str, Any] = {
         "model": record["model"],
@@ -4732,9 +4758,93 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             await asyncio.gather(task, return_exceptions=True)
         return _public(_read(record["project_path"], session_id))
     record = _recover(_read(path, session_id))
+    if action == "resume" and _recover_committed_round_limit_failure(record):
+        return _public(record)
+    # Recover known pre-fix stream failures and timed-out attempts only after
+    # the user explicitly asks to resume. Their unknown-cost holds remain.
+    latest_step = record.get("steps", [])[-1] if record.get("steps") else {}
+    legacy_stream_failure = record.get("message") == "plan_stream:event_after_terminal"
+    resumable_output_limit = isinstance(record.get("message"), str) and record[
+        "message"
+    ].startswith("Provider output exceeded the configured per-call token limit")
+    resumable_timeout = (
+        isinstance(record.get("message"), str)
+        and record["message"].startswith("AI provider call timed out")
+        and latest_step.get("failure_kind") == "timeout"
+    )
+    if (
+        action == "resume"
+        and record.get("status") == "failed"
+        and (legacy_stream_failure or resumable_timeout or resumable_output_limit)
+        and record.get("steps")
+        and record["steps"][-1].get("status") == "failed"
+        and record["steps"][-1].get("attempt_status") == "unknown"
+    ):
+        async with state_lock, _manager_lock:
+            with _project_manager_lock(path):
+                record = _read(path, session_id)
+                latest_step = record.get("steps", [])[-1] if record.get("steps") else {}
+                legacy_stream_failure = record.get("message") == "plan_stream:event_after_terminal"
+                resumable_output_limit = isinstance(record.get("message"), str) and record[
+                    "message"
+                ].startswith("Provider output exceeded the configured per-call token limit")
+                resumable_timeout = (
+                    isinstance(record.get("message"), str)
+                    and record["message"].startswith("AI provider call timed out")
+                    and latest_step.get("failure_kind") == "timeout"
+                )
+                if (
+                    record.get("status") == "failed"
+                    and (legacy_stream_failure or resumable_timeout or resumable_output_limit)
+                    and record.get("steps")
+                    and record["steps"][-1].get("status") == "failed"
+                    and record["steps"][-1].get("attempt_status") == "unknown"
+                ):
+                    previous_step = record["steps"][-1]
+                    previous_step["legacy_stream_failure_kind"] = previous_step.get("failure_kind")
+                    previous_step["status"] = "interrupted"
+                    previous_step["failure_kind"] = "interrupted"
+                    previous_step["interruption_reason"] = "legacy_stream_event_limit"
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · provider stream"
+                    record["message"] = (
+                        "A previous provider call ended without a complete saved response. "
+                        "Its usage may still accrue; resume explicitly to make a new attempt."
+                    )
+                    if resumable_timeout:
+                        record["resume_window_reset"] = True
+                    else:
+                        record["stopped_at"] = previous_step.get("finished_at") or _now()
+                    for branch in record.get("strategy_runs", []):
+                        if branch.get("status") == "failed":
+                            branch["status"] = "paused"
+                            branch["current_action"] = "Paused · provider stream"
+                            branch["reason"] = record["message"]
+                    _event(record, "research.stream_interrupted", record["message"])
+                    record["updated_at"] = _now()
+                    _save(record["project_path"], record)
     if record["status"] not in {"paused", "stopped"}:
         return _public(record)
     if action == "resume":
+        # A paused session's idle time does not consume its active runtime
+        # window. Older paused records may predate stopped_at; use their last
+        # durable update as the pause boundary.
+        if (
+            record.get("status") == "paused"
+            and not record.get("stopped_at")
+            and not record.get("resume_window_reset")
+        ):
+            record["stopped_at"] = record.get("updated_at") or _now()
+        if record.pop("resume_window_reset", False):
+            duration = int(record.get("duration_limit_minutes", CALL_TIMEOUT // 60))
+            record["deadline_at"] = (datetime.now(UTC) + timedelta(minutes=duration)).isoformat()
+            _event(
+                record,
+                "session.resume_window",
+                f"A new {duration}-minute runtime window was granted for the explicit resume.",
+            )
+            record["updated_at"] = _now()
+            _save(record["project_path"], record)
         project = inspect_project(path).project
         strategy_ids = record.get("strategy_ids", [record.get("strategy_id")])
         for strategy_id in strategy_ids:
@@ -4757,6 +4867,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             datetime.fromisoformat(record["deadline_at"]) + stopped_for
         ).isoformat()
         record.pop("stopped_at", None)
+    resumed_deadline_at = record.get("deadline_at")
+    resumed_stopped_duration_seconds = record.get("stopped_duration_seconds")
     if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
         record["status"] = "ended"
         record["message"] = (
@@ -4831,6 +4943,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
+            if isinstance(resumed_deadline_at, str):
+                record["deadline_at"] = resumed_deadline_at
+            if isinstance(resumed_stopped_duration_seconds, (int, float)):
+                record["stopped_duration_seconds"] = resumed_stopped_duration_seconds
+            record.pop("stopped_at", None)
             _, locked_guard = _snapshot(record["project_path"])
             if locked_guard != guard:
                 record["message"] = "Project or strategy changed; research remains paused."
@@ -4848,6 +4965,16 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                     "session.limits_updated",
                     "The project cost limit was updated for this resumed session: "
                     f"{previous_cost_limit!r} → {resumed_cost_limit!r} USD.",
+                )
+            previous_output_limit = record.get("output_token_limit")
+            resumed_output_limit = current_limits["output_tokens_per_call"]
+            if previous_output_limit != resumed_output_limit:
+                record["output_token_limit"] = resumed_output_limit
+                _event(
+                    record,
+                    "session.limits_updated",
+                    "The per-call output token limit was updated for this resumed session: "
+                    f"{previous_output_limit!r} → {resumed_output_limit!r} tokens.",
                 )
             others = [
                 recovered
@@ -5465,6 +5592,22 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "An unresolved obligation exceeds the safe extract bound. No provider call was made; "
             "the original obligation remains saved and must be reviewed before continuing."
         )
+    unresolved_obligations = [item for item in obligations if item.get("status") == "unresolved"]
+    batch_count = max(1, math.ceil(len(unresolved_obligations) / MAX_PROMPT_OBLIGATIONS))
+    batch_start_cycle = record.get("obligation_batch_start_cycle", 1)
+    if type(batch_start_cycle) is not int or batch_start_cycle < 1:
+        batch_start_cycle = 1
+    batch_index = (max(1, cycle) - batch_start_cycle) % batch_count
+    # Present recent obligations first, then rotate through stable batches on
+    # later cycles. The full ledger remains saved and is used to select source
+    # artifacts; only this bounded working batch enters the provider prompt.
+    newest_first = list(reversed(unresolved_obligations))
+    start = batch_index * MAX_PROMPT_OBLIGATIONS
+    selected_batch = newest_first[start : start + MAX_PROMPT_OBLIGATIONS]
+    selected_ids = {item.get("obligation_id") for item in selected_batch}
+    prompt_source_obligations = [
+        item for item in obligations if item.get("obligation_id") in selected_ids
+    ]
     strategy_snapshot, omitted_strategy_count, omitted_strategy_ids = _compact_strategy_snapshot(
         record.get("strategy_snapshot"), record.get("strategy_id")
     )
@@ -5505,6 +5648,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             obligation["source_artifact_availability"] = (
                 "adequate_bounded_extract_original_not_supplied"
             )
+    prompt_obligations, obligation_scopes = _compact_context_obligations(prompt_source_obligations)
     context: dict[str, Any] = {
         "problem": record["problem"],
         "strategy": {
@@ -5534,12 +5678,25 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "prior_session_failure_attempt_ids": [
             item["attempt_id"] for item in prior_session_failures
         ],
-        "obligation_ledger": obligations,
-        "obligation_ledger_omitted_count": omitted_obligation_count,
-        "obligation_ledger_omitted_ids": omitted_obligation_ids,
-        "outstanding_obligations": [
-            item["text"] for item in obligations if item["status"] == "unresolved"
-        ],
+        "obligation_ledger": prompt_obligations,
+        "obligation_scope_assumptions": obligation_scopes,
+        "obligation_batch": {
+            "index": batch_index + 1,
+            "count": batch_count,
+            "included_unresolved": len(selected_batch),
+            "total_unresolved": len(unresolved_obligations),
+            "remaining_are_saved": True,
+        },
+        "obligation_ledger_omitted_count": len(unresolved_obligations)
+        - len(selected_batch)
+        + omitted_obligation_count,
+        "obligation_ledger_omitted_ids": [
+            item.get("obligation_id")
+            for item in newest_first
+            if item.get("obligation_id") not in selected_ids
+        ][:MAX_CONTEXT_OMISSION_POINTERS]
+        or omitted_obligation_ids,
+        "outstanding_obligations": [item["text"] for item in selected_batch],
         "context_artifact_ids": [a["id"] for a in selected],
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
@@ -5651,9 +5808,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         for state in ("unresolved", "addressed", "superseded", "retracted", "unknown")
     }
     manifest["omitted_obligations"] = {
-        "count": omitted_obligation_count,
-        "obligation_ids": omitted_obligation_ids,
-        "reason": "lower-priority dispositions exceeded the fixed 64-obligation ledger bound; unresolved obligations are never omitted",
+        "count": len(unresolved_obligations) - len(selected_batch) + omitted_obligation_count,
+        "obligation_ids": context["obligation_ledger_omitted_ids"],
+        "reason": "unresolved obligations outside this prompt batch remain in the saved ledger and rotate into later cycles; no saved obligation was discarded",
     }
     if role == "skeptic":
         pending = pending_investigation
@@ -5696,7 +5853,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         )
     if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
         raise ResearchContextLimitError(
-            "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
+            f"Mandatory research context exceeds the {MAX_AGENT_CONTEXT_BYTES // 1000} KB UTF-8 byte limit. "
             "No provider call was made; shorten the project question or critical evidence, "
             "or start a narrower session. Saved research records were preserved."
         )
@@ -5705,6 +5862,23 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
 
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _compact_context_obligations(
+    obligations: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Deduplicate repeated assumption scopes in provider context, not saved records."""
+    compact: list[dict[str, Any]] = []
+    scopes: dict[str, list[str]] = {}
+    for obligation in obligations:
+        item = dict(obligation)
+        assumptions = item.pop("scope_assumptions", [])
+        if isinstance(assumptions, list) and assumptions:
+            scope_id = _digest(json.dumps(assumptions, ensure_ascii=False, sort_keys=True))
+            scopes[scope_id] = assumptions
+            item["scope_assumptions_ref"] = scope_id
+        compact.append(item)
+    return compact, scopes
 
 
 def _manifest_source_group(
@@ -6046,6 +6220,10 @@ def _reconcile_artifact_open_obligations(record: dict[str, Any], artifact: dict[
         project_id=record.get("project_id"),
         strategy_id=artifact.get("strategy_id"),
         prior_obligations=record.get("prior_session_obligations", []),
+        # This is saved-history reconciliation, not a provider-context admission.
+        # Persist every unresolved item; enforce the smaller bound only when
+        # assembling a future provider request.
+        unbounded_for_admission=True,
     )
     strategy_id = artifact.get("strategy_id")
     unresolved = []
@@ -6061,6 +6239,74 @@ def _reconcile_artifact_open_obligations(record: dict[str, Any], artifact: dict[
         if isinstance(text, str) and text.strip():
             unresolved.append(text)
     artifact["open_obligations"] = list(dict.fromkeys(unresolved))
+
+
+def _recover_committed_round_limit_failure(record: dict[str, Any]) -> bool:
+    """Finalize a fully saved last round after obligation reconciliation exceeded prompt bounds."""
+    message = record.get("message")
+    if (
+        record.get("status") != "failed"
+        or not isinstance(message, str)
+        or not re.match(r"^\d+ unresolved obligations exceed the \d+-item context bound\.", message)
+    ):
+        return False
+    branches = record.get("strategy_runs", [])
+    if len(branches) != 1:
+        return False
+    branch = branches[0]
+    cycle_limit = record.get("cycle_limit")
+    artifact = next(
+        (
+            item
+            for item in reversed(record.get("artifacts", []))
+            if isinstance(item, dict)
+            and item.get("strategy_id") == branch.get("strategy_id")
+            and item.get("strategy_cycle") == cycle_limit
+        ),
+        None,
+    )
+    if not isinstance(artifact, dict) or branch.get("status") != "failed":
+        return False
+    completed_roles = {
+        step.get("role")
+        for step in record.get("steps", [])
+        if isinstance(step, dict)
+        and step.get("strategy_id", branch.get("strategy_id")) == branch.get("strategy_id")
+        and step.get("cycle") == cycle_limit
+        and step.get("status") == "completed"
+        and isinstance(step.get("output"), dict)
+    }
+    if not {"investigator", "skeptic"} <= completed_roles:
+        return False
+    _reconcile_artifact_open_obligations(record, artifact)
+    artifact_id = artifact.get("id")
+    if isinstance(artifact_id, str) and artifact_id not in branch.setdefault("artifacts", []):
+        branch["artifacts"].append(artifact_id)
+    branch["cycle"] = cycle_limit
+    branch["current_question"] = artifact.get("next_question", "")
+    branch["last_decision"] = artifact.get("coordinator_decision")
+    branch["status"] = "ended"
+    branch["current_action"] = "Completed"
+    branch["reason"] = (
+        "Configured research-round limit reached after saving the final Skeptic review."
+    )
+    branch["pending_investigation"] = None
+    branch["pending_skeptic"] = None
+    record["status"] = "ended"
+    record["cycle"] = cycle_limit
+    record["current_action"] = "Completed"
+    record["terminal_reason"] = "configured_research_round_limit"
+    record["message"] = (
+        "Configured research-round limit reached. Saved findings, Skeptic reviews, "
+        "and unresolved obligations are preserved."
+    )
+    record["outcome"] = _outcome(record)
+    record["strategy_assessments"] = _strategy_assessments(record)
+    record["portfolio_decision"] = _portfolio_decision(record)
+    record["updated_at"] = _now()
+    _event(record, "session.recovered_terminal_review", record["message"])
+    _save(record["project_path"], record)
+    return True
 
 
 def _reconcile_skeptic_obligations(
@@ -6241,7 +6487,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
         # turning a modestly long proof into a permanently blocked session.
         ("method", 12_000),
         ("evidence_status", 500),
-        ("next_question", 700),
+        ("next_question", 2400),
     ):
         if key in result:
             result[key] = _bounded_note(result[key], limit)
@@ -6251,7 +6497,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
             ("claim_or_question", 1600),
             ("method", 12_000),
             ("evidence_status", 500),
-            ("next_question", 700),
+            ("next_question", 2400),
         )
         if isinstance(source.get(key), str) and len(source[key].strip()) > limit
     ]
@@ -6269,17 +6515,16 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
                 "unresolved_objections",
                 "resolved_objections",
                 "basis_artifact_ids",
-                "argument_steps",
             )
             if key in objective
         }
-        for key, limit in (("claim", 2000), ("argument_summary", 2500)):
+        for key, limit in (("claim", 5000), ("argument_summary", 5000)):
             if isinstance(objective.get(key), str):
                 result["objective_review"][key] = _bounded_note(objective[key], limit)
                 if len(objective[key].strip()) > limit:
                     result["extract_truncated_fields"].append(f"objective_review.{key}")
         for key, count, limit in (
-            ("assumptions", 8, 300),
+            ("assumptions", 32, 1000),
             ("proof_obligations", 12, 600),
             ("unresolved_objections", 12, 600),
             ("resolved_objections", 12, 600),
@@ -6290,8 +6535,18 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
                     isinstance(note, str) and len(note.strip()) > limit for note in objective[key]
                 ):
                     result["extract_truncated_fields"].append(f"objective_review.{key}")
+        if isinstance(objective.get("argument_steps"), list):
+            result["objective_review"]["argument_step_dispositions"] = [
+                {
+                    key: step.get(key)
+                    for key in ("step_number", "disposition", "objection")
+                    if key in step
+                }
+                for step in objective["argument_steps"]
+                if isinstance(step, dict)
+            ]
     for key, count, limit in (
-        ("assumptions", 8, 300),
+        ("assumptions", 32, 1000),
         ("objections", 12, 600),
         ("open_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
     ):
@@ -6311,10 +6566,24 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
     investigator = source.get("investigator_output")
     if isinstance(investigator, dict):
         result["investigator_output"] = {
-            key: value
-            for key, value in investigator.items()
-            if key not in {"python_code", "sage_code"}
+            key: investigator[key]
+            for key in (
+                "open_obligations",
+                "python_execution",
+                "sage_execution",
+                "computational_citations",
+            )
+            if key in investigator
         }
+        if isinstance(investigator.get("open_obligations"), list):
+            raw_obligations = investigator["open_obligations"]
+            result["investigator_output"]["open_obligations"] = _bounded_notes(
+                raw_obligations, MAX_CONTEXT_OBLIGATIONS, 1_200
+            )
+            if len(raw_obligations) > MAX_CONTEXT_OBLIGATIONS or any(
+                isinstance(note, str) and len(note.strip()) > 1_200 for note in raw_obligations
+            ):
+                result["extract_truncated_fields"].append("investigator_output.open_obligations")
         for field in ("python_execution", "sage_execution"):
             execution = result["investigator_output"].get(field)
             if isinstance(execution, dict):
@@ -6340,20 +6609,27 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
                 "cross_strategy_relations",
                 "retracted_cross_strategy_source_artifact_ids",
                 "obligation_reviews",
+                "reasoning_assessments",
             )
             if key in skeptic
         }
         result["skeptic_output"]["response"] = _bounded_note(
-            result["skeptic_output"].get("response"), 1800
+            result["skeptic_output"].get("response"), 4000
         )
-        if isinstance(skeptic.get("response"), str) and len(skeptic["response"].strip()) > 1800:
+        if isinstance(skeptic.get("response"), str) and len(skeptic["response"].strip()) > 4000:
             result["extract_truncated_fields"].append("skeptic_output.response")
+        for key, count, limit in (("assumptions_reviewed", 32, 1000),):
+            if isinstance(skeptic.get(key), list):
+                result["skeptic_output"][key] = _bounded_notes(skeptic[key], count, limit)
+                if len(skeptic[key]) > count or any(
+                    isinstance(note, str) and len(note.strip()) > limit for note in skeptic[key]
+                ):
+                    result["extract_truncated_fields"].append(f"skeptic_output.{key}")
         for key, count, limit in (
             ("objections", 12, 600),
             ("remaining_obligations", MAX_CONTEXT_OBLIGATIONS, 1_200),
             ("proof_obligations", 12, 600),
             ("unresolved_objections", 12, 600),
-            ("assumptions_reviewed", 8, 300),
         ):
             if isinstance(skeptic.get(key), list):
                 result["skeptic_output"][key] = _bounded_notes(skeptic[key], count, limit)
@@ -6878,7 +7154,7 @@ def _portfolio_context(
         )
     if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
         raise ResearchContextLimitError(
-            "Mandatory peer and research context exceeds the 256 KB UTF-8 byte limit. "
+            f"Mandatory peer and research context exceeds the {MAX_AGENT_CONTEXT_BYTES // 1000} KB UTF-8 byte limit. "
             "No provider call was made; session remains recoverable and saved evidence is intact."
         )
     return context
@@ -7607,6 +7883,15 @@ def _commit_portfolio_review(
         "basis_artifact_ids": referenced_ids,
     }
     record["artifacts"].append(artifact)
+    # A successful, fully reviewed artifact supersedes stale assessment errors
+    # retained from an earlier interrupted attempt in this same session.
+    record.pop("assessment_error", None)
+    if (
+        decision == "stop_budget_exhausted"
+        and cycle >= int(record.get("cycle_limit", 0))
+        and int(record.get("calls_used", 0)) < int(record.get("call_limit", CALL_LIMIT))
+    ):
+        record["terminal_reason"] = "configured_research_round_limit"
     _reconcile_artifact_open_obligations(record, artifact)
     branch["artifacts"].append(artifact_id)
     branch["cycle"] = cycle
@@ -7674,7 +7959,7 @@ async def _portfolio_role_call(
                     )
                 if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
                     raise ResearchContextLimitError(
-                        "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
+                        f"Mandatory research context exceeds the {MAX_AGENT_CONTEXT_BYTES // 1000} KB UTF-8 byte limit. "
                         "No provider call was made; saved research records were preserved."
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
@@ -7790,10 +8075,22 @@ async def _portfolio_role_call(
                     record["status"] = "ended"
                     record["current_action"] = "Completed · budget limit"
                     record["terminal_reason"] = str(exc)
+                    incomplete_cycle = (
+                        " No Skeptic agent turn was dispatched for this round."
+                        if role == "skeptic"
+                        and any(
+                            step.get("role") == "investigator"
+                            and step.get("strategy_id") == branch.get("strategy_id")
+                            and step.get("cycle") == branch.get("cycle")
+                            for step in record.get("steps", [])
+                        )
+                        else ""
+                    )
                     record["message"] = (
                         f"Session stopped at round {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
                         f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} agent turns "
                         f"because the hard token/cost budget refused another provider call. {exc}"
+                        f"{incomplete_cycle}"
                     )
                     record["outcome"] = _outcome(record)
                     record["strategy_assessments"] = _strategy_assessments(record)
@@ -8245,8 +8542,17 @@ async def _portfolio_role_call(
                         )
                 elif step.get("cost_reserve") is not None:
                     _retain_unknown_cost_reservation(record, step)
-                branch["status"] = "failed"
-                branch["current_action"] = "Failed"
+                stream_failure = _is_resumable_stream_failure(exc)
+                output_limit_failure = _is_resumable_output_limit_failure(exc)
+                resumable_call_failure = stream_failure or output_limit_failure
+                branch["status"] = "paused" if resumable_call_failure else "failed"
+                branch["current_action"] = (
+                    "Paused · provider response limit"
+                    if output_limit_failure
+                    else "Paused · provider stream"
+                    if stream_failure
+                    else "Failed"
+                )
                 failure_message = str(exc).strip()[:1000]
                 if timeout_failure:
                     failure_message = (
@@ -8260,6 +8566,37 @@ async def _portfolio_role_call(
                         "Provider call failed; saved research artifacts were retained."
                     )
                 branch["reason"] = failure_message
+                if resumable_call_failure:
+                    step.update(
+                        {
+                            "status": "interrupted",
+                            "attempt_status": "unknown",
+                            "failure_kind": "interrupted",
+                            "interruption_reason": (
+                                "provider_output_limit"
+                                if output_limit_failure
+                                else "provider_stream_invalid"
+                            ),
+                        }
+                    )
+                    record["status"] = "paused"
+                    record["current_action"] = branch["current_action"]
+                    record["message"] = (
+                        "The provider response exceeded the configured per-call output limit. "
+                        "Its usage may still accrue; completed research is preserved. Update the "
+                        "limit and resume explicitly to make a new attempt."
+                        if output_limit_failure
+                        else "The provider stream could not be validated. Its usage may still accrue; "
+                        "completed research is preserved. Resume explicitly to make a new attempt."
+                    )
+                    record["stopped_at"] = _now()
+                    for sibling in record.get("strategy_runs", []):
+                        if sibling is not branch and sibling.get("status") in {"queued", "running"}:
+                            sibling["status"] = "paused"
+                            sibling["current_action"] = (
+                                "Deferred after provider stream interruption"
+                            )
+                            sibling["reason"] = record["message"]
                 if isinstance(exc, ChatGPTProviderRejection):
                     # Structured error descriptions are locally authored from
                     # allowlisted codes, not arbitrary provider text.
@@ -8306,8 +8643,14 @@ async def _portfolio_role_call(
                     record["assessment_error"] = failure_message
                 _event(
                     record,
-                    "strategy.failed",
-                    f"{branch['strategy_title']}: {branch['reason']}",
+                    "research.response_limit_interrupted"
+                    if output_limit_failure
+                    else "research.stream_interrupted"
+                    if stream_failure
+                    else "strategy.failed",
+                    record["message"]
+                    if resumable_call_failure
+                    else f"{branch['strategy_title']}: {branch['reason']}",
                     role,
                 )
                 record["current_steps"] = [
@@ -9671,7 +10014,7 @@ async def _worker(session_id: str, path: str) -> None:
                 )
             if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
                 raise ResearchContextLimitError(
-                    "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
+                    f"Mandatory research context exceeds the {MAX_AGENT_CONTEXT_BYTES // 1000} KB UTF-8 byte limit. "
                     "No provider call was made; saved research records were preserved."
                 )
             record["status"] = "queued"
@@ -10131,6 +10474,7 @@ async def _worker(session_id: str, path: str) -> None:
     except (ProjectError, OSError, ValueError, TypeError, httpx.HTTPError, TimeoutError) as exc:
         try:
             record = _read(path, session_id)
+            stream_failure = _is_resumable_stream_failure(exc)
             if record["status"] not in {"stopped", "paused"}:
                 storage_failure = "storage limit reached" in str(exc).lower()
                 failure_message = str(exc).strip()[:1000]
@@ -10144,7 +10488,9 @@ async def _worker(session_id: str, path: str) -> None:
                 context_failure = isinstance(exc, ResearchContextLimitError) or (
                     guard_failure and "context" in str(exc).lower()
                 )
-                record["status"] = "paused" if storage_failure or guard_failure else "failed"
+                record["status"] = (
+                    "paused" if storage_failure or guard_failure or stream_failure else "failed"
+                )
                 for branch in record.get("strategy_runs", []):
                     if branch.get("status") in {"queued", "running"}:
                         branch["status"] = "paused" if record["status"] == "paused" else "failed"
@@ -10162,6 +10508,8 @@ async def _worker(session_id: str, path: str) -> None:
                     if storage_failure
                     else "Paused · context limit"
                     if context_failure
+                    else "Paused · provider stream"
+                    if stream_failure
                     else "Paused"
                     if guard_failure
                     else "Failed"
@@ -10170,6 +10518,8 @@ async def _worker(session_id: str, path: str) -> None:
                     record,
                     "research.context_blocked"
                     if context_failure
+                    else "research.stream_interrupted"
+                    if stream_failure
                     else "paused"
                     if record["status"] == "paused"
                     else "failed",
@@ -10181,6 +10531,16 @@ async def _worker(session_id: str, path: str) -> None:
                     step["token_usage_status"] = "unavailable"
                     if isinstance(step.get("provider_input_audit"), dict):
                         step["provider_input_audit"]["status"] = "call_failed_dispatch_unknown"
+                    if stream_failure:
+                        step["attempt_status"] = "unknown"
+                        step["failure_kind"] = "interrupted"
+                        step["interruption_reason"] = "provider_stream_invalid"
+                        if cloud_research.billing_enabled() and step.get("attempt_id"):
+                            try:
+                                cloud_research.mark_call_unknown(record["id"], step["attempt_id"])
+                            except cloud_research.CloudResearchUnavailable:
+                                pass
+                        _retain_unknown_cost_reservation(record, step)
                     _record_guidance_interruption(
                         record,
                         step,

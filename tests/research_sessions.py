@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 import shutil
 import time
 from copy import deepcopy
@@ -1505,6 +1506,107 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
     view = initialize_project(path, "Evidence selection", "Keep the active question bounded.")
     strategy_id = str(uuid4())
     session_id = str(uuid4())
+    long_question = "Next test. " + "q" * 900
+    long_skeptic_review = "Review. " + "s" * 2100
+    required_artifact = {
+        "id": str(uuid4()),
+        "strategy_id": strategy_id,
+        "claim_or_question": "A reportable conditional finding.",
+        "method": "The reasoning is saved in the original artifact.",
+        "evidence_status": "Partial and unverified.",
+        "next_question": long_question,
+        "open_obligations": ["Inspect the stated timing assumption."],
+        "skeptic_output": {"response": long_skeptic_review},
+    }
+    selected_required, _ = research_sessions._select_context_artifacts(
+        [required_artifact],
+        "investigator",
+        view.path,
+        [
+            {
+                "status": "unresolved",
+                "source_artifact_ids": [required_artifact["id"]],
+                "basis_artifact_ids": [],
+            }
+        ],
+    )
+    assert selected_required[0]["next_question"] == long_question
+    assert selected_required[0]["skeptic_output"]["response"] == long_skeptic_review
+    assert selected_required[0]["extract_truncated_fields"] == []
+    shared_assumptions = ["An explicit scenario premise. " + "a" * 400 for _ in range(5)]
+    expanded_ledger = [
+        {
+            "obligation_id": str(index),
+            "text": f"Material unresolved question {index}.",
+            "status": "unresolved",
+            "scope_assumptions": shared_assumptions,
+            "source_artifact_ids": [required_artifact["id"]],
+        }
+        for index in range(81)
+    ]
+    compact_ledger, scopes = research_sessions._compact_context_obligations(expanded_ledger)
+    assert len(scopes) == 1
+    assert all("scope_assumptions" not in item for item in compact_ledger)
+    assert all(item["scope_assumptions_ref"] in scopes for item in compact_ledger)
+    assert (
+        research_sessions._json_bytes(compact_ledger) + research_sessions._json_bytes(scopes)
+        < research_sessions._json_bytes(expanded_ledger) // 2
+    )
+
+    # A complex project keeps its full unresolved ledger while rotating bounded
+    # working batches through successive provider prompts.
+    batch_artifact = {
+        "id": str(uuid4()),
+        "strategy_id": strategy_id,
+        "claim_or_question": "A complex scenario with unresolved decision conditions.",
+        "method": "Preserve and revisit every unresolved condition.",
+        "evidence_status": "Partial and unverified.",
+        "open_obligations": [f"Material unresolved condition {index}." for index in range(167)],
+    }
+    batched_record = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "problem": view.project.problem,
+        "strategy_id": strategy_id,
+        "strategy_title": "Test obligation batches",
+        "strategy_text": "Prioritize decision-critical obligations and give a qualified answer.",
+        "current_question": "Advance the best-supported provisional answer.",
+        "strategy_snapshot": [],
+        "artifacts": [batch_artifact],
+        "prior_session_findings": [],
+        "prior_session_obligations": [],
+        "prior_session_obligations_omitted": 0,
+        "prior_session_failures": [],
+        "prior_session_failures_omitted": 0,
+        "obligation_batch_start_cycle": 3,
+    }
+    batch_cycles = range(
+        3,
+        3 + math.ceil(167 / research_sessions.MAX_PROMPT_OBLIGATIONS),
+    )
+    batches = [
+        research_sessions._agent_context(batched_record, "investigator", cycle)
+        for cycle in batch_cycles
+    ]
+    batched_ids = [
+        item["obligation_id"] for batch in batches for item in batch["obligation_ledger"]
+    ]
+    assert all(
+        len(batch["outstanding_obligations"]) <= research_sessions.MAX_PROMPT_OBLIGATIONS
+        for batch in batches
+    )
+    assert [batch["obligation_batch"]["index"] for batch in batches] == list(
+        range(1, len(batches) + 1)
+    )
+    assert len(set(batched_ids)) == len(batched_ids) == 167
+    assert all(batch["obligation_batch"]["remaining_are_saved"] for batch in batches)
+    assert all(
+        batch["context_manifest"]["assembled_context_bytes"]
+        <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+        for batch in batches
+    )
+
     counterexample_id = str(uuid4())
     old_obligation_id = str(uuid4())
     latest_id = str(uuid4())
@@ -1726,7 +1828,7 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
     over_budget = {
         **context_record,
         "id": str(uuid4()),
-        "problem": "😀" * 70_000,
+        "problem": "😀" * 140_000,
         "artifacts": [],
     }
     try:
@@ -1908,8 +2010,8 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
     )
 
     # Coordinator reconciliation may add obligations beyond the provider's
-    # 12-item schema ceiling. Preserve that ledger-backed list up to the
-    # existing 64-obligation context bound so Resume does not truncate it.
+    # 12-item schema ceiling. Preserve the complete list in saved artifacts;
+    # later provider prompts work through bounded rotating batches.
     reconciled_obligations = [f"Reconciled obligation {number}." for number in range(16)]
     expanded_evidence = research_sessions._compact_context_artifact(
         {
@@ -2294,6 +2396,11 @@ async def test_pause_counts_interrupted_call(path: Path):
     for gate in (agentic._gate, proposals._gate, text_views._gate, research_sessions._gate):
         assert gate.acquire(blocking=False)
         gate.release()
+    paused_record = research_sessions._read(str(path), started["id"])
+    paused_now = datetime.now(UTC)
+    paused_record["updated_at"] = (paused_now - timedelta(seconds=90)).isoformat()
+    paused_record["deadline_at"] = (paused_now - timedelta(seconds=30)).isoformat()
+    research_sessions._save(str(path), paused_record)
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
@@ -2306,6 +2413,7 @@ async def test_pause_counts_interrupted_call(path: Path):
     ):
         resumed = await research_sessions.control_session(str(path), started["id"], "resume")
         assert resumed["status"] == "queued"
+        assert datetime.fromisoformat(resumed["deadline_at"]) > datetime.now(UTC)
         assert "may still complete or be billed" in resumed["message"]
         await asyncio.wait_for(resumed_call.wait(), 2)
         stopped = await research_sessions.control_session(str(path), started["id"], "stop")
@@ -3283,6 +3391,27 @@ def test_outcome_classification():
         }
     )
     assert partial["assessment"] == "mixed" and "unsupported" in " ".join(partial["caveats"])
+    round_limited_partial = research_sessions._outcome(
+        {
+            "status": "ended",
+            "terminal_reason": "configured_research_round_limit",
+            "artifacts": [
+                {
+                    **artifact,
+                    "objective_review": {
+                        "status": "partial",
+                        "claim": "A conditional result is reportable; feasibility remains unresolved.",
+                        "verification_status": "incomplete",
+                        "unresolved_objections": ["Scenario-specific inputs are missing."],
+                        "basis_artifact_ids": ["artifact-1"],
+                    },
+                }
+            ],
+        }
+    )
+    assert round_limited_partial["assessment"] == "partial"
+    assert round_limited_partial["label"] == "Partial · rounds complete, objective unresolved"
+    assert "Scenario-specific inputs are missing." in round_limited_partial["conclusion"]
     legacy_review = {
         "status": "partial",
         "claim": "Historical review without a verification status.",
@@ -6411,6 +6540,199 @@ async def test_configured_cost_cap_pauses_and_resumes_after_replenishment(path: 
     assert finished["steps"][0]["output"] == paused["steps"][0]["output"]
 
 
+async def test_invalid_provider_stream_pauses_and_resumes_without_replaying_investigator(
+    path: Path,
+):
+    """An invalid stream is held for explicit resume; saved Investigator work remains intact."""
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "model_calls": 6, "research_rounds": 1}
+    limits = research_sessions.save_limits(str(path), limits)
+    calls = []
+
+    async def provider_call(record, role, context, timeout_seconds=None, step_id=None):
+        calls.append(role)
+        if role == "investigator":
+            return investigation(1), {"input_tokens": 100, "output_tokens": 100}
+        elif len(calls) == 2:
+            raise ValueError("plan_stream:seq(kind=response.output_text.delta,seq=1,expected>1)")
+        else:
+            return skeptic(1), {"input_tokens": 100, "output_tokens": 100}
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call_provider", new=AsyncMock(side_effect=provider_call)),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
+        )
+        interrupted = await wait_for(path, started["id"])
+        assert interrupted["status"] == "paused", interrupted
+        assert interrupted["calls_used"] == 2
+        assert interrupted["steps"][0]["status"] == "completed"
+        assert interrupted["steps"][1]["status"] == "interrupted"
+        saved_investigator = interrupted["steps"][0]["output"]
+        assert isinstance(saved_investigator, dict) and saved_investigator
+        assert calls == ["investigator", "skeptic"]
+
+        # Emulate a pre-fix persisted failure so explicit resume also recovers
+        # the already saved sessions that carry the legacy parser error.
+        legacy = research_sessions._read(str(path), started["id"])
+        legacy["status"] = "failed"
+        legacy["message"] = "plan_stream:event_after_terminal"
+        legacy["steps"][-1].update(
+            {
+                "status": "failed",
+                "attempt_status": "unknown",
+                "failure_kind": "provider_error",
+            }
+        )
+        legacy["strategy_runs"][0]["status"] = "failed"
+        research_sessions._save(str(path), legacy)
+
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert calls == ["investigator", "skeptic", "skeptic"], calls
+    assert finished["status"] == "ended", finished
+    assert [step["role"] for step in finished["steps"]] == [
+        "investigator",
+        "skeptic",
+        "skeptic",
+    ]
+    assert finished["steps"][0]["output"] == saved_investigator
+
+    # A timeout can consume the remaining runtime window. Explicitly resuming
+    # that failed attempt must grant a new bounded window, without replaying
+    # the completed Investigator turn.
+    expired = research_sessions._read(str(path), started["id"])
+    expired["status"] = "failed"
+    expired["message"] = "AI provider call timed out at its 104-second call/session limit."
+    expired["deadline_at"] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+    expired["steps"][-1].update(
+        {"status": "failed", "attempt_status": "unknown", "failure_kind": "timeout"}
+    )
+    expired["strategy_runs"][0].update(
+        {"status": "failed", "pending_investigation": saved_investigator, "pending_skeptic": None}
+    )
+    research_sessions._save(str(path), expired)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call_provider", new=AsyncMock(side_effect=provider_call)),
+    ):
+        resumed_after_timeout = await research_sessions.control_session(
+            str(path), started["id"], "resume"
+        )
+        assert resumed_after_timeout["status"] == "queued", resumed_after_timeout
+        assert datetime.fromisoformat(resumed_after_timeout["deadline_at"]) > datetime.now(UTC)
+        timeout_recovered = await wait_for(path, started["id"])
+    assert calls == ["investigator", "skeptic", "skeptic", "skeptic"], calls
+    assert timeout_recovered["status"] == "ended", timeout_recovered
+    assert timeout_recovered["steps"][0]["output"] == saved_investigator
+
+    limits = research_sessions.save_limits(str(path), {**limits, "output_tokens_per_call": 8000})
+    oversized = research_sessions._read(str(path), started["id"])
+    oversized["status"] = "failed"
+    oversized["message"] = "Provider output exceeded the configured per-call token limit"
+    oversized["steps"][-1].update(
+        {"status": "failed", "attempt_status": "unknown", "failure_kind": "provider_error"}
+    )
+    oversized["strategy_runs"][0].update(
+        {"status": "failed", "pending_investigation": saved_investigator, "pending_skeptic": None}
+    )
+    research_sessions._save(str(path), oversized)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call_provider", new=AsyncMock(side_effect=provider_call)),
+    ):
+        resumed_after_limit = await research_sessions.control_session(
+            str(path), started["id"], "resume"
+        )
+        assert resumed_after_limit["output_token_limit"] == 8000
+        limited_recovery = await wait_for(path, started["id"])
+    assert calls == ["investigator", "skeptic", "skeptic", "skeptic", "skeptic"], calls
+    assert limited_recovery["status"] == "ended", limited_recovery
+    assert limited_recovery["steps"][0]["output"] == saved_investigator
+
+    terminal_recovery = research_sessions._read(str(path), started["id"])
+    first_artifact = terminal_recovery["artifacts"][0]
+    last_artifact = deepcopy(first_artifact)
+    last_artifact.update(
+        {
+            "id": str(uuid4()),
+            "sequence": 2,
+            "strategy_cycle": 2,
+            "coordinator_decision": "stop_budget_exhausted",
+            "next_question": "",
+            "open_obligations": [f"Persisted unresolved item {index}." for index in range(140)],
+        }
+    )
+    terminal_recovery["artifacts"].append(last_artifact)
+    for role in ("investigator", "skeptic"):
+        prior_step = next(
+            step
+            for step in terminal_recovery["steps"]
+            if step.get("cycle") == 1 and step.get("role") == role
+        )
+        final_step = deepcopy(prior_step)
+        final_step.update(
+            {
+                "id": str(uuid4()),
+                "attempt_id": str(uuid4()),
+                "cycle": 2,
+                "call_number": 6,
+                "status": "completed",
+                "output": last_artifact[
+                    "investigator_output" if role == "investigator" else "skeptic_output"
+                ],
+                "failure_kind": None,
+                "interruption_reason": None,
+            }
+        )
+        terminal_recovery["steps"].append(final_step)
+    terminal_branch = terminal_recovery["strategy_runs"][0]
+    terminal_branch.update({"status": "failed", "cycle": 1, "artifacts": [first_artifact["id"]]})
+    terminal_recovery.update(
+        {
+            "status": "failed",
+            "cycle": 1,
+            "cycle_limit": 2,
+            "calls_used": 7,
+            "call_limit": 12,
+            "message": "167 unresolved obligations exceed the 128-item context bound. No provider call was made; saved research history was preserved. Narrow the current question.",
+        }
+    )
+    research_sessions._save(str(path), terminal_recovery)
+    probe = deepcopy(terminal_recovery)
+    assert research_sessions._recover_committed_round_limit_failure(probe), {
+        "message": probe.get("message"),
+        "cycle_limit": probe.get("cycle_limit"),
+        "branch_status": probe.get("strategy_runs", [{}])[0].get("status"),
+        "last_artifact_cycle": probe.get("artifacts", [{}])[-1].get("strategy_cycle"),
+        "cycle_two_roles": [
+            (step.get("role"), step.get("status"), step.get("cycle"))
+            for step in probe.get("steps", [])
+            if step.get("cycle") == 2
+        ],
+    }
+    calls_before_finalization = list(calls)
+    finalized = await research_sessions.control_session(str(path), started["id"], "resume")
+    assert finalized["status"] == "ended", {
+        "status": finalized.get("status"),
+        "message": finalized.get("message"),
+        "branch_status": finalized.get("strategy_runs", [{}])[0].get("status"),
+    }
+    assert finalized["strategy_runs"][0]["status"] == "ended"
+    assert len(finalized["artifacts"]) >= 2
+    finalized_cycle_two = next(
+        artifact for artifact in finalized["artifacts"] if artifact.get("strategy_cycle") == 2
+    )
+    assert len(finalized_cycle_two["open_obligations"]) >= 140
+    assert calls == calls_before_finalization
+
+
 async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
     token_message = research_sessions._portfolio_limit_message(
         {"cycle": 1, "cycle_limit": 3, "calls_used": 1, "call_limit": 6, "steps": []},
@@ -8524,6 +8846,11 @@ def main():
         asyncio.run(
             test_configured_cost_cap_pauses_and_resumes_after_replenishment(
                 root / "portfolio-cost-cap-second-call.sigma"
+            )
+        )
+        asyncio.run(
+            test_invalid_provider_stream_pauses_and_resumes_without_replaying_investigator(
+                root / "portfolio-invalid-stream-resume.sigma"
             )
         )
         asyncio.run(

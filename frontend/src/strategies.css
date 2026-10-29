@@ -644,6 +644,7 @@
 .workspace-page .session-outcome.outcome-negative { border-left-color: #d38578; }
 .workspace-page .session-outcome.outcome-negative > p:first-child span { color: #e6a69a; }
 .workspace-page .session-outcome.outcome-pending > p:first-child span,
+.workspace-page .session-outcome.outcome-partial > p:first-child span,
 .workspace-page .session-outcome.outcome-mixed > p:first-child span { color: #e2be91; }
 
 /* T25: keep each session's outcome in one readable, nested column. */
@@ -909,6 +910,7 @@
 .workspace-page .session-outcome-inline.outcome-positive span { color: #a5d1b3; }
 .workspace-page .session-outcome-inline.outcome-negative span { color: #e6a69a; }
 .workspace-page .session-outcome-inline.outcome-pending span,
+.workspace-page .session-outcome-inline.outcome-partial span,
 .workspace-page .session-outcome-inline.outcome-mixed span { color: #e2be91; }
 
 /* Favor the session details column on desktop. */

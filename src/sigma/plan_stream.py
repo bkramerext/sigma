@@ -10,7 +10,6 @@ from sigma.openai_connection import inference_failure
 from sigma.projects import ProjectError
 
 MAX_STREAM_BYTES = 1000000
-MAX_EVENTS = 4096
 KNOWN_ERRORS = {
     "subscription_sharing_usage_limit_exceeded": (
         "limited",
@@ -238,7 +237,7 @@ async def completed(
         raise ValueError(f"plan_stream:content_type({content_type!r})")
     decoder = codecs.getincrementaldecoder("utf-8")("strict")
     buffer = ""
-    byte_count = event_count = 0
+    byte_count = 0
     sequence = -1
     response_id = None
     terminal = None
@@ -261,9 +260,6 @@ async def completed(
                 if terminal is None:
                     raise ValueError("plan_stream:done_before_terminal")
                 continue
-            event_count += 1
-            if event_count > MAX_EVENTS:
-                raise ValueError("plan_stream:event_after_terminal")
             if terminal is not None:
                 # A completed response is authoritative. Some hosted bridges
                 # append bounded bookkeeping events after response.completed;

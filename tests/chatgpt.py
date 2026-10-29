@@ -310,7 +310,29 @@ async def checks(root):
         trailing_result = await generate_proposal(str(path))
         assert trailing_result["draft"] == DRAFT
         fixture.stream_override = None
-        assert fixture.generated == 2
+        # Sol/High can emit many small SSE frames. The byte limit bounds the
+        # stream; frame count alone is not a reliable proxy for its size.
+        base_events = fixture.events()
+        many_event_stream = [
+            base_events[0],
+            *[
+                {
+                    "type": "response.output_text.delta",
+                    "sequence_number": sequence,
+                    "delta": "",
+                }
+                for sequence in range(1, 9001)
+            ],
+            {**base_events[-1], "sequence_number": 9001},
+        ]
+        fixture.stream_override = "".join(
+            "data: " + json.dumps(event) + "\n\n" for event in many_event_stream
+        ).encode()
+        reset_connection()
+        many_event_result = await generate_proposal(str(path))
+        assert many_event_result["draft"] == DRAFT
+        fixture.stream_override = None
+        assert fixture.generated == 3
         await rejection(generate_proposal(str(path), expected_project_id="changed"), "identity")
         await rejection(generate_proposal(str(path), expected_binding="api_key"), "billing mode")
         # SSE malformed/failed/incomplete/refusal/truncated/oversized/out-of-order streams.

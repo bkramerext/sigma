@@ -8069,3 +8069,27 @@ The default token location is now `~/.sigma/cloud-cli/token`, with a tested
 not yet been executed; it awaits one successful local CLI sign-in and funding
 preflight. The project remains category Military and the scenario remains a
 fictional high-level strategic/humanitarian exercise.
+
+## Issue #289 — ONP five-round local run and outcome correction (2026-10-29)
+
+The existing local Operation Narrow Passage session ended normally after all
+five configured rounds, 16 provider calls, and five saved research artifacts.
+Its saved terminal reason is `configured_research_round_limit`; the obsolete
+assessment error is cleared. The derived outcome is `Partial · rounds complete,
+objective unresolved`, preserving the distinction between completing the
+configured research process and establishing the objective. No session was
+rerun and no provider was contacted for this follow-up.
+
+The complete portable project export is
+`operation-narrow-passage-v4-round5-corrected-outcome-20261029.json` in the
+operator's private `~/sigma_blue` directory (mode 0600). It was regenerated
+from existing local project storage and checked by decoding the session and
+recomputing its derived outcome; the export records 5 cycles, 16 calls, 5
+artifacts, and the corrected Partial classification. The earlier export with
+the stale Mixed assessment remains preserved separately.
+
+Verification passed: `tests/research_sessions.py`, `tests/chatgpt.py`, Ruff
+check/format, Pyright on the modified research/stream modules, frontend
+typecheck, and frontend production build. The build emitted the existing
+Vite advisory for chunks larger than 500 kB. Full `./sigma test`, browser
+checks, and live-provider behavior were not rerun for this scoped correction.
