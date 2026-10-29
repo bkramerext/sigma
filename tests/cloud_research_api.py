@@ -674,6 +674,9 @@ def main() -> None:
                 paper_project_id = paper_project.json()["project"]["id"]
                 package, _ = papers._snapshot(paper_path)
                 evidence_ref = package["sources"][0]["id"]
+                # Fast paper preparation reads source IDs directly instead of
+                # learning them from an extracted provider batch.
+                paper_long_evidence_ref = evidence_ref
                 paper_draft = {
                     "title": "A bounded exploratory note",
                     "abstract": "This note records one limited observation in the saved project and describes the unresolved checks that remain before any claim about a recurrence can be established.",
@@ -796,7 +799,9 @@ def main() -> None:
                 paper_long_mode = False
                 assert long_response.status_code == 200, long_response.text
                 assert '"type": "complete"' in long_response.text, long_response.text
-                assert provider_calls - long_calls_before == 4
+                # Fast path makes one plan call plus two section calls:
+                # no separate evidence-extraction call is billed.
+                assert provider_calls - long_calls_before == 3
                 all_papers = client.get("/api/projects/papers", params={"path": paper_path}).json()[
                     "papers"
                 ]
@@ -816,7 +821,7 @@ def main() -> None:
                     (paper_project_id,),
                 ).fetchone()[0]
                 db.close()
-                assert paper_audit == 5
+                assert paper_audit == 4
 
                 response_body = {
                     "status": "completed",
