@@ -136,7 +136,7 @@ def main() -> None:
                     "aria-expanded", "false"
                 )
                 session_toggle = dialog.locator(".about-session-toggle")
-                expect(session_toggle).to_contain_text("Show Me")
+                expect(session_toggle).to_contain_text("Show six turns")
                 expect(session_toggle).to_have_count(1)
                 session_toggle.hover()
                 agent_toggle_style = session_toggle.evaluate(
@@ -168,7 +168,7 @@ def main() -> None:
                     "Investigators return with the critique"
                 )
                 expect(dialog.locator(".about-strategy-parallel-note")).to_contain_text(
-                    "investigated in the same session"
+                    "Press Play"
                 )
                 strategy_rounds = dialog.locator(".about-strategy-round")
                 expect(strategy_rounds).to_have_count(3)
@@ -179,58 +179,73 @@ def main() -> None:
                     "Research round"
                 )
                 expect(dialog.locator(".about-shared-budget")).to_contain_text(
-                    "Shared maximum agent turns"
+                    "Why more than one round?"
+                )
+                expect(dialog.locator(".about-shared-budget")).to_contain_text(
+                    "how many agent turns the entire session may use"
                 )
                 expect(dialog.locator(".about-evidence-report-note")).to_contain_text(
-                    "reports and exports"
+                    "Export the research or write a report"
                 )
                 expect(dialog.locator(".about-round-feedback")).to_contain_text(
-                    "next round"
+                    "revise the idea"
                 )
                 expect(
                     details.get_by_role("heading", name="One investigation. Multiple agent turns.")
                 ).to_be_visible()
-                expect(details.locator(".about-agent-turn")).to_have_count(3)
+                expect(details.locator(".about-agent-round")).to_have_count(3)
+                expect(details.locator(".about-agent-turn")).to_have_count(6)
+                expect(details.locator(".about-agent-round-pair")).to_have_count(3)
+                expect(details.locator(".about-agent-round-heading")).to_have_count(3)
                 expect(details.locator(".about-round-definition")).to_contain_text(
                     "One research round"
                 )
                 expect(details.locator(".about-round-definition")).to_contain_text(
                     "One agent turn"
                 )
-                expect(details.locator(".about-turn-number").nth(0)).to_have_text(
-                    "ROUND 1 · TURN 1"
+                expect(details.locator(".about-agent-instantiation h5")).to_have_text(
+                    "One strategy · Three rounds · Six turns"
                 )
-                expect(details.locator(".about-turn-number").nth(1)).to_have_text(
-                    "ROUND 1 · TURN 2"
+                for turn in range(1, 7):
+                    expect(details.locator(".about-turn-number").nth(turn - 1)).to_have_text(
+                        f"TURN {turn}"
+                    )
+                for round_number in range(1, 4):
+                    expect(details.locator(".about-agent-round-heading").nth(round_number - 1)).to_contain_text(
+                        f"Round {round_number}"
+                    )
+                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
+                    "3 approaches × 3 rounds × 2 turns"
                 )
-                expect(details.locator(".about-turn-number").nth(2)).to_have_text(
-                    "ROUND 2 · NEXT TURN"
+                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
+                    "up to 18 possible turns"
                 )
-                expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
-                    "3 strategies × 2 rounds × 2 turns = up to 12 agent turns"
+                expect(dialog.locator(".about-session-exploration-example")).to_contain_text(
+                    "limit to 12 turns"
                 )
                 expect(
                     details.locator(
                         ".about-agent-turn .about-diagram-node-title", has_text="Investigator"
                     )
-                ).to_have_count(2)
+                ).to_have_count(3)
                 expect(
                     details.locator(
                         ".about-agent-turn .about-diagram-node-title", has_text="Skeptic"
                     )
-                ).to_have_count(1)
-                expect(details.locator(".about-agent-return")).to_contain_text(
-                    "critique feeds the next Investigator turn"
+                ).to_have_count(3)
+                expect(details.locator(".about-agent-return")).to_have_count(2)
+                expect(details.locator(".about-agent-return").nth(0)).to_contain_text(
+                    "feedback shapes the next attempt"
                 )
-                expect(details.locator(".about-agent-return svg path")).to_have_count(1)
+                expect(details.locator(".about-agent-return svg path")).to_have_count(2)
                 expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
-                    "research steps and artifacts are recorded for inspection"
+                    "arguments, objections and saved results remain available to inspect"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
                     "revisit a strategy with new evidence"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
-                    "compare results over time"
+                    "compare what changed"
                 )
                 expect(details.get_by_text("Coordinator", exact=False)).to_have_count(0)
                 expanded_style = details.evaluate(

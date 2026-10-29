@@ -42,3 +42,9 @@ SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5196 python browser_checks/about_dialog_
 ```
 
 Capture expanded architecture screenshots at 1440px, 390px, and 320px, confirm no clipped text, and attach before/after evidence in the PR. No production deploy or self-merge.
+
+## Follow-up feedback: six-turn illustration and first-time-reader clarity
+
+Updated the existing PR after review feedback. The illustration now shows **three complete Investigator → Skeptic rounds (six numbered agent turns) within one strategy**, rather than a two-turn example with an incomplete third turn. Above it, the normal diagram begins with a research question and distinct approaches, tells readers what pressing Play does, explains *why* an approach can be revisited, and gives a concrete session-wide exploration space: **three approaches × three rounds × two turns = up to eighteen possible turns; a twelve-turn session ceiling allows at most twelve of those**. Limits do not promise full execution.
+
+Updated `browser_checks/about_dialog_acceptance.py` to cover all six turns, three rounds, mobile stacking, and shared-budget language; it still requires real Chrome acceptance and screenshots. CI for the follow-up SHA must be checked separately. No paid provider calls, release, or self-merge.
