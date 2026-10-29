@@ -1578,9 +1578,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         {continuationAvailable && restartableCheckpoint && !checkpointMismatch && <button type="button" className="text-view-link" disabled={loading || !binding} onClick={() => setResetConfirm(true)}>Start over</button>}
       </>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
       {resetConfirm && !busy && restartableCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Confirm starting paper over">
-        <p>Discard unfinished paper work? Research, saved papers, and AI usage history remain. No AI call is made.</p>
-        <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm Start over</button>
-        <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Keep unfinished work</button>
+        <p>Discard unfinished paper work?</p>
+        <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
+        <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
       </div>}
       {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningRetry
         ? 'Retry makes another AI request; Start over clears this attempt.'
