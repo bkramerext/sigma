@@ -887,6 +887,87 @@ def test_explicit_restart_checkpoint_migrates_and_rebinds_safely() -> None:
         assert papers._load_work(str(path)) is None
 
 
+def test_evidence_envelope_budget_resumes_without_repacking() -> None:
+    """A batch accepted during packing must be accepted before dispatch too.
+
+    The batch_id field adds a few bytes beyond the 48 KB fields budget.
+    Repacking would shift indices after a previously paid checkpoint, so
+    preserve the original field groups and next_batch cursor.
+    """
+    source_ref = "project:fixture"
+    fields = [
+        {
+            "field_ref": f"{i + 1:064x}",
+            "source_ref": source_ref,
+            "field": f"/data/value{i}",
+            "value": "x" * 9_500 if i < 4 else "",
+        }
+        for i in range(5)
+    ]
+    batch = {"batch_id": "E2", "fields": fields}
+    extra = 48_007 - len(papers._json(batch))
+    assert 0 < extra < 12_000
+    fields[-1]["value"] = "x" * extra
+    assert len(papers._json(batch)) == 48_007
+    assert len(papers._json({"fields": fields})) <= papers.MAX_PROVIDER_INPUT_BYTES
+    limit = papers._evidence_input_limit(batch)
+    assert limit > papers.MAX_PROVIDER_INPUT_BYTES
+    assert 48_007 <= limit
+    assert len(papers._provider_input_text(batch, "sigma_paper_evidence_batch", limit)) == 48_007
+
+    first_batch = {"batch_id": "E1", "fields": [
+        {"field_ref": "0" * 64, "source_ref": source_ref,
+         "field": "/data/prior", "value": "already indexed"}
+    ]}
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "fixture",
+        "sources": [{"id": source_ref, "kind": "project",
+                     "data": {"title": "Fixture"}}],
+    }
+    state = papers._new_work("a" * 64, "fixture", "b" * 64, "fixture-model", "high")
+    state["next_batch"] = 1
+    state["provider_calls"] = 1
+    state["provider_calls_total"] = 1
+    seen: list[str] = []
+
+    async def fake_provider(input_value, _binding, _config, *,
+                            schema_name, max_input_bytes, **_kwargs):
+        seen.append(schema_name)
+        if schema_name == "sigma_paper_evidence_batch":
+            assert input_value is batch  # E1 is not replayed.
+            assert max_input_bytes == limit
+            return papers.EvidenceBatchResult(
+                notes=[],
+                conflicts_or_gaps=[],
+                covered_field_refs=[field["field_ref"] for field in fields],
+                omitted_fields=[],
+            ), "fixture-model"
+        raise ProjectError("fixture stop before paper planning")
+
+    async def check() -> None:
+        with (
+            patch.object(papers, "_evidence_batches", return_value=[first_batch, batch]),
+            patch.object(papers, "_provider_structured", new=fake_provider),
+        ):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "token": "fixture", "mode": "chatgpt"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _state: None,
+                )
+            except ProjectError as exc:
+                assert "fixture stop before paper planning" in str(exc)
+            else:
+                raise AssertionError("Fixture must stop after completing E2")
+    asyncio.run(check())
+    assert seen == ["sigma_paper_evidence_batch", "sigma_long_paper_plan"]
+    assert state["next_batch"] == 2
+    assert state["provider_calls"] == 3  # Prior E1 + E2 + blocked planning attempt.
+
+
 def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog() -> None:
     notes = [
         papers.EvidenceNote(
@@ -1518,6 +1599,7 @@ def main() -> None:
     test_paper_progress_endpoint_recovers_interrupted_checkpoint()
     test_restart_uses_current_evidence_and_is_idempotent()
     test_explicit_restart_checkpoint_migrates_and_rebinds_safely()
+    test_evidence_envelope_budget_resumes_without_repacking()
     test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:
