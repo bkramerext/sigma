@@ -1325,20 +1325,12 @@ function paperElapsed(seconds: number): string {
   return minutes ? `${minutes}m ${remaining}s` : `${remaining}s`;
 }
 
-// A resumed checkpoint reports accumulated active time in elapsed_seconds.
-// The current attempt has a fresh started_at. Show both honestly instead of
-// making a newly retried paper appear to have already run for several minutes.
-// When a run is interrupted, do not include idle time since the interruption.
 function paperTimingLabel(progress: PaperProgress, now: number): string {
-  const total = Math.max(0, Math.floor(progress.elapsed_seconds));
-  if (progress.status !== 'active') return `Total active time across attempts ${paperElapsed(total)}`;
   const started = Date.parse(progress.started_at);
-  if (!Number.isFinite(started)) return `Total active time across attempts ${paperElapsed(total)}`;
-  const attempt = Math.max(0, Math.floor((now - started) / 1000));
-  const earlier = Math.max(0, total - attempt);
-  return earlier > 0
-    ? `This attempt ${paperElapsed(attempt)} · Earlier attempts ${paperElapsed(earlier)}`
-    : `This attempt ${paperElapsed(attempt)}`;
+  const seconds = Number.isFinite(started)
+    ? Math.max(0, Math.floor((now - started) / 1000))
+    : Math.max(0, progress.elapsed_seconds);
+  return paperElapsed(seconds);
 }
 
 function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
@@ -1595,7 +1587,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           : `Resuming with ${resumeDetails?.completed_sections ?? 0} saved section(s).`
       }</p>}
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · {paperTimingLabel(paperProgress, paperClock)}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Waiting for the AI response.' : 'Awaiting an update from SIGMA.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)}{paperProgress.status === 'active' ? ` · ${paperTimingLabel(paperProgress, paperClock)}` : ''}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Waiting for the AI response.' : 'Awaiting an update from SIGMA.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
