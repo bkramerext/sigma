@@ -1613,26 +1613,30 @@ class CloudAuthTests(TestCase):
             first = self.finish(email="admin@example.org", subject="initial-google-subject")
             self.assertIn("sigma_session", first.cookies)
             self.client.cookies.clear()
-            initially_denied = self.finish(
+            initially_uninvited = self.finish(
                 email="zetacontinuation@gmail.com", subject="configured-google-subject"
             )
-            self.assertEqual(initially_denied.headers["location"], "/?access=denied")
-            self.assertIn("sigma_denied", initially_denied.cookies)
-            self.client.cookies.set("sigma_denied", initially_denied.cookies["sigma_denied"])
+            self.assertEqual(initially_uninvited.headers["location"], "/")
+            self.assertIn("sigma_session", initially_uninvited.cookies)
+            self.client.cookies.set("sigma_session", initially_uninvited.cookies["sigma_session"])
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
             os.environ["SIGMA_CLOUD_ADMIN_CONTACT_EMAIL"] = "zetacontinuation@gmail.com"
-            # A stale denied page must offer Google sign-in again, never an
-            # invitation, once the account is authorized.
-            recovered = self.client.get("/api/cloud-auth/denied")
-            self.assertEqual(recovered.json(), {"identity_available": False, "retry_signin": True})
+            # The verified identity becomes an administrator as soon as the
+            # configured contact changes; guest status does not pin its role.
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "admin"
+            )
             self.assertEqual(
                 self.client.post(
                     "/api/cloud-auth/invitation-request",
                     json={},
                     headers={"Origin": "http://127.0.0.1:5173"},
                 ).status_code,
-                409,
+                401,
             )
-            # Retain the previous denial cookie just as the browser does.
+            # A fresh chooser flow continues to complete normally.
             allowed = self.finish(
                 email="zetacontinuation@gmail.com", subject="configured-google-subject"
             )
@@ -1649,6 +1653,68 @@ class CloudAuthTests(TestCase):
             self.assertFalse(account["account"]["invitation_welcome_pending"])
             self.assertEqual(account["admin_contact_email"], "zetacontinuation@gmail.com")
             self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
+
+    def test_local_uninvited_google_user_requests_invitation_and_becomes_member(self):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.org",
+            },
+        ):
+            admin_login = self.finish(email="admin@example.org", subject="onboard-admin")
+            self.client.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            guest_context = TestClient(
+                app, base_url="http://127.0.0.1", client=("127.0.0.1", 12346)
+            )
+            guest = guest_context.__enter__()
+            self.addCleanup(guest_context.__exit__, None, None, None)
+            signed_in = self.finish(
+                email="new-member@example.org", subject="onboard-member", client=guest
+            )
+            self.assertEqual(signed_in.status_code, 303)
+            self.assertEqual(signed_in.headers["location"], "/")
+            guest.cookies.set("sigma_session", signed_in.cookies["sigma_session"])
+            status = guest.get("/api/cloud-auth/status").json()
+            self.assertTrue(status["authenticated"])
+            self.assertEqual(status["user"], {"email": "new-member@example.org", "role": "guest"})
+            self.assertEqual(status["account"]["access"]["status"], "uninvited")
+            self.assertFalse(status["account"]["sponsorship"]["eligible"])
+            self.assertEqual(guest.get("/api/projects/recent").status_code, 200)
+            self.assertEqual(
+                guest.post(
+                    "/api/projects/research-sessions/start",
+                    headers={"Origin": local_origin},
+                    json={},
+                ).status_code,
+                403,
+            )
+            with patch.object(cloud_auth, "_deliver_invitation") as deliver:
+                requested = guest.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                )
+                self.assertEqual(requested.status_code, 200, requested.text)
+                self.assertEqual(requested.json()["status"], "notified")
+                self.assertTrue(
+                    guest.post(
+                        "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                    ).json()["duplicate"]
+                )
+                deliver.assert_called_once()
+            queue = self.client.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+            self.assertEqual(queue[0]["email"], "new-member@example.org")
+            approved = self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": "new-member@example.org", "role": "member"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(approved.status_code, 200, approved.text)
+            member = guest.get("/api/cloud-auth/status").json()
+            self.assertEqual(member["user"]["role"], "member")
+            self.assertTrue(member["account"]["sponsorship"]["eligible"])
+            self.assertIsNone(member["account"].get("invitation_status"))
 
     def test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth(self):
         from sigma import ai_store
@@ -3026,8 +3092,12 @@ class CloudAuthTests(TestCase):
                 client=member_client,
             )
             self.assertEqual(denied.status_code, 303)
-            self.assertIn("access=denied", denied.headers["location"])
-            self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+            self.assertEqual(denied.headers["location"], "/")
+            self.assertIn("sigma_session", denied.cookies)
+            member_client.cookies.set("sigma_session", denied.cookies["sigma_session"])
+            guest_status = member_client.get("/api/cloud-auth/status").json()
+            self.assertEqual(guest_status["user"]["role"], "guest")
+            self.assertFalse(guest_status["account"]["sponsorship"]["eligible"])
             grant = admin.post(
                 "/api/cloud-auth/admin/grants",
                 json={"kind": "email", "value": "nontrivialzeeros@gmail.com", "role": "member"},

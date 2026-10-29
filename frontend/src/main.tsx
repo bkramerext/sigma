@@ -2196,7 +2196,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean }) {
   const cloud = useCloudIdentity();
-  const showConnectionStatus = !cloud?.enabled || cloud.authenticated;
+  const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
@@ -2934,7 +2934,7 @@ function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
-  const showConnectionStatus = !cloud?.enabled || cloud.authenticated;
+  const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   useEffect(() => {
@@ -3017,12 +3017,12 @@ function Home({ initialPath, onOpen }: {
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
-          {(!cloud?.enabled || cloud.authenticated) && <>
+          {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
             <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
           <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
           </>}
         </div>
-        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
+        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
@@ -3367,7 +3367,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const cloud = useCloudIdentity();
-  const guest = !!cloud?.enabled && !cloud.authenticated;
+  const guest = !!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest');
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
@@ -3786,7 +3786,7 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
@@ -3907,26 +3907,27 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
-  // The denied-identity cookie proves Google verified an account, but SIGMA
-  // did not authorize it. Signed-out guests and already-invited accounts
-  // must never see an invitation action.
-  const canRequestInvitation = !!cloud?.enabled && !cloud.authenticated
-    && deniedIdentityAvailable && cloud.deniedInvitationStatus === null
+  // A local Google guest is authenticated but has no member permissions.
+  const authenticatedGuest = cloud?.authenticated && cloud.user?.role === 'guest';
+  const invitationStatus = authenticatedGuest ? cloud?.account?.invitation_status : cloud?.deniedInvitationStatus;
+  const invitationIdentity = !!cloud?.enabled && (authenticatedGuest || (!cloud.authenticated && deniedIdentityAvailable));
+  const canRequestInvitation = invitationIdentity
+    && invitationStatus == null
     && !invitationRecorded;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
     ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
     : '/api/cloud-auth/login';
   useEffect(() => {
-    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') {
+    if ((cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') || (authenticatedGuest && invitationStatus)) {
       setInvitationRecorded(true);
     }
-  }, [cloud?.deniedInvitationStatus]);
+  }, [cloud?.deniedInvitationStatus, authenticatedGuest, invitationStatus]);
   useEffect(() => {
     const inviteIntent = new URLSearchParams(window.location.search).get('invite') === '1';
-    if (canRequestInvitation && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
-    if (!canRequestInvitation && dialog.current?.open) dialog.current.close();
-  }, [canRequestInvitation]);
+    if (canRequestInvitation && deniedIdentityAvailable && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
+    if (!invitationIdentity && dialog.current?.open) dialog.current.close();
+  }, [canRequestInvitation, invitationIdentity]);
   useEffect(() => {
     const open = () => {
       document
@@ -4014,18 +4015,18 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
-    {!cloud?.authenticated && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
+    {(!cloud?.authenticated || authenticatedGuest) && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
       <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
-      {deniedIdentityAvailable
+      {(deniedIdentityAvailable || authenticatedGuest)
         ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
         : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request.</p>}
-      {deniedIdentityAvailable
+      {(deniedIdentityAvailable || authenticatedGuest)
         ? invitationRecorded
-          ? <p role="status">{cloud?.deniedInvitationStatus === 'sending' ? 'Your invitation request is already recorded and being processed.' : "Glad you're interested! Your request has been sent along to the right person!"}</p>
-          : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); dialog.current?.close(); }}/>
+          ? <p role="status">Your invitation request is recorded and awaiting administrator review.</p>
+          : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); if (authenticatedGuest) window.dispatchEvent(new Event('sigma-cloud-auth-refresh')); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}/>
         : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
-      {deniedIdentityAvailable && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
+      {deniedIdentityAvailable && !authenticatedGuest && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>}
   </>;
@@ -4042,8 +4043,9 @@ function HomeInvitationAction() {
     window.addEventListener('sigma-invitation-recorded', onRecorded);
     return () => window.removeEventListener('sigma-invitation-recorded', onRecorded);
   }, []);
-  if (!cloud?.enabled || cloud.authenticated || !cloud.deniedIdentityAvailable
-    || cloud.deniedInvitationStatus !== null || recorded) return null;
+  const uninvited = cloud?.user?.role === 'guest' || cloud?.deniedIdentityAvailable;
+  if (!cloud?.enabled || !uninvited
+    || (cloud.user?.role === 'guest' ? cloud.account?.invitation_status != null : cloud.deniedInvitationStatus !== null) || recorded) return null;
   return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}>Invite me!</button>;
 }
 
@@ -4576,7 +4578,7 @@ function CloudAuthGate() {
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedIdentityAvailable={deniedIdentityAvailable} authenticated={status.authenticated} user={status.user}/>;
   return <CloudIdentityContext.Provider value={context}>
-    <AIProvider unavailable={!status.authenticated}><App/>
+    <AIProvider unavailable={!status.authenticated || status.user?.role === 'guest'}><App/>
     {status.authenticated && showSponsorWelcome && <InvitationWelcomeDialog
       audience={status.account?.sponsorship.eligible ? 'sponsored' : 'invited'}
       allowance={budgetEmail === status.user?.email ? budget?.remaining_usd ?? null : null}

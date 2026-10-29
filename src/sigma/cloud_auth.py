@@ -737,6 +737,11 @@ def resolve_session(raw: str | None) -> Principal | None:
         if not row or row["expires_at"] <= _now():
             return None
         role = _authorization(cfg, row["subject"], row["email"])
+        # A verified Google identity remains signed in locally while awaiting
+        # an invitation. This is identity only: middleware keeps guest access
+        # on the public sample and invitation paths below.
+        if not role and cfg.local:
+            return Principal(row["subject"], row["email"], "guest")
         if not role:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
             db.execute(
@@ -872,6 +877,51 @@ async def middleware(request: Request, call_next):
         response = JSONResponse({"error": "Authentication required."}, status_code=401)
         _clear_cookie(response, cfg, SESSION_COOKIE)
         return response
+    if principal.role == "guest":
+        guest_auth_paths = {
+            ("POST", "/api/cloud-auth/logout"),
+            ("POST", "/api/cloud-auth/invitation-request"),
+            ("POST", "/api/cloud-auth/feedback"),
+        }
+        if path.startswith("/api/projects/"):
+            if request.method not in {"GET", "HEAD", "OPTIONS"} and origin != cfg.origin:
+                return JSONResponse({"error": "Request origin is not authorized."}, status_code=403)
+            if (
+                path
+                in {
+                    "/api/projects/research-sessions/start",
+                    "/api/projects/proposals",
+                    "/api/projects/proposals/agentic",
+                    "/api/projects/strategy-suggestions",
+                    "/api/projects/text/convert",
+                    "/api/projects/papers",
+                    "/api/projects/papers/restart",
+                    "/api/projects/research-executions",
+                }
+                or path.startswith("/api/projects/research-sessions/")
+                and request.method == "POST"
+            ):
+                return JSONResponse(
+                    {"error": "Guest projects are available for local review only."},
+                    status_code=403,
+                )
+            from sigma import cloud_workspaces
+
+            guest_token = request.cookies.get(_cookie_name(GUEST_COOKIE, cfg))
+            workspace = cloud_workspaces.guest_workspace(guest_token) if guest_token else None
+            if workspace is None:
+                guest_token = secrets.token_hex(32)
+                workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
+            request.state.cloud_guest_workspace = workspace
+            response = await call_next(request)
+            response.set_cookie(
+                _cookie_name(GUEST_COOKIE, cfg),
+                guest_token,
+                **_cookie_options(cfg, GUEST_COOKIE, max_age=SESSION_SECONDS),
+            )
+            return response
+        if path != "/api/cloud-auth/status" and (request.method, path) not in guest_auth_paths:
+            return JSONResponse({"error": "Member access requires an invitation."}, status_code=403)
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
     # Local Google identity gates project access but does not replace the
@@ -1262,7 +1312,23 @@ def status(request: Request):
     account = None
     if principal is not None:
         try:
-            account = _persist_user_state(cfg, principal)
+            if principal.role == "guest":
+                with _db(cfg) as db:
+                    invitation = db.execute(
+                        "SELECT status FROM invitation_requests WHERE subject=?",
+                        (principal.subject,),
+                    ).fetchone()
+                account = {
+                    "identity": {"email": principal.email, "verified": True},
+                    "access": {"status": "uninvited", "role": "guest"},
+                    "workspace": {"available": False, "id": None},
+                    "model_access": {"mode": "personal", "connection": "disconnected"},
+                    "sponsorship": {"eligible": False, "forced": False},
+                    "invitation_welcome_pending": False,
+                    "invitation_status": invitation["status"] if invitation else None,
+                }
+            else:
+                account = _persist_user_state(cfg, principal)
         except (sqlite3.Error, OSError, RuntimeError):
             return {
                 "enabled": cfg.enabled,
@@ -1510,6 +1576,34 @@ async def callback(
     invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
     role = _authorization(cfg, subject, email)
     if not role:
+        if cfg.local:
+            # Local Google identity is independent of invitation membership.
+            # role=guest keeps all member and research routes denied below.
+            raw = secrets.token_urlsafe(32)
+            with _db(cfg) as db:
+                if session_cookie:
+                    db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
+                db.execute(
+                    "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
+                    "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+                    (subject, email, _now()),
+                )
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (_hash(raw), subject, email, _now() + SESSION_SECONDS),
+                )
+            response = RedirectResponse("/", status_code=303)
+            response.set_cookie(
+                _cookie_name(SESSION_COOKIE, cfg),
+                raw,
+                **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+            )
+            _clear_cookie(response, cfg, FLOW_COOKIE)
+            _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
+            _clear_cookie(response, cfg, DENIED_COOKIE)
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            return response
         denied_token = secrets.token_urlsafe(32)
         with _db(cfg) as db:
             if session_cookie:
@@ -1788,6 +1882,10 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         if not sponsored_access_enabled() or eligible is None:
             raise HTTPException(403, "This account is not eligible for sponsored reload requests.")
         identity = {"email": principal.email, "subject": principal.subject}
+    elif (
+        authenticated := resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    ) is not None and authenticated.role == "guest":
+        identity = {"email": authenticated.email, "subject": authenticated.subject}
     else:
         denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
         if not denied_cookie or len(denied_cookie) > 128:

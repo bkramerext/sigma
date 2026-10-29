@@ -1,3 +1,31 @@
+## Ticket #312 — Local uninvited-user onboarding (2026-10-28)
+
+Local Google sign-in now creates a verified, role-limited guest session when an
+identity has no active membership grant. The account pill keeps the Google
+identity visible; guests can browse sample projects and request an invitation
+without receiving sponsorship eligibility. Guest middleware continues to deny
+member-only routes and research execution. Invitation requests remain bound to
+the verified Google subject in the durable auth database, duplicate requests
+are suppressed, and an admin grant turns the same identity into a member on its
+next status check. The invitation dialog now keeps its recorded-request
+acknowledgment visible while hiding further request actions. Guest UI hides AI
+connection and new/import project controls.
+
+The new `tests/cloud_auth.py` regression exercises Google callback verification
+with a deterministic OAuth fixture, guest access restrictions, durable request,
+duplicate suppression, admin review/grant, and transition to sponsored member
+eligibility. `browser_checks/local_auth_real_backend.py` now checks the
+authenticated guest pill, invitation UI acknowledgment, duplicate-action
+suppression, and absence of the AI connection pill against Chromium and the
+real local API. `./sigma test` passed all configured steps, including Ruff,
+format, Pyright, frontend typecheck, and production build. The graph-present
+sandbox scenario was skipped because its local image is unavailable. The
+real-browser scenario uses seeded local identities and intercepts invitation
+delivery; it does not claim live Google OAuth or provider inference. No paid
+provider calls were made. Manual acceptance with N, admin approval in the UI,
+and a sponsored Easy research session remain unverified and are required
+before release acceptance.
+
 ## PR #297 — Gate 3 corrections (2026-10-28)
 
 Implementation commit: `19821f010ac6620a3b259b25860a2721c76c509d` on

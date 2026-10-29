@@ -24,6 +24,7 @@ CHROME = os.environ.get(
 )
 Z = "zetacontinuation@gmail.com"
 N = "nontrivialzeeros@gmail.com"
+UNINVITED = "new-user@example.org"
 
 
 def free_port() -> int:
@@ -92,6 +93,17 @@ def seed_state(auth_home: Path, credential_home: Path) -> dict[str, str]:
                 (cloud_auth._hash(raw), subject, email, cloud_auth._now() + 3600),
             )
             session_cookies[email] = raw
+        guest_subject = "google-subject-uninvited"
+        guest_cookie = secrets.token_urlsafe(32)
+        db.execute(
+            "INSERT OR REPLACE INTO identities(subject,email,updated_at) VALUES(?,?,?)",
+            (guest_subject, UNINVITED, cloud_auth._now()),
+        )
+        db.execute(
+            "INSERT OR REPLACE INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+            (cloud_auth._hash(guest_cookie), guest_subject, UNINVITED, cloud_auth._now() + 3600),
+        )
+        session_cookies[UNINVITED] = guest_cookie
 
     account_template = {
         "client_id": "fixture-chatgpt-client",
@@ -504,9 +516,45 @@ def main() -> None:
                     "async () => (await (await fetch('/api/cloud-auth/status')).json()).account.model_access.mode"
                 )
                 assert selected_member == "personal", selected_member
+
+                # The uninvited Google identity gets an authenticated local
+                # guest session and an invitation request path, while research
+                # execution remains denied by the actual API middleware.
+                login_cookie(UNINVITED)
+                page.reload(wait_until="domcontentloaded")
+                expect(
+                    page.locator(".identity-pill-stack .project-google-signin").first
+                ).to_have_text("Sign out of Google")
+                status = page.evaluate(
+                    "async () => (await (await fetch('/api/cloud-auth/status')).json())"
+                )
+                assert status["user"] == {"email": UNINVITED, "role": "guest"}, status
+                assert not status["account"]["sponsorship"]["eligible"], status
+                expect(page.get_by_role("button", name="Invite me!")).to_be_visible()
+                assert page.locator(".api-connection").count() == 0
+                invitation_posts: list[dict] = []
+                page.route(
+                    "**/api/cloud-auth/invitation-request",
+                    lambda route: (
+                        invitation_posts.append(route.request.post_data_json or {}),
+                        route.fulfill(
+                            status=200,
+                            content_type="application/json",
+                            body='{"status":"notified","duplicate":false}',
+                        ),
+                    ),
+                )
+                page.get_by_role("button", name="Invite me!").click()
+                invitation_dialog = page.get_by_role("dialog", name="Request an invitation")
+                invitation_dialog.get_by_role("button", name="Invite me").click()
+                expect(invitation_dialog.locator('[role="status"]')).to_contain_text(
+                    "Your invitation request is recorded and awaiting administrator review."
+                )
+                expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
+                assert invitation_posts == [{}], invitation_posts
                 browser.close()
             print(
-                "PASS local Chromium ↔ real SIGMA API: same-email personal/sponsor OAuth, persistence, server restart, member privacy, zero-budget Play denial, and personal authorization"
+                "PASS local Chromium ↔ real SIGMA API: same-email personal/sponsor OAuth, persistence, server restart, member privacy, zero-budget Play denial, and authenticated uninvited-user invitation UI"
             )
         finally:
             if api is not None and api.poll() is None:
