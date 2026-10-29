@@ -3,64 +3,63 @@
 ## Delivery
 
 - Branch: `green/issue-301-live-logging`
+- Review target: `15288315d9c8ccabeec3278d3bf7cff0c0e86ade`
 - Base: `main` at `26628d549dbe11aad0c9f612633c08964ae9eb90`
-- Implementation commit: `9cd147d1895d96997709a4149431aec4f207fe0b`
-- Final implementation HEAD: `9cd147d1895d96997709a4149431aec4f207fe0b` (the following commit records this handoff).
-- PR: [#324](https://github.com/bkramerext/sigma/pull/324)
-- State: Ready for Review; not merged.
+- Correction commit / final implementation HEAD: `ff28c1a605d768943f7ade64e1249205896f3f3c`
+- Handoff/tracking metadata follows the implementation commit; the PR head points to the latest branch commit.
+- PR: [#324](https://github.com/bkramerext/sigma/pull/324), open, Ready for Review, not merged
 
 ## Architecture and files
 
-- `src/sigma/session_log.py`: isolated append-only Markdown session store; UUID project/session paths, byte-framed event records, serialized/fsynced appends, safe tail recovery, redaction, stable derived short names, incremental reads, cleanup.
-- `src/sigma/research_sessions.py`: best-effort hooks at the actual provider request/response boundary, request ID pairing, operational events and cross-strategy evidence availability/inclusion metadata.
-- `src/sigma/api.py`: owner-authorized incremental log read and Markdown download; project deletion cleanup.
-- `frontend/src/SessionLogButton.tsx`, `frontend/src/SessionLogPage.tsx`, `frontend/src/main.tsx`, `frontend/src/style.css`, `frontend/src/strategies.css`: adjacent Log control and independent live polling window with paired collapsible provider exchange blocks.
-- `tests/session_log.py`, `tests/research_sessions.py`, `tests/cloud_research_api.py`, registration in `src/sigma/tooling.py`: storage/recovery, real serialized provider request capture, redaction, auth and export exclusion regressions.
-- `browser_checks/issue301_session_log.py`: real Chromium window, incremental update, pairing, download, refresh and close check.
-- `docs/evaluations/issue301/session-log-chromium.png`: captured browser evidence.
-- `docs/STATUS.md` and `docs/TICKET_TRACKING.md`: tracking update.
+- `src/sigma/session_log.py`: isolated one-Markdown-file-per-session store, UUID-derived paths, ordered background writer, framed append records, `fsync`, read-only torn-frame recovery, credential redaction, stable names, incremental reads, and project/session cleanup.
+- `src/sigma/research_sessions.py`: best-effort hooks at the actual provider boundary. It pairs complete serialized requests and provider response wire data by request ID and records operational/cross-strategy metadata. After an Investigator response passes existing output validation, the validated claim supplies a compact project subject label. This reuses existing model output and makes no naming request.
+- `src/sigma/api.py`: existing owner-scoped session checks for incremental retrieval/download and project deletion cleanup. Deletion stops active sessions, then awaits queued log cleanup off the event loop.
+- `frontend/src/SessionLogPage.tsx`: one fetch at a time using recursive timeout polling, monotone byte cursor, and sequence-based event deduplication.
+- `frontend/src/SessionLogButton.tsx`, `frontend/src/main.tsx`, `frontend/src/style.css`, `frontend/src/strategies.css`: Log control and independent window.
+- `tests/session_log.py`: ordering, delayed storage, append-only bytes, torn-write recovery across restart, multiline payload, redaction, persistence, cleanup, and stable naming.
+- `tests/research_sessions.py`: actual request/response capture and stable name derived from validated Investigator output without extra provider calls.
+- `tests/cloud_research_api.py`: owner and cross-user read/download authorization plus deletion of an active session and its project log tree.
+- `browser_checks/issue301_session_log.py`: standalone real-Chromium popup behavior with deterministic mocked API responses.
+- `browser_checks/issue301_integrated.py`: real Chromium over HTTP to the production `session_log.append`, `read`, and `log_path` service, using deterministic project/session lookup fixtures. It delays a response, replays an event, and checks no overlapping requests, monotone cursors, deduplication, refresh, and download.
+- Screenshots: [standalone browser check](../docs/evaluations/issue301/session-log-chromium.png) and [integrated browser check](../docs/evaluations/issue301/session-log-integrated-chromium.png).
+- Tracking: `docs/STATUS.md`, `docs/TICKET_TRACKING.md`.
 
-Logs are kept outside project JSON exports. Provider logging is best-effort and exceptions are swallowed so they do not fail research. One stable title-derived short name is persisted as an adjacent sidecar per project; no extra naming provider call is made.
+Provider log events are queued to one dedicated daemon writer. Disk locks, scans, serialization/redaction, and `fsync` occur on that thread, not on the research execution path. Queue order preserves event order within the process; `flock` serializes processes. Graceful interpreter shutdown drains the queue. Existing project JSON exports remain free of diagnostics.
 
 ## Verification
 
-- `./sigma test` — PASS across all configured steps (backend regressions, Ruff, Ruff format, Pyright, frontend typecheck/build). The graph-present local sandbox subcase skipped because its configured image was unavailable.
-- `uv run --locked --no-sync python tests/session_log.py` — PASS (append-only integrity, concurrent appends, recovery, multiline content, redaction, restart, project cleanup and name stability).
-- `uv run --locked --no-sync python tests/cloud_research_api.py` — PASS (owner log retrieval/incremental cursor and cross-user denial).
-- `uv run --locked --no-sync python tests/research_sessions.py` — PASS during full suite; verifies deterministic provider request/response capture and export exclusion.
-- `uv run --locked --no-sync ruff check ...` and `ruff format --check ...` — PASS for changed backend/tests.
-- `npm run typecheck --prefix frontend` — PASS.
-- `uv run --locked --no-sync --with playwright python browser_checks/issue301_session_log.py` — PASS in actual Google Chrome/Chromium; separate popup, title, in-flight then paired response, multiline request, download, refresh and independent close. This uses a deterministic mocked HTTP fixture for the browser UI. Backend API and provider boundary are covered separately by deterministic tests.
-- `git diff --check` — PASS.
-
-No paid provider calls were made.
+- `./sigma test` — PASS across configured steps: all backend regression suites, Ruff check/format, Pyright, frontend typecheck and production build. The graph-present local sandbox subcase skipped because its configured image was unavailable.
+- `uv run --locked --no-sync python tests/session_log.py` — PASS; includes a deliberately delayed writer, concurrent events, byte-for-byte prefix checks, interrupted trailing frame preserved through restart and subsequent append, multiline content, adverse secret redaction, stable claim-derived names, and cleanup.
+- `uv run --locked --no-sync python tests/research_sessions.py` — PASS; complete provider request/response pairing and claim-derived name, with the existing deterministic call count unchanged.
+- `uv run --locked --no-sync python tests/cloud_research_api.py` — PASS; active-session project deletion/log cleanup and cross-user view/download rejection.
+- `uv run --locked --no-sync ruff check ...`, `ruff format --check ...`, `npm run typecheck --prefix frontend`, and `git diff --check` — PASS.
+- `uv run --locked --no-sync --with playwright python browser_checks/issue301_session_log.py` — PASS in real Chrome; separate popup, title, live paired response, multiline request, download, reload, and independent close.
+- `uv run --locked --no-sync --with playwright python browser_checks/issue301_integrated.py` — PASS in real Chrome against an HTTP fixture calling the production log store; delayed requests had maximum concurrency one, cursors advanced monotonically, a replayed event rendered once, the delayed response paired, and refresh/download worked.
+- No paid provider calls were made.
 
 ## Acceptance status
 
 ### MET
 
-- Log control is adjacent to Play/Stop/Resume, using reduced existing icon treatments and preserving color.
-- Separate window updates by incremental polling; title and heading use `<Short Project Name>, Session <N>`.
-- Actual provider serialized request and returned response are captured at the provider boundary and paired by stable request ID, with raw response wire data, timing, usage/cost/reservation metadata, failures, round/strategy/turn/role identifiers and request identifiers.
-- Parallel and out-of-order provider activity is represented as independent paired blocks; pending calls show elapsed time.
-- One Markdown file per session, append-only framed writes with serialization, fsync, partial-tail recovery, multiline content and VS Code-readable output.
-- Credentials/secrets are redacted before persistence; logger failures are best-effort.
-- Incremental viewing/download ownership checks, project deletion cleanup, and omission from project JSON export.
-- Stable short name reuse across sessions without a separate paid naming call.
-- Real Chromium interaction verified; persistence/restart and concurrency have deterministic backend regression coverage.
+- AI-derived, subject-based short name is extracted from the first successful validated Investigator claim and atomically persisted once for the project. Later sessions reuse it. No extra naming call; research output schema/validation is unchanged.
+- Disk operations are off the research path. A delayed-storage regression confirms enqueue returns promptly and queued concurrent events preserve order.
+- The Markdown file is strictly append-only: torn records are skipped without truncation or rewrite. Valid frames appended after a torn tail remain readable; subprocess recovery verifies existing bytes are unchanged.
+- Frontend requests cannot overlap. A monotone cursor ref and sequence set prevent regressions/duplicates; the browser integration delays responses and deliberately replays an old event.
+- Active-session project deletion stops the worker and removes the full log directory; authorization is enforced for incremental retrieval and download; request/response content is redacted; project exports omit logs.
+- Real Chromium has been exercised both with mocked API behavior and with HTTP responses from the production storage service.
 
 ### UNMET
 
-- None identified against the consolidated ticket's required behavior.
+- None identified in the four adversarial findings.
 
 ### UNVERIFIED / limitations
 
-- The Chromium run used a deterministic mocked API fixture rather than driving the local backend and browser together. Backend persistence, actual provider-boundary capture, and auth were verified in separate deterministic API/unit tests.
-- Short name is title-derived and persisted in a sidecar rather than generated by AI. No naming provider call is made, by design; a paid or separate naming request was explicitly excluded.
-- Appends synchronously fsync within the logging call. Errors are swallowed, but slow storage may briefly add event-loop latency during provider events.
-- The graph-present sandbox test was skipped due to unavailable configured image.
+- The integrated browser server uses deterministic project/session lookup fixtures rather than starting the full authenticated API server. The production FastAPI routes, owner checks, active deletion and downloads are independently covered by `TestClient` API tests.
+- The short name is a compact deterministic subject extraction from an already AI-produced validated claim. Before a successful Investigator claim exists, the window temporarily displays `Research Project`.
+- The writer queue is in memory. Graceful shutdown drains it, and a torn on-disk append is recovered without modification. An abrupt process kill before a queued event reaches disk can lose that not-yet-written event; logging remains best-effort so it cannot delay/fail research.
+- The graph-present sandbox scenario is skipped because its configured image is unavailable.
 - No paid provider calls occurred.
 
 ## Review notes
 
-Coordinator should independently review cleanup behavior for active-session project deletion, append framing/recovery, redaction coverage, and request/response pairing. The implementation does not alter provider payloads; it serializes the already-built payload for audit. PR will target `main`, remain Ready for Review, and will not be merged by Green.
+The provider request is serialized from the already-built payload only to capture its actual contents; the provider payload and validation rules are unchanged. The PR remains open and unmerged for independent review.
