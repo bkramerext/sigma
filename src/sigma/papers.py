@@ -2856,6 +2856,7 @@ Return the complete plan JSON matching the schema."""
     if fast_path:
         plan_input["index_origin"] = "deterministic_selection_from_structured_research"
         plan_input["indexed_fragments_not_selected"] = len(state.get("omitted_evidence", []))
+    long_plan: LongPaperPlan | None = None
     if state.get("plan"):
         try:
             long_plan = LongPaperPlan.model_validate(state["plan"])
@@ -2872,7 +2873,7 @@ Return the complete plan JSON matching the schema."""
                 ) from None
             state.pop("plan", None)
             save_state(state)
-    if not state.get("plan"):
+    if long_plan is None:
         if progress:
             await progress("planning", None, None, "active")
         plan, _ = await call_with_safe_retry(
