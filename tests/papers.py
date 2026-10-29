@@ -2576,6 +2576,90 @@ def test_invalid_planning_claim_reference_is_recoverable() -> None:
     assert old["plan"]["sections"][0]["claim_ids"] == valid_plan.sections[0].claim_ids
 
 
+def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
+    """An explicit reset switches eligible research to one call without AI."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "easy-restart.sigma"
+        view = initialize_project(path, "Easy paper", "How many regions can n lines form?")
+        package = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": view.project.id,
+            "sources": [
+                {
+                    "id": f"project:{view.project.id}",
+                    "kind": "project",
+                    "data": {"id": view.project.id, "difficulty": "easy"},
+                },
+                {
+                    "id": "session:one",
+                    "kind": "session",
+                    "data": {"outcome": "An existing mathematical argument. " * 3_500},
+                },
+            ],
+        }
+        encoded = papers._json(package)
+        assert papers.MAX_ONE_SHOT_CONTEXT_BYTES < len(encoded) < 200_000
+        snapshot_hash = papers.hashlib.sha256(encoded).hexdigest()
+        identity = "chatgpt:fixture"
+        credential = {"identity": identity, "mode": "chatgpt", "token": "fixture"}
+        config = {"available": True, "model": "gpt-fixture", "reasoning_effort": "high"}
+        binding = papers.hashlib.sha256(("chatgpt\\0" + identity).encode()).hexdigest()
+        checkpoint = papers._new_work(
+            snapshot_hash, view.project.id, binding, "gpt-fixture", "high"
+        )
+        checkpoint["provider_calls"] = 2
+        checkpoint["provider_calls_total"] = 2
+        checkpoint["evidence_indexed"] = True
+        checkpoint["evidence_strategy"] = "structured_v1"
+        papers._save_work(str(path), checkpoint)
+
+        async def fake_auth():
+            return credential
+
+        async def fake_configuration(**_kwargs):
+            return config
+
+        with (
+            patch.object(papers, "_snapshot", return_value=(package, snapshot_hash)),
+            patch.object(papers, "auth_context", new=fake_auth),
+            patch.object(papers, "configuration", new=fake_configuration),
+            patch.object(papers, "_provider", side_effect=AssertionError("no AI on Start over")),
+            patch.object(
+                papers, "_provider_structured", side_effect=AssertionError("no AI on Start over")
+            ),
+        ):
+            before = papers.preflight(
+                str(path), expected_project_id=view.project.id,
+                expected_binding=identity, mode="chatgpt",
+                model="gpt-fixture", reasoning_effort="high",
+            )
+            assert before["resume_available"] is True
+            assert before["long_form"] is True
+            assert before["single_call_restart_available"] is True
+
+            reset = asyncio.run(
+                papers.restart_work(
+                    str(path), view.project.id, identity,
+                    snapshot_hash, confirmed=True, force_long_form=False,
+                )
+            )
+            assert reset["provider_calls_attempted"] == 0
+            saved = papers._load_work(str(path))
+            assert saved is not None
+            assert saved["kind"] == "one_shot"
+            assert saved["provider_calls_total"] == 2
+            assert len(saved["prior_runs"]) == 1
+            assert saved["prior_runs"][0]["provider_calls_attempted"] == 2
+            after = papers.preflight(
+                str(path), expected_project_id=view.project.id,
+                expected_binding=identity, mode="chatgpt",
+                model="gpt-fixture", reasoning_effort="high",
+            )
+            assert after["long_form"] is False
+            assert after["maximum_provider_calls"] == 1
+            assert after["provider_calls_attempted"] == 0
+
+
 def test_long_paper_planning_timeout_is_stage_specific() -> None:
     """All paper inference stages receive at least five minutes."""
     assert papers.CALL_SECONDS == 300
@@ -2616,6 +2700,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 
 def main() -> None:
+    test_easy_paper_start_over_escapes_repeated_paid_planning()
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
     test_invalid_planning_claim_reference_is_recoverable()
