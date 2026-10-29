@@ -2107,6 +2107,7 @@ async def _generate_long_draft(
     progress: PaperStageCallback | None = None,
     project_id: str | None = None,
     project_path_value: str | None = None,
+    structured_fast_path: bool = False,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     # Existing paid field-extraction checkpoints remain on their original
@@ -2118,8 +2119,8 @@ async def _generate_long_draft(
             and state.get("evidence_strategy") != "structured_v1"
         )
     )
-    fast_path = not legacy_checkpoint
-    batches = _evidence_batches(package) if legacy_checkpoint else []
+    fast_path = structured_fast_path and not legacy_checkpoint
+    batches = _evidence_batches(package) if not fast_path else []
     if len(batches) + MAX_LONG_PAPER_SECTIONS + 16 > MAX_LONG_PAPER_CALLS:
         raise ProjectError("This snapshot exceeds the bounded long-paper provider-call budget")
     notes: list[EvidenceNote] = [
@@ -2761,6 +2762,7 @@ async def _generate_impl(
                 report,
                 view.project.id,
                 path,
+                structured_fast_path=True,
             )
             model = config["model"]
             long_form = True
