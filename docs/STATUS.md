@@ -20,10 +20,38 @@ successful DELETE, removed row, and absent backend record. Active execution
 cancellation was verified through deterministic service regressions. No live
 or paid provider calls were made.
 
-The worktree branch is based on current `origin/main`. Open PR #297 also changes
-the session service, API, and session UI. A Git merge-tree check against its
-latest fetched head found no textual conflicts with this branch; behavior still
-needs review together before merging.
+The branch merged `origin/main` at `dc3d2574` before this follow-up; semantic
+integration was verified with the full suite and browser acceptance below.
+
+## Issue #310 — Authoritative execution slots and project deletion (2026-10-29)
+
+Hosted concurrency admission now names the session IDs occupying project
+slots. Startup reconciliation inspects prior-process queued, running, and
+stopping reservations under the project admission lock; a per-session OS worker
+lock preserves legitimate slow work, while a missing worker recovers the saved
+session and marks dispatched calls' completion unknown without removing spend
+history. Terminal saved sessions repair stale running ledger rows, covering the
+reported invisible-occupant failure. Completed task objects no longer prevent
+recovery.
+
+`DELETE /api/projects` validates project identity and workspace/root ownership,
+takes the project lock used for admission, stops and awaits active sessions,
+removes directory or JSON-bundle project data, and forgets the recent entry.
+Cancellation reaches the worker cleanup `finally` block before project
+removal. The endpoint retains hosted call/spend ledger history. Regression
+coverage includes deterministic invisible-slot recovery after a provider
+disconnect, concurrent admission with visible occupants, slow-worker lock
+preservation, abandoned running worker recovery, session removal during
+execution, completion races, and the real project-delete endpoint.
+
+Verification: `tests/cloud_research.py`, `tests/research_sessions.py`, and
+`tests/lifecycle.py` passed. `./sigma test` passed in full, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. Real Chrome
+`browser_checks/issue286_concurrent_sessions.py` passed against an isolated
+provider fixture and Vite on port 5174. No paid provider calls were made. The
+suite emitted its existing large frontend chunk advisory; epistemic continuity
+skipped the optional graph-present sandbox case because the local Python
+sandbox image is unavailable.
 
 ## Issue #306 and happy-path reliability (#302) (2026-10-28)
 

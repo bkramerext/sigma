@@ -3230,7 +3230,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _recover(record: dict[str, Any]) -> dict[str, Any]:
-    if record["status"] not in {"queued", "running"} or record["id"] in _tasks:
+    task = _tasks.get(record["id"])
+    if record["status"] not in {"queued", "running"} or (task is not None and not task.done()):
         return record
     # Queued cloud sessions have not crossed a provider-dispatch boundary and
     # can be safely picked up when an owner reconnects. Running calls are never
@@ -3945,13 +3946,23 @@ async def stop_project_sessions(path: str) -> list[str]:
     """Stop every active execution before a caller removes project data."""
     stopped: list[str] = []
     for record in _all(path):
-        if record.get("status") not in {"queued", "running"}:
+        if record.get("status") not in {"queued", "running", "paused"}:
             continue
         session_id = record["id"]
         await control_session(path, session_id, "stop")
         task = _tasks.get(session_id)
         if task is not None and not task.done():
+            event = _control.get(session_id)
+            if event is not None:
+                event.set()
+            task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        # A worker may have completed between the snapshot and stop request.
+        # Re-read after its execution owner exits so callers only proceed when
+        # the persisted state is terminal and no worker can write again.
+        final = _read(path, session_id)
+        if final.get("status") not in {"stopped", "completed", "ended", "failed"}:
+            await control_session(path, session_id, "stop")
         stopped.append(session_id)
     return stopped
 
@@ -4373,8 +4384,12 @@ async def start_session(
             active = [_recover(r) for r in records]
             active = [r for r in active if r["status"] in {"queued", "running"}]
             if len(active) >= limits["max_concurrent_sessions"]:
+                occupants = ", ".join(
+                    f"#{item.get('session_number')} ({item['id']})" for item in active
+                )
                 raise ProjectError(
-                    f"This project already has {len(active)} active research session(s), its maximum concurrent sessions limit. Stop, resume, or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                    "This project is at its maximum concurrent sessions limit. "
+                    f"Sessions occupying slots: {occupants}. Open Research Sessions to inspect or stop them."
                 )
             credential = await auth_context()
             if credential["identity"] != expected_binding:

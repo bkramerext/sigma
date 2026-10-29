@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import os
 import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from sigma import cloud_research, cloud_workspaces, openai_connection, research_sessions
-from sigma.projects import create_strategy, initialize_project
+from sigma.projects import ProjectError, create_strategy, initialize_project
 
 
 def research_outputs() -> tuple[dict, dict]:
@@ -265,7 +267,7 @@ def test_orphaned_job_reconciliation(
                 item["id"] = str(uuid4())
                 item["idempotency_key"] = str(uuid4())
                 item["status"] = status
-                item["max_concurrent_sessions"] = 3
+                item["max_concurrent_sessions"] = 10
                 item["steps"] = []
                 item["events"] = []
                 return item
@@ -310,6 +312,7 @@ def test_orphaned_job_reconciliation(
                 cloud_research.prepare_job(slot_two)
             except cloud_research.CloudResearchUnavailable as exc:
                 assert "maximum concurrent sessions" in str(exc).lower()
+                assert slot_one["id"] in str(exc)
             else:
                 raise AssertionError("hosted reservation exceeded the project's session limit")
             db = cloud_research._connect()
@@ -344,29 +347,45 @@ def test_orphaned_job_reconciliation(
             cloud_research.prepare_job(running)
             assert cloud_research.claim_job(running["id"])
             research_sessions._save(project.path, running)
+            slow_worker_fd = os.open(
+                research_sessions._worker_lock_path(project.path, running["id"]),
+                os.O_CREAT | os.O_RDWR,
+                0o600,
+            )
+            fcntl.flock(slow_worker_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            abandoned = derived_job("running")
+            cloud_research.prepare_job(abandoned)
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='running' WHERE session_id=?", (abandoned["id"],))
+            db.close()
+            research_sessions._save(project.path, abandoned)
             ambiguous = derived_job("running")
             cloud_research.prepare_job(ambiguous)
             # Seed a historical concurrent-running state while exercising recovery;
             # admission itself correctly permits only one live session per owner.
             db = cloud_research._connect()
             db.execute("UPDATE jobs SET status='paused' WHERE session_id=?", (running["id"],))
+            db.execute("UPDATE jobs SET status='paused' WHERE session_id=?", (abandoned["id"],))
             db.close()
             assert cloud_research.claim_job(ambiguous["id"])
             db = cloud_research._connect()
             db.execute("UPDATE jobs SET status='running' WHERE session_id=?", (running["id"],))
+            db.execute("UPDATE jobs SET status='running' WHERE session_id=?", (abandoned["id"],))
             db.close()
             call_id = str(uuid4())
             cloud_research.reserve_call(ambiguous["id"], call_id, 0.25, 100)
             cloud_research.mark_call_unknown(ambiguous["id"], call_id)
             db = cloud_research._connect()
             db.execute(
-                "UPDATE jobs SET process_epoch=? WHERE session_id IN (?,?,?)",
-                (old_epoch, valid["id"], running["id"], ambiguous["id"]),
+                "UPDATE jobs SET process_epoch=? WHERE session_id IN (?,?,?,?)",
+                (old_epoch, valid["id"], running["id"], abandoned["id"], ambiguous["id"]),
             )
             db.execute("UPDATE jobs SET status='queued' WHERE session_id=?", (ambiguous["id"],))
             db.close()
             with patch.object(cloud_research, "_PROCESS_EPOCH", next_epoch):
                 removed = cloud_research.reconcile_orphaned_jobs()
+            fcntl.flock(slow_worker_fd, fcntl.LOCK_UN)
+            os.close(slow_worker_fd)
             assert ambiguous["id"] not in removed
             db = cloud_research._connect()
             assert (
@@ -381,6 +400,10 @@ def test_orphaned_job_reconciliation(
                 ).fetchone()[0]
                 == "running"
             )
+            assert (
+                research_sessions.get_session(project.path, abandoned["id"])["status"] == "paused"
+            )
+            assert cloud_research.job_status(abandoned["id"]) == "interrupted"
             assert (
                 db.execute(
                     "SELECT status,amount_usd FROM calls WHERE call_id=?", (call_id,)
@@ -1432,6 +1455,176 @@ def test_json_project_session_playback(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_failed_session_releases_project_slot(
+    root: Path, ledger_root: Path, limits_env: dict[str, str]
+) -> None:
+    """A terminal provider failure must not strand its durable project slot."""
+    member = workspace(root / "failed-session-slot", "a" * 32)
+    with (
+        patch.dict(
+            os.environ,
+            {
+                **limits_env,
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+            clear=False,
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            project = initialize_project(
+                member.path / "disconnect.sigma", "Disconnect recovery", "Check slot release"
+            )
+            strategy = create_strategy(
+                project.path, "Bounded", "Inspect one finite case."
+            ).project.strategies[0]
+            limits = {
+                "research_rounds": 1,
+                "model_calls": 2,
+                "session_duration_minutes": 5,
+                "output_tokens_per_call": 256,
+                "maximum_estimated_cost_usd": 0.25,
+                "max_concurrent_sessions": 1,
+            }
+            research_sessions.save_limits(project.path, limits)
+            credential = {
+                "mode": "api_key",
+                "identity": "cloud_service_api_key:" + member.subject_hash,
+                "token": "fixture-service-key",
+                "status": "connected",
+            }
+            model_config = {
+                "available": True,
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "high",
+            }
+
+            async def disconnected_provider(*_args, **_kwargs):
+                raise ProjectError("Provider connection was disconnected during Play.")
+
+            async def healthy_provider(record, role, context, timeout_seconds=None, step_id=None):
+                del record, context, timeout_seconds
+                assert isinstance(step_id, str)
+                outputs = research_outputs()
+                return outputs[0] if role == "investigator" else outputs[1], {
+                    "input_tokens": 90,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 30,
+                }
+
+            async def exercise() -> tuple[dict[str, Any], dict[str, Any]]:
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "execution_capabilities", return_value=[])
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "_call",
+                            new=AsyncMock(side_effect=disconnected_provider),
+                        )
+                    )
+                    failed_start = await research_sessions.start_session(
+                        project.path,
+                        strategy.id,
+                        str(uuid4()),
+                        project.project.id,
+                        credential["identity"],
+                        limits,
+                    )
+                    for _ in range(500):
+                        failed = research_sessions.get_session(project.path, failed_start["id"])
+                        if (
+                            failed["status"] == "failed"
+                            and failed_start["id"] not in research_sessions._tasks
+                        ):
+                            break
+                        await asyncio.sleep(0.01)
+                    else:
+                        raise AssertionError("disconnected session did not reach failed state")
+                assert failed["status"] == "failed"
+                assert cloud_research.job_status(failed["id"]) == "terminal"
+                # Recreate the reported invisible-occupant failure: the UI's
+                # saved session is terminal, while an old execution ledger row
+                # still claims to be running after its worker disappeared.
+                with cloud_research._transaction() as db:
+                    db.execute(
+                        "UPDATE jobs SET status='running',process_epoch=? WHERE session_id=?",
+                        (uuid4().hex, failed["id"]),
+                    )
+                assert (
+                    research_sessions.get_session(project.path, failed["id"])["status"] == "failed"
+                )
+                assert cloud_research.job_status(failed["id"]) == "running"
+                with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                    cloud_research.reconcile_orphaned_jobs()
+                assert cloud_research.job_status(failed["id"]) == "terminal"
+
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "execution_capabilities", return_value=[])
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "_call",
+                            new=AsyncMock(side_effect=healthy_provider),
+                        )
+                    )
+                    next_start = await research_sessions.start_session(
+                        project.path,
+                        strategy.id,
+                        str(uuid4()),
+                        project.project.id,
+                        credential["identity"],
+                        limits,
+                    )
+                    for _ in range(500):
+                        next_state = research_sessions.get_session(project.path, next_start["id"])
+                        if next_state["status"] in {"ended", "failed", "paused"}:
+                            break
+                        await asyncio.sleep(0.01)
+                    else:
+                        raise AssertionError("follow-up session never reached a saved state")
+                return failed, next_state
+
+            failed, next_state = asyncio.run(exercise())
+            assert failed["status"] == "failed"
+            assert next_state["status"] == "ended"
+            assert cloud_research.job_status(failed["id"]) == "terminal"
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_hosted_deployment_forwards_global_spend_window() -> None:
     compose = (Path(__file__).resolve().parents[1] / "deploy" / "compose.yaml").read_text(
         encoding="utf-8"
@@ -2391,6 +2584,9 @@ def main() -> None:
         json_playback_ledger = root / "json-playback-ledger"
         json_playback_ledger.mkdir(mode=0o700)
         test_json_project_session_playback(root, json_playback_ledger, settings)
+        failed_session_ledger = root / "failed-session-ledger"
+        failed_session_ledger.mkdir(mode=0o700)
+        test_failed_session_releases_project_slot(root, failed_session_ledger, settings)
 
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)

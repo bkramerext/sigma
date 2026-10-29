@@ -1255,6 +1255,51 @@ class UpdateProjectRequest(ProjectSettingsRequest):
     expected: ProjectSettingsRequest
 
 
+class DeleteProjectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(min_length=1, max_length=4096)
+    expected_project_id: str = Field(min_length=1, max_length=100)
+
+
+@app.delete("/api/projects")
+async def delete_project_view(body: DeleteProjectRequest):
+    """Stop project executions before removing the saved project data."""
+    import shutil
+
+    from sigma.projects import project_path, projects_root
+
+    authorized = project_path(body.path)
+    root = projects_root().resolve(strict=True)
+    try:
+        if authorized == root or not authorized.is_relative_to(root):
+            raise ProjectError("Project is outside the permitted projects directory")
+        view = inspect_project(str(authorized))
+        if view.project.id != body.expected_project_id:
+            raise ProjectError("Project changed; refresh before deleting it")
+        # Admission takes the same lock from reservation through publication.
+        # Hold it while stopping workers and unlinking data so no new worker can
+        # enter between cancellation and deletion.
+        with research_sessions._project_manager_lock(str(authorized)):
+            view = inspect_project(str(authorized))
+            if view.project.id != body.expected_project_id:
+                raise ProjectError("Project changed; refresh before deleting it")
+            await research_sessions.stop_project_sessions(str(authorized))
+            if authorized.suffix == ".json":
+                authorized.unlink()
+            elif authorized.suffix == ".sigma" and authorized.is_dir():
+                shutil.rmtree(authorized)
+            else:
+                raise ProjectError("Unsupported project storage format")
+        from sigma.recents import forget_recent
+
+        forget_recent(body.expected_project_id, str(authorized))
+        return {"deleted": True, "project_id": body.expected_project_id}
+    except WorkspaceAccessError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ProjectError("Project could not be deleted safely") from exc
+
+
 @app.post("/api/projects/update")
 def update_project_view(body: UpdateProjectRequest):
     return asdict(
