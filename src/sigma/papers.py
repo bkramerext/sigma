@@ -26,6 +26,11 @@ from sigma.proposals import configuration
 
 MAX_CONTEXT_BYTES = 20_000_000
 MAX_ONE_SHOT_CONTEXT_BYTES = 100_000
+# An easy project with at most one research session should not jump from one
+# provider call to plan + multiple section calls merely because its saved
+# transcript grew slightly past 100 KB. Keep the FULL source package in the
+# one-shot request; this is not evidence compaction or a quality shortcut.
+MAX_EASY_ONE_SHOT_CONTEXT_BYTES = 200_000
 MAX_PROVIDER_INPUT_BYTES = 48_000
 MAX_FIELDS_PER_BATCH = 100
 MAX_REDUCTION_GROUP_BYTES = MAX_PROVIDER_INPUT_BYTES
@@ -486,6 +491,51 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
             f"Complete evidence snapshot is {len(encoded)} bytes; the paper archive limit is {MAX_CONTEXT_BYTES} bytes. No evidence was omitted or sent to the provider. This project exceeds the current safe archive capacity."
         )
     return package, hashlib.sha256(encoded).hexdigest()
+
+
+def _paper_long_form(
+    package: dict[str, Any],
+    *,
+    force_long_form: bool = False,
+    existing: Mapping[str, Any] | None = None,
+) -> bool:
+    """Avoid the 100 KB call-count cliff for genuinely small-scope easy projects.
+
+    A compatible unfinished long-form run retains its original plan/sections
+    regardless of the newer eligibility rule. No paid checkpoint is migrated,
+    replayed or discarded implicitly. The archived evidence and provider input
+    stay complete in the one-shot case.
+    """
+    if force_long_form:
+        return True
+    size = len(_json(package))
+    if size <= MAX_ONE_SHOT_CONTEXT_BYTES:
+        return False
+    if size > MAX_EASY_ONE_SHOT_CONTEXT_BYTES:
+        return True
+    sources = package.get("sources", [])
+    project = next((source.get("data", {}) for source in sources if source.get("kind") == "project"), {})
+    research_sessions = sum(source.get("kind") == "session" for source in sources)
+    artifacts = sum(source.get("kind") == "artifact" for source in sources)
+    agentic = any(source.get("kind") in {"agentic_run", "agentic_step"} for source in sources)
+    eligible = bool(
+        isinstance(project, dict)
+        and project.get("difficulty") == "easy"
+        and research_sessions <= 1
+        and artifacts <= 6
+        and not agentic
+        and len(sources) <= 12
+    )
+    if not eligible:
+        return True
+    if (
+        existing is not None
+        and existing.get("snapshot_sha256") == hashlib.sha256(_json(package)).hexdigest()
+        and existing.get("project_id") == package.get("project_id")
+        and existing.get("kind") == "long_form"
+    ):
+        return True
+    return False
 
 
 def _utf8_fragments(value: str, limit: int) -> list[str]:
@@ -1435,7 +1485,7 @@ async def _restart_work_locked(
         prior_runs=history,
         kind=(
             "long_form"
-            if force_long_form or len(_json(package)) > MAX_ONE_SHOT_CONTEXT_BYTES
+            if _paper_long_form(package, force_long_form=force_long_form)
             else "one_shot"
         ),
     )
@@ -3123,7 +3173,9 @@ async def _generate_impl(
             if previous_progress is not None:
                 elapsed_before = int(previous_progress["elapsed_seconds"])
             work = checkpoint
-        long_form = len(_json(package)) > MAX_ONE_SHOT_CONTEXT_BYTES or force_long_form
+        long_form = _paper_long_form(
+            package, force_long_form=force_long_form, existing=checkpoint
+        )
         expected_kind = "long_form" if long_form else "one_shot"
         compatible = checkpoint is not None and not any(
             checkpoint.get(key) != value
@@ -3434,9 +3486,9 @@ def preflight(
     """Estimate bounded long-paper calls without contacting an inference provider."""
     package, fingerprint = _snapshot(path)
     size = len(_json(package))
-    long_form = size > MAX_ONE_SHOT_CONTEXT_BYTES or force_long_form
     view = inspect_project(path)
     existing = _load_work(path)
+    long_form = _paper_long_form(package, force_long_form=force_long_form, existing=existing)
     fast_preflight = bool(
         long_form
         and (
