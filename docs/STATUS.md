@@ -12,8 +12,9 @@ installed the committed lockfile. This included the production frontend build,
 release image/source SHA checks, deployment automation, Ruff, formatting,
 Pyright (0 diagnostics), and frontend typecheck. The existing large JavaScript
 chunk advisory remains; epistemic continuity skipped its optional graph-present
-sandbox case because the local sandbox image is unavailable. No provider calls
-were made.
+sandbox case because the local sandbox image is unavailable. Real Chrome About
+dialog acceptance passed at 1440, 390, and 320px; the production build output
+contains the exact `Version 0.1.4` footer. No provider calls were made.
 
 Read-only hosted checks on `https://sigma-research.duckdns.org` returned HTTP
 200 for the app and `/api/cloud-auth/status` (`ready=true`, hosted auth,
