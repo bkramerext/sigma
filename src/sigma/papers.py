@@ -1596,8 +1596,12 @@ async def _provider_structured(
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = json.dumps(input_value, ensure_ascii=False, separators=(",", ":"))
-    if len(input_text.encode("utf-8")) > max_input_bytes:
-        raise ProjectError("A long-paper stage exceeded its bounded input size")
+    input_bytes = len(input_text.encode("utf-8"))
+    if input_bytes > max_input_bytes:
+        raise ProjectError(
+            f"Paper stage {schema_name} needs {input_bytes:,} input bytes; "
+            f"the supported limit is {max_input_bytes:,}. No provider call was made for this stage."
+        )
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
@@ -1851,6 +1855,11 @@ that occur in the input. Do not add scientific claims or outside citations."""
             if group and len(_json(trial)) > MAX_REDUCTION_GROUP_BYTES:
                 groups.append(group)
                 group = []
+            if len(_json([note.model_dump()])) > MAX_REDUCTION_GROUP_BYTES:
+                raise ProjectError(
+                    "An individual evidence-index note exceeds the reduction input limit; "
+                    "the note must be compacted before another provider call."
+                )
             group.append(note)
         if group:
             groups.append(group)
@@ -1867,6 +1876,7 @@ that occur in the input. Do not add scientific claims or outside citations."""
                 instructions=reduce_instructions,
                 schema_name="sigma_paper_evidence_reduction",
                 response_model=EvidenceBatchResult,
+                max_input_bytes=MAX_REDUCTION_GROUP_BYTES,
                 project_id=project_id,
                 project_path_value=project_path_value,
             )
