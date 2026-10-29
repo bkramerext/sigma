@@ -109,6 +109,60 @@ assumption, cloud research advances to a JSON orphan-recovery fixture that
 does not create its parent directory. `tests/deployment_package.py` also
 assumes API-key mode without setting it. No CI was run or awaited.
 
+## T301 — Context-aware mathematical Markdown (2026-10-28)
+
+The existing AI conversion prompt now explicitly distinguishes math from prose
+using sentence meaning and preserves code identifiers, environment variables,
+URLs, paths, dates, versions, currency, escaped delimiters and Markdown
+structure. `RenderedMarkdown` now applies conservative recognition to Markdown
+text nodes: a bare equation needs mathematical structure or a nearby math cue,
+so assignment-shaped prose such as `x = value`, `x = y`, and `x = 3` remains
+ordinary text. Dollar amounts are excluded individually before delimiter
+pairing, preserving prices adjacent to explicit inline math. Equations,
+context-labeled fractions and indexed variables can
+typeset inside paragraphs, emphasis, lists, blockquotes and GFM tables while
+inline code, fences and link labels remain protected. Paired legacy `\(...\)`
+and `\[...\]` delimiters convert safely; unmatched dollars are treated as
+literal text. GFM table parsing uses the existing unified/remark pipeline with
+the small `remark-gfm` plugin; KaTeX remains the renderer.
+
+`tests/text_views.py` passed through the real
+`POST /api/projects/text/convert` route using one deterministic mocked provider
+response. It verifies the prompt, exact stored Markdown and unchanged source
+project bytes. `browser_checks/t301_markdown_math.py` passed against the real
+React Markdown component in Chrome, checking 25 KaTeX spans and exact TeX
+annotations for formulas, fractions, subscripts and the quadratic root formula.
+Adversarial checks cover plain assignments and configuration values, multiple
+prices before and after explicit math, independent math delimiters, code
+dollars, and literal text preservation. It also checks GFM table/list structure,
+identifiers, dates, paths, URLs and escaped/unmatched delimiters. Screenshots of the converted
+fixture and bare math are
+[markdown-render.png](evaluations/t301/markdown-render.png) and
+[markdown-render-raw-math.png](evaluations/t301/markdown-render-raw-math.png).
+The shared fixture and reproduction notes are in
+[T301 evidence](evaluations/t301/README.md).
+The real-Chrome `browser_checks/t47_conclusion.py` regression also passes: Greek
+equations, Unicode inequalities, meromorphic expressions and bracketed
+fractions in a saved Research Outcome produce the expected KaTeX spans without
+KaTeX errors. Its failure was traced to the former ASCII-only equation start
+and slash-only fraction normalization; both were corrected in the existing
+renderer. The full T47 check also covered desktop/mobile presentation and
+ordinary prose preservation without provider calls.
+`./sigma test` passed every step, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. Vite emitted its existing advisory for a
+JavaScript chunk above 500 kB. The final run is archived at
+[full-test.txt](evaluations/t301/full-test.txt).
+
+No live or paid provider calls were made. Live AI classification therefore
+remains **UNVERIFIED**. One optional call through the existing text-conversion
+path would evaluate the representative corpus. At the default `gpt-6.1-sol`
+API standard rate ($2/M input and $10/M output tokens), the corpus-sized call is
+expected to be around one cent; the current 8,000 output-token limit puts the
+visible output portion below $0.08, with input under one cent at the 24,000
+character request cap. Actual usage and the active billing path can differ;
+see [current OpenAI API pricing](https://developers.openai.com/api/docs/pricing).
+No math claim is verified by formatting.
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the

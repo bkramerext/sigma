@@ -15,6 +15,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -25,6 +26,7 @@ CHROME = os.environ.get(
 Z = "zetacontinuation@gmail.com"
 N = "nontrivialzeeros@gmail.com"
 UNINVITED = "new-user@example.org"
+UNINVITED_OTHER = "another-new-user@example.org"
 
 
 def free_port() -> int:
@@ -93,17 +95,20 @@ def seed_state(auth_home: Path, credential_home: Path) -> dict[str, str]:
                 (cloud_auth._hash(raw), subject, email, cloud_auth._now() + 3600),
             )
             session_cookies[email] = raw
-        guest_subject = "google-subject-uninvited"
-        guest_cookie = secrets.token_urlsafe(32)
-        db.execute(
-            "INSERT OR REPLACE INTO identities(subject,email,updated_at) VALUES(?,?,?)",
-            (guest_subject, UNINVITED, cloud_auth._now()),
-        )
-        db.execute(
-            "INSERT OR REPLACE INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
-            (cloud_auth._hash(guest_cookie), guest_subject, UNINVITED, cloud_auth._now() + 3600),
-        )
-        session_cookies[UNINVITED] = guest_cookie
+        for email, guest_subject in (
+            (UNINVITED, "google-subject-uninvited"),
+            (UNINVITED_OTHER, "google-subject-uninvited-other"),
+        ):
+            guest_cookie = secrets.token_urlsafe(32)
+            db.execute(
+                "INSERT OR REPLACE INTO identities(subject,email,updated_at) VALUES(?,?,?)",
+                (guest_subject, email, cloud_auth._now()),
+            )
+            db.execute(
+                "INSERT OR REPLACE INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                (cloud_auth._hash(guest_cookie), guest_subject, email, cloud_auth._now() + 3600),
+            )
+            session_cookies[email] = guest_cookie
 
     account_template = {
         "client_id": "fixture-chatgpt-client",
@@ -552,9 +557,165 @@ def main() -> None:
                 )
                 expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
                 assert invitation_posts == [{}], invitation_posts
+
+                # Exercise authenticated guest workspace ownership through the
+                # real API subprocess. The browser keeps the first guest cookie
+                # while its verified Google session changes to a second guest.
+                login_cookie(UNINVITED)
+                page.reload(wait_until="domcontentloaded")
+                owned_project = page.evaluate(
+                    """async () => {
+                      const catalog = await fetch('/api/projects/samples').then(r => r.json());
+                      const sample = catalog.projects[0];
+                      const opened = await fetch('/api/projects/samples/open', {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({sample_id: sample.id})
+                      });
+                      return {status: opened.status, project: await opened.json()};
+                    }"""
+                )
+                assert owned_project["status"] == 200, owned_project
+                guest_project_path = owned_project["project"]["path"]
+                guest_project_id = owned_project["project"]["project"]["id"]
+                from sigma import project_bundle
+
+                def write_guest_member(relative: str, contents: bytes) -> None:
+                    guest_project = Path(guest_project_path)
+                    if guest_project.is_dir():
+                        target = guest_project / relative
+                        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                        target.write_bytes(contents)
+                    else:
+                        project_bundle.write_file(guest_project_path, relative, contents)
+
+                guest_session_id = str(uuid4())
+                write_guest_member(
+                    f"research-sessions/{guest_session_id}.json",
+                    json.dumps(
+                        {
+                            "id": guest_session_id,
+                            "project_path": str(Path(guest_project_path).resolve()),
+                            "project_id": guest_project_id,
+                            "session_number": 1,
+                            "status": "ended",
+                            "message": "guest workspace identity fixture",
+                            "steps": [],
+                        }
+                    ).encode(),
+                )
+                guest_execution_id = str(uuid4())
+                guest_artifact = b"identity-private artifact"
+                write_guest_member(
+                    f"research-executions/{guest_execution_id}.json",
+                    json.dumps(
+                        {
+                            "id": guest_execution_id,
+                            "project_id": guest_project_id,
+                            "status": "completed",
+                            "created_at": datetime.now(UTC).isoformat(),
+                            "artifacts": [
+                                {
+                                    "filename": "identity.txt",
+                                    "media_type": "text/plain",
+                                    "size_bytes": len(guest_artifact),
+                                    "sha256": hashlib.sha256(guest_artifact).hexdigest(),
+                                }
+                            ],
+                        }
+                    ).encode(),
+                )
+                write_guest_member(
+                    f"research-executions/{guest_execution_id}.artifacts/identity.txt",
+                    guest_artifact,
+                )
+                guest_cookie = next(
+                    item for item in context.cookies(origin) if item["name"].endswith("sigma_guest")
+                )
+                old_guest_cookie_value = guest_cookie["value"]
+                owned_reads = page.evaluate(
+                    """async ({path, sessionId, executionId}) => {
+                      const urls = [
+                        '/api/projects/inspect?' + new URLSearchParams({path}),
+                        '/api/projects/research-sessions/' + sessionId + '?' + new URLSearchParams({path}),
+                        '/api/projects/research-executions/' + executionId + '/artifacts/identity.txt?' + new URLSearchParams({path})
+                      ];
+                      const results = [];
+                      for (const url of urls) {
+                        const response = await fetch(url);
+                        results.push({status: response.status, headers: {
+                          cache: response.headers.get('cache-control'),
+                          referrer: response.headers.get('referrer-policy'),
+                          nosniff: response.headers.get('x-content-type-options'),
+                          csp: response.headers.get('content-security-policy')
+                        }, body: await response.text()});
+                      }
+                      return results;
+                    }""",
+                    {
+                        "path": guest_project_path,
+                        "sessionId": guest_session_id,
+                        "executionId": guest_execution_id,
+                    },
+                )
+                assert [item["status"] for item in owned_reads] == [200, 200, 200], owned_reads
+                for item in owned_reads:
+                    assert item["headers"] == {
+                        "cache": "no-store",
+                        "referrer": "no-referrer",
+                        "nosniff": "nosniff",
+                        "csp": "frame-ancestors 'none'",
+                    }, item
+                assert owned_reads[2]["body"] == guest_artifact.decode(), owned_reads[2]
+
+                context.add_cookies(
+                    [
+                        {
+                            "name": "sigma_session",
+                            "value": cookies[UNINVITED_OTHER],
+                            "url": origin,
+                            "httpOnly": True,
+                            "sameSite": "Lax",
+                        }
+                    ]
+                )
+                assert (
+                    next(
+                        item
+                        for item in context.cookies(origin)
+                        if item["name"].endswith("sigma_guest")
+                    )["value"]
+                    == old_guest_cookie_value
+                ), "The browser did not retain the first guest cookie during identity switch"
+                cross_project = page.evaluate(
+                    """async ({path, sessionId, executionId}) => {
+                      const requests = [
+                        ['/api/projects/inspect', {path}],
+                        ['/api/projects/research-sessions/' + sessionId, {path}],
+                        ['/api/projects/research-executions/' + executionId + '/artifacts/identity.txt', {path}]
+                      ];
+                      const results = [];
+                      for (const [route, params] of requests) {
+                        const response = await fetch(route + '?' + new URLSearchParams(params));
+                        results.push({status: response.status, body: await response.text()});
+                      }
+                      return results;
+                    }""",
+                    {
+                        "path": guest_project_path,
+                        "sessionId": guest_session_id,
+                        "executionId": guest_execution_id,
+                    },
+                )
+                assert [item["status"] for item in cross_project] == [404, 404, 404], cross_project
+                new_guest_cookie = next(
+                    item for item in context.cookies(origin) if item["name"].endswith("sigma_guest")
+                )
+                assert new_guest_cookie["value"] != old_guest_cookie_value, (
+                    "Switching Google identities reused the prior guest workspace cookie"
+                )
                 browser.close()
             print(
-                "PASS local Chromium ↔ real SIGMA API: same-email personal/sponsor OAuth, persistence, server restart, member privacy, zero-budget Play denial, and authenticated uninvited-user invitation UI"
+                "PASS local Chromium ↔ real SIGMA API: OAuth/membership, invitation UI, guest cache headers, and project/session/artifact isolation across Google identities"
             )
         finally:
             if api is not None and api.poll() is None:

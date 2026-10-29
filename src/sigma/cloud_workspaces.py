@@ -94,8 +94,16 @@ def reset(token: Token[Workspace | None]) -> None:
     _CURRENT.reset(token)
 
 
-def guest_workspace(token: str, *, create: bool = False) -> Workspace | None:
-    """Resolve an opaque, process-local guest workspace, expiring it after inactivity."""
+def guest_workspace(
+    token: str, *, create: bool = False, subject: str | None = None
+) -> Workspace | None:
+    """Resolve a guest workspace, binding it to at most one verified identity.
+
+    Anonymous workspaces can be claimed by the first authenticated guest. Once
+    claimed, a different Google subject cannot reuse the opaque browser cookie.
+    """
+    if subject is not None and (not isinstance(subject, str) or not subject or len(subject) > 255):
+        return None
     if not re.fullmatch(r"[0-9a-f]{64}", token):
         return None
     now = time.monotonic()
@@ -107,6 +115,12 @@ def guest_workspace(token: str, *, create: bool = False) -> Workspace | None:
         existing = _GUESTS.get(token)
         if existing is not None:
             workspace, directory, _ = existing
+            if subject is not None and workspace.verified_subject is None:
+                from dataclasses import replace
+
+                workspace = replace(workspace, verified_subject=subject)
+            elif subject is not None and workspace.verified_subject != subject:
+                return None
             _GUESTS[token] = (workspace, directory, now + GUEST_TTL_SECONDS)
             return workspace
         if not create:
@@ -114,7 +128,7 @@ def guest_workspace(token: str, *, create: bool = False) -> Workspace | None:
         directory = tempfile.TemporaryDirectory(prefix="sigma-guest-")
         os.chmod(directory.name, 0o700)
         path = Path(directory.name).resolve(strict=True)
-        workspace = Workspace(token[:32], "guest", path, guest=True)
+        workspace = Workspace(token[:32], "guest", path, verified_subject=subject, guest=True)
         _GUESTS[token] = (workspace, directory, now + GUEST_TTL_SECONDS)
         return workspace
 

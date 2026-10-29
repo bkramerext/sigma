@@ -829,13 +829,16 @@ async def _guest_project_response(request: Request, call_next, principal: Princi
     from sigma import cloud_workspaces
 
     cfg = config()
+    subject = principal.subject if principal is not None else None
     token = request.cookies.get(_cookie_name(GUEST_COOKIE, cfg))
-    workspace = cloud_workspaces.guest_workspace(token) if token else None
+    workspace = cloud_workspaces.guest_workspace(token, subject=subject) if token else None
     if workspace is None:
         token = secrets.token_hex(32)
-        workspace = cloud_workspaces.guest_workspace(token, create=True)
+        workspace = cloud_workspaces.guest_workspace(token, create=True, subject=subject)
     if workspace is None:
-        return JSONResponse({"error": "Guest workspace is unavailable."}, status_code=503)
+        return _guest_secure_response(
+            JSONResponse({"error": "Guest workspace is unavailable."}, status_code=503)
+        )
     request.state.cloud_guest_workspace = workspace
     # Mark authenticated and anonymous guests so project reads can suppress
     # provider discovery and queued session dispatch.
@@ -851,6 +854,15 @@ async def _guest_project_response(request: Request, call_next, principal: Princi
         token,
         **_cookie_options(cfg, GUEST_COOKIE, max_age=SESSION_SECONDS),
     )
+    return _guest_secure_response(response)
+
+
+def _guest_secure_response(response: Response) -> Response:
+    """Keep guest-scoped project content out of shared caches and embedders."""
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
     return response
 
 
@@ -929,16 +941,13 @@ async def middleware(request: Request, call_next):
         )
         if path.startswith("/api/projects/") and (guest_workspace is not None or create_guest):
             if not _guest_project_route_allowed(request.method, path):
-                return JSONResponse(
-                    {"error": "This project operation requires member access."},
-                    status_code=403,
+                return _guest_secure_response(
+                    JSONResponse(
+                        {"error": "This project operation requires member access."},
+                        status_code=403,
+                    )
                 )
-            response = await _guest_project_response(request, call_next)
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
-            return response
+            return await _guest_project_response(request, call_next)
         response = JSONResponse({"error": "Authentication required."}, status_code=401)
         _clear_cookie(response, cfg, SESSION_COOKIE)
         return response
@@ -950,9 +959,11 @@ async def middleware(request: Request, call_next):
         }
         if path.startswith("/api/projects/"):
             if not _guest_project_route_allowed(request.method, path):
-                return JSONResponse(
-                    {"error": "This project operation requires member access."},
-                    status_code=403,
+                return _guest_secure_response(
+                    JSONResponse(
+                        {"error": "This project operation requires member access."},
+                        status_code=403,
+                    )
                 )
             return await _guest_project_response(request, call_next, principal)
         if path != "/api/cloud-auth/status" and (request.method, path) not in guest_auth_paths:
@@ -1684,7 +1695,7 @@ async def callback(
 
         from sigma import cloud_workspaces, projects
 
-        guest_workspace = cloud_workspaces.guest_workspace(guest_token)
+        guest_workspace = cloud_workspaces.guest_workspace(guest_token, subject=subject)
         if guest_workspace is not None:
             return_query = parse_qs(
                 urlsplit(return_to).query, keep_blank_values=True, max_num_fields=8

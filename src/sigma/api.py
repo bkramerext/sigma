@@ -372,7 +372,9 @@ def copy_project_to_guest_workspace(body: GuestProjectCopyRequest):
     if (source is None and not cfg.local) or (source is not None and source.guest):
         raise HTTPException(401, "Sign in to copy this project to a guest workspace.")
     guest_token = secrets.token_hex(32)
-    target = cloud_workspaces.guest_workspace(guest_token, create=True)
+    principal = cloud_auth.current_principal()
+    subject = principal.subject if principal is not None and principal.role != "guest" else None
+    target = cloud_workspaces.guest_workspace(guest_token, create=True, subject=subject)
     if target is None:
         raise HTTPException(503, "A temporary guest workspace is unavailable.")
     try:

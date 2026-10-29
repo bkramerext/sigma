@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -11,6 +13,7 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 import httpx
 import jwt
@@ -787,6 +790,26 @@ class CloudAuthTests(TestCase):
         self.assertEqual(query["prompt"], ["select_account"])
         flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
         return query["state"][0], response.cookies[flow_cookie]
+
+    def test_guest_cookie_is_bound_to_one_verified_subject(self):
+        from sigma import cloud_workspaces
+
+        token_value = uuid4().hex * 2
+        owner = cloud_workspaces.guest_workspace(
+            token_value, create=True, subject="verified-google-subject-a"
+        )
+        self.assertIsNotNone(owner)
+        assert owner is not None
+        same_owner = cloud_workspaces.guest_workspace(
+            token_value, subject="verified-google-subject-a"
+        )
+        self.assertEqual(same_owner, owner)
+        self.assertIsNone(
+            cloud_workspaces.guest_workspace(token_value, subject="verified-google-subject-b")
+        )
+        # A signed-out browser can continue its temporary guest page; signing
+        # in as another Google identity will be checked against the binding.
+        self.assertEqual(cloud_workspaces.guest_workspace(token_value), owner)
 
     def test_guest_sample_projects_use_temporary_workspace_without_recents(self):
         from sigma import cloud_workspaces
@@ -1792,6 +1815,149 @@ class CloudAuthTests(TestCase):
             self.assertEqual(
                 guest.get("/api/projects/inspect", params={"path": guest_path}).status_code, 200
             )
+            from sigma import cloud_workspaces, project_bundle
+
+            guest_workspace = cloud_workspaces.guest_workspace(
+                guest.cookies.get(
+                    cloud_auth._cookie_name(cloud_auth.GUEST_COOKIE, cloud_auth.config())
+                ),
+                subject="route-guest",
+            )
+            self.assertIsNotNone(guest_workspace)
+            assert guest_workspace is not None
+            self.assertTrue(Path(guest_path).is_relative_to(guest_workspace.path))
+
+            def write_project_member(relative: str, contents: bytes) -> None:
+                project = Path(guest_path)
+                if project.is_dir():
+                    target = project / relative
+                    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    target.write_bytes(contents)
+                else:
+                    project_bundle.write_file(guest_path, relative, contents)
+
+            # Populate valid owner-scoped session/execution artifacts in the
+            # guest's own project bundle so the allowlisted read handlers are
+            # exercised successfully, not just inferred from the middleware.
+            project_id = copied.json()["project"]["id"]
+            session_id = str(uuid4())
+            session = {
+                "id": session_id,
+                "project_path": str(Path(guest_path).resolve()),
+                "project_id": project_id,
+                "session_number": 1,
+                "status": "ended",
+                "message": "isolated fixture session",
+                "steps": [],
+            }
+            write_project_member(
+                f"research-sessions/{session_id}.json", json.dumps(session).encode()
+            )
+            execution_id = str(uuid4())
+            artifact_bytes = b"guest-owned artifact"
+            execution = {
+                "id": execution_id,
+                "project_id": project_id,
+                "status": "completed",
+                "created_at": cloud_auth._now(),
+                "artifacts": [
+                    {
+                        "filename": "owned.txt",
+                        "media_type": "text/plain",
+                        "size_bytes": len(artifact_bytes),
+                        "sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+                    }
+                ],
+            }
+            write_project_member(
+                f"research-executions/{execution_id}.json", json.dumps(execution).encode()
+            )
+            write_project_member(
+                f"research-executions/{execution_id}.artifacts/owned.txt", artifact_bytes
+            )
+            project_read = guest.get("/api/projects/inspect", params={"path": guest_path})
+            self.assertEqual(project_read.status_code, 200, project_read.text)
+            session_read = guest.get(
+                f"/api/projects/research-sessions/{session_id}", params={"path": guest_path}
+            )
+            self.assertEqual(session_read.status_code, 200, session_read.text)
+            artifact_read = guest.get(
+                f"/api/projects/research-executions/{execution_id}/artifacts/owned.txt",
+                params={"path": guest_path},
+            )
+            self.assertEqual(artifact_read.status_code, 200, artifact_read.text)
+            self.assertEqual(artifact_read.content, artifact_bytes)
+            for response in (project_read, session_read, artifact_read):
+                self.assertEqual(response.headers.get("cache-control"), "no-store")
+                self.assertEqual(response.headers.get("referrer-policy"), "no-referrer")
+                self.assertEqual(response.headers.get("x-content-type-options"), "nosniff")
+                self.assertEqual(
+                    response.headers.get("content-security-policy"), "frame-ancestors 'none'"
+                )
+            for route in (
+                "events",
+                "research-limits",
+                "current-understanding",
+                "research-sessions",
+                "research-executions",
+                "papers",
+                "papers/preflight",
+                "proposals/config",
+                "text",
+                "recent",
+            ):
+                response = guest.get(
+                    f"/api/projects/{route}",
+                    params={"path": guest_path, "scope": "project"},
+                )
+                self.assertEqual(response.status_code, 200, (route, response.text))
+
+            paper_id = uuid4().hex
+            pdf_bytes = b"%PDF-1.4 guest fixture"
+            paper_record = {
+                "paper_id": paper_id,
+                "project_id": project_id,
+                "created_at": cloud_auth._now(),
+                "snapshot_sha256": "0" * 64,
+                "validation_warnings": [],
+                "generation": {},
+                "draft": {
+                    "title": "Guest-owned paper",
+                    "abstract": "Fixture abstract.",
+                    "problem_framing": [],
+                    "methods": [],
+                    "sections": [],
+                    "claims": [],
+                    "limitations": [],
+                    "open_obligations": [],
+                    "conclusions": [],
+                },
+                "tex_source": r"\documentclass{article}",
+                "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+                "pdf_size_bytes": len(pdf_bytes),
+            }
+            paper_prefix = "papers" if Path(guest_path).is_dir() else "artifacts/papers"
+            write_project_member(
+                f"{paper_prefix}/{paper_id}.json", json.dumps(paper_record).encode()
+            )
+            write_project_member(f"{paper_prefix}/{paper_id}.pdf", pdf_bytes)
+            paper_reads = (
+                guest.get("/api/projects/papers", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}/pdf", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}/txt", params={"path": guest_path}),
+                guest.get(f"/api/projects/papers/{paper_id}/tex", params={"path": guest_path}),
+            )
+            self.assertTrue(
+                all(response.status_code == 200 for response in paper_reads),
+                [(response.status_code, response.text[:160]) for response in paper_reads],
+            )
+            self.assertEqual(paper_reads[2].content, pdf_bytes)
+            self.assertIn("Guest-owned paper", paper_reads[3].text)
+            self.assertIn(r"\documentclass{article}", paper_reads[4].text)
+            self.assertTrue(
+                all(response.headers.get("cache-control") == "no-store" for response in paper_reads)
+            )
             self.assertEqual(
                 guest.get("/api/projects/strategies", params={"path": guest_path}).status_code,
                 200,
@@ -1860,6 +2026,17 @@ class CloudAuthTests(TestCase):
                 ).status_code,
                 403,
             )
+            for route in (
+                "/api/projects/audit",
+                "/api/projects/export",
+                "/api/projects/download",
+                "/api/projects/export/report",
+            ):
+                self.assertEqual(
+                    guest.get(route, params={"path": guest_path}).status_code,
+                    403,
+                    route,
+                )
             member_project_after = self.client.get(
                 "/api/projects/inspect", params={"path": member_path}
             ).json()
@@ -1869,6 +2046,7 @@ class CloudAuthTests(TestCase):
             # endpoints are denied unless their exact method/path is added to
             # the reviewed guest-safe allowlist.
             protected_count = 0
+            allowed_routes = set()
             for route in app.routes:
                 route_path = getattr(route, "path", "")
                 if not route_path.startswith("/api/projects/"):
@@ -1876,6 +2054,7 @@ class CloudAuthTests(TestCase):
                 for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
                     concrete_path = re.sub(r"\{[^}]+\}", "audit-probe", route_path)
                     if cloud_auth._guest_project_route_allowed(method, concrete_path):
+                        allowed_routes.add((method, route_path))
                         continue
                     response = guest.request(
                         method,
@@ -1891,10 +2070,35 @@ class CloudAuthTests(TestCase):
                     )
                     protected_count += 1
             self.assertGreater(protected_count, 30)
+            expected_guest_routes = {
+                ("GET", path)
+                for path in cloud_auth._GUEST_PROJECT_READ_PATHS | {"/api/projects/samples"}
+            } | {
+                ("GET", "/api/projects/research-sessions/{session_id}"),
+                ("GET", "/api/projects/research-executions/{execution_id}"),
+                (
+                    "GET",
+                    "/api/projects/research-executions/{execution_id}/artifacts/{filename}",
+                ),
+                ("GET", "/api/projects/papers/{paper_id}"),
+                ("GET", "/api/projects/papers/{paper_id}/pdf"),
+                ("GET", "/api/projects/papers/{paper_id}/txt"),
+                ("GET", "/api/projects/papers/{paper_id}/tex"),
+                ("POST", "/api/projects/samples/open"),
+                ("POST", "/api/projects/open"),
+                ("POST", "/api/projects/close"),
+            }
+            self.assertEqual(allowed_routes, expected_guest_routes)
             self.assertEqual(
                 guest.get("/api/cloud-auth/local-sponsored-allowance").status_code, 403
             )
             self.assertEqual(guest.get("/api/ai/connection").status_code, 403)
+            for admin_route in (
+                "/api/cloud-auth/admin/invitation-requests",
+                "/api/cloud-auth/admin/grants",
+                "/api/cloud-auth/admin/feedback",
+            ):
+                self.assertEqual(guest.get(admin_route).status_code, 403, admin_route)
 
     def test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth(self):
         from sigma import ai_store
