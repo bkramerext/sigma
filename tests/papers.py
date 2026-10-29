@@ -294,10 +294,10 @@ def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> N
 
     async def handler(request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(request.content))
-        stream = "".join("data: " + json.dumps(event) + "\\n\\n" for event in events)
+        stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
         return httpx.Response(
             200, headers={"content-type": "text/event-stream"},
-            content=(stream + "data: [DONE]\\n\\n").encode(),
+            content=(stream + "data: [DONE]\n\n").encode(),
         )
 
     real_client = httpx.AsyncClient
