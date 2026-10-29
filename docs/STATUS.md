@@ -1,3 +1,33 @@
+## PR #325 — documentation accuracy and onboarding verification (2026-10-29)
+
+README setup and local Google-auth claims were checked against `./sigma`,
+`src/sigma/ui.py`, `src/sigma/tooling.py`, `pyproject.toml`, and
+`frontend/package.json`. A fresh detached Git worktree on the existing macOS
+14.6 Apple Silicon host completed `./sigma setup` with CPython 3.14.7, Node
+24.21.0, and npm 11.19.0. `./sigma start` then served the frontend and local
+API; the frontend returned HTTP 200 and `/api/cloud-auth/status` reported local
+readiness. This was an isolated checkout, not a clean-machine test. No Google
+OAuth exchange or provider request was made.
+
+`uv run --with playwright --no-sync python browser_checks/guest_samples.py`
+passed in real Chrome against isolated fixture storage. `./sigma test` passed
+all scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend typecheck,
+and production build. The suite skipped its optional graph-present Python
+sandbox scenario because the sandbox image is not available locally.
+
+Hosted administrator contact semantics were checked against
+`src/sigma/cloud_auth.py` and `tests/cloud_auth.py`: the first configured email
+is bound to its verified Google subject as the durable bootstrap administrator;
+a later configured contact can be independently subject-bound when it signs
+in; changing contact does not revoke the bootstrap identity; previous later
+contact bindings persist but only the currently configured contact receives
+implicit admin access. The retired `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is
+rejected by production preflight. Production OAuth, invitation delivery, and
+identity-based hosted acceptance remain unverified. Cloud deployment guidance
+now identifies the observed v0.1.4 deployment, retains old sizing/cost
+decisions as historical context, and directs executable operations to the
+current runbook. See PR #325 for the complete file diff and handoff.
+
 ## v0.1.4 production release preparation (2026-10-29)
 
 Product version metadata is aligned at `0.1.4` in `pyproject.toml`, `uv.lock`,
