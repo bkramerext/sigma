@@ -1483,7 +1483,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
       </div>}
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating…' : 'Generate'}</button></div>
+      <div className="ai-paper-controls"><button type="button" className="text-view-link" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating…' : 'Generate'}</button></div>
       {busy && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
