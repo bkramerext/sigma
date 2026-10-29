@@ -3785,7 +3785,14 @@ class CloudAuthTests(TestCase):
             self.assertEqual(allowance.json()["remaining_usd"], 1.25)
             self.assertTrue(allowance.json()["local_preview"])
             self.assertFalse(allowance.json()["simulated"])
-            bearer_allowance = member.get(
+            bearer_context = TestClient(
+                app,
+                base_url="http://127.0.0.1",
+                client=("127.0.0.1", 23457),
+            )
+            bearer_client = bearer_context.__enter__()
+            self.addCleanup(bearer_context.__exit__, None, None, None)
+            bearer_allowance = bearer_client.get(
                 "/api/cloud-auth/local-sponsored-allowance",
                 headers={"Authorization": f"Bearer {login.cookies['sigma_session']}"},
             )

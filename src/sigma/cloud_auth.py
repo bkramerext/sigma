@@ -1469,7 +1469,9 @@ def local_sponsored_allowance(request: Request):
         raise HTTPException(404, "Not found")
     if request.client is None or request.client.host not in {"127.0.0.1", "::1", "localhost"}:
         raise HTTPException(403, "Local sponsored preview requires a loopback client.")
-    principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    principal = resolve_session(
+        _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    )
     if principal is None:
         raise HTTPException(401, "Sign in with an eligible account to view its allowance.")
     account = _persist_user_state(cfg, principal)
