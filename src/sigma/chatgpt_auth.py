@@ -524,6 +524,15 @@ async def callback(
                     state["accounts"][identifier] = record
                     state["active"], state["mode"] = identifier, "chatgpt"
                 permitted = PLAN_SCOPES.issubset(record["scopes"])
+                if (
+                    permitted
+                    and not attempt.sponsor
+                    and not attempt.hosted
+                    and attempt.owner_subject
+                ):
+                    from sigma import cloud_auth
+
+                    cloud_auth.record_personal_authorization(attempt.owner_subject)
                 finish(
                     attempt,
                     "connected" if permitted else "plan_not_permitted",

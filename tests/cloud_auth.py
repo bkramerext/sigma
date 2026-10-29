@@ -956,7 +956,13 @@ class CloudAuthTests(TestCase):
                 follow_redirects=False,
             )
 
-    def seed_personal_plan_authorization(self, subject: str, email: str | None = None) -> None:
+    def seed_personal_plan_authorization(
+        self,
+        subject: str,
+        email: str | None = None,
+        *,
+        record_authorization: bool = True,
+    ) -> None:
         """Fixture for tests whose setup assumes completed personal OAuth."""
         from sigma import ai_store, chatgpt_auth
 
@@ -977,6 +983,8 @@ class CloudAuthTests(TestCase):
         }
         state["active"], state["mode"] = "fixture-personal", "chatgpt"
         ai_store.write(path, state)
+        if record_authorization:
+            cloud_auth.record_personal_authorization(subject)
 
     def test_signin_returns_to_safe_project_continuation(self):
         project_return = "/project?path=%2Ftmp%2Fguest-project&resume_play=1"
@@ -1748,6 +1756,8 @@ class CloudAuthTests(TestCase):
             self.assertEqual(asyncio.run(saved_sponsor_token()), "existing-sponsor-token")
 
     def test_local_admin_sponsored_mode_transition_uses_bounded_global_pilot(self):
+        from sigma import ai_store, chatgpt_auth
+
         local_origin = "http://127.0.0.1:5173"
         with patch.dict(
             os.environ,
@@ -1795,7 +1805,49 @@ class CloudAuthTests(TestCase):
                 self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
                 "sponsored",
             )
-            self.seed_personal_plan_authorization("mode-transition-admin")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',model_access_selected=1 "
+                    "WHERE subject='mode-transition-admin'"
+                )
+            legacy_selected = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(legacy_selected.status_code, 403, legacy_selected.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "personal",
+                "legacy preference remains truthful without becoming authorization proof",
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='sponsored',model_access_selected=0 "
+                    "WHERE subject='mode-transition-admin'"
+                )
+            self.seed_personal_plan_authorization(
+                "mode-transition-admin", record_authorization=False
+            )
+            credential_path = (
+                ai_store.personal_directory_for_subject("mode-transition-admin")
+                / "credentials.json"
+            )
+            credential_state = ai_store.read(credential_path)
+            credential = credential_state["accounts"]["fixture-personal"]
+            credential["scopes"] = ["resource.invoke"]
+            credential["plan_authorized"] = False
+            ai_store.write(credential_path, credential_state)
+            missing_plan_scope = self.client.post(
+                "/api/ai/mode", json={"mode": "personal"}, headers=headers
+            )
+            self.assertEqual(missing_plan_scope.status_code, 403, missing_plan_scope.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+            credential["scopes"] = list(chatgpt_auth.PLAN_SCOPES)
+            credential["plan_authorized"] = True
+            ai_store.write(credential_path, credential_state)
+            cloud_auth.record_personal_authorization("mode-transition-admin")
             switched_personal = self.client.post(
                 "/api/ai/mode", json={"mode": "personal"}, headers=headers
             )

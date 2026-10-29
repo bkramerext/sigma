@@ -237,6 +237,8 @@ async def checks(root):
         denied_id = (await auth.preferences())["active_account"]
         assert denied_id != first_id and len((await auth.preferences())["accounts"]) == 2
         assert (await connection.connection())["status"] == "plan_not_permitted"
+        async with transaction() as stored:
+            assert stored["accounts"][denied_id]["plan_authorized"] is False
         fixture.scope = auth.SCOPES
         _, result = await sign_in(fixture, denied_id)
         assert result["status"] == "connected"

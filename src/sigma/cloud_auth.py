@@ -297,6 +297,10 @@ def _initialize(path: Path) -> None:
                     CHECK(invitation_welcome_pending IN (0,1)),
                 updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS personal_authorizations (
+                subject TEXT PRIMARY KEY,
+                authorized_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS flows (
                 state_hash TEXT PRIMARY KEY,
                 nonce TEXT NOT NULL,
@@ -613,7 +617,9 @@ def set_model_access(subject: str, mode: str) -> None:
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
         eligibility = db.execute(
-            "SELECT sponsorship_eligible,model_access,model_access_selected FROM user_state WHERE subject=? AND access_active=1",
+            "SELECT sponsorship_eligible,"
+            "EXISTS(SELECT 1 FROM personal_authorizations WHERE subject=user_state.subject) "
+            "AS personal_authorized FROM user_state WHERE subject=? AND access_active=1",
             (subject,),
         ).fetchone()
         if (
@@ -631,21 +637,14 @@ def set_model_access(subject: str, mode: str) -> None:
             mode == "personal"
             and eligibility is not None
             and eligibility["sponsorship_eligible"]
-            and (
-                eligibility["model_access"] != "personal"
-                or not eligibility["model_access_selected"]
-            )
+            and not eligibility["personal_authorized"]
         ):
-            # A selected mode is not evidence of OAuth. Only a durable, plan-
-            # permitted registration in this subject's isolated store can
-            # establish the first personal preference. Existing preferences
-            # survive later token/provider failures.
-            from sigma import cloud_personal
-
-            if not cfg.local or not cloud_personal.has_durable_plan_authorization(subject):
-                raise PermissionError(
-                    "Connect your personal ChatGPT account before selecting personal access."
-                )
+            # A mode flag is not evidence of OAuth. This subject-bound record
+            # is written only after a successful local OAuth callback with plan
+            # scopes, and survives later token/provider failures.
+            raise PermissionError(
+                "Connect your personal ChatGPT account before selecting personal access."
+            )
         changed = db.execute(
             "UPDATE user_state SET model_access=?,model_access_selected=1,model_access_explicit=1,updated_at=? WHERE subject=? AND access_active=1"
             + (" AND sponsorship_eligible=1" if mode == "sponsored" else ""),
@@ -653,6 +652,26 @@ def set_model_access(subject: str, mode: str) -> None:
         ).rowcount
         if changed != 1:
             raise PermissionError("This account is not eligible for the selected connection.")
+
+
+def record_personal_authorization(subject: str) -> None:
+    """Record successful plan-permitted OAuth for an eligible local subject."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.local:
+        return
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT access_active,sponsorship_eligible FROM user_state WHERE subject=?",
+            (subject,),
+        ).fetchone()
+        if row is None or not row["access_active"]:
+            raise RuntimeError("Authorized account state is unavailable.")
+        if row["sponsorship_eligible"]:
+            db.execute(
+                "INSERT INTO personal_authorizations(subject,authorized_at) VALUES(?,?) "
+                "ON CONFLICT(subject) DO UPDATE SET authorized_at=excluded.authorized_at",
+                (subject, _now()),
+            )
 
 
 def persist_model_connection_status(subject: str, status: str) -> None:
