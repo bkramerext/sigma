@@ -446,7 +446,7 @@ class ResearchLimitsRequest(OpenRequest):
 class PaperGenerateRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
-    expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_snapshot_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     long_form: bool = False
 
 
