@@ -661,7 +661,7 @@ def research_session_log_download_view(session_id: str, path: str):
     try:
         result = session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
         body = session_log.markdown_export(
-            result["events"], result["session"], result["short_name"]
+            result["events"], result["session"], result["project_title"]
         )
         return Response(
             body,
