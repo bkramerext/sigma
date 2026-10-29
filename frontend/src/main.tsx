@@ -1428,7 +1428,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
       setCheckpointMismatch(null);
-      setSuccess('Unfinished paper work cleared. No generation has started. Your saved versions are unchanged; choose Generate when you’re ready to start over.');
+      setPaperProgress(null);
+      setSuccess(result.evidence_updated_since_preflight
+        ? 'Unfinished paper work cleared using the latest research evidence. No generation has started. Saved versions remain unchanged; choose Generate to start.'
+        : 'Unfinished paper work cleared. No generation has started. Saved versions remain unchanged; choose Generate to start.');
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
