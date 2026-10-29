@@ -453,7 +453,10 @@ async def generate_proposal(
     expected_binding: str | None = None,
     expected_project_id: str | None = None,
     suggestion_only: bool = False,
+    infer_strategy: bool = False,
 ) -> dict[str, Any]:
+    if suggestion_only and infer_strategy:
+        raise ProjectError("A strategy inference cannot also be a copy-only suggestion")
     view = inspect_project(path)
     if expected_project_id is not None and view.project.id != expected_project_id:
         raise ProjectError(
@@ -468,7 +471,9 @@ async def generate_proposal(
     if not config["available"]:
         raise ProjectError(config["message"])
     project_id, context = (
-        suggestion_context_for(path, view) if suggestion_only else context_for(path, seed, view)
+        suggestion_context_for(path, view)
+        if suggestion_only or infer_strategy
+        else context_for(path, seed, view)
     )
     if not _gate.acquire(blocking=False):
         raise ProjectError(
@@ -493,6 +498,17 @@ async def generate_proposal(
                     "Return only the strict structured response."
                 )
                 if suggestion_only
+                else (
+                    "Infer one concrete, distinct, bounded STRATEGY from the supplied cross-session Current Understanding and selected source-linked evidence. "
+                    "The inferred strategy will be automatically added to this project if valid. "
+                    "Address a genuinely unresolved question, skeptical objection, negative result, or a useful independent test; "
+                    "avoid duplicating any existing strategy, even a disabled or removed one. "
+                    "Do not turn a conjecture into an established result, and do not invent historical findings. "
+                    "Use exact session/artifact IDs where present, explain the motivating evidence and uncertainty in the approach, "
+                    "and propose a discriminating first test. Return the structured fields of one strategy, "
+                    "not a full research report or a proof. "
+                )
+                if infer_strategy
                 else (
                     "Propose one distinct, bounded STRATEGY for investigating the research problem. "
                     "Give it a concise, specific title of 2–12 words describing this bounded investigation; "
@@ -522,7 +538,7 @@ async def generate_proposal(
             "text": {
                 "format": {
                     "type": "json_schema",
-                    "name": "strategy_suggestion" if suggestion_only else "strategy_proposal",
+                    "name": "strategy_suggestion" if suggestion_only else "strategy_inference" if infer_strategy else "strategy_proposal",
                     "strict": True,
                     "schema": schema,
                 }
@@ -609,7 +625,7 @@ async def generate_proposal(
             )
         _, current_context = (
             suggestion_context_for(path, current_view)
-            if suggestion_only
+            if suggestion_only or infer_strategy
             else context_for(path, seed, current_view)
         )
         if current_context != context:
@@ -681,7 +697,9 @@ async def generate_proposal(
                 or similarity(proposal.approach, strategy.approach) > 0.75
             ):
                 raise ProjectError(
-                    "The proposal repeats an existing direction. Try a different starting point or explicitly regenerate."
+                    "The inferred strategy repeats an existing direction; nothing was added."
+                    if infer_strategy
+                    else "The proposal repeats an existing direction. Try a different starting point or explicitly regenerate."
                 )
         returned_model = raw.get("model", config["model"])
         if not isinstance(returned_model, str) or not re.fullmatch(
