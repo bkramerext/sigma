@@ -2067,7 +2067,7 @@ function AboutArchitecture() {
         </div>
         <p className="about-strategy-round-note">Each approach can have its own Investigator–Skeptic rounds.</p>
       </div>
-      <div className="about-flow-connector about-strategy-parallel-note"><span>Several selected directions can advance side by side</span><i aria-hidden="true"/></div>
+      <div className="about-flow-connector about-strategy-parallel-note"><span>Selected strategies can be investigated in the same session</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
         <div className="about-session-heading">{card('session', 'Research Session', 'Schedules rounds across selected strategies')}</div>
         <p className="about-session-round-label">Research round <small>within one strategy</small></p>
@@ -2120,6 +2120,7 @@ function AboutArchitecture() {
       </div>
       <div className="about-flow-connector"><span>Record arguments, tests, objections and outcomes</span><i aria-hidden="true"/></div>
       <div className="about-flow-evidence">{card('savedEvidence', 'Saved Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
+      <div className="about-evidence-report-note">Inspectable evidence and outcomes support reports and exports.</div>
       <div className="about-history-return"><span aria-hidden="true">↶</span> Findings may inform later sessions or researcher-approved strategy revisions.</div>
     </div>
     <p className="about-architecture-caption">Different strategies, repeated Investigator–Skeptic review, and inspectable evidence—not just a single chatbot response. Findings are assessed, not assumed proven.</p>

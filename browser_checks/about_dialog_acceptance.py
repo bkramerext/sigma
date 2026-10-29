@@ -168,7 +168,7 @@ def main() -> None:
                     "Investigators return with the critique"
                 )
                 expect(dialog.locator(".about-strategy-parallel-note")).to_contain_text(
-                    "advance side by side"
+                    "investigated in the same session"
                 )
                 strategy_rounds = dialog.locator(".about-strategy-round")
                 expect(strategy_rounds).to_have_count(3)
@@ -180,6 +180,9 @@ def main() -> None:
                 )
                 expect(dialog.locator(".about-shared-budget")).to_contain_text(
                     "Shared maximum agent turns"
+                )
+                expect(dialog.locator(".about-evidence-report-note")).to_contain_text(
+                    "reports and exports"
                 )
                 expect(dialog.locator(".about-round-feedback")).to_contain_text(
                     "next round"
@@ -221,7 +224,7 @@ def main() -> None:
                 )
                 expect(details.locator(".about-agent-return svg path")).to_have_count(1)
                 expect(details.locator(".about-agent-instantiation-note")).to_contain_text(
-                    "complete recoverability and auditing"
+                    "research steps and artifacts are recorded for inspection"
                 )
                 expect(details.locator(".about-multiple-sessions-note")).to_contain_text(
                     "revisit a strategy with new evidence"
