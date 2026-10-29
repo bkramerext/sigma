@@ -1336,6 +1336,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
+  const [legacyCheckpoint, setLegacyCheckpoint] = useState<any>(null);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
@@ -1360,7 +1361,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setContinuationAvailable(false); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setContinuationAvailable(false); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -1377,6 +1378,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         if (preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
           setCheckpointMismatch(preflight);
         else setCheckpointMismatch(null);
+        setLegacyCheckpoint(
+          preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available &&
+          preflight.evidence_strategy === 'legacy_field_extraction' &&
+          preflight.provider_calls_attempted > 0 ? preflight : null
+        );
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
@@ -1422,19 +1428,21 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     finally { setBusy(false); }
   }
   async function restartCheckpoint() {
-    if (busy || !checkpointMismatch?.checkpoint_can_restart || !binding) return;
+    const restartSource = checkpointMismatch ?? legacyCheckpoint;
+    if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
     setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
     try {
       const response = await fetch('/api/projects/papers/restart', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           path, expected_project_id: projectId, expected_binding: binding,
-          expected_snapshot_sha256: checkpointMismatch.snapshot_sha256, confirm_restart: true,
+          expected_snapshot_sha256: restartSource.snapshot_sha256, confirm_restart: true,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
       setCheckpointMismatch(null);
+      setLegacyCheckpoint(null);
       setContinuationAvailable(false);
       setPaperProgress(null);
       setSuccess(result.evidence_updated_since_preflight
@@ -1535,6 +1543,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
+      </div>}
+      {legacyCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Switch paper generation to fast pipeline">
+        <p>This unfinished paper uses the older batch-by-batch extractor. You can continue that attempt, or start fresh using faster structured evidence preparation. Switching clears unfinished paper work but preserves your saved papers and previous provider-call accounting.</p>
+        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start fresh with fast generation</button>
       </div>}
       <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{continuationAvailable ? 'Continue' : 'Generate'}</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
