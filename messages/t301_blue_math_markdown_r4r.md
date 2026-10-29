@@ -2,10 +2,10 @@
 
 **State:** R4R  
 **Branch:** `blue/t301-math-markdown` → `main`  
-**Base:** `2cf878a3290e697b408ebdb5d58871690e2c030b`  
+**Base:** `6ecc0df23127f4f1f920943331ff43afcc399682`
 **Implementation commit:** `c3c0dcbc589f90bb3dfa428e48743bcc291f1169` (initial implementation; subsequent verification refinements are on the same branch)
 
-**Correction base:** `2cf878a3290e697b408ebdb5d58871690e2c030b` (latest fetched `origin/main`; branch merge-base matches, so no rebase was required)
+**Correction base:** `6ecc0df23127f4f1f920943331ff43afcc399682` (latest fetched `origin/main`; merged into this branch to preserve the concurrent T313 changes without rewriting history)
 
 **PR:** [#314](https://github.com/bkramerext/sigma/pull/314) — open, not merged
 **Ticket:** [T301](../tickets/t301.md)
@@ -81,8 +81,8 @@ for bare notation inside source prose.
 
 Latest correction verification:
 
-- `git fetch origin main` — passed; latest main and branch merge-base are
-  `2cf878a3290e697b408ebdb5d58871690e2c030b`.
+- `git fetch origin main` — passed; latest main is
+  `6ecc0df23127f4f1f920943331ff43afcc399682`, merged into the feature branch.
 - `uv run --locked --no-sync python tests/text_views.py` — passed with the
   expanded ordinary-assignment and currency fixture; actual API route and
   source-byte preservation checks remain enabled.
@@ -96,25 +96,6 @@ Latest correction verification:
   frontend typecheck, production build, and repository tests. Output is archived
   at [`full-test.txt`](../docs/evaluations/t301/full-test.txt).
 - `git diff --check` — passed after all changes.
-
-- `uv run --locked --no-sync python tests/text_views.py` — passed. Calls the
-  real `POST /api/projects/text/convert` endpoint with a deterministic mocked
-  provider transport; validates request instructions, one provider dispatch,
-  stored output and unchanged source bytes.
-- `uv run --with playwright python browser_checks/t301_markdown_math.py` —
-  passed in real Chrome against the production `RenderedMarkdown` component
-  served by Vite. Verified the TeX annotations for 20 KaTeX spans in the
-  converted fixture and seven bare math expressions in source prose, including
-  the quadratic roots' grouped square root and fraction. Also checked
-  identifiers, inline and fenced code, GFM table/list, blockquote,
-  URL/path/date/version, currency, escaped and unmatched delimiters. Captured
-  both screenshots linked above.
-- `npm ci --no-audit --no-fund`, `npm run typecheck`, and `npm run build` —
-  passed. Vite emitted the existing advisory for a chunk over 500 kB.
-- `./sigma test` — all steps passed, including Ruff, formatting, Pyright,
-  frontend typecheck, and production build. Full output is
-  [`full-test.txt`](../docs/evaluations/t301/full-test.txt).
-- `git diff --check` — passed.
 
 ## Acceptance
 
@@ -136,12 +117,12 @@ Latest correction verification:
 - **MET:** Conservative equation classification, literal currency handling
   around explicit delimiters, adversarial API/browser regression coverage,
   source-byte preservation, browser screenshots, typecheck/build/full suite,
-  and latest-main reconciliation (no divergence).
+  and latest-main reconciliation via a merge preserving the T313 changes.
 - **UNVERIFIED:** Live model semantic classification and quality. No paid/live
   provider calls were made.
 - **UNMET:** None known.
 
-**Final tested implementation HEAD:** `229679c9e28e61b27675116c5f696c04af80ce2d`.
+**Final tested implementation HEAD:** `2a24e58c4675531bd515d1476ce44b4847a3f9a1`.
 All code, fixture and evidence changes were tested at this commit; the handoff
 update is a documentation-only commit on top. **Provider calls/cost:** zero.
 
