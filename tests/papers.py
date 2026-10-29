@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import shutil
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -2332,11 +2334,26 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         async def model_configuration(**_kwargs):
             return config
 
+        # CI need not install a TeX toolchain to exercise checkpoint-to-saved-PDF
+        # plumbing. Machines with Tectonic still compile a real PDF; others use
+        # a clearly identified local test stub, not a claimed PDF quality check.
+        tectonic_available = shutil.which("tectonic") is not None
+        compiler_context = (
+            nullcontext()
+            if tectonic_available
+            else patch.object(
+                papers,
+                "_compile_pdf",
+                return_value=b"%PDF-1.4\\n" + b"% deterministic test fixture\\n" * 40,
+            )
+        )
+
         with (
             patch("sigma.api.export_project_view", return_value=export),
             patch.object(papers, "auth_context", new=credential_context),
             patch.object(papers, "configuration", new=model_configuration),
             patch.object(papers, "_provider_structured", new=simulated_provider),
+            compiler_context,
         ):
             snapshot_hash = papers._snapshot(str(path))[1]
             started = perf_counter()
@@ -2376,9 +2393,10 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         )
         assert len(mock_calls) == 3
         assert elapsed_seconds < 300
+        compiler_label = "real Tectonic compilation" if tectonic_available else "stub PDF (Tectonic unavailable)"
         print(
             f"PASS mocked five-session Tadpoles paper-to-PDF E2E in {elapsed_seconds:.2f}s "
-            "(local deterministic provider; live <5-minute target remains unverified)."
+            f"({compiler_label}; deterministic provider; live <5-minute target remains unverified)."
         )
 
 
