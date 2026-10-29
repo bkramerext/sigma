@@ -1325,6 +1325,22 @@ function paperElapsed(seconds: number): string {
   return minutes ? `${minutes}m ${remaining}s` : `${remaining}s`;
 }
 
+// A resumed checkpoint reports accumulated active time in elapsed_seconds.
+// The current attempt has a fresh started_at. Show both honestly instead of
+// making a newly retried paper appear to have already run for several minutes.
+// When a run is interrupted, do not include idle time since the interruption.
+function paperTimingLabel(progress: PaperProgress, now: number): string {
+  const total = Math.max(0, Math.floor(progress.elapsed_seconds));
+  if (progress.status !== 'active') return `Total active time across attempts ${paperElapsed(total)}`;
+  const started = Date.parse(progress.started_at);
+  if (!Number.isFinite(started)) return `Total active time across attempts ${paperElapsed(total)}`;
+  const attempt = Math.max(0, Math.floor((now - started) / 1000));
+  const earlier = Math.max(0, total - attempt);
+  return earlier > 0
+    ? `This attempt ${paperElapsed(attempt)} · Earlier attempts ${paperElapsed(earlier)}`
+    : `This attempt ${paperElapsed(attempt)}`;
+}
+
 function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -1351,10 +1367,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   useEffect(() => {
-    if (!busy) return;
+    if (!busy && paperProgress?.status !== 'active') return;
     const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [busy]);
+  }, [busy, paperProgress?.status]);
   async function refresh(keepId?: string) {
     setLoading(true);
     try {
@@ -1518,7 +1534,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
             setLastPaperSignalAt(Date.now());
             const nextProgress = { ...event, status: event.state === 'complete' ? 'complete' : 'active', activity_state: event.state } as PaperProgress;
             setPaperProgress(nextProgress);
-            setPhase(`${paperProgressOperation(nextProgress)} · Elapsed ${paperElapsed(nextProgress.elapsed_seconds)}`);
+            setPhase(paperProgressOperation(nextProgress));
           }
           if (event.type === 'heartbeat') {
             setLastPaperSignalAt(Date.now());
@@ -1575,7 +1591,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           : `SIGMA will reuse the completed outline and ${resumeDetails?.completed_sections ?? 0} saved section(s). Unfinished sections require AI calls and may consume provider allowance.`
       }</p>}
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Still working — SIGMA is responding. The AI provider has not finished this stage; its intermediate reasoning progress is unknown.' : 'Waiting for another SIGMA status update. Intermediate AI reasoning progress is not available.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningRetry ? 'Saved evidence preparation can be reused; the failed planning request must be made again and may use allowance.' : continuationAvailable ? 'Completed paper stages are saved. Continue paper to finish the remaining stages; new AI calls may use allowance.' : checkpointMismatch ? 'The previous attempt cannot resume with the current research or AI settings. Clear outdated paper work, then Generate.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · {paperTimingLabel(paperProgress, paperClock)}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Still working — SIGMA is responding. The AI provider has not finished this stage; its intermediate reasoning progress is unknown.' : 'Waiting for another SIGMA status update. Intermediate AI reasoning progress is not available.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningRetry ? 'Saved evidence preparation can be reused; the failed planning request must be made again and may use allowance.' : continuationAvailable ? 'Completed paper stages are saved. Continue paper to finish the remaining stages; new AI calls may use allowance.' : checkpointMismatch ? 'The previous attempt cannot resume with the current research or AI settings. Clear outdated paper work, then Generate.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
