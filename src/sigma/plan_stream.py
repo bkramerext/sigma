@@ -105,6 +105,22 @@ def failure(
         else:
             shape = "other-object"
     if mode == "chatgpt":
+        # Strict-schema rejection is an actionable request defect, not an
+        # account/plan failure. Expose only a locally allowlisted provider
+        # error code, never the raw provider message or arbitrary parameters.
+        if status == 400 and code == "invalid_json_schema":
+            inference_failure("unavailable", guard)
+            raise ChatGPTProviderRejection(
+                "ChatGPT rejected SIGMA's structured-output schema "
+                "(HTTP 400; provider code: invalid_json_schema). "
+                "The account remains connected; no automatic retry or "
+                "billing fallback occurred.",
+                state="unavailable",
+                code=None,
+                http_status=status,
+                streamed=streamed,
+                stream_event=stream_event,
+            )
         state, message = KNOWN_ERRORS.get(
             code if isinstance(code, str) else "",
             {
