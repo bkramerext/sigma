@@ -2822,6 +2822,48 @@ def test_structured_index_retains_session_narrative_and_original_question() -> N
     assert plan["project_question"] == problem
 
 
+def test_summary_only_research_uses_zero_paid_evidence_extraction_calls() -> None:
+    """An unconventional session field still uses deterministic indexing."""
+    package, plan = fast_package()
+    package["sources"][1]["data"] = {
+        "summary": (
+            "The investigator derives a candidate construction for the number "
+            "of regions, and the skeptic leaves the convexity proof obligation "
+            "unresolved."
+        )
+    }
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    stages: list[str] = []
+
+    async def provider(_input, _binding, _config, *, schema_name, **_kwargs):
+        stages.append(schema_name)
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=["The saved research supports this bounded interpretation."]
+        ), "fixture-model"
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            paper, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert paper.sections
+        assert batches == 0
+        assert calls == len(plan.sections) + 1
+        assert stages.count("sigma_long_paper_plan") == 1
+        assert stages.count("sigma_long_paper_section") == len(plan.sections)
+        assert state["evidence_strategy"] == "structured_v1"
+
+    asyncio.run(check())
+
+
 def test_long_paper_planning_timeout_is_stage_specific() -> None:
     """All paper inference stages receive at least five minutes."""
     assert papers.CALL_SECONDS == 300
@@ -2862,6 +2904,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 
 def main() -> None:
+    test_summary_only_research_uses_zero_paid_evidence_extraction_calls()
     test_one_shot_provider_failure_requires_explicit_reset_without_rebilling()
     test_structured_index_retains_session_narrative_and_original_question()
     test_easy_paper_start_over_escapes_repeated_paid_planning()
