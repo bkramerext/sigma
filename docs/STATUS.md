@@ -7931,11 +7931,11 @@ Authenticated guests can browse samples and request access, but receive no
 membership or sponsorship allowance until admin approval. Invitation requests
 remain durable and deduplicated; built-in admin access remains intact.
 
-The complete `./sigma test` suite passed on validated implementation HEAD
-`efa26c2`, including auth and research API regressions, frontend typecheck/build,
-Ruff, and Pyright. Chromium acceptance checks passed for real-backend auth with
+After reconciling with `origin/main` at `4e4738a20fbb8bde2bc26b30d2599abd41dcef90`, the complete `./sigma test` suite passed on validated implementation HEAD
+`61e3b96452cd71ac06643627e2fd133c6a54043b`, including auth and research API regressions, frontend typecheck/build,
+Ruff, and Pyright. Chromium acceptance checks passed after the latest-main merge for real-backend auth with
 deterministic OAuth/provider boundaries, guest samples, invitations, admin and
-member sponsor pill, saved session playback, and responsive About behavior.
+member sponsor pill, saved session playback, and responsive About behavior (including the updated About dialog help selector).
 No paid calls were made. One graph-present sandbox scenario skipped because the
 local image is unavailable. See the consolidated
 [`PR #297 Green R4R`](../messages/pr297_green_consolidated_r4r.md) for exact

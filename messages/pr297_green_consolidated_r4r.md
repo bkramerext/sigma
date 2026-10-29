@@ -2,9 +2,9 @@
 
 Branch: `coordinator/signin-session-playback-stabilization`
 Repository: `bkramerext/sigma`
-Updated base: `origin/main` at `6ecc0df23127f4f1f920943331ff43afcc399682` (T313).
-Validated implementation HEAD: `efa26c2` (merge of current main plus guest authorization corrections).
-Final handoff commit SHA: recorded in the updated PR #297 description after this file is committed.
+Updated base: `origin/main` at `4e4738a20fbb8bde2bc26b30d2599abd41dcef90` (PR #315).
+Validated implementation HEAD: `61e3b96452cd71ac06643627e2fd133c6a54043b` (merge of current main plus guest authorization corrections).
+Final published PR head SHA: recorded in the updated PR #297 description after the handoff and browser-check commits.
 
 ## Security audit and corrections
 
@@ -25,7 +25,7 @@ Real Chromium checks — PASS:
 - `browser_checks/t17_8_saved_session.py`: saved session playback without provider calls.
 - `browser_checks/about_dialog_acceptance.py`: responsive About dialog and focus/help behavior at desktop/mobile widths.
 
-`git diff --check` — PASS. No paid provider calls were made. Sponsored inference and OAuth boundaries in automated checks are deterministic fixtures, not live Google/OpenAI calls.
+`git diff --check` — PASS. `browser_checks/about_dialog_acceptance.py` was refreshed for current main’s Research Question help label and rerun successfully. No paid provider calls were made. Sponsored inference and OAuth boundaries in automated checks are deterministic fixtures, not live Google/OpenAI calls.
 
 ## Acceptance state
 
