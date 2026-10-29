@@ -29,4 +29,4 @@ Do not coordinate or communicate directly with other Codex workers. Report depen
 
 ## Review
 
-Implementation commit: to be filled after commit. PR: to be linked after opening. This branch is ready for review and has not been self-merged.
+Implementation commit: `726e4568912c1d1f74f84ee42161561808430aa9`. [PR #334](https://github.com/bkramerext/sigma/pull/334) is open against `main` at base `0253b2a3dcdb0542e365c00e480156c05f3132af`, with this implementation commit as its current head. This branch is ready for review and has not been self-merged.
