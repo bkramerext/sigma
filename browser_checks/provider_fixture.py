@@ -98,7 +98,7 @@ async def handler(request):
                 "omitted_fields": [],
             }
         elif schema_name == "sigma_long_paper_plan":
-            reference = context["indexed_source_ids"][0]
+            reference = context["evidence_index"][0]["evidence_refs"][0]
             output = {
                 "title": "A Long-Form Experimental Research Synthesis",
                 "abstract": "This paper organizes the saved experimental question, its evidence base, and the limitations recorded in the frozen research snapshot. The manuscript distinguishes observations from hypotheses and proposed future tests.",

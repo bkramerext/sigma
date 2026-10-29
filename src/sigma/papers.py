@@ -540,6 +540,25 @@ def _evidence_batches(package: dict[str, Any]) -> list[dict[str, Any]]:
     return batches
 
 
+def _long_plan_input(
+    project_data: Mapping[str, Any],
+    evidence_index: list[dict[str, Any]],
+    source_count: int,
+    batch_count: int,
+) -> dict[str, Any]:
+    """Build the outline context without duplicating references already in the index."""
+    return {
+        "project": {
+            key: project_data[key]
+            for key in ("title", "investigation_type", "difficulty")
+            if key in project_data
+        },
+        "evidence_index": evidence_index,
+        "source_count_in_frozen_snapshot": source_count,
+        "batch_coverage": {"completed": batch_count, "total": batch_count},
+    }
+
+
 def _paper_dir(path: str, create: bool = True) -> Path:
     target = project_path(path)
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
@@ -1697,9 +1716,7 @@ async def _provider_structured(
     project_path_value: str | None = None,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
-    input_text = json.dumps(input_value, ensure_ascii=False, separators=(",", ":"))
-    if len(input_text.encode("utf-8")) > max_input_bytes:
-        raise ProjectError("A long-paper stage exceeded its bounded input size")
+    input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
@@ -1808,6 +1825,22 @@ async def _provider_structured(
                 pass
 
 
+def _provider_input_text(input_value: Any, schema_name: str, max_input_bytes: int) -> str:
+    input_text = json.dumps(input_value, ensure_ascii=False, separators=(",", ":"))
+    input_size = len(input_text.encode("utf-8"))
+    if input_size > max_input_bytes:
+        stage = {
+            "sigma_paper_evidence_batch": "Evidence extraction",
+            "sigma_paper_evidence_reduction": "Evidence consolidation",
+            "sigma_long_paper_plan": "Paper planning",
+            "sigma_long_paper_section": "Section writing",
+        }.get(schema_name, "Long-paper")
+        raise ProjectError(
+            f"{stage} input is {input_size:,} bytes; it exceeds the {max_input_bytes:,}-byte bound."
+        )
+    return input_text
+
+
 async def _generate_long_draft(
     package: dict[str, Any],
     binding: Mapping[str, Any],
@@ -1831,8 +1864,15 @@ async def _generate_long_draft(
     conflict_note_count = int(state.get("conflict_note_count", 0))
     calls = int(state.get("provider_calls", 0))
 
-    def before_provider_call(reserve: int = 0) -> None:
+    def before_provider_call(
+        reserve: int = 0,
+        *,
+        input_value: Any,
+        schema_name: str,
+        max_input_bytes: int = MAX_PROVIDER_INPUT_BYTES,
+    ) -> None:
         nonlocal calls
+        _provider_input_text(input_value, schema_name, max_input_bytes)
         if calls + reserve >= MAX_LONG_PAPER_CALLS:
             raise ProjectError("Long-paper generation reached the bounded provider-call budget")
         calls += 1
@@ -1856,7 +1896,11 @@ distinct whenever merging would obscure differences between sessions or experime
             batch = batches[batch_index]
             if progress:
                 await progress("evidence", batch_index + 1, len(batches), "active")
-            before_provider_call(MAX_LONG_PAPER_SECTIONS + 1 + 32)
+            before_provider_call(
+                MAX_LONG_PAPER_SECTIONS + 1 + 32,
+                input_value=batch,
+                schema_name="sigma_paper_evidence_batch",
+            )
             result, _ = await _provider_structured(
                 batch,
                 binding,
@@ -1965,9 +2009,14 @@ that occur in the input. Do not add scientific claims or outside citations."""
             group = groups[group_index]
             if progress:
                 await progress("consolidation", None, None, "active")
-            before_provider_call(MAX_LONG_PAPER_SECTIONS + 1)
+            reduction_input = [item.model_dump() for item in group]
+            before_provider_call(
+                MAX_LONG_PAPER_SECTIONS + 1,
+                input_value=reduction_input,
+                schema_name="sigma_paper_evidence_reduction",
+            )
             reduced, _ = await _provider_structured(
-                [item.model_dump() for item in group],
+                reduction_input,
                 binding,
                 config,
                 instructions=reduce_instructions,
@@ -2049,23 +2098,18 @@ into a result. Return the complete plan JSON matching the schema."""
         (source["data"] for source in package["sources"] if source["kind"] == "project"), {}
     )
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
-    plan_input = {
-        "project": {
-            key: project_data[key]
-            for key in ("title", "investigation_type", "difficulty")
-            if isinstance(project_data, dict) and key in project_data
-        },
-        "evidence_index": index,
-        "indexed_source_ids": sorted(indexed_refs),
-        "source_count_in_frozen_snapshot": len(source_ids),
-        "batch_coverage": {"completed": len(batches), "total": len(batches)},
-    }
+    plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
     if state.get("plan"):
         long_plan = LongPaperPlan.model_validate(state["plan"])
     else:
         if progress:
             await progress("planning", None, None, "active")
-        before_provider_call(MAX_LONG_PAPER_SECTIONS)
+        before_provider_call(
+            MAX_LONG_PAPER_SECTIONS,
+            input_value=plan_input,
+            schema_name="sigma_long_paper_plan",
+            max_input_bytes=220_000,
+        )
         plan, _ = await _provider_structured(
             plan_input,
             binding,
@@ -2133,7 +2177,12 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             "section_plan": section.model_dump(),
             "evidence_notes": relevant,
         }
-        before_provider_call(len(long_plan.sections) - section_number)
+        before_provider_call(
+            len(long_plan.sections) - section_number,
+            input_value=section_input,
+            schema_name="sigma_long_paper_section",
+            max_input_bytes=220_000,
+        )
         body, _ = await _provider_structured(
             section_input,
             binding,

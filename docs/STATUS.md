@@ -4,7 +4,7 @@ Paper generation now persists and streams actual pipeline stages, real evidence
 batch/section counts where known, elapsed time, and active/failed/cancelled/
 interrupted/complete state. Refreshing or reconnecting reads the saved
 checkpoint; retry resumes from saved work. The dialog includes a Cancel
-generation control. The read-only progress endpoint is scoped by the existing
+control styled consistently with other underlined actions. The read-only progress endpoint is scoped by the existing
 guest workspace rules.
 
 Verification on `blue/issue-328-paper-progress`, based on current main
@@ -15,7 +15,11 @@ provider fixture passed one-shot progress, cancellation/retry, actual long-form
 evidence batching, reload recovery, PDF completion, and saved-version links.
 No paid provider calls were made. Screenshots are in
 `docs/evaluations/issue_328/`. Human UI review is pending; PR #323 integration
-is still a sequencing dependency, so #328 is not opened as a PR yet.
+is still a sequencing dependency, so #328 is not opened as a PR yet. A
+deterministic large-index reproduction also exposed planner overflow from
+duplicating each indexed evidence reference in the outline input; that redundant
+list is removed. Bound failures now report the stage and measured/allowed byte
+counts.
 
 ## PR #325 — documentation accuracy and onboarding verification (2026-10-29)
 

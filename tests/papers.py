@@ -549,6 +549,100 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
     asyncio.run(check())
 
 
+def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog() -> None:
+    notes = [
+        papers.EvidenceNote(
+            statement=f"Saved evidence note {group:03d}",
+            kind="result",
+            evidence_refs=[f"{group * 12 + offset:064x}" for offset in range(12)],
+        ).model_dump()
+        for group in range(180)
+    ]
+    refs = sorted({reference for note in notes for reference in note["evidence_refs"]})
+    plan_input = papers._long_plan_input(
+        {"title": "Fixture", "investigation_type": "experimental", "difficulty": "hard"},
+        notes,
+        len(refs),
+        len(notes),
+    )
+    # This bounded evidence index is valid by itself. The old plan shape copied
+    # every 64-byte reference into a second list, pushing the input beyond 220 KB.
+    assert len(papers._json(notes)) < papers.MAX_PLANNER_INDEX_BYTES
+    legacy_input = {**plan_input, "indexed_source_ids": refs}
+    assert len(papers._json(legacy_input)) > 220_000
+    assert len(papers._json(plan_input)) <= 220_000
+    assert "indexed_source_ids" not in plan_input
+    assert {
+        reference for note in plan_input["evidence_index"] for reference in note["evidence_refs"]
+    } == set(refs)
+
+    async def over_limit() -> None:
+        with patch.object(
+            papers.httpx,
+            "AsyncClient",
+            side_effect=AssertionError("oversized input must fail before dispatch"),
+        ):
+            try:
+                await papers._provider_structured(
+                    "input exceeds bound",
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "fixture", "reasoning_effort": "high"},
+                    instructions="fixture",
+                    schema_name="sigma_long_paper_plan",
+                    response_model=papers.LongPaperPlan,
+                    max_input_bytes=4,
+                )
+            except ProjectError as exc:
+                assert "Paper planning input is 21 bytes" in str(exc), str(exc)
+                assert "4-byte bound" in str(exc)
+            else:
+                raise AssertionError("Oversized paper planning input must be rejected")
+
+    async def rejects_before_counting_a_provider_call() -> None:
+        project_id = "fixture-project"
+        source_id = f"project:{project_id}"
+        package = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": project_id,
+            "sources": [{"id": source_id, "kind": "project", "data": {"title": "Fixture"}}],
+        }
+        state = papers._new_work("a" * 64, project_id, "b" * 64, "fixture", "high")
+        state.update(
+            {
+                "evidence_indexed": True,
+                "evidence_notes": [
+                    papers.EvidenceNote(
+                        statement="A saved evidence note.", kind="result", evidence_refs=[source_id]
+                    ).model_dump()
+                ],
+            }
+        )
+        with (
+            patch.object(papers, "_long_plan_input", return_value={"padding": "x" * 220_000}),
+            patch.object(
+                papers,
+                "_provider_structured",
+                side_effect=AssertionError("oversized planning input must not dispatch"),
+            ),
+        ):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"mode": "api_key", "identity": "fixture", "token": "unused"},
+                    {"model": "fixture", "reasoning_effort": "high"},
+                    state,
+                    lambda _state: None,
+                )
+            except ProjectError as exc:
+                assert "Paper planning input" in str(exc), str(exc)
+            else:
+                raise AssertionError("Oversized planning input must be rejected")
+        assert state["provider_calls"] == 0
+
+    asyncio.run(over_limit())
+    asyncio.run(rejects_before_counting_a_provider_call())
+
+
 def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
     async def check() -> None:
         project_id = "fixture-project"
@@ -1079,6 +1173,7 @@ def main() -> None:
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_paper_progress_endpoint_recovers_interrupted_checkpoint()
+    test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"

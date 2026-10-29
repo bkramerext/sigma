@@ -1428,7 +1428,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
       setCheckpointMismatch(null);
-      setSuccess('Unfinished paper work cleared. No generation has started. Your saved versions are unchanged; choose Generate paper when you’re ready to start over.');
+      setSuccess('Unfinished paper work cleared. No generation has started. Your saved versions are unchanged; choose Generate when you’re ready to start over.');
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -1525,7 +1525,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
       </div>}
-      <div className="ai-paper-controls"><button type="button" className="text-view-link" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating paper…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
+      <div className="ai-paper-controls"><button type="button" className="text-view-link" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating paper…' : 'Generate'}</button>{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>Saved work is available; retry to continue where possible.</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}

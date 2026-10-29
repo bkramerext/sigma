@@ -37,7 +37,7 @@ with sync_playwright() as playwright:
     page.goto(UI_ORIGIN + "/project?path=" + quote(path, safe=""))
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-    generate = dialog.get_by_role("button", name="Generate paper", exact=True)
+    generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     expect(generate).to_have_css("text-decoration-line", "underline")
     expect(dialog.get_by_role("button", name="Close", exact=True)).to_have_css(
@@ -46,12 +46,12 @@ with sync_playwright() as playwright:
     generate.click()
     status = dialog.locator(".ai-paper-progress")
     expect(status).to_contain_text("Writing the paper", timeout=10000)
-    expect(dialog.get_by_role("button", name="Cancel generation", exact=True)).to_have_css(
+    expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_have_css(
         "text-decoration-line", "underline"
     )
     expect(status).to_contain_text("Elapsed")
     page.screenshot(path="/tmp/sigma-issue328-short-progress.png", full_page=True)
-    dialog.get_by_role("button", name="Cancel generation", exact=True).click()
+    dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(status).to_contain_text("Generation cancelled", timeout=10000)
     expect(status).to_contain_text("Writing the paper")
     generate = dialog.locator(".ai-paper-controls .settings-submit")
@@ -88,7 +88,7 @@ with sync_playwright() as playwright:
     page.goto(UI_ORIGIN + "/project?path=" + quote(long_path, safe=""))
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-    generate = dialog.get_by_role("button", name="Generate paper", exact=True)
+    generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
     progress = dialog.locator(".ai-paper-progress")
@@ -107,7 +107,7 @@ with sync_playwright() as playwright:
     expect(progress).to_contain_text("Elapsed")
     page.screenshot(path="/tmp/sigma-issue328-reconnected.png", full_page=True)
 
-    generate = dialog.get_by_role("button", name="Generate paper", exact=True)
+    generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
     expect(dialog.locator(".ai-paper-progress")).to_contain_text("Compiling PDF", timeout=60000)
