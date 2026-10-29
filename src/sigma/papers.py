@@ -2454,19 +2454,17 @@ results, and study limitations. Do not invent data, analyses, experiments, citat
 Return enough paragraphs to explain the evidence and reasoning in full, not a short summary. Use
 plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or document markup."""
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
-    for section_number, section in enumerate(long_plan.sections, start=1):
+
+    async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
-            long_sections.append(
-                PaperSection(
-                    heading=section.heading,
-                    paragraphs=section_draft.paragraphs,
-                    claim_ids=section.claim_ids,
-                )
+            return PaperSection(
+                heading=section.heading,
+                paragraphs=section_draft.paragraphs,
+                claim_ids=section.claim_ids,
             )
-            continue
-        if progress:
+        if progress and not fast_path:
             await progress("sections", section_number, len(long_plan.sections), "active")
         relevant = [
             note.model_dump()
@@ -2483,7 +2481,7 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             "evidence_notes": relevant,
         }
         before_provider_call(
-            len(long_plan.sections) - section_number,
+            len(long_plan.sections) - len(saved_sections) - 1,
             input_value=section_input,
             schema_name="sigma_long_paper_section",
             max_input_bytes=220_000,
@@ -2500,26 +2498,73 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             project_path_value=project_path_value,
         )
         section_draft = LongSectionDraft.model_validate(body)
-        state["provider_calls"] = calls
         encoded_section = _json(section_draft.model_dump())
         if len(encoded_section) > 250_000:
             raise ProjectError(
                 f"Section {section.heading} exceeded the 250 KB section bound; no paper was published."
             )
-        long_sections.append(
-            PaperSection(
-                heading=section.heading,
-                paragraphs=section_draft.paragraphs,
-                claim_ids=section.claim_ids,
-            )
-        )
+        # No await between registering a completed result and saving the
+        # checkpoint: concurrent tasks cannot interleave and lose a section.
         saved_sections[section_key] = section_draft.model_dump()
         state["provider_calls"] = calls
         save_state(state)
         if progress:
-            await progress("sections", section_number, len(long_plan.sections), "milestone")
+            completed_count = len(saved_sections) if fast_path else section_number
+            await progress("sections", completed_count, len(long_plan.sections), "milestone")
         if calls > MAX_LONG_PAPER_CALLS:
             raise ProjectError("Long-paper generation exceeded its bounded provider-call budget")
+        return PaperSection(
+            heading=section.heading,
+            paragraphs=section_draft.paragraphs,
+            claim_ids=section.claim_ids,
+        )
+
+    if fast_path:
+        pending = [
+            (number, section)
+            for number, section in enumerate(long_plan.sections, start=1)
+            if str(number) not in saved_sections
+        ]
+        if pending and progress:
+            await progress("sections", max(1, len(saved_sections)), len(long_plan.sections), "active")
+        semaphore = asyncio.Semaphore(FAST_SECTION_CONCURRENCY)
+
+        async def bounded_section(
+            section_number: int, section: LongSectionPlan
+        ) -> tuple[int, PaperSection]:
+            async with semaphore:
+                return section_number, await write_section(section_number, section)
+
+        tasks = [
+            asyncio.create_task(bounded_section(number, section))
+            for number, section in pending
+        ]
+        try:
+            if tasks:
+                await asyncio.gather(*tasks)
+        except BaseException:
+            # gather itself does not cancel sibling calls on failure. Cancel
+            # and drain them before unwinding, preserving already-saved work.
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        # Reconstruct in outline order, never in provider completion order.
+        long_sections = [
+            PaperSection(
+                heading=section.heading,
+                paragraphs=LongSectionDraft.model_validate(saved_sections[str(number)]).paragraphs,
+                claim_ids=section.claim_ids,
+            )
+            for number, section in enumerate(long_plan.sections, start=1)
+        ]
+    else:
+        # Historical extraction/checkpoint behavior remains serial for saved
+        # paid runs; its event count semantics are unchanged.
+        long_sections = [
+            await write_section(number, section)
+            for number, section in enumerate(long_plan.sections, start=1)
+        ]
 
     warning_items = [*long_plan.validation_warnings[:8]]
     if conflict_note_count:
