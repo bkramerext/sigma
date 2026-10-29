@@ -2258,7 +2258,7 @@ async def _provider(
                     response,
                     guard,
                     max_stream_bytes=MAX_CHATGPT_STREAM_BYTES,
-                    overflow_message="ChatGPT paper response exceeded the 4 MB stream limit. No paper was saved.",
+                    overflow_message="ChatGPT paper response exceeded the 16 MB stream limit. No paper was saved.",
                 )
             else:
                 body = bytearray()
