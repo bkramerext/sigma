@@ -15,7 +15,7 @@ RAW_BODY = r"""The probability is 1/2. We obtain f(x) = x² + 3x and E = mc². T
 MAX_RETRY_COUNT = 3
 ```
 
-Ordinary assignments stay ordinary: x = value, x = y, and x = 3. The setting RETRY_LIMIT = 5 is prose too."""
+Ordinary assignments stay ordinary: x = value, x = y, x = 3, and let x = value. The setting RETRY_LIMIT = 5 is prose too."""
 
 
 with sync_playwright() as playwright:
@@ -116,9 +116,11 @@ with sync_playwright() as playwright:
     expect(raw).to_contain_text("MAX_RETRY_COUNT")
     expect(raw).to_contain_text("x = value, x = y, and x = 3")
     expect(raw).to_contain_text("DATABASE_URL = value")
+    expect(raw).to_contain_text("let x = value")
     expect(raw.locator(".katex").filter(has_text="x = value")).to_have_count(0)
     expect(raw.locator(".katex").filter(has_text="x = y")).to_have_count(0)
     expect(raw.locator(".katex").filter(has_text="DATABASE_URL")).to_have_count(0)
+    expect(raw.locator(".katex").filter(has_text="let x = value")).to_have_count(0)
     expect(raw.locator(".katex").filter(has_text="MAX_RETRY_COUNT")).to_have_count(0)
     expect(raw.locator("code")).to_have_count(2)
     page.screenshot(path="docs/evaluations/t301/markdown-render-raw-math.png", full_page=True)

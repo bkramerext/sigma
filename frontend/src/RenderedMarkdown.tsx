@@ -77,7 +77,7 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
     if (!/[\p{L}\d]/u.test(right)) return false;
     const boundary = Math.max(text.lastIndexOf('.', match.index), text.lastIndexOf('!', match.index), text.lastIndexOf('?', match.index), text.lastIndexOf(';', match.index), 0);
     const precedingSentence = text.slice(Math.max(boundary, match.index - 100), match.index).toLowerCase();
-    const hasMathematicalCue = /\b(?:equation|root|roots|sequence|term|variable|function|probability|fraction|ratio|solution|solve|formula|identity|satisf(?:y|ies)|denote|defined|let|obtain|substitute|calculate|compute|evaluate|algebraic|mathematical)\b/u.test(precedingSentence);
+    const hasMathematicalCue = /\b(?:equation|root|roots|sequence|term|variable|function|probability|fraction|ratio|solution|solve|formula|identity|satisf(?:y|ies)|denote|defined|obtain|substitute|calculate|compute|evaluate|algebraic|mathematical)\b/u.test(precedingSentence);
     const hasFormulaStructure = /[+−\-*/^_{}²³√±×÷<>≤≥≠≈∑∫]/u.test(right);
     if (!hasFormulaStructure && !hasMathematicalCue) return false;
     // Trim a natural-language continuation after a mathematical expression.
