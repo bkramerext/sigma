@@ -14,14 +14,16 @@ stopping all active sessions before deleting the project directory. `./sigma
 test` passed for the final implementation, including Ruff, formatting, Pyright,
 frontend typecheck, and production build; the build reports the existing large
 main JavaScript chunk advisory. The focused research-session suite and targeted
-Ruff/Pyright/frontend typecheck also passed. All provider requests were
-deterministic mocked fixtures; no live or paid calls were made. Real Chrome
-verification was not run: the available browser server is serving a different
-checkout, and the required local UI ports are already occupied.
+Ruff/Pyright/frontend typecheck also passed. Real Chrome on an isolated local
+fixture verified the session-row removal confirmation, successful DELETE,
+removed row, and absent backend record. Active execution cancellation was
+verified through the deterministic service regressions. All provider requests
+were deterministic mocked fixtures; no live or paid calls were made.
 
 The worktree branch is based on current `origin/main`. Open PR #297 also changes
-the session service, API, and session UI, so this issue branch needs integration
-review against that PR before merging.
+the session service, API, and session UI. A Git merge-tree check against its
+latest fetched head found no textual conflicts with this branch; behavior still
+needs review together before merging.
 
 ## Issue #306 and happy-path reliability (#302) (2026-10-28)
 
