@@ -1,3 +1,27 @@
+## Issue #329 — independent paper-generation testing (2026-10-29)
+
+Added a test-only pyramid on implementation HEAD
+`6fbd6ae914f352dd20a1525b0255342991847181`, covering evidence/provenance and
+math review fidelity, bounded indexing/omissions, retries and unknown provider
+consumption, concurrent section checkpoints, resume/cancel, stale and legacy
+work, compiler failures, responsive browser recovery, and deterministic
+Tadpoles-shaped five-session PDF generation. The mock PDF run took 0.37 s;
+this does not verify the live <5-minute target. The real-Chrome fixture check
+passed granular progress, retry, mobile failure/Continue, incompatible-snapshot
+restart, and PDF completion. No live provider calls were made. ONP mathematical
+quality on the actual project remains unverified.
+
+Focused paper tests, changed-file Ruff/format checks, and Pyright passed.
+`./sigma test` is not clean on the supplied implementation HEAD: the older
+`tests/cloud_research_api.py` fixture returns a response shape rejected by the
+fast synthesis path, and Ruff check/format report issues in
+`src/sigma/papers.py`. These are implementation-branch findings and this
+test-only branch does not alter production code. Pyright and frontend
+typecheck passed; build was skipped after earlier suite failures. The optional
+graph-present sandbox case skipped because its image is unavailable. See
+[`docs/evaluations/issue_329/TEST_REPORT.md`](evaluations/issue_329/TEST_REPORT.md)
+for commands, results, and handoff details.
+
 ## Issue #328 — live paper-generation progress (2026-10-29)
 
 Paper generation now persists and streams actual pipeline stages, real evidence

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
+from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import perf_counter
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -55,6 +58,92 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
             "validation_warnings": ["No external references were supplied."],
         }
     )
+
+
+def fast_package(section_count: int = 2) -> tuple[dict[str, Any], papers.FastLongPaperPlan]:
+    project_ref = "project:fast-fixture"
+    session_ref = "session:onp-fixture"
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "fast-fixture",
+        "sources": [
+            {
+                "id": project_ref,
+                "kind": "project",
+                "data": {
+                    "title": "A saved mathematical investigation",
+                    "problem": "Assess the recorded candidate proof and its assumptions.",
+                    "investigation_type": "mathematical",
+                    "difficulty": "hard",
+                },
+            },
+            {
+                "id": session_ref,
+                "kind": "session",
+                "data": {
+                    "reasoning_steps": [
+                        "For n=0 the empty arrangement has one region. At step k, the new line has at most k-1 distinct crossings, hence at most k pieces.",
+                        "The family L_j:y=jx+j^2 has pairwise distinct intersections along L_k, giving k pieces at every insertion.",
+                    ],
+                    "skeptic_objections": [
+                        "The source argues that separated pieces lie in different old cells; this bridge still needs a formal check."
+                    ],
+                    "negative_findings": [
+                        "No independent proof checker was run.",
+                        "No effect.",
+                    ],
+                    "contradictory_findings": [
+                        "The investigator calls the argument complete, while the skeptic records an unresolved convexity obligation."
+                    ],
+                    "proof_obligations": [
+                        "Prove every arrangement cell is convex and every crossed cell splits into two cells."
+                    ],
+                    "results": {"computed_base_case_n0": 1},
+                },
+            },
+        ],
+    }
+    plan = papers.FastLongPaperPlan(
+        title="A Saved Candidate Argument and Its Verification Gaps",
+        abstract=(
+            "This paper reconstructs a mathematical candidate from saved evidence, "
+            "including its base case, per-step bound, proposed construction, and "
+            "unresolved verification obligations. It does not claim formal proof."
+        ),
+        abstract_claim_ids=["C1"],
+        problem_framing=[
+            "The project asks for an evidence-bound assessment of the saved argument."
+        ],
+        problem_framing_claim_ids=["C1"],
+        methods=["We inspect the preserved mathematical reasoning and skeptical records."],
+        methods_claim_ids=["C1"],
+        claims=[
+            papers.PaperClaim(
+                id="C1",
+                statement="The frozen record contains an unverified candidate argument.",
+                status="unresolved",
+                evidence_refs=[project_ref, session_ref],
+                reasoning="The cited project and session records identify the claim and its open checks.",
+            )
+        ],
+        sections=[
+            papers.LongSectionPlan(
+                heading=f"Evidence stage {index}",
+                purpose="Explain the source-linked argument and the supporting or limiting evidence.",
+                evidence_refs=[project_ref, session_ref],
+                claim_ids=["C1"],
+            )
+            for index in range(1, section_count + 1)
+        ],
+        limitations=["The saved argument has not been independently verified."],
+        open_obligations=[
+            "Prove every arrangement cell is convex and every crossed cell splits into two cells."
+        ],
+        conclusions=["The evidence supports an unverified candidate, not a certified theorem."],
+        conclusion_claim_ids=["C1"],
+        validation_warnings=["No independent proof checker was run."],
+    )
+    return package, plan
 
 
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
@@ -224,7 +313,10 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         schema = request["text"]["format"]["schema"]
         assert set(schema["required"]) == set(schema["properties"])
     assert set(requests[-1]["text"]["format"]["schema"]["required"]) == {
-        "notes", "conflicts_or_gaps", "covered_field_refs", "omitted_fields"
+        "notes",
+        "conflicts_or_gaps",
+        "covered_field_refs",
+        "omitted_fields",
     }
 
 
@@ -260,20 +352,20 @@ def test_strict_paper_schemas_require_all_properties() -> None:
     normalized = papers._paper_response_schema(papers.EvidenceBatchResult)
     assert set(normalized["required"]) == set(normalized["properties"])
     # Do not change the application's Pydantic parsing/default semantics.
-    parsed = papers.EvidenceBatchResult(
-        notes=[], conflicts_or_gaps=[]
-    )
+    parsed = papers.EvidenceBatchResult(notes=[], conflicts_or_gaps=[])
     assert parsed.covered_field_refs == [] and parsed.omitted_fields == []
 
 
 def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> None:
     """Trailing usage bookkeeping must not invalidate a paid completed stage."""
-    stage_text = json.dumps({
-        "notes": [],
-        "conflicts_or_gaps": [],
-        "covered_field_refs": [],
-        "omitted_fields": [],
-    })
+    stage_text = json.dumps(
+        {
+            "notes": [],
+            "conflicts_or_gaps": [],
+            "covered_field_refs": [],
+            "omitted_fields": [],
+        }
+    )
     stage_response = {
         "id": "resp-evidence-fixture",
         "status": "completed",
@@ -281,14 +373,18 @@ def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> N
         "output": [],
     }
     events = [
-        {"type": "response.created", "sequence_number": 0,
-         "response": {"id": stage_response["id"]}},
-        {"type": "response.output_text.delta", "sequence_number": 1,
-         "delta": stage_text},
-        {"type": "response.completed", "sequence_number": 2,
-         "response": stage_response},
-        {"type": "response.usage", "sequence_number": 3,
-         "usage": {"input_tokens": 32, "output_tokens": 17}},
+        {
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {"id": stage_response["id"]},
+        },
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": stage_text},
+        {"type": "response.completed", "sequence_number": 2, "response": stage_response},
+        {
+            "type": "response.usage",
+            "sequence_number": 3,
+            "usage": {"input_tokens": 32, "output_tokens": 17},
+        },
     ]
     sent: list[dict[str, Any]] = []
 
@@ -296,16 +392,15 @@ def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> N
         sent.append(json.loads(request.content))
         stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
         return httpx.Response(
-            200, headers={"content-type": "text/event-stream"},
+            200,
+            headers={"content-type": "text/event-stream"},
             content=(stream + "data: [DONE]\n\n").encode(),
         )
 
     real_client = httpx.AsyncClient
     with patch(
         "sigma.papers.httpx.AsyncClient",
-        side_effect=lambda **kwargs: real_client(
-            transport=httpx.MockTransport(handler), **kwargs
-        ),
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
     ):
         result, model = asyncio.run(
             papers._provider_structured(
@@ -693,22 +788,18 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
         current_snapshot_sha256 = papers._snapshot(str(path))[1]
         old_snapshot_sha256 = "a" * 64
         stale_dialog_sha256 = "b" * 64
-        assert current_snapshot_sha256 not in {
-            old_snapshot_sha256, stale_dialog_sha256
-        }
+        assert current_snapshot_sha256 not in {old_snapshot_sha256, stale_dialog_sha256}
 
-        credential = {
-            "mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"
-        }
-        config = {
-            "available": True, "model": "gpt-fixture", "reasoning_effort": "high"
-        }
-        old_history = [{
-            "provider_calls_attempted": 2,
-            "snapshot_sha256": "c" * 64,
-            "model": "previous-model",
-            "reset_at": "2026-10-29T00:00:00+00:00",
-        }]
+        credential = {"mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"}
+        config = {"available": True, "model": "gpt-fixture", "reasoning_effort": "high"}
+        old_history = [
+            {
+                "provider_calls_attempted": 2,
+                "snapshot_sha256": "c" * 64,
+                "model": "previous-model",
+                "reset_at": "2026-10-29T00:00:00+00:00",
+            }
+        ]
         checkpoint = papers._new_work(
             old_snapshot_sha256,
             view.project.id,
@@ -734,7 +825,8 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
                 patch.object(papers, "configuration", new=fake_configuration),
                 patch.object(papers, "_provider", side_effect=AssertionError("no inference")),
                 patch.object(
-                    papers, "_provider_structured",
+                    papers,
+                    "_provider_structured",
                     side_effect=AssertionError("no inference"),
                 ),
             ):
@@ -755,11 +847,11 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
                         json={**body, "expected_project_id": "wrong-project"},
                     )
                     assert wrong_project.status_code != 200
-                    assert papers._load_work(str(path))["provider_calls"] == 1
+                    unchanged = papers._load_work(str(path))
+                    assert unchanged is not None
+                    assert unchanged["provider_calls"] == 1
 
-                    response = await client.post(
-                        "/api/projects/papers/restart", json=body
-                    )
+                    response = await client.post("/api/projects/papers/restart", json=body)
                     assert response.status_code == 200, response.text
                     result = response.json()
                     assert result["snapshot_sha256"] == current_snapshot_sha256
@@ -775,9 +867,7 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
                     assert reset["provider_calls_total"] == 3
                     assert len(reset["prior_runs"]) == 2
 
-                    repeated = await client.post(
-                        "/api/projects/papers/restart", json=body
-                    )
+                    repeated = await client.post("/api/projects/papers/restart", json=body)
                     assert repeated.status_code == 200, repeated.text
                     assert repeated.json()["provider_calls_previous_runs"] == 3
                     reset_again = papers._load_work(str(path))
@@ -915,15 +1005,21 @@ def test_evidence_envelope_budget_resumes_without_repacking() -> None:
     assert 48_007 <= limit
     assert len(papers._provider_input_text(batch, "sigma_paper_evidence_batch", limit)) == 48_007
 
-    first_batch = {"batch_id": "E1", "fields": [
-        {"field_ref": "0" * 64, "source_ref": source_ref,
-         "field": "/data/prior", "value": "already indexed"}
-    ]}
+    first_batch = {
+        "batch_id": "E1",
+        "fields": [
+            {
+                "field_ref": "0" * 64,
+                "source_ref": source_ref,
+                "field": "/data/prior",
+                "value": "already indexed",
+            }
+        ],
+    }
     package = {
         "schema": "sigma-paper-evidence-v2",
         "project_id": "fixture",
-        "sources": [{"id": source_ref, "kind": "project",
-                     "data": {"title": "Fixture"}}],
+        "sources": [{"id": source_ref, "kind": "project", "data": {"title": "Fixture"}}],
     }
     state = papers._new_work("a" * 64, "fixture", "b" * 64, "fixture-model", "high")
     state["next_batch"] = 1
@@ -931,8 +1027,9 @@ def test_evidence_envelope_budget_resumes_without_repacking() -> None:
     state["provider_calls_total"] = 1
     seen: list[str] = []
 
-    async def fake_provider(input_value, _binding, _config, *,
-                            schema_name, max_input_bytes, **_kwargs):
+    async def fake_provider(
+        input_value, _binding, _config, *, schema_name, max_input_bytes, **_kwargs
+    ):
         seen.append(schema_name)
         if schema_name == "sigma_paper_evidence_batch":
             assert input_value is batch  # E1 is not replayed.
@@ -962,6 +1059,7 @@ def test_evidence_envelope_budget_resumes_without_repacking() -> None:
                 assert "fixture stop before paper planning" in str(exc)
             else:
                 raise AssertionError("Fixture must stop after completing E2")
+
     asyncio.run(check())
     assert seen == ["sigma_paper_evidence_batch", "sigma_long_paper_plan"]
     assert state["next_batch"] == 2
@@ -1585,6 +1683,647 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert len(saved["draft"]["sections"]) == 2
 
 
+def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> None:
+    package, _plan = fast_package()
+    notes, _ = papers._structured_evidence_index(package)
+    note_text = "\n".join(note.statement for note in notes)
+    note_kinds = {note.kind for note in notes}
+    source_ids = {source["id"] for source in package["sources"]}
+    assert all(note.evidence_refs and set(note.evidence_refs) <= source_ids for note in notes)
+    for expected in (
+        "empty arrangement has one region",
+        "No independent proof checker was run.",
+        "negative_findings/1: No effect.",
+        "unresolved convexity obligation",
+        "Prove every arrangement cell is convex",
+        "computed_base_case_n0: 1",
+    ):
+        assert expected in note_text, expected
+    assert {"negative", "question", "result"} <= note_kinds
+    assert all(
+        note.evidence_refs == ["session:onp-fixture"]
+        for note in notes
+        if "session:onp-fixture" in note.evidence_refs
+    )
+
+    original = papers._research_integrity_records(package)
+    excerpts = papers._section_original_excerpts(
+        original,
+        {"session:onp-fixture"},
+        "proof argument skeptic objection contradiction failure obligation results",
+        60_000,
+    )
+    excerpt_text = "\n".join(item["content_excerpt"] for item in excerpts)
+    for expected in (
+        "For n=0 the empty arrangement has one region",
+        "The source argues that separated pieces lie in different old cells",
+        "No independent proof checker was run.",
+        "investigator calls the argument complete",
+        "Prove every arrangement cell is convex",
+    ):
+        assert expected in excerpt_text, expected
+    unresolved = papers._reconcile_obligations(
+        draft().model_copy(update={"open_obligations": []}), package
+    )
+    assert any(
+        item["text"]
+        == "Prove every arrangement cell is convex and every crossed cell splits into two cells."
+        and item["status"] == "Not listed by author; not presumed resolved"
+        for item in unresolved
+    )
+    rendered = papers._tex(
+        draft(),
+        [],
+        "a" * 64,
+        math_style=True,
+        integrity_records=[
+            {
+                "source_ref": item["source_ref"],
+                "field": item["field"],
+                "content": {"excerpt": item["content_excerpt"], "truncated": item["truncated"]},
+            }
+            for item in excerpts
+        ],
+        integrity_excerpts=True,
+        obligation_reconciliation=unresolved,
+    )
+    assert r"\section{Frozen obligation reconciliation}" in rendered
+    assert r"\section{Selected source-linked research excerpts}" in rendered
+    assert "not presumed resolved" in rendered
+
+    large_package, _ = fast_package()
+    large_package["sources"][0]["data"] = {}
+    large_package["sources"][1]["data"]["findings"] = [
+        f"Finding {index}: " + ("This saved result is a limited observation. " * 8)
+        for index in range(1_200)
+    ]
+    bounded, omitted = papers._structured_evidence_index(large_package)
+    assert 0 < len(omitted) < 1_200
+    assert len({item["field_ref"] for item in omitted}) == len(omitted)
+    assert all(item["source_ref"] == "session:onp-fixture" for item in omitted)
+    assert all(len(item["field_ref"]) == 64 and item["reason"] for item in omitted)
+    assert len(papers._json([item.model_dump() for item in bounded])) <= papers.FAST_INDEX_MAX_BYTES
+    assert any("No independent proof checker was run." in item.statement for item in bounded)
+
+
+def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
+    expected = {
+        "biology": ("Introduction and biological context", "cross-species limitations"),
+        "mathematical": ("Introduction and definitions", "bridges between logical steps"),
+        "military": ("Question and operational context", "alternative interpretations"),
+    }
+    for research_type, (heading, guidance) in expected.items():
+        tex = papers._tex(draft(), [], "f" * 64, investigation_type=research_type)
+        assert rf"\section{{{heading}}}" in tex
+        assert guidance in tex
+    math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
+    assert r"\section{Introduction and definitions}" in math_tex
+    assert r"\section*{Proof and claim status}" in math_tex
+
+
+def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None:
+    package, plan = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    attempts: list[str] = []
+    retry_progress: list[tuple[str, int | None, int | None, str]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        attempts.append(schema_name)
+        if schema_name == "sigma_long_paper_plan" and attempts.count(schema_name) == 1:
+            raise papers.PaperConnectionFailure("fixture connect failed before dispatch")
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved section {number} preserves the recorded limitation."]
+        ), "fixture-model"
+
+    async def progress(stage, current, total, activity):
+        retry_progress.append((stage, current, total, activity))
+
+    saved_states: list[dict[str, Any]] = []
+
+    async def check_retry() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            generated, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda value: saved_states.append(copy.deepcopy(value)),
+                progress,
+                structured_fast_path=True,
+            )
+        assert len(generated.sections) == 2
+        assert calls == 4  # failed connection + outline + two sections
+        assert batches == 0
+
+    asyncio.run(check_retry())
+    assert attempts.count("sigma_long_paper_plan") == 2
+    assert ("retry", 1, 3, "active") in retry_progress
+    assert state["provider_calls_total"] == 4
+    assert state["evidence_strategy"] == "structured_v1"
+    assert saved_states[-1]["plan"]["title"] == plan.title
+
+    uncertain_state = papers._new_work("c" * 64, "fast-fixture", "d" * 64, "fixture-model", "high")
+    uncertain_attempts = 0
+
+    async def uncertain_provider(_input, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal uncertain_attempts
+        uncertain_attempts += 1
+        assert schema_name == "sigma_long_paper_plan"
+        raise ProjectError("fixture post-dispatch timeout; consumption is unknown")
+
+    async def check_uncertain() -> None:
+        with patch.object(papers, "_provider_structured", new=uncertain_provider):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    uncertain_state,
+                    lambda _value: None,
+                    structured_fast_path=True,
+                )
+            except ProjectError as exc:
+                assert "consumption is unknown" in str(exc)
+            else:
+                raise AssertionError("Unknown-consumption failures must remain visible")
+
+    asyncio.run(check_uncertain())
+    assert uncertain_attempts == 1
+    assert uncertain_state["provider_calls"] == 1
+    assert uncertain_state["provider_calls_total"] == 1
+    assert uncertain_state["evidence_indexed"] is True
+
+
+def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
+    package, plan = fast_package(section_count=6)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    active = 0
+    maximum_active = 0
+    attempt_counts: dict[str, int] = {}
+    saves: list[dict[str, Any]] = []
+    progress_events: list[tuple[str, int | None, int | None, str]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal active, maximum_active
+        attempt_counts[schema_name] = attempt_counts.get(schema_name, 0) + 1
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        active += 1
+        maximum_active = max(maximum_active, active)
+        try:
+            await asyncio.sleep((7 - number) * 0.015)
+            return papers.LongSectionDraft(
+                paragraphs=[f"Durable completion for section {number}."]
+            ), "fixture-model"
+        finally:
+            active -= 1
+
+    async def check() -> tuple[papers.PaperDraft, int]:
+        async def progress(stage, current, total, activity):
+            progress_events.append((stage, current, total, activity))
+
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda value: saves.append(copy.deepcopy(value)),
+                progress=progress,
+                structured_fast_path=True,
+            )
+        return result, calls
+
+    generated, calls = asyncio.run(check())
+    assert maximum_active == papers.FAST_SECTION_CONCURRENCY
+    assert calls == 7
+    assert attempt_counts == {"sigma_long_paper_plan": 1, "sigma_long_paper_section": 6}
+    assert [item.heading for item in generated.sections] == [item.heading for item in plan.sections]
+    assert [item.paragraphs[0] for item in generated.sections] == [
+        f"Durable completion for section {number}." for number in range(1, 7)
+    ]
+    assert ("evidence", 1, 1, "active") in progress_events
+    assert ("evidence", 1, 1, "milestone") in progress_events
+    assert ("planning", None, None, "active") in progress_events
+    assert ("planning", None, None, "milestone") in progress_events
+    section_milestones = [
+        item[1:3] for item in progress_events if item[0] == "sections" and item[3] == "milestone"
+    ]
+    assert section_milestones == [(number, 6) for number in range(1, 7)]
+    assert set(state["section_drafts"]) == {str(number) for number in range(1, 7)}
+    assert all(
+        set(snapshot.get("section_drafts", {})) <= set(state["section_drafts"])
+        for snapshot in saves
+    )
+    assert len(saves) >= 8
+    before = dict(attempt_counts)
+
+    async def forbidden(_input, *_args, **_kwargs):
+        raise AssertionError("Completed plan and sections must not be replayed")
+
+    async def check_resume() -> None:
+        with patch.object(papers, "_provider_structured", new=forbidden):
+            result, completed_calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert completed_calls == 7
+        assert len(result.sections) == 6
+
+    asyncio.run(check_resume())
+    assert attempt_counts == before
+
+
+def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
+    package, plan = fast_package(section_count=2)
+    state = papers._new_work("3" * 64, "fast-fixture", "4" * 64, "fixture-model", "high")
+    attempts: list[tuple[str, int | None]] = []
+
+    async def first_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        number = input_value.get("section_number")
+        attempts.append((schema_name, number))
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        if number == 1:
+            return papers.LongSectionDraft(
+                paragraphs=["This completed section is durable."]
+            ), "fixture-model"
+        await asyncio.sleep(0.05)
+        raise ProjectError("fixture section failure after another section was saved")
+
+    async def fail_one_section() -> None:
+        with patch.object(papers, "_provider_structured", new=first_provider):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _value: None,
+                    structured_fast_path=True,
+                )
+            except ProjectError as exc:
+                assert "another section was saved" in str(exc)
+            else:
+                raise AssertionError(
+                    "The injected section failure must preserve a partial checkpoint"
+                )
+
+    asyncio.run(fail_one_section())
+    assert set(state["section_drafts"]) == {"1"}
+    assert attempts.count(("sigma_long_paper_plan", None)) == 1
+    assert attempts.count(("sigma_long_paper_section", 1)) == 1
+    assert attempts.count(("sigma_long_paper_section", 2)) == 1
+
+    async def resume_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        number = input_value.get("section_number")
+        assert schema_name == "sigma_long_paper_section" and number == 2
+        attempts.append((schema_name, number))
+        return papers.LongSectionDraft(
+            paragraphs=["Only the incomplete section is retried."]
+        ), "fixture-model"
+
+    async def resume() -> None:
+        with patch.object(papers, "_provider_structured", new=resume_provider):
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert [section.paragraphs[0] for section in result.sections] == [
+            "This completed section is durable.",
+            "Only the incomplete section is retried.",
+        ]
+        assert calls == 4  # outline, completed section, uncertain failure, continuation
+        assert batches == 0
+
+    asyncio.run(resume())
+    assert attempts.count(("sigma_long_paper_plan", None)) == 1
+    assert attempts.count(("sigma_long_paper_section", 1)) == 1
+    assert attempts.count(("sigma_long_paper_section", 2)) == 2
+    assert set(state["section_drafts"]) == {"1", "2"}
+
+
+def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "single-flight.sigma"
+        view = initialize_project(path, "Single flight", "Preserve one generation at a time")
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        started = asyncio.Event()
+        release = asyncio.Event()
+        provider_calls = 0
+
+        async def blocked_provider(context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            started.set()
+            await release.wait()
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            return draft(source), "fixture-model"
+
+        async def credentials():
+            return credential
+
+        async def configuration(**_kwargs):
+            return config
+
+        async def check() -> None:
+            with (
+                patch.object(papers, "auth_context", new=credentials),
+                patch.object(papers, "configuration", new=configuration),
+                patch.object(papers, "_provider", new=blocked_provider),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                first = asyncio.create_task(
+                    papers.generate(str(path), credential["identity"], view.project.id)
+                )
+                await asyncio.wait_for(started.wait(), timeout=2)
+                try:
+                    await papers.generate(str(path), credential["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "already active" in str(exc)
+                else:
+                    raise AssertionError("A concurrent generation must be rejected")
+                release.set()
+                result = await first
+                assert result["title"] == "An evidence-bound exploratory note"
+
+        asyncio.run(check())
+        assert provider_calls == 1
+        assert len(papers.list_papers(str(path))) == 1
+        assert not papers._gate.locked()
+
+
+def test_fast_long_draft_cancellation_keeps_completed_sections() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("1" * 64, "fast-fixture", "2" * 64, "fixture-model", "high")
+    first_section_saved = asyncio.Event()
+    blocked_section_started = asyncio.Event()
+    active = 0
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal active
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        active += 1
+        try:
+            if number == 1:
+                return papers.LongSectionDraft(
+                    paragraphs=["This section is checkpointed."]
+                ), "fixture-model"
+            blocked_section_started.set()
+            await asyncio.Event().wait()
+            raise AssertionError("blocked section should be cancelled")
+        finally:
+            active -= 1
+
+    def save(value: dict[str, Any]) -> None:
+        if "1" in value.get("section_drafts", {}):
+            first_section_saved.set()
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            task = asyncio.create_task(
+                papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    save,
+                    structured_fast_path=True,
+                )
+            )
+            await asyncio.wait_for(first_section_saved.wait(), timeout=3)
+            await asyncio.wait_for(blocked_section_started.wait(), timeout=3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            else:
+                raise AssertionError("Cancellation must propagate from section writing")
+
+    asyncio.run(check())
+    assert active == 0
+    assert set(state["section_drafts"]) == {"1"}
+    assert state["provider_calls"] >= 2
+
+
+def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
+    sample_path = (
+        Path(__file__).resolve().parents[1] / "samples/xenopus-tail-regeneration/project.json"
+    )
+    sample = json.loads(sample_path.read_text(encoding="utf-8"))
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "tadpoles-five-session.sigma"
+        project_view = initialize_project(
+            path,
+            sample["title"],
+            sample["problem"],
+            "biology",
+            "gpt-6.1-sol",
+            "high",
+            "hard",
+        )
+        project_data = asdict(project_view.project)
+        project_data["strategies"] = []
+        sessions = [
+            {
+                "id": f"tadpole-session-{index}",
+                "status": "completed",
+                "outcome": {
+                    "summary": (
+                        "A saved exploratory finding compares stage-specific regeneration "
+                        "and records limitations; it is not an independent validation."
+                    ),
+                    "verification_status": "unverified",
+                    "open_obligations": [
+                        "Validate the candidate interaction on an independent biological cohort."
+                    ],
+                },
+                "findings": [
+                    f"Session {index} records a limited observation with no claimed causal mechanism."
+                ],
+                "negative_findings": [
+                    f"Session {index} did not establish an independent replicate."
+                ],
+                "contradictory_findings": [
+                    f"Session {index} contrasts the observed pattern with an alternative explanation."
+                ],
+                "reasoning_steps": [
+                    f"Session {index} separates the recorded observation from a proposed mechanism."
+                ],
+                "skeptic_objections": [
+                    f"Session {index} lacks independent specimens and a falsifying perturbation."
+                ],
+                "open_obligations": [
+                    "Validate the candidate interaction on an independent biological cohort."
+                ],
+                "artifacts": [
+                    {
+                        "id": f"artifact-{index}",
+                        "title": f"Saved session {index} evidence note",
+                        "content": "The complete source record remains archived for inspection.",
+                    }
+                ],
+            }
+            for index in range(1, 6)
+        ]
+        export = {
+            "project": project_data,
+            "research_sessions": sessions,
+            "agentic_runs": [],
+        }
+        credential = {"identity": "fixture:api-key", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        mock_calls: list[str] = []
+
+        async def simulated_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+            mock_calls.append(schema_name)
+            if schema_name == "sigma_long_paper_plan":
+                refs = sorted(
+                    {ref for item in input_value["evidence_index"] for ref in item["evidence_refs"]}
+                )
+                assert len(refs) > 1
+                session_refs = [ref for ref in refs if ref.startswith("session:")]
+                assert len(session_refs) == 5
+                obligation = (
+                    "Validate the candidate interaction on an independent biological cohort."
+                )
+                return papers.FastLongPaperPlan(
+                    title="Five-Session Xenopus Evidence Synthesis",
+                    abstract=(
+                        "This mock study assembles five saved Xenopus sessions and preserves "
+                        "their observations, negative results, contradictions, and limitations. "
+                        "It does not claim a validated biological mechanism."
+                    ),
+                    abstract_claim_ids=["C1"],
+                    problem_framing=[
+                        "The project asks for a discriminating regeneration mechanism."
+                    ],
+                    problem_framing_claim_ids=["C1"],
+                    methods=["We synthesize only saved source-linked session records."],
+                    methods_claim_ids=["C1"],
+                    claims=[
+                        papers.PaperClaim(
+                            id="C1",
+                            statement="The five sessions preserve exploratory, unresolved evidence.",
+                            status="unresolved",
+                            evidence_refs=session_refs,
+                            reasoning="Each cited session retains uncertainty and a common validation obligation.",
+                        )
+                    ],
+                    sections=[
+                        papers.LongSectionPlan(
+                            heading="Recorded observations and uncertainty",
+                            purpose="Describe the session evidence without presenting a mechanism as verified.",
+                            evidence_refs=session_refs,
+                            claim_ids=["C1"],
+                        ),
+                        papers.LongSectionPlan(
+                            heading="Negative evidence and next tests",
+                            purpose="Preserve skeptical objections, contradictions, and the next validation obligation.",
+                            evidence_refs=session_refs,
+                            claim_ids=["C1"],
+                        ),
+                    ],
+                    limitations=[
+                        "All five records are synthetic fixtures, not biological findings."
+                    ],
+                    open_obligations=[obligation],
+                    conclusions=[
+                        "This is an unresolved mock synthesis, not a validated mechanism."
+                    ],
+                    conclusion_claim_ids=["C1"],
+                    validation_warnings=["No live provider or biological evaluation was used."],
+                ), config["model"]
+            if schema_name == "sigma_long_paper_section":
+                return papers.LongSectionDraft(
+                    paragraphs=[
+                        "The archived records preserve negative observations, disagreement, and the Skeptic's independent-cohort objection. This deterministic text is a test fixture and makes no biological claim."
+                    ]
+                ), config["model"]
+            raise AssertionError(f"Unexpected provider stage: {schema_name}")
+
+        async def credential_context():
+            return credential
+
+        async def model_configuration(**_kwargs):
+            return config
+
+        with (
+            patch("sigma.api.export_project_view", return_value=export),
+            patch.object(papers, "auth_context", new=credential_context),
+            patch.object(papers, "configuration", new=model_configuration),
+            patch.object(papers, "_provider_structured", new=simulated_provider),
+        ):
+            snapshot_hash = papers._snapshot(str(path))[1]
+            started = perf_counter()
+            result = asyncio.run(
+                papers.generate(
+                    str(path),
+                    credential["identity"],
+                    project_view.project.id,
+                    force_long_form=True,
+                    expected_snapshot_sha256=snapshot_hash,
+                )
+            )
+            elapsed_seconds = perf_counter() - started
+
+        record = papers.get_paper(str(path), result["paper_id"])
+        assert record["pdf_available"] is True
+        assert record["pdf_size_bytes"] > 500
+        assert record["generation"]["provider_calls_attempted"] == 3
+        assert record["generation"]["evidence_batch_count"] == 0
+        assert record["generation"]["evidence_fields_omitted"] == 0
+        assert (
+            len([source for source in record["snapshot"]["sources"] if source["kind"] == "session"])
+            == 5
+        )
+        assert all(
+            any(
+                source["id"] == f"artifact:tadpole-session-{index}:artifact-{index}"
+                for source in record["snapshot"]["sources"]
+            )
+            for index in range(1, 6)
+        )
+        assert any(
+            item["text"]
+            == "Validate the candidate interaction on an independent biological cohort."
+            and item["status"] == "Listed as open in paper"
+            for item in record["obligation_reconciliation"]
+        )
+        assert len(mock_calls) == 3
+        assert elapsed_seconds < 300
+        print(
+            f"PASS mocked five-session Tadpoles paper-to-PDF E2E in {elapsed_seconds:.2f}s "
+            "(local deterministic provider; live <5-minute target remains unverified)."
+        )
+
+
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
@@ -1602,6 +2341,14 @@ def main() -> None:
     test_evidence_envelope_budget_resumes_without_repacking()
     test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
+    test_structured_fast_index_preserves_math_review_and_bounds_omissions()
+    test_research_type_specific_tex_sections_and_authoring_guidance()
+    test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
+    test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
+    test_fast_checkpoint_resume_replays_only_incomplete_section()
+    test_fast_long_draft_cancellation_keeps_completed_sections()
+    test_paper_generation_rejects_concurrent_duplicate_request()
+    test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
@@ -1864,8 +2611,9 @@ def main() -> None:
     )
     assert r"\section{Structured reasoning and review records}" in integrity_tex
     assert r"\section*{Important evidence coverage limitation}" in integrity_tex
+    opening_heading = papers._paper_style("default")[0]
     assert integrity_tex.index("Important evidence coverage limitation") < integrity_tex.index(
-        r"\section{Problem framing}"
+        r"\section{" + opening_heading + "}"
     )
     material = papers._material_evidence_omissions(
         [
@@ -2002,7 +2750,7 @@ def main() -> None:
     assert r"AI-generated research synthesis \textperiodcentered{} SIGMA" in tex
     assert r"\section*{About this paper}" in tex
     about_start = tex.index(r"\section*{About this paper}")
-    assert about_start < tex.index(r"\section{Problem framing}")
+    assert about_start < tex.index(r"\section{" + papers._paper_style("default")[0] + "}")
     assert (
         "This paper was generated by SIGMA, an AI-assisted research system, from the project's recorded investigations, findings, and supporting evidence."
         in tex
@@ -2037,12 +2785,13 @@ def main() -> None:
     unicode_superscript = papers._latex_prose("The saved construction uses j².")
     assert "$j^{2}$" in unicode_superscript
     math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True)
-    assert r"\section{Introduction}" in math_tex
-    assert r"\section{Evidence and scope}" in math_tex
+    math_opening, math_methods, _, _ = papers._paper_style("mathematical")
+    assert r"\section{" + math_opening + "}" in math_tex
+    assert r"\section{" + math_methods + "}" in math_tex
     assert r"\section{Verification status and limitations}" in math_tex
     assert r"\section{Conclusion}" in math_tex
     assert math_tex.index(r"\section{Conclusion}") < math_tex.index(
-        r"\section*{Claim status and evidence}"
+        r"\section*{Proof and claim status}"
     )
     injected_section = parsed.sections[0].model_copy(
         update={"paragraphs": [r"Run \input{host-file} now."]}
@@ -2176,7 +2925,10 @@ def main() -> None:
         assert not any(
             item["kind"] == "session" for item in exploratory_record["snapshot"]["sources"]
         )
-    print("Paper snapshots, citation validation, version retention and bounded rendering passed.")
+    print(
+        "Paper snapshots, provenance/obligation fidelity, bounded fast indexing, retry, "
+        "concurrent checkpoints, resume, cancellation, TeX styles, and version retention passed."
+    )
 
 
 if __name__ == "__main__":
