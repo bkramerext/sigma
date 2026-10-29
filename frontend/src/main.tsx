@@ -1354,6 +1354,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [legacyCheckpoint, setLegacyCheckpoint] = useState<any>(null);
   const [singleCallRestart, setSingleCallRestart] = useState<any>(null);
+  const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
   const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1386,7 +1387,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setSingleCallRestart(null); setContinuationAvailable(false); setResumeDetails(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setLegacyCheckpoint(null); setSingleCallRestart(null); setRestartableCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -1413,6 +1414,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         setSingleCallRestart(
           preflightResponse.ok && preflight.resume_available &&
           preflight.single_call_restart_available && preflight.checkpoint_can_restart ? preflight : null
+        );
+        setRestartableCheckpoint(
+          preflightResponse.ok && preflight.checkpoint_exists &&
+          preflight.checkpoint_can_restart ? preflight : null
         );
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
@@ -1459,7 +1464,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     finally { setBusy(false); }
   }
   async function restartCheckpoint() {
-    const restartSource = checkpointMismatch ?? singleCallRestart ?? legacyCheckpoint;
+    const restartSource = checkpointMismatch ?? restartableCheckpoint;
     if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
     setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
     try {
@@ -1475,6 +1480,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setCheckpointMismatch(null);
       setLegacyCheckpoint(null);
       setSingleCallRestart(null);
+      setRestartableCheckpoint(null);
       setContinuationAvailable(false);
       setResumeDetails(null);
       setPaperProgress(null);
@@ -1586,16 +1592,17 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Clear outdated paper work</button>
       </div>}
       {singleCallRestart && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Use one-call paper generation">
-        <p>The last paper planning attempts did not produce a saved outline. This easy, single-session project can instead be written in one AI call. You can switch without calling AI now: unfinished outline preparation is cleared, but the saved research, saved papers, and prior provider-call accounting are retained. Choose Generate afterward to request the new paper; that call may use allowance.</p>
-        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Switch to one-call paper generation</button>
+        <p>The last paper planning attempts did not produce a saved outline. This easy, single-session project can instead be written in one AI call. Choose <strong>Start over</strong> below to clear unfinished paper work without contacting AI. Your research, saved papers, and prior provider-call accounting remain intact. Generate afterward starts the new one-call request and may use allowance.</p>
       </div>}
       {legacyCheckpoint && !checkpointMismatch && !singleCallRestart && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Switch paper generation to fast pipeline">
-        <p>This unfinished paper uses the older batch-by-batch extractor. You can continue that attempt, or start fresh using faster structured evidence preparation. Switching clears unfinished paper work but preserves saved papers and previous provider-call accounting.</p>
-        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start fresh with fast generation</button>
+        <p>This unfinished paper uses the older batch-by-batch extractor. You can continue it, or choose <strong>Start over</strong> below to use faster structured evidence preparation. Starting over clears unfinished paper work without contacting AI; research, saved papers, and provider-call accounting are retained.</p>
       </div>}
-      <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
+      <div className="ai-paper-controls">{!busy && <>
+        <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>
+        {continuationAvailable && restartableCheckpoint && !checkpointMismatch && <button type="button" className="text-view-link" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>}
+      </>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
       {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningRetry
-        ? 'The last planning response did not produce a saved outline. Research evidence preparation was retained. Retry paper planning makes a new AI request and may consume provider allowance; it does not replay completed evidence preparation.'
+        ? 'The last planning response did not produce a saved outline. Retry paper planning makes another AI request and may repeat the failure. Start over clears unfinished paper work without making an AI call; choose Generate afterward to start fresh. Research, saved versions and provider-call accounting are preserved.'
         : resumeDetails?.draft_recovery_available
           ? 'The completed paper draft is saved. Continue paper will retry PDF compilation without repeating AI authoring.'
           : `SIGMA will reuse the completed outline and ${resumeDetails?.completed_sections ?? 0} saved section(s). Unfinished sections require AI calls and may consume provider allowance.`
