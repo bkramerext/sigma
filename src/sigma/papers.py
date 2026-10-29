@@ -677,10 +677,17 @@ def _structured_evidence_index(
                 for index, child in enumerate(value):
                     visit(child, f"{path}/{index}", meaningful)
                 return
-            if not meaningful or not isinstance(value, str):
+            if not meaningful or value is None:
                 return
-            content = " ".join(value.split())
-            if len(content) < 12:
+            if isinstance(value, str):
+                content = " ".join(value.split())
+            elif isinstance(value, (int, float, bool)):
+                content = json.dumps(value, ensure_ascii=False)
+            else:
+                return
+            # Short negative findings and measured numeric outcomes still
+            # matter. The field label supplies the schema's minimum length.
+            if not content:
                 return
             path_lower = path.casefold()
             negative = any(term in path_lower for term in _FAST_NEGATIVE_TERMS)
