@@ -3560,6 +3560,13 @@ def preflight(
         and work_state.get("one_shot_draft") is not None
         and work_state.get("provider_calls", 0) > 0
     )
+    incomplete_one_shot = bool(
+        not long_form
+        and same_project_and_snapshot
+        and work_state.get("kind") == "one_shot"
+        and work_state.get("provider_calls", 0) > 0
+        and not one_shot_draft_available
+    )
     resume_available = bool(
         same_project_and_snapshot
         and checkpoint_kind_matches
@@ -3661,6 +3668,7 @@ def preflight(
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
         "draft_recovery_available": resume_available and one_shot_draft_available,
+        "incomplete_one_shot": incomplete_one_shot,
         "completed_batches": work_state.get("next_batch", 0) if resume_available else 0,
         "evidence_indexed": work_state.get("evidence_indexed", False)
         if resume_available
