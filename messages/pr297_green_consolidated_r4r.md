@@ -66,3 +66,12 @@ Real Chromium checks — PASS against the updated tree:
 | Live Google sign-in → invitation → approval → member → Easy sponsored session as N | UNVERIFIED (human acceptance gate) | Not run; no live Google or paid provider call |
 
 Keep PR #297 open and unmerged. Do not deploy. After Red #317 merges, fetch that new main and re-run the affected full suite and browser checks before another review handoff.
+
+## Manual acceptance runbook (still pending)
+
+1. Open the local UI at `http://127.0.0.1:5173` and sign in with test account N through Google. Confirm N is authenticated, sees the Google identity pill and **Invite Me!**, and cannot run research or use sponsorship before approval.
+2. Click **Invite Me!** once. Confirm the request acknowledgement, reload, and verify the pending request suppresses the button and a duplicate request is not created.
+3. Sign in as `zetacontinuation@gmail.com`. In administration, locate N's pending request and approve it. Confirm the approval is saved.
+4. Sign back in as N. Confirm member status, no invitation prompt, and the displayed sponsorship allowance.
+5. Without connecting N's personal ChatGPT account, start one short Easy research session. Confirm sponsored inference is selected, at least one provider call succeeds, and the session completes. Confirm usage is attributed to N and the allowance reflects the debit.
+6. Record the timestamp, N identity, admin approval, completed session, and before/after allowance for release evidence. Stop and report any deviation; do not treat fixture-based browser checks as live acceptance.
