@@ -566,6 +566,30 @@ def _evidence_batches(package: dict[str, Any]) -> list[dict[str, Any]]:
     return batches
 
 
+def _evidence_input_limit(batch: Mapping[str, Any]) -> int:
+    """Allow the bounded batch's small JSON envelope without repacking fields.
+
+    `_evidence_batches` caps the serialized {"fields": [...]} object at
+    MAX_PROVIDER_INPUT_BYTES. The dispatched request adds a "batch_id" key,
+    so applying the same size cap to the full envelope rejects valid batches
+    (e.g. 48,007 bytes) after they have already been checkpointed. Account
+    for only that deterministically bounded overhead. This preserves batch
+    boundaries and the next_batch cursor in existing paid checkpoints.
+    """
+    batch_id = batch["batch_id"]
+    if (
+        not isinstance(batch_id, str)
+        or not re.fullmatch(r"E[1-9][0-9]{0,2}", batch_id)
+        or int(batch_id[1:]) > MAX_EVIDENCE_BATCHES
+    ):
+        raise ProjectError("Evidence batch identifier is invalid")
+    return (
+        MAX_PROVIDER_INPUT_BYTES
+        + len(_json({"batch_id": batch_id, "fields": []}))
+        - len(_json({"fields": []}))
+    )
+
+
 def _long_plan_input(
     project_data: Mapping[str, Any],
     evidence_index: list[dict[str, Any]],
@@ -1983,10 +2007,15 @@ distinct whenever merging would obscure differences between sessions or experime
             batch = batches[batch_index]
             if progress:
                 await progress("evidence", batch_index + 1, len(batches), "active")
+            # The 48 KB packing budget applies to the fields object; its
+            # dispatched batch_id wrapper is additional bounded JSON overhead.
+            # Keep original batch boundaries stable for resumable checkpoints.
+            evidence_input_limit = _evidence_input_limit(batch)
             before_provider_call(
                 MAX_LONG_PAPER_SECTIONS + 1 + 32,
                 input_value=batch,
                 schema_name="sigma_paper_evidence_batch",
+                max_input_bytes=evidence_input_limit,
             )
             result, _ = await _provider_structured(
                 batch,
@@ -1995,6 +2024,7 @@ distinct whenever merging would obscure differences between sessions or experime
                 instructions=extraction_instructions,
                 schema_name="sigma_paper_evidence_batch",
                 response_model=EvidenceBatchResult,
+                max_input_bytes=evidence_input_limit,
                 project_id=project_id,
                 project_path_value=project_path_value,
             )
@@ -2805,7 +2835,7 @@ def preflight(
     )
     maximum_output_tokens = calls_remaining * 12_000 if mode == "api_key" else None
     maximum_structured_input_bytes = (
-        len(batches) * MAX_PROVIDER_INPUT_BYTES
+        sum(_evidence_input_limit(batch) for batch in batches)
         + MAX_LONG_PAPER_REDUCTION_CALLS * MAX_PROVIDER_INPUT_BYTES
         + (MAX_LONG_PAPER_OUTLINE_CALLS + MAX_LONG_PAPER_SECTIONS) * 220_000
         if long_form
