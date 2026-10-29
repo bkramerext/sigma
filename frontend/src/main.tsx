@@ -1341,12 +1341,19 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
+  const [lastPaperSignalAt, setLastPaperSignalAt] = useState<number | null>(null);
+  const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
   async function refresh(keepId?: string) {
     setLoading(true);
     try {
@@ -1456,6 +1463,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setPhase('Preparing research evidence…'); setError(''); setSuccess('');
+    setLastPaperSignalAt(null); setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
     let providerCallsAttempted: number | undefined;
@@ -1503,11 +1511,15 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           }
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
+            setLastPaperSignalAt(Date.now());
             const nextProgress = { ...event, status: event.state === 'complete' ? 'complete' : 'active', activity_state: event.state } as PaperProgress;
             setPaperProgress(nextProgress);
             setPhase(`${paperProgressOperation(nextProgress)} · Elapsed ${paperElapsed(nextProgress.elapsed_seconds)}`);
           }
-          if (event.type === 'heartbeat' && event.progress) setPaperProgress(event.progress as PaperProgress);
+          if (event.type === 'heartbeat') {
+            setLastPaperSignalAt(Date.now());
+            if (event.progress) setPaperProgress(event.progress as PaperProgress);
+          }
         }
         if (done) break;
       }
@@ -1551,7 +1563,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       </div>}
       <div className="ai-paper-controls">{!busy && <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{continuationAvailable ? 'Continue' : 'Generate'}</button>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{continuationAvailable ? 'Saved work is available. Choose Continue to resume without repeating completed stages.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)} · Elapsed {paperElapsed(paperProgress.elapsed_seconds)}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Still working — SIGMA is responding. The AI provider has not finished this stage; its intermediate reasoning progress is unknown.' : 'Waiting for another SIGMA status update. Intermediate AI reasoning progress is not available.'}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{continuationAvailable ? 'Saved work is available. Choose Continue to resume without repeating completed stages.' : 'Review the error, then refresh to check whether work can be resumed.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
