@@ -2766,6 +2766,7 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                     reasoning_effort=config["reasoning_effort"],
                 )
                 assert preflight["resume_available"] is False
+                assert preflight["incomplete_one_shot"] is True
                 assert preflight["checkpoint_can_restart"] is True
                 try:
                     await papers.generate(str(path), account["identity"], view.project.id)
