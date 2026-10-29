@@ -95,8 +95,10 @@ def test_evidence_batches_account_for_full_provider_envelope() -> None:
         ]
     }
     full_batch = papers._evidence_batches(package)[0]
-    exact_bytes = len(papers._json(full_batch))
-    # A missing batch_id in the sizing calculation used to accept this case.
+    largest_row = full_batch["fields"][-1]
+    # Permit a row without its batch identifier but not its actual wire shape.
+    exact_bytes = len(papers._json({"batch_id": "E2", "fields": [largest_row]}))
+    assert len(papers._json({"fields": [largest_row]})) < exact_bytes - 1
     with patch.object(papers, "MAX_PROVIDER_INPUT_BYTES", exact_bytes - 1):
         try:
             papers._evidence_batches(package)
