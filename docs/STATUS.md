@@ -1,3 +1,37 @@
+## Issue #306 and happy-path reliability (#302) (2026-10-28)
+
+Research limits now say **Research rounds** and **Maximum agent turns**. A round
+is an Investigator/Skeptic exchange for one strategy; the shared turn budget
+can be smaller than twice the round ceiling or the number of selected
+strategies. The scheduler rotates across strategies, reserves complete pairs,
+and records any deferred strategy explicitly. Defaults are 2 rounds, 12 turns,
+30 minutes, 4,000 output tokens per call, one concurrent session, and no
+optional input-token or cost cap. These settings limit routine provider use
+without forcing users into higher token or duration ceilings.
+
+The frontend and backend accept the same ranges and require at least one full
+two-turn pair. USD cost entry accepts surrounding whitespace and an optional
+leading `$`, then persists a normalized numeric USD value. A proposed
+productive stop is reopened when reviewed evidence leaves objective obligations
+unresolved and the saved limits allow another round. Provider response bodies
+and completed SSE streams are bounded at 8 MB; the prior 1 MB transport bound
+rejected large successful Responses envelopes (including session #11's
+reported >1 MB response). The Maximum Regions browser acceptance measured a
+3,801-byte project payload and 5,410-byte assembled provider context, so this
+sample's 1 MB issue is not project-data overhead. The larger stream bound is
+still bounded and regression-tested at both 1 MB and 8 MB.
+
+Deterministic browser acceptance with SIGMA, Chrome, and the local provider
+fixture passed: sample copy, USD round-trip, Investigator/Skeptic order, usage
+and estimated cost accounting, mathematical candidate, terminal status,
+report export, refresh and reopening. It measured two simulated provider calls
+and $0.004008 estimated usage. This was fixture traffic, not a live provider
+session. Focused project-settings, research-session, Sage execution, Ruff,
+Pyright, frontend typecheck, production build, and full `./sigma test` all
+passed. Live provider behavior is **UNVERIFIED**; no paid call was authorized
+or made. See `messages/issue_306_happy_path_r4r.txt` for the full Software
+Factory handoff.
+
 ## T301 — Context-aware mathematical Markdown (2026-10-28)
 
 The existing AI conversion prompt now explicitly distinguishes math from prose
@@ -7684,3 +7718,75 @@ authentication ownership and were not changed. Session playback/progress,
 results, and research-output browser states therefore remain unverified.
 No paid provider calls were made. R4R is open as
 [PR #316](https://github.com/bkramerext/sigma/pull/316); no self-merge.
+
+## PR #317 adversarial correction pass (2026-10-28)
+
+Added adversarial regressions for changing shared-turn strategy sets, fairness,
+final-turn Skeptic dispatch, deferred branch reasons, and unsupported completion
+claims at the exact budget boundary. The deterministic Maximum Regions Chrome
+acceptance now runs two rounds: flawed Investigator claim, Skeptic objection,
+revised proof, final Skeptic review, saved artifacts, usage/cost reconciliation,
+report export, refresh and reopen. It passed with four fixture calls, 3,600
+input / 400 cached / 4,800 output tokens, 3,801-byte copied project JSON, and
+5,410-byte assembled context. These usage/cost values are simulated; no paid
+provider calls were made.
+
+T201 workflow run `40809905085` passed `t201_overflow.py` and
+`t81_public_legal_pages.py` but failed at `guest_samples.py:409`: the existing
+model-availability status span intercepted the Cancel button. The same guest
+sample script passed twice on unchanged base `6ecc0df23127f4f1f920943331ff43afcc399682`
+and failed once on the PR head; evidence indicates an intermittent, pre-existing
+UI hit-test defect, not a changed locator or status component. The aggregate
+T201 result remains UNMET pending a clean rerun. See
+`messages/issue_306_happy_path_r4r.txt` for exact disposition and evidence.
+
+Correction-pass `./sigma test` completed successfully, including backend tests,
+Ruff check/format, Pyright, frontend typecheck, and production build. Its
+existing graph-present sandbox subcase explicitly skipped because the local
+Python sandbox image is unavailable. The deterministic two-round Maximum
+Regions Chrome test also passed. No live provider calls were made.
+
+GitHub Actions snapshot for correction implementation `a651a96622340e4a4c8cd9aa66fa5ca839cfa7ee`: SIGMA verification, Research Outcome, T92, and T200 succeeded; T201 recovery run `40811468962` failed again in its browser recovery exercise; T249 run `40811468856` was still running the sandbox image build at the last observation (**UNVERIFIED**). Local `./sigma test` and the two-round deterministic Chrome lifecycle passed. No paid provider calls were made.
+
+## PR #317 reconciliation and T201 correction (2026-10-28)
+
+Merged current `origin/main` at `4cff1e544bc30f14096073ee6c7440c45bb5e499`,
+preserving the T314 Markdown renderer, browser checks, ticket and evidence.
+The T201 guest-sample Cancel obstruction reproduced locally on the merged tree.
+A narrow workspace-header hit-testing fix lets the empty grid area pass pointer
+events through while retaining events on interactive controls. Real Chrome
+`browser_checks/guest_samples.py` passed after the fix (68 transient guest
+workspaces observed).
+
+The Maximum Regions four-turn deterministic Chrome test verifies scripted
+orchestration, storage, report and simulated usage/cost reconciliation only.
+It launches Chrome with `--disable-web-security` and routes API calls to a
+separate fixture origin; it is not normal same-origin/CORS or browser-security
+acceptance, and does not test live model quality, actual provider usage, or real
+provider cost. The research response limit remains a finite 8,000,000 bytes.
+The retained oversized-response regression accepts a 1,010,000-byte response
+and rejects payloads/streams above 8 MB. Production payload sizes, parsing peak
+memory, and live provider behavior remain **UNVERIFIED**. Local portfolio
+execution can buffer three 8 MB responses concurrently (24 MB raw bodies in
+theoretical aggregate, excluding parser/object overhead); hosted execution
+serializes calls. This is not a total process-memory ceiling.
+
+Final review gates for PR #317 are met on implementation HEAD
+`f7ce1dafe6c513db995ab847e16f7bea66439e07`, based on current main
+`4cff1e544bc30f14096073ee6c7440c45bb5e499`. All six associated GitHub Actions
+runs succeeded: T201 `40813340833`, T249 `40813340817`, SIGMA verification
+`40813340820`, Research Outcome `40813340819`, T92 `40813340813`, and T200
+`40813340805`. Local `./sigma test` also passed all steps after installing the
+merged lockfile; the local graph-present sandbox subcase skipped because the
+image is unavailable, while T249 CI passed its sandbox build/integration.
+Real Chrome passed guest samples (including Cancel), T301 Markdown, T47
+Research Outcome, and the two-round scripted Maximum Regions lifecycle.
+
+The Chrome Maximum Regions fixture scripts all four responses and token counts;
+it verifies deterministic orchestration/persistence/simulated accounting only.
+It uses `--disable-web-security` and a separate fixture origin, so does not
+verify normal origin/CORS behavior. Live provider behavior and cost remain
+UNVERIFIED; no paid calls were made. The 8 MB per-response limit and 1.01 MB
+accept/8 MB overflow regressions remain in place. Three concurrent local
+responses could hold 24 MB raw buffers plus parsing allocations; production
+payload and peak-memory behavior remain UNVERIFIED. No deployment or merge.

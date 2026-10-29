@@ -328,6 +328,9 @@ async def test_recovery_and_runtime_identity(path):
 
 async def test_failure_reuse_then_revision(path):
     view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=3, model_calls=6)
+    research_sessions.save_limits(str(path), limits)
     tools = capabilities()
     outputs = [
         dict(investigation(1), sage_code="raise ValueError('revise')"),

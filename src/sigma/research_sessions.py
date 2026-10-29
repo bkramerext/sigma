@@ -68,7 +68,7 @@ MAX_CONTEXT_MANIFEST_BYTES = 12_000
 MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
 MAX_PRIOR_OBLIGATION_CONTEXT_BYTES = 64_000
 MAX_OBLIGATION_SOURCE_ARTIFACTS = 32
-MAX_RESEARCH_RESPONSE_BYTES = 1_000_000
+MAX_RESEARCH_RESPONSE_BYTES = 8_000_000
 MAX_SESSION_INTERVENTIONS = 24
 MAX_REJECTED_INTERVENTIONS = 8
 # Internal experiment only. Literal frozen sources remain the shipped dispatch
@@ -78,10 +78,10 @@ CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
     "max_concurrent_sessions": 1,
-    "research_rounds": 3,
-    "model_calls": 30,
-    "session_duration_minutes": 60,
-    "output_tokens_per_call": 12000,
+    "research_rounds": 2,
+    "model_calls": 12,
+    "session_duration_minutes": 30,
+    "output_tokens_per_call": 4000,
     "maximum_estimated_cost_usd": None,
     "maximum_input_tokens_per_session": None,
 }
@@ -444,7 +444,7 @@ def _record_guidance_delivery(
         _event(
             record,
             "intervention.delivered",
-            f"Human feedback {intervention['id']} delivered to {role.title()} for strategy {strategy_id}, cycle {cycle}, at the saved step boundary.",
+            f"Human feedback {intervention['id']} delivered to {role.title()} for strategy {strategy_id}, research round {cycle}, at the saved step boundary.",
             role,
         )
 
@@ -707,8 +707,6 @@ def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
         type(cost) not in {int, float} or not math.isfinite(cost) or not 0.01 <= cost <= 100
     ):
         raise ProjectError("Research limits are invalid")
-    if raw["model_calls"] < 2 * raw["research_rounds"]:
-        raise ProjectError("Research limits are invalid")
     result = dict(raw)
     result.setdefault("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
     return result
@@ -761,7 +759,7 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         value = result.get(key)
         if type(value) is not int or not minimum <= value <= maximum:
             field = (
-                "Skeptic iterations"
+                "Research rounds"
                 if key == "research_rounds"
                 else key.replace("_", " ").capitalize()
             )
@@ -780,10 +778,8 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         raise ProjectError("Maximum input tokens per session must be 4,096–1,000,000 or unlimited")
     if input_limit is not None and cost is None:
         raise ProjectError("An input-token limit requires a maximum estimated session cost")
-    if result["model_calls"] < 2 * result["research_rounds"]:
-        raise ProjectError(
-            "Maximum agent calls must be at least twice the Skeptic iterations so each iteration can include Investigator and Skeptic"
-        )
+    if result["model_calls"] < 2:
+        raise ProjectError("Maximum agent turns must allow one Investigator/Skeptic pair")
     return result
 
 
@@ -1996,7 +1992,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
             "label": "Participating agents",
             "value": ", ".join(sorted(roles)) if roles else "— (no dispatched calls)",
         },
-        {"label": "Model calls by status", "value": calls_value},
+        {"label": "Agent turns by status", "value": calls_value},
         {
             "label": "Tokens · input / output / cached / total",
             "value": f"{input_tokens} / {output_tokens} / {cached_tokens} / {total_tokens}",
@@ -2045,7 +2041,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     research_quality = [
         {"label": "Strategies investigated", "value": strategy_value},
         {
-            "label": "Research cycles",
+            "label": "Research rounds",
             "value": cycles_value,
             "detail": "Counts a strategy's cycle once even when its Investigator and Skeptic calls overlap with other strategies.",
         },
@@ -4278,10 +4274,6 @@ async def start_session(
         with _project_manager_lock(view.path):
             limits = get_limits(view.path)
             limits = _validate_limits(limits)
-            if len(selected_ids) * 2 > limits["model_calls"]:
-                raise ProjectError(
-                    "The model-call limit must allow one Investigator/Skeptic pair for every selected strategy"
-                )
             if expected_limits is not None and _validate_limits(expected_limits) != limits:
                 raise ProjectError(
                     "Research limits changed before confirmation; review the current limits and retry"
@@ -4901,7 +4893,7 @@ async def _call_provider(
             collected.extend(chunk)
             if len(collected) > MAX_RESEARCH_RESPONSE_BYTES:
                 _sponsor_inference_diagnostic(record, "response_overflow")
-                raise ProjectError("Research provider transport exceeded the 1 MB safety bound")
+                raise ProjectError("Research provider transport exceeded the 8 MB safety bound")
         body = bytes(collected)
         if response.status_code != 200:
             try:
@@ -4922,6 +4914,8 @@ async def _call_provider(
             raw = await completed(
                 httpx.Response(response.status_code, headers=response.headers, content=body),
                 "research",
+                max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
+                overflow_message="Research provider stream exceeded the 8 MB safety bound",
             )
         else:
             try:
@@ -5190,7 +5184,10 @@ async def _call(
         raise
     except Exception as exc:
         message = str(exc).casefold()
-        if "transport exceeded the 1 mb safety bound" in message:
+        if (
+            "transport exceeded the 8 mb safety bound" in message
+            or "stream exceeded the 8 mb safety bound" in message
+        ):
             status = "response_overflow"
         elif isinstance(exc, ResearchContextLimitError):
             status = "context_limit"
@@ -7266,7 +7263,7 @@ def _commit_portfolio_review(
     _event(
         record,
         "coordinator.started",
-        f"Coordinator is applying {branch['strategy_title']}'s Skeptic review for cycle {cycle}.",
+        f"Coordinator is applying {branch['strategy_title']}'s Skeptic review for round {cycle}.",
     )
     decision, next_question = coordinate_decision(
         output["assessment"],
@@ -7281,6 +7278,8 @@ def _commit_portfolio_review(
     reviewed_argument = _reviewed_argument(investigation, output)
     objective_candidate = (
         output["objective_status"] == "achieved"
+        and output["assessment"] == "stop"
+        and not output["next_question"].strip()
         and output["verification_status"] == "convincing_unverified"
         and bool(output["solution_claim"].strip())
         and bool(output["argument_summary"].strip())
@@ -7307,6 +7306,31 @@ def _commit_portfolio_review(
             for item in branch_artifacts
         )
     )
+    # A model's "stop"/"productive conclusion" verdict is not itself proof that
+    # the project objective has been met. If the saved, reviewed argument still
+    # has unresolved obligations, schedule another strategy round when the
+    # configured per-strategy round and shared turn ceilings permit it.
+    if decision == "stop_productive_conclusion" and not objective_candidate:
+        next_question = (
+            output["next_question"].strip()
+            or next(
+                (item.strip() for item in output["remaining_obligations"] if item.strip()),
+                "",
+            )
+            or "Review the saved argument against the project objective and identify any unsupported step or remaining obligation."
+        )
+        if cycle < int(record.get("cycle_limit", 3)) and int(
+            record.get("calls_used", 0)
+        ) + 2 <= int(record.get("call_limit", CALL_LIMIT)):
+            decision = "continue"
+            _event(
+                record,
+                "coordinator.incomplete_conclusion_reopened",
+                f"The proposed conclusion for {branch['strategy_title']} did not satisfy the saved objective review; another round was scheduled.",
+            )
+        else:
+            decision = "stop_budget_exhausted"
+            next_question = ""
     if (
         objective_candidate
         and not output["next_question"].strip()
@@ -7452,7 +7476,7 @@ def _commit_portfolio_review(
     _event(
         record,
         "artifact.saved",
-        f"Session evidence from {branch['strategy_title']} (cycle {cycle}) was committed.",
+        f"Session evidence from {branch['strategy_title']} (round {cycle}) was committed.",
     )
     return artifact
 
@@ -7616,8 +7640,8 @@ async def _portfolio_role_call(
                     record["current_action"] = "Completed · budget limit"
                     record["terminal_reason"] = str(exc)
                     record["message"] = (
-                        f"Session stopped at cycle {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
-                        f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} calls "
+                        f"Session stopped at round {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
+                        f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} agent turns "
                         f"because the hard token/cost budget refused another provider call. {exc}"
                     )
                     record["outcome"] = _outcome(record)
@@ -7685,10 +7709,10 @@ async def _portfolio_role_call(
             record["current_action"] = f"{role.title()} · {branch['strategy_title']}"
             record["current_question"] = branch["current_question"]
             record["message"] = (
-                f"Cycle {cycle}: {role.title()} provider call "
+                f"Research round {cycle}: {role.title()} agent turn "
                 f"{record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
                 if len(record["strategy_runs"]) == 1
-                else f"{role.title()} call {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} is running for {branch['strategy_title']}."
+                else f"{role.title()} agent turn {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} is running for {branch['strategy_title']}."
             )
             step_id = record["current_step"]
             timeout_seconds = _call_timeout_seconds(record)
@@ -8361,10 +8385,10 @@ def _portfolio_cost_limit_message(record: dict[str, Any], runs: list[dict[str, A
         skeptic_started = any(step.get("role") == "skeptic" for step in branch_steps)
         partial = ""
         if int(branch.get("calls_used", 0)) > 0 and not skeptic_started:
-            partial = " No Skeptic call was dispatched for this cycle."
+            partial = " No Skeptic agent turn was dispatched for this round."
         reasons.append(f"{branch.get('strategy_title', 'Strategy')}: {reason}{partial}")
     return (
-        f"Session stopped at cycle {cycle} of {cycle_limit}, after {calls_used}/{call_limit} calls "
+        f"Session stopped at round {cycle} of {cycle_limit}, after {calls_used}/{call_limit} agent turns "
         f"because the configured session cost limit blocked a required reserve. "
         + " ".join(reasons)
     )
@@ -8403,12 +8427,37 @@ def _portfolio_limit_message(record: dict[str, Any], runs: list[dict[str, Any]])
         if int(branch.get("calls_used", 0)) > 0 and not any(
             step.get("role") == "skeptic" for step in branch_steps
         ):
-            partial = " No Skeptic call was dispatched for this cycle."
+            partial = " No Skeptic agent turn was dispatched for this round."
         details.append(f"{branch.get('strategy_title', 'Strategy')}: {reason}{partial}")
     return (
-        f"Session stopped at cycle {cycle} of {cycle_limit}, after {calls_used}/{call_limit} calls "
+        f"Session stopped at round {cycle} of {cycle_limit}, after {calls_used}/{call_limit} agent turns "
         f"because {reason_text}. " + " ".join(details)
     )
+
+
+def _affordable_portfolio_branches(
+    active: list[dict[str, Any]], remaining: int, cursor: int
+) -> tuple[list[dict[str, Any]], int]:
+    """Choose complete turns fairly from the shared budget in stable rotation order."""
+    if not active or remaining < 1:
+        return [], 0
+    offset = cursor % len(active)
+    rotated = active[offset:] + active[:offset]
+    selected: list[dict[str, Any]] = []
+    allocated = 0
+    last_selected_index: int | None = None
+    for index, branch in enumerate(rotated):
+        cost = 1 if branch.get("pending_investigation") else 2
+        if allocated + cost <= remaining:
+            selected.append(branch)
+            allocated += cost
+            last_selected_index = index
+    next_cursor = (
+        (offset + last_selected_index + 1) % len(active)
+        if last_selected_index is not None
+        else offset
+    )
+    return selected, next_cursor
 
 
 async def _portfolio_worker(session_id: str, path: str) -> None:
@@ -8483,7 +8532,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     branch["status"] = "ended"
                     branch["current_action"] = "Budget exhausted"
                     branch["reason"] = (
-                        "Shared call budget cannot fund another complete Investigator/Skeptic pair."
+                        "Deferred: the shared turn ceiling is exhausted before another complete Investigator/Skeptic pair."
                     )
                 # The portfolio ends with a partial result if any sibling
                 # completed or reached a bounded terminal state. Only an
@@ -8499,12 +8548,22 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     for branch in runs
                     if branch.get("current_action") == "Incomplete · output limit"
                 ]
+                deferred_branches = [
+                    str(branch.get("strategy_title") or "Strategy")
+                    for branch in runs
+                    if branch.get("current_action") == "Budget exhausted"
+                    and str(branch.get("reason") or "").startswith("Deferred:")
+                ]
                 record["message"] = (
                     _portfolio_failure_message(runs)
                     if record["status"] == "failed"
                     else "One or more provider responses were clipped; saved partial output and usage are incomplete. No clipped call was retried."
                     if incomplete_branches
-                    else "All strategy branches finished or the shared call budget was exhausted."
+                    else "All enabled strategy branches reached a terminal review before the shared turn ceiling was used."
+                    if not active and remaining > 0
+                    else "The shared turn ceiling prevented another complete Investigator/Skeptic pair. Deferred branches: "
+                    + ", ".join(deferred_branches)
+                    + ". Saved findings and each branch's stopping reason are shown in the Outcome."
                 )
                 if record.get("provider_usage_limited") is True:
                     record["current_action"] = "Provider usage limit"
@@ -8539,33 +8598,27 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 _event(record, "portfolio.completed", record["message"])
                 _save(path, record)
                 return
-            cursor = int(record.get("portfolio_cursor", 0)) % len(active)
-            rotated = active[cursor:] + active[:cursor]
-            selected = []
-            calls_allocated = 0
-            for branch in sorted(
-                rotated,
-                key=lambda item: (
-                    0 if item.get("pending_investigation") else 1,
-                    0 if item.get("pending_peer_handoffs") else 1,
-                ),
-            ):
-                cost = 1 if branch.get("pending_investigation") else 2
-                if calls_allocated + cost <= remaining:
-                    selected.append(branch)
-                    calls_allocated += cost
+            selected, next_cursor = _affordable_portfolio_branches(
+                active, remaining, int(record.get("portfolio_cursor", 0))
+            )
             if not selected:
+                deferred = [branch["strategy_title"] for branch in active]
                 for branch in active:
                     branch["status"] = "ended"
                     branch["current_action"] = "Budget exhausted"
                     branch["reason"] = (
-                        "Shared call budget cannot fund a complete Investigator/Skeptic pair."
+                        "Deferred: fewer than two shared turns remain for a complete Investigator/Skeptic pair."
                     )
                 record["status"] = "ended"
                 record["current_action"] = "Completed · budget exhausted"
                 record["message"] = (
-                    "Shared call budget cannot fund another complete strategy cycle."
+                    "The shared turn ceiling is exhausted for complete Investigator/Skeptic pairs. "
+                    + "Deferred branches: "
+                    + ", ".join(deferred)
+                    + ". "
+                    + "Saved findings and each branch's stopping reason are available in the Outcome."
                 )
+                record["terminal_reason"] = record["message"]
                 record["cycle"] = max((branch["cycle"] for branch in runs), default=0)
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
@@ -8574,7 +8627,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 _event(record, "portfolio.completed", record["message"])
                 _save(path, record)
                 return
-            record["portfolio_cursor"] = (cursor + len(selected)) % len(active)
+            record["portfolio_cursor"] = next_cursor
             record["status"] = "running"
             record["message"] = (
                 f"Coordinating {len(selected)} enabled strategy branches with shared budget."
@@ -8655,7 +8708,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     branch["status"] = "ended"
                     branch["current_action"] = "Budget exhausted"
                     branch["reason"] = (
-                        "Shared model-call budget reached; no incomplete pair was retried."
+                        "Deferred: shared turn ceiling exhausted before another complete "
+                        "Investigator/Skeptic pair."
                     )
             record["cycle"] = max(
                 (branch["cycle"] for branch in record["strategy_runs"]), default=0
@@ -9307,7 +9361,7 @@ async def _worker(session_id: str, path: str) -> None:
             record["status"] = "queued"
             record["cycle"] = cycle_num
             record["message"] = (
-                f"Cycle {cycle_num}: waiting to run the {role}; no provider call is currently in flight."
+                f"Research round {cycle_num}: waiting to run the {role}; no provider call is currently in flight."
             )
             record["current_action"] = f"Waiting for {role.title()}"
             _event(record, "role.queued", record["message"], role)
@@ -9390,7 +9444,7 @@ async def _worker(session_id: str, path: str) -> None:
                 record["status"] = "running"
                 record["current_action"] = role.title()
                 record["message"] = (
-                    f"Cycle {cycle_num}: {role.title()} provider call {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
+                    f"Research round {cycle_num}: {role.title()} agent turn {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
                 )
                 _event(record, "call.started", record["message"], role)
                 step = {
@@ -9462,14 +9516,14 @@ async def _worker(session_id: str, path: str) -> None:
             _event(
                 record,
                 "call.completed",
-                f"Cycle {cycle_num}: {role.title()} output validated and saved.",
+                f"Research round {cycle_num}: {role.title()} output validated and saved.",
                 role,
             )
             if role == "investigator":
                 record["pending_investigation"] = output
                 record["current_action"] = "Skeptic"
                 record["message"] = (
-                    f"Cycle {cycle_num}: investigator note saved; skeptic review is next."
+                    f"Research round {cycle_num}: Investigator note saved; Skeptic review is next."
                 )
                 _save(path, record)
                 continue
@@ -9482,7 +9536,7 @@ async def _worker(session_id: str, path: str) -> None:
             _event(
                 record,
                 "coordinator.started",
-                f"Cycle {cycle_num}: coordinator is applying the skeptic decision.",
+                f"Research round {cycle_num}: coordinator is applying the Skeptic decision.",
             )
             decision, next_question = coordinate_decision(
                 output["assessment"],
@@ -9505,6 +9559,8 @@ async def _worker(session_id: str, path: str) -> None:
             reviewed_argument = _reviewed_argument(investigation, output)
             objective_candidate = (
                 output["objective_status"] == "achieved"
+                and output["assessment"] == "stop"
+                and not output["next_question"].strip()
                 and verification_status == "convincing_unverified"
                 and bool(output["solution_claim"].strip())
                 and bool(output["argument_summary"].strip())
@@ -9668,7 +9724,7 @@ async def _worker(session_id: str, path: str) -> None:
             record["artifacts"].append(artifact)
             _reconcile_artifact_open_obligations(record, artifact)
             record["strategy_assessments"] = _strategy_assessments(record)
-            _event(record, "artifact.saved", f"Cycle {cycle_num} research artifact committed.")
+            _event(record, "artifact.saved", f"Research round {cycle_num} artifact committed.")
             record["cycle"] = cycle_num
             record["current_question"] = next_question
             if decision.startswith("stop_") and decision != "stop_budget_exhausted":
@@ -9691,7 +9747,7 @@ async def _worker(session_id: str, path: str) -> None:
                 record["status"] = "running"
                 record["current_action"] = "Investigator"
                 record["message"] = (
-                    f"Cycle {cycle_num} saved; coordinator selected the next question."
+                    f"Research round {cycle_num} saved; coordinator selected the next question."
                 )
             record["outcome"] = _outcome(record)
             if record["status"] == "ended":
