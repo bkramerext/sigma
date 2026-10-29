@@ -69,18 +69,23 @@ def stop_servers(children: list[subprocess.Popen[bytes]]) -> None:
 
 
 def local_google_configuration_warning() -> str | None:
-    """Explain a partial local OAuth setup without reading or evaluating shell files."""
-    has_client_setting = any(
-        os.environ.get(key, "").strip()
+    """Explain why local Google sign-in cannot complete, without exposing credentials."""
+    missing = [
+        key
         for key in ("GOOGLE_OIDC_CLIENT_ID", "GOOGLE_OIDC_CLIENT_SECRET")
-    )
-    if has_client_setting and not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip():
+        if not os.environ.get(key, "").strip()
+    ]
+    if missing:
         return (
-            "Google OAuth client settings were found, but local Google sign-in is disabled "
-            "because SIGMA_CLOUD_ADMIN_CONTACT_EMAIL is missing from this launch "
-            "environment. Export the designated administrator's actual Gmail address before starting SIGMA; "
-            "if it is in ~/.bashrc, run `source ~/.bashrc` in the launching shell, then "
-            "restart with `./sigma start --nav`."
+            "Google sign-in is not configured for this local server. Missing "
+            + ", ".join(missing)
+            + ". Set these in the checkout .env or launching environment, then restart with `./sigma start`."
+        )
+    if not os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip():
+        return (
+            "Google OAuth is configured, but local administrator access is unavailable "
+            "because SIGMA_CLOUD_ADMIN_CONTACT_EMAIL is missing. Set it to the designated "
+            "administrator's actual Gmail address and restart SIGMA."
         )
     return None
 
@@ -117,6 +122,8 @@ def run_ui(
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
+        if warning := local_google_configuration_warning():
+            print(warning, file=sys.stderr, flush=True)
         if signin and mock_auth:
             print("--signin and --mock-auth cannot be combined.", file=sys.stderr)
             return 2

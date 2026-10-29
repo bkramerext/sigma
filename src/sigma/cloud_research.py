@@ -26,6 +26,7 @@ _PROCESS_EPOCH = uuid4().hex
 USD_UNITS = 1_000_000_000
 MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("1000.00")
+LOCAL_PILOT_MONTHLY_SPEND_USD = Decimal("50.00")
 MAX_PROJECT_SESSION_CALLS = 120
 MAX_SESSION_MINUTES = 15
 
@@ -97,12 +98,15 @@ def _money_ceiling(name: str, *, maximum: Decimal, message: str) -> Decimal:
 def _spend_ceiling_decimal() -> Decimal:
     from sigma import cloud_auth
 
-    if cloud_auth.local_sponsored_principal() is not None and not os.environ.get(
-        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"
-    ):
-        # Preserve the established local aggregate guard unless an operator
-        # deliberately raises it. The project session cap is independent.
-        return Decimal("0.25")
+    # The mode-selection endpoint takes this snapshot before persisting the
+    # user's first sponsored choice. Eligibility, rather than the previous
+    # choice, determines whether the bounded local pilot ceiling applies.
+    if cloud_auth.local_sponsored_principal(
+        require_selected=False
+    ) is not None and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"):
+        # A small invited pilot should not be stopped by a $0.25 lifetime
+        # API-rate-equivalent budget. The local default is bounded per month.
+        return LOCAL_PILOT_MONTHLY_SPEND_USD
     return _money_ceiling(
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
         maximum=MAX_GLOBAL_SPEND_USD,
@@ -113,19 +117,18 @@ def _spend_ceiling_decimal() -> Decimal:
 def _global_ceiling_failure_message() -> str:
     """Give local sponsored operators the missing configured-cap diagnosis.
 
-    The local default is an *internal API-rate equivalent*, not evidence of
-    actual API charges or provider availability. Never silently raise it.
+    The local default is an internal API-rate equivalent, not evidence of
+    actual API charges or provider availability. Explicit ceilings are honored.
     """
     if (
-        not cloud_workspaces.enabled()
-        and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+        not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+        and _global_spend_period() == "calendar_month"
     ):
         return (
             "The global inference-spend ceiling has been reached: local sponsored "
-            "research defaults to $0.25 cumulative API-rate equivalent across sessions. "
-            "Inspect outstanding ledger obligations with scripts/inspect_cloud_spend.py. "
-            "Only an explicitly configured SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD changes "
-            "this ceiling after restarting SIGMA; saved accounting is preserved."
+            "research exhausted its $50 monthly shared API-rate-equivalent budget. "
+            "Saved research is available; unused provider reservations remain held "
+            "across month boundaries. The budget renews next UTC month."
         )
     return "The global inference-spend ceiling has been reached; saved research remains available."
 
@@ -138,33 +141,42 @@ def _user_spend_ceiling_decimal() -> Decimal:
     )
 
 
+def _admin_has_unlimited_spend() -> bool:
+    """An active, verified administrator has no individual sponsored-dollar cap."""
+    from sigma import cloud_auth
+
+    workspace = _ledger_workspace()
+    cfg = cloud_auth.config()
+    if not cfg.enabled or cfg.error or workspace is None or not workspace.email:
+        return False
+    with cloud_auth._db(cfg) as db:
+        state = (
+            db.execute(
+                "SELECT role,access_active,email FROM user_state WHERE subject=?",
+                (workspace.verified_subject,),
+            ).fetchone()
+            if workspace.verified_subject
+            else db.execute(
+                "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
+                (workspace.workspace_id,),
+            ).fetchone()
+        )
+    return bool(
+        state is not None
+        and state["role"] == "admin"
+        and state["access_active"]
+        and state["email"] == workspace.email
+    )
+
+
 def _effective_user_spend_ceiling_decimal() -> Decimal:
     from sigma import cloud_auth
 
     workspace = _ledger_workspace()
-    # Admins have no per-account sponsorship allowance. The operator's
-    # global ceiling still bounds every provider call, including admin calls.
-    cfg = cloud_auth.config()
-    if cfg.enabled and not cfg.error and workspace is not None and workspace.email:
-        with cloud_auth._db(cfg) as db:
-            state = (
-                db.execute(
-                    "SELECT role,access_active,email FROM user_state WHERE subject=?",
-                    (workspace.verified_subject,),
-                ).fetchone()
-                if workspace.verified_subject
-                else db.execute(
-                    "SELECT role,access_active,email FROM user_state WHERE workspace_id=?",
-                    (workspace.workspace_id,),
-                ).fetchone()
-            )
-        if (
-            state is not None
-            and state["role"] == "admin"
-            and state["access_active"]
-            and state["email"] == workspace.email
-        ):
-            return _spend_ceiling_decimal()
+    # This displayed nominal ceiling is not a cumulative admin allowance:
+    # admission remains governed solely by the global spending ceiling.
+    if _admin_has_unlimited_spend():
+        return _spend_ceiling_decimal()
     try:
         default = _user_spend_ceiling_decimal()
     except CloudResearchUnavailable:
@@ -224,6 +236,51 @@ def _ceiling_units(value: Decimal) -> int:
 def _call_amount_units(db: sqlite3.Connection, where: str, parameters: tuple[Any, ...] = ()) -> int:
     rows = db.execute(f"SELECT amount_usd FROM calls {where}", parameters).fetchall()
     return sum(_usd_units(row["amount_usd"]) for row in rows)
+
+
+def _global_spend_period() -> str:
+    """Renew only the local pilot or an explicitly opted-in hosted budget."""
+    configured = os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_WINDOW", "").strip().lower()
+    if configured in {"cumulative", "calendar_month"}:
+        return configured
+    if configured:
+        raise CloudResearchUnavailable("Global inference spending window is invalid.")
+    from sigma import cloud_auth
+
+    if (
+        cloud_auth.local_sponsored_principal(require_selected=False) is not None
+        and not os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+    ):
+        return "calendar_month"
+    return "cumulative"
+
+
+def _global_window_start() -> str | None:
+    if _global_spend_period() == "cumulative":
+        return None
+    now = datetime.now(UTC)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def _next_global_reset_at() -> str | None:
+    if _global_spend_period() == "cumulative":
+        return None
+    now = datetime.now(UTC)
+    year, month = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)
+    return datetime(year, month, 1, tzinfo=UTC).isoformat()
+
+
+def _global_call_amount_units(db: sqlite3.Connection) -> int:
+    window_start = _global_window_start()
+    if window_start is None:
+        return _call_amount_units(db, "")
+    # Unresolved reservations and unknown dispatches remain obligations
+    # across month boundaries; only settled older usage leaves the window.
+    return _call_amount_units(
+        db,
+        "WHERE created_at>=? OR status IN ('reserved','unknown')",
+        (window_start,),
+    )
 
 
 def _evaluation_queue_limits() -> tuple[int, int, int, int]:
@@ -352,7 +409,9 @@ def _project_relpath(record: dict[str, Any], owner_path: Path) -> str:
     try:
         root = owner_path.resolve(strict=True)
         project = Path(value).resolve(strict=True)
-        if not project.is_dir() or not project.is_relative_to(root):
+        if not project.is_relative_to(root) or not (
+            project.is_dir() or (project.suffix == ".json" and project.is_file())
+        ):
             return ""
         return project.relative_to(root).as_posix()
     except (OSError, RuntimeError, ValueError):
@@ -497,6 +556,7 @@ def prepare_job(record: dict[str, Any]) -> None:
     # An explicit account allowance is sufficient. Require the configured
     # default only when resolving an account that has no specific allowance.
     user_ceiling_units = _ceiling_units(_effective_user_spend_ceiling_decimal())
+    unlimited_admin = _admin_has_unlimited_spend()
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
     _, _, per_user_queue, global_queue = _evaluation_queue_limits()
     call_limit = record.get("call_limit")
@@ -588,6 +648,22 @@ def prepare_job(record: dict[str, Any]) -> None:
                         "Research request identity conflicts with a saved job."
                     )
                 if existing["status"] in {"paused", "interrupted", "terminal"}:
+                    # Resuming a saved session must not silently queue work
+                    # when its funding is already exhausted. Keep the saved
+                    # terminal/interrupted state intact for playback.
+                    if _global_call_amount_units(db) >= global_ceiling_units:
+                        raise CloudResearchUnavailable(_global_ceiling_failure_message())
+                    if (
+                        not unlimited_admin
+                        and _user_call_amount_units(db, owner) >= user_ceiling_units
+                    ):
+                        raise CloudResearchUnavailable(
+                            "Your cumulative cloud research allowance has been reached; saved research remains available."
+                        )
+                    if not unlimited_admin and _user_call_tokens(db, owner) >= token_budget:
+                        raise CloudResearchUnavailable(
+                            "The per-user research token budget has been reached."
+                        )
                     per_user = db.execute(
                         "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
                         (owner,),
@@ -608,13 +684,13 @@ def prepare_job(record: dict[str, Any]) -> None:
             # Reject the request *before* creating a saved zero-call session.
             # A nonzero remainder may still be too small for this model's
             # actual first-call reservation; reserve_call remains authoritative.
-            if _call_amount_units(db, "") >= global_ceiling_units:
+            if _global_call_amount_units(db) >= global_ceiling_units:
                 raise CloudResearchUnavailable(_global_ceiling_failure_message())
-            if _user_call_amount_units(db, owner) >= user_ceiling_units:
+            if not unlimited_admin and _user_call_amount_units(db, owner) >= user_ceiling_units:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
-            if _user_call_tokens(db, owner) >= token_budget:
+            if not unlimited_admin and _user_call_tokens(db, owner) >= token_budget:
                 raise CloudResearchUnavailable(
                     "The per-user research token budget has been reached."
                 )
@@ -657,8 +733,11 @@ def claim_job(session_id: str) -> bool:
             job = db.execute("SELECT * FROM jobs WHERE session_id=?", (session_id,)).fetchone()
             if not job or job["workspace_id"] != owner:
                 raise CloudResearchUnavailable("Research job is unavailable.")
-            if job["status"] == "running":
-                return True
+            # A running job belongs to an already claimed worker. Returning
+            # True here lets a second worker repeat provider calls after an
+            # interrupted process while the durable status is still running.
+            # Only a queued job can be claimed; the caller must recover stale
+            # running slots under the exclusive per-session worker lock.
             if job["status"] != "queued":
                 return False
             user_running = db.execute(
@@ -949,17 +1028,21 @@ def reconcile_orphaned_jobs() -> list[str]:
             continue
         try:
             project = lexical_project.resolve(strict=True)
-            if not project.is_dir() or not project.is_relative_to(root):
+            if not project.is_relative_to(root):
                 continue
-            project_document = project / "project.json"
-            session_directory = project / "research-sessions"
-            if (
-                project_document.is_symlink()
-                or not project_document.is_file()
-                or session_directory.is_symlink()
-                or not session_directory.is_dir()
-            ):
-                continue
+            bundle_project = project.suffix == ".json" and project.is_file()
+            if not bundle_project:
+                if not project.is_dir():
+                    continue
+                project_document = project / "project.json"
+                session_directory = project / "research-sessions"
+                if (
+                    project_document.is_symlink()
+                    or not project_document.is_file()
+                    or session_directory.is_symlink()
+                    or not session_directory.is_dir()
+                ):
+                    continue
             try:
                 project_view = inspect_project(str(project))
             except ProjectError:
@@ -972,9 +1055,19 @@ def reconcile_orphaned_jobs() -> list[str]:
             from sigma import research_sessions
 
             with research_sessions._project_manager_lock(str(project)):
-                session_record = session_directory / f"{session_id}.json"
-                if session_record.exists() or session_record.is_symlink():
-                    continue
+                if bundle_project:
+                    # A single-file project stores sessions as JSON bundle
+                    # members. Read under the same admission lock as _save so
+                    # missing members are proof of an unpublished request.
+                    from sigma.project_bundle import read_bundle
+
+                    members = read_bundle(str(project))["files"]
+                    if f"research-sessions/{session_id}.json" in members:
+                        continue
+                else:
+                    session_record = project / "research-sessions" / f"{session_id}.json"
+                    if session_record.exists() or session_record.is_symlink():
+                        continue
                 with _transaction() as db:
                     current = db.execute(
                         "SELECT workspace_id,status,project_id,project_relpath,process_epoch FROM jobs WHERE session_id=?",
@@ -1054,6 +1147,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
     user_ceiling = _effective_user_spend_ceiling_decimal()
     global_ceiling_units = _ceiling_units(global_ceiling)
     user_ceiling_units = _ceiling_units(user_ceiling)
+    unlimited_admin = _admin_has_unlimited_spend()
     amount_units = _usd_units(amount_usd)
     reserved_amount = amount_units / USD_UNITS
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
@@ -1063,7 +1157,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
         )
     if type(token_reservation) is not int or token_reservation <= 0:
         raise CloudResearchUnavailable("Cloud provider token reservation is invalid.")
-    if token_reservation > token_budget:
+    if not unlimited_admin and token_reservation > token_budget:
         raise CloudResearchUnavailable("The next provider call exceeds the per-user token budget.")
     try:
         with _transaction() as db:
@@ -1085,16 +1179,22 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 raise CloudResearchUnavailable(
                     "This provider attempt was already reserved and cannot be replayed."
                 )
-            used_units = _call_amount_units(db, "")
+            used_units = _global_call_amount_units(db)
             if used_units + amount_units > global_ceiling_units:
-                raise CloudResearchUnavailable(_global_ceiling_failure_message())
+                remaining_units = max(0, global_ceiling_units - used_units)
+                raise CloudResearchUnavailable(
+                    f"{_global_ceiling_failure_message()} "
+                    f"Remaining global capacity: ${remaining_units / USD_UNITS:.4f}; "
+                    f"next call requires ${amount_units / USD_UNITS:.4f}. "
+                    "No provider call was made."
+                )
             user_used_units = _user_call_amount_units(db, owner)
-            if user_used_units + amount_units > user_ceiling_units:
+            if not unlimited_admin and user_used_units + amount_units > user_ceiling_units:
                 raise CloudResearchUnavailable(
                     "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
             user_tokens = _user_call_tokens(db, owner)
-            if user_tokens + token_reservation > token_budget:
+            if not unlimited_admin and user_tokens + token_reservation > token_budget:
                 raise CloudResearchUnavailable(
                     "The per-user research token budget has been reached."
                 )
@@ -1214,6 +1314,7 @@ def snapshot() -> dict[str, Any]:
     owner = _workspace_id()
     allowance = _effective_user_spend_ceiling_decimal()
     allowance_units = _ceiling_units(allowance)
+    unlimited_admin = _admin_has_unlimited_spend()
     try:
         with _connect() as db:
             own = db.execute(
@@ -1236,13 +1337,28 @@ def snapshot() -> dict[str, Any]:
             unknown = db.execute(unknown_query, unknown_parameters).fetchone()[0]
             tokens = _user_call_tokens(db, owner)
             to_usd = lambda units: round(units / USD_UNITS, 9)
+            # An individual can have remaining allowance after the shared
+            # inference ceiling is exhausted. Expose aggregate *capacity*
+            # only, never another account's usage or identity, so the UI
+            # cannot suggest that research is fundable when it is not.
+            global_remaining_units = max(
+                0, _ceiling_units(_spend_ceiling_decimal()) - _global_call_amount_units(db)
+            )
             return {
                 "jobs": {row["status"]: row["count"] for row in own},
+                "global_remaining_usd": to_usd(global_remaining_units),
+                "global_ceiling_usd": float(_spend_ceiling_decimal()),
+                "global_spend_period": _global_spend_period(),
+                "global_reset_at": _next_global_reset_at(),
                 "allowance_usd": float(allowance),
                 "estimated_usage_usd": to_usd(estimated_units),
                 "held_usd": to_usd(held_units),
                 "reserved_and_estimated_usd": to_usd(total_units),
-                "remaining_usd": to_usd(max(0, allowance_units - total_units)),
+                "remaining_usd": to_usd(
+                    global_remaining_units
+                    if unlimited_admin
+                    else max(0, allowance_units - total_units)
+                ),
                 # Kept for existing audit consumers; new clients use the explicit name.
                 "user_reserved_and_estimated_usd": to_usd(total_units),
                 "user_reserved_or_observed_tokens": int(tokens),

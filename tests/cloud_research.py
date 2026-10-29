@@ -74,7 +74,7 @@ def job(workspace: str, *, session: str | None = None, key: str | None = None) -
 
 def workspace(root: Path, identifier: str, email: str | None = None) -> cloud_workspaces.Workspace:
     path = root / identifier
-    path.mkdir(mode=0o700, exist_ok=True)
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
     return cloud_workspaces.Workspace(identifier, identifier, path, email)
 
 
@@ -456,6 +456,8 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
     second_project = initialize_project(owner.path / "budget-two.sigma", "Budget two", "Question")
     env = {
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "cloud-research-fixture-key",
         "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
         "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
@@ -689,6 +691,8 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                 assert summary["estimated_usage_usd"] == 1.60, summary
                 assert summary["held_usd"] == 0, summary
                 assert summary["remaining_usd"] == 0.40, summary
+                if user_number == 9:
+                    assert summary["global_remaining_usd"] == 4.00, summary
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
         assert abs(global_reserved_spend() - 16.00) < 1e-6
@@ -716,13 +720,31 @@ def test_pilot_global_spend_accepts_multiple_users(root: Path, ledger_root: Path
                         record["id"], f"at-global-{extra_number}", amount, 100
                     )
                     assert cloud_research.snapshot()["held_usd"] == amount
+                    if extra_number == 11:
+                        # The final call consumes the global ceiling. A further
+                        # provider reservation must fail before any dispatch,
+                        # with a precise and actionable funding shortfall.
+                        try:
+                            cloud_research.reserve_call(
+                                record["id"], "blocked-after-global-ceiling", 0.01, 1
+                            )
+                        except cloud_research.CloudResearchUnavailable as exc:
+                            assert "Remaining global capacity: $0.0000" in str(exc)
+                            assert "next call requires $0.0100" in str(exc)
+                            assert "No provider call was made." in str(exc)
+                        else:
+                            raise AssertionError("A provider call bypassed the global ceiling")
                     # The reservation stays in the ledger, but should not
                     # occupy a live concurrency slot after the test job ends.
                     record["status"] = "ended"
                     cloud_research.sync_job(record)
                 else:
                     assert abs(global_reserved_spend() - 20.00) < 1e-6
-                    assert cloud_research.snapshot()["remaining_usd"] == 2.00
+                    budget = cloud_research.snapshot()
+                    assert budget["remaining_usd"] == 2.00
+                    # Personal allowance is positive, but provider research
+                    # is still blocked by the independent shared ceiling.
+                    assert budget["global_remaining_usd"] == 0.00
                     try:
                         cloud_research.prepare_job(record)
                     except cloud_research.CloudResearchUnavailable as exc:
@@ -1003,21 +1025,428 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert research_sessions.get_limits(project.path)["session_duration_minutes"] == 60
 
 
-def test_local_global_spend_default_stays_at_legacy_safe_ceiling() -> None:
-    """Raising project session caps does not implicitly raise the local aggregate ceiling."""
+def test_local_global_spend_default_supports_small_team_pilot() -> None:
+    """The local pilot renews monthly, while explicit operator caps stay cumulative."""
     with patch("sigma.cloud_auth.local_sponsored_principal", return_value=object()):
-        with patch.dict(os.environ, {}, clear=False):
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": ""}, clear=False):
             os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
-            assert cloud_research._spend_ceiling_decimal() == Decimal("0.25")
-            assert "$0.25" in cloud_research._global_ceiling_failure_message()
-            assert "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD" in (
-                cloud_research._global_ceiling_failure_message()
-            )
-        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00"}):
+            assert cloud_research._spend_ceiling_decimal() == Decimal("50.00")
+            assert cloud_research._global_spend_period() == "calendar_month"
+            assert "$50 monthly" in cloud_research._global_ceiling_failure_message()
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "",
+            },
+        ):
             assert cloud_research._spend_ceiling_decimal() == Decimal("5.00")
+            assert cloud_research._global_spend_period() == "cumulative"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "calendar_month",
+            },
+        ):
+            assert cloud_research._global_spend_period() == "calendar_month"
+        with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "invalid"}):
+            try:
+                cloud_research._global_spend_period()
+            except cloud_research.CloudResearchUnavailable:
+                pass
+            else:
+                raise AssertionError("Invalid spend periods must fail closed")
+
+
+def test_monthly_global_budget_retains_unknown_provider_holds(
+    root: Path, ledger_root: Path
+) -> None:
+    """Old settled calls age out, but unresolved calls keep their full hold."""
+    from datetime import UTC, datetime, timedelta
+
+    owner = workspace(root / "monthly-global", "a" * 32)
+    old = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "calendar_month",
+            },
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        context = cloud_workspaces._CURRENT.set(owner)
+        try:
+            with cloud_research._connect() as db:
+                db.execute(
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    (
+                        "old-month-job",
+                        owner.workspace_id,
+                        "test-month",
+                        "old-month-key",
+                        "terminal",
+                        old,
+                        old,
+                    ),
+                )
+                db.execute(
+                    "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
+                    "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        "old-month-call",
+                        "old-month-job",
+                        owner.workspace_id,
+                        0.9,
+                        "usage_estimated",
+                        1,
+                        1,
+                        0,
+                        old,
+                        old,
+                    ),
+                )
+                db.commit()
+            summary = cloud_research.snapshot()
+            assert summary["global_remaining_usd"] == 1.00
+            assert summary["global_spend_period"] == "calendar_month"
+            assert summary["global_reset_at"] is not None
+            with cloud_research._connect() as db:
+                db.execute("UPDATE calls SET status='unknown' WHERE call_id='old-month-call'")
+                db.commit()
+            assert cloud_research.snapshot()["global_remaining_usd"] == 0.10
+            with cloud_research._connect() as db:
+                db.execute(
+                    "UPDATE calls SET status='usage_estimated' WHERE call_id='old-month-call'"
+                )
+                db.commit()
+            assert cloud_research.snapshot()["global_remaining_usd"] == 1.00
+            # Cumulative remains the default for explicitly configured caps.
+            with patch.dict(os.environ, {"SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "cumulative"}):
+                summary = cloud_research.snapshot()
+                assert summary["global_remaining_usd"] == 0.10
+                assert summary["global_reset_at"] is None
+        finally:
+            cloud_workspaces._CURRENT.reset(context)
+
+
+def test_admin_unlimited_allowance_survives_monthly_global_renewal(
+    root: Path, ledger_root: Path
+) -> None:
+    """An admin's historical spend never creates an additional lifetime cap."""
+    from datetime import UTC, datetime, timedelta
+
+    owner = workspace(root / "admin-renewal", "b" * 32)
+    old = (datetime.now(UTC) - timedelta(days=40)).isoformat()
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
+                "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW": "calendar_month",
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=True),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            project = initialize_project(
+                owner.path / "admin-monthly.sigma", "Admin renewal", "Check the global ceiling"
+            )
+            with cloud_research._connect() as db:
+                db.execute(
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    (
+                        "old-admin-month",
+                        owner.workspace_id,
+                        "old",
+                        "admin-old",
+                        "terminal",
+                        old,
+                        old,
+                    ),
+                )
+                db.execute(
+                    "INSERT INTO calls(call_id,session_id,workspace_id,amount_usd,status,token_reservation,"
+                    "input_tokens,output_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        "old-admin-spend",
+                        "old-admin-month",
+                        owner.workspace_id,
+                        0.95,
+                        "usage_estimated",
+                        1100000,
+                        1100000,
+                        0,
+                        old,
+                        old,
+                    ),
+                )
+            summary = cloud_research.snapshot()
+            assert summary["global_remaining_usd"] == 1.00, summary
+            assert summary["remaining_usd"] == 1.00, summary
+            assert summary["user_reserved_or_observed_tokens"] > 1000000
+
+            first = job(owner.workspace_id)
+            first.update(
+                project_id=project.project.id,
+                project_path=project.path,
+                maximum_estimated_cost_usd=None,
+            )
+            cloud_research.prepare_job(first)
+            assert cloud_research.claim_job(first["id"])
+            cloud_research.reserve_call(first["id"], "admin-new-month-first", 0.20, 20)
+            cloud_research.settle_call(
+                first["id"],
+                "admin-new-month-first",
+                input_tokens=10,
+                output_tokens=10,
+                estimated_cost_usd=0.20,
+            )
+            first["status"] = "ended"
+            cloud_research.sync_job(first)
+
+            second = job(owner.workspace_id)
+            second.update(
+                project_id=project.project.id,
+                project_path=project.path,
+                maximum_estimated_cost_usd=None,
+            )
+            cloud_research.prepare_job(second)
+            assert cloud_research.claim_job(second["id"])
+            cloud_research.reserve_call(second["id"], "admin-new-month-second", 0.75, 20)
+            summary = cloud_research.snapshot()
+            assert summary["global_remaining_usd"] == 0.05, summary
+            assert summary["remaining_usd"] == 0.05, summary
+            assert summary["reserved_and_estimated_usd"] == 1.90, summary
+            try:
+                cloud_research.reserve_call(second["id"], "admin-global-blocked", 0.10, 10)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "global inference-spend ceiling" in str(exc)
+            else:
+                raise AssertionError("Admin bypassed the shared global spend ceiling")
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_json_project_orphan_recovery(
+    root: Path, ledger_root: Path, limits_env: dict[str, str]
+) -> None:
+    """JSON-backed projects must recover unpublished jobs without losing saved work."""
+    member = workspace(root / "json-queue-recovery", "e" * 32)
+    with (
+        patch.dict(
+            os.environ,
+            {
+                **limits_env,
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+                "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
+            },
+            clear=False,
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            project = initialize_project(
+                member.path / "portable.json", "Portable research", "Check persistence"
+            )
+
+            def bundle_job() -> dict[str, Any]:
+                record = job(member.workspace_id)
+                record.update(
+                    project_id=project.project.id,
+                    project_path=project.path,
+                    session_number=1,
+                    status="queued",
+                    max_concurrent_sessions=2,
+                    steps=[],
+                    events=[],
+                    strategy_runs=[],
+                )
+                return record
+
+            unpublished = bundle_job()
+            assert cloud_research._project_relpath(unpublished, member.path) == "portable.json"
+            cloud_research.prepare_job(unpublished)
+            from sigma.project_bundle import read_bundle
+
+            member_name = f"research-sessions/{unpublished['id']}.json"
+            assert member_name not in read_bundle(project.path)["files"]
+            with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                removed = cloud_research.reconcile_orphaned_jobs()
+            assert unpublished["id"] in removed
+            assert cloud_research.job_status(unpublished["id"]) is None
+
+            # Publishing a bundled session must keep its queued reservation.
+            saved = bundle_job()
+            cloud_research.prepare_job(saved)
+            research_sessions._save(project.path, saved)
+            assert f"research-sessions/{saved['id']}.json" in read_bundle(project.path)["files"]
+            with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                assert saved["id"] not in cloud_research.reconcile_orphaned_jobs()
+            assert cloud_research.job_status(saved["id"]) == "queued"
+
+            # A published-or-not call with uncertain provider dispatch always
+            # retains both its spend hold and ledger row.
+            uncertain = bundle_job()
+            cloud_research.prepare_job(uncertain)
+            assert cloud_research.claim_job(uncertain["id"])
+            call_id = str(uuid4())
+            cloud_research.reserve_call(uncertain["id"], call_id, 0.10, 10)
+            cloud_research.mark_call_unknown(uncertain["id"], call_id)
+            with cloud_research._transaction() as db:
+                db.execute(
+                    "UPDATE jobs SET status='queued' WHERE session_id=?",
+                    (uncertain["id"],),
+                )
+            with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                assert uncertain["id"] not in cloud_research.reconcile_orphaned_jobs()
+            assert cloud_research.job_status(uncertain["id"]) == "queued"
+            with cloud_research._connect() as db:
+                row = db.execute(
+                    "SELECT status,amount_usd FROM calls WHERE call_id=?", (call_id,)
+                ).fetchone()
+                assert row["status"] == "unknown" and row["amount_usd"] == 0.10
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_json_project_session_playback(
+    root: Path, ledger_root: Path, limits_env: dict[str, str]
+) -> None:
+    """Hosted JSON projects execute and reopen saved role calls as real sessions."""
+    member = workspace(root / "json-playback", "f" * 32)
+    with (
+        patch.dict(
+            os.environ,
+            {
+                **limits_env,
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+            clear=False,
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            project = initialize_project(
+                member.path / "playback.json", "Portable playback", "Check a bound"
+            )
+            strategy = create_strategy(
+                project.path, "Investigation", "Derive the bound, then challenge it."
+            ).project.strategies[0]
+            limits = {
+                "research_rounds": 1,
+                "model_calls": 2,
+                "session_duration_minutes": 5,
+                "output_tokens_per_call": 256,
+                "maximum_estimated_cost_usd": 0.25,
+            }
+            research_sessions.save_limits(project.path, limits)
+            credential = {
+                "mode": "api_key",
+                "identity": "cloud_service_api_key:" + member.subject_hash,
+                "token": "fake-service-key",
+                "status": "connected",
+            }
+            configuration = {
+                "available": True,
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "high",
+            }
+            outputs = research_outputs()
+
+            async def provider(record, role, context, timeout_seconds=None, step_id=None):
+                del record, context, timeout_seconds
+                assert isinstance(step_id, str)
+                return (
+                    outputs[0] if role == "investigator" else outputs[1],
+                    {
+                        "input_tokens": 90,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 30,
+                    },
+                )
+
+            async def execute() -> dict[str, Any]:
+                with (
+                    patch.object(
+                        research_sessions,
+                        "auth_context",
+                        new=AsyncMock(return_value=credential),
+                    ),
+                    patch.object(
+                        research_sessions,
+                        "configuration",
+                        new=AsyncMock(return_value=configuration),
+                    ),
+                    patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                    patch.object(
+                        research_sessions, "_call", new=AsyncMock(side_effect=provider)
+                    ) as calls,
+                ):
+                    started = await research_sessions.start_session(
+                        project.path,
+                        strategy.id,
+                        str(uuid4()),
+                        project.project.id,
+                        credential["identity"],
+                        limits,
+                    )
+                    for _ in range(500):
+                        current = research_sessions.get_session(project.path, started["id"])
+                        if current["status"] in {"ended", "failed", "paused"}:
+                            break
+                        await asyncio.sleep(0.01)
+                    else:
+                        raise AssertionError("JSON-backed session never finished")
+                    assert calls.await_count == 2, (current["status"], current["message"])
+                    return current
+
+            finished = asyncio.run(execute())
+            assert finished["status"] == "ended"
+            reopened = research_sessions.list_sessions(project.path)
+            assert len(reopened) == 1
+            played = reopened[0]
+            assert played["id"] == finished["id"]
+            assert played["status"] == "ended"
+            assert len(played["steps"]) == 2
+            assert len(played["artifacts"]) == 1
+            assert played["estimated_cost_usd"] == finished["estimated_cost_usd"]
+            assert any(event["kind"] == "call.completed" for event in played["events"])
+            from sigma.project_bundle import read_bundle
+
+            assert f"research-sessions/{played['id']}.json" in read_bundle(project.path)["files"]
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_hosted_deployment_forwards_global_spend_window() -> None:
+    compose = (Path(__file__).resolve().parents[1] / "deploy" / "compose.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "SIGMA_CLOUD_GLOBAL_SPEND_WINDOW: ${SIGMA_CLOUD_GLOBAL_SPEND_WINDOW:-cumulative}" in compose
+    ), "The hosted backend silently ignored the approved spending-window setting."
 
 
 def main() -> None:
+    # This suite validates the explicitly configured API-key admission path;
+    # never inherit the repository's local ChatGPT provider default.
+    os.environ.setdefault("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    os.environ.setdefault("SIGMA_CLOUD_OPENAI_API_KEY", "cloud-research-fixture-key")
+    test_hosted_deployment_forwards_global_spend_window()
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
         persistent_root = (
@@ -1038,6 +1467,11 @@ def main() -> None:
         b = workspace(root, "b" * 32)
         settings = {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            # These admission tests exercise the API-key funding path. Keep
+            # ambient repository defaults (which may select ChatGPT) out of
+            # their deterministic provider assertions.
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+            "SIGMA_CLOUD_OPENAI_API_KEY": "cloud-research-fixture-key",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
             "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
@@ -1059,6 +1493,7 @@ def main() -> None:
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
                 "OPENAI_API_KEY": "local-operator-key-must-not-be-used",
                 "SIGMA_CLOUD_OPENAI_API_KEY": "",
             },
@@ -1071,6 +1506,7 @@ def main() -> None:
             os.environ,
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
                 "SIGMA_CLOUD_OPENAI_API_KEY": "explicit-cloud-fixture",
             },
             clear=False,
@@ -1087,6 +1523,9 @@ def main() -> None:
                 first = job(a.workspace_id)
                 cloud_research.prepare_job(first)
                 assert cloud_research.claim_job(first["id"])
+                # A running job must never be claimed by a second worker:
+                # doing so could dispatch the same provider step twice.
+                assert not cloud_research.claim_job(first["id"])
                 call = str(uuid4())
                 cloud_research.reserve_call(first["id"], call, 0.2, 120)
                 try:
@@ -1166,6 +1605,7 @@ def main() -> None:
                     "session_duration_minutes": 5,
                     "output_tokens_per_call": 256,
                     "maximum_estimated_cost_usd": 0.25,
+                    "maximum_input_tokens_per_session": 600_000,
                 }
                 research_sessions.save_limits(live_view.path, session_limits)
                 credential = {
@@ -1264,7 +1704,294 @@ def main() -> None:
                     integrated = asyncio.run(run_research())
                 assert integrated["status"] == "ended"
                 assert len(integrated["artifacts"]) == 1
+                # Browser reload fetches a fresh projection from durable
+                # project storage, not the task's in-memory result.
+                reopened = research_sessions.list_sessions(live_view.path)
+                saved = next(entry for entry in reopened if entry["id"] == integrated["id"])
+                assert saved["status"] == "ended"
+                assert len(saved["artifacts"]) == 1
+                assert len(saved["steps"]) == 2
+                assert saved["calls_used"] == 2
+                assert [step["role"] for step in saved["steps"]] == ["investigator", "skeptic"]
+                assert any(event["kind"] == "call.completed" for event in saved["events"])
+                assert saved["outcome"]["metrics"]["operational"]
+                assert saved["estimated_cost_usd"] == integrated["estimated_cost_usd"]
+                # Hosted hard-budget and provider reservations describe the
+                # same attempts. Both must settle without leaving a second
+                # phantom token hold or rejecting the Skeptic call.
+                assert integrated["tokens_reserved"] == 0, integrated["tokens_reserved"]
+                assert len(integrated["hard_budget_ledger"]["calls"]) == 2
+                assert all(
+                    entry["status"] == "settled"
+                    for entry in integrated["hard_budget_ledger"]["calls"]
+                )
                 assert cloud_research.snapshot()["user_reserved_and_estimated_usd"] < 1.0
+
+                async def run_clipped_call() -> None:
+                    """A provider response clipped at its output limit still settles usage."""
+                    before = cloud_research.snapshot()
+                    clipped = research_sessions.IncompleteResearchResponse(
+                        "Provider response exceeded max output tokens.",
+                        partial_text="Saved partial investigation output.",
+                        usage={
+                            "input_tokens": 90,
+                            "cached_input_tokens": None,
+                            "output_tokens": 256,
+                        },
+                    )
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(
+                            research_sessions, "_call", new=AsyncMock(side_effect=clipped)
+                        ) as calls,
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            ended = research_sessions.get_session(live_view.path, started["id"])
+                            if ended["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("clipped cloud call did not save a terminal state")
+                        assert ended["status"] == "ended", ended["message"]
+                        assert calls.await_count == 1
+                        assert ended["steps"][0]["status"] == "incomplete"
+                        assert ended["steps"][0]["attempt_status"] == "usage_estimated"
+                        assert ended["tokens_reserved"] == 0
+                        assert ended["estimated_cost_usd"] > 0
+                        assert ended["steps"][0]["partial_output"] == clipped.partial_text
+                        persisted = research_sessions.list_sessions(live_view.path)
+                        assert any(
+                            item["id"] == started["id"]
+                            and item["steps"][0]["attempt_status"] == "usage_estimated"
+                            for item in persisted
+                        )
+                        with cloud_research._connect() as db:
+                            call = db.execute(
+                                "SELECT status,input_tokens,output_tokens FROM calls WHERE call_id=?",
+                                (ended["steps"][0]["id"],),
+                            ).fetchone()
+                            assert call["status"] == "usage_estimated"
+                            assert call["input_tokens"] == 90
+                            assert call["output_tokens"] == 256
+                        after = cloud_research.snapshot()
+                        assert after["held_usd"] == before["held_usd"], (before, after)
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_clipped_call())
+
+                async def run_invalid_response() -> None:
+                    """Known usage must settle even when the agent violates an acknowledgment rule."""
+                    before = cloud_research.snapshot()
+                    outputs = research_outputs()
+
+                    async def completed_call(
+                        record, role, context, timeout_seconds=None, step_id=None
+                    ):
+                        del record, role, context, timeout_seconds
+                        assert isinstance(step_id, str)
+                        return outputs[0], {
+                            "input_tokens": 90,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 30,
+                        }
+
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(research_sessions, "_call", side_effect=completed_call),
+                        patch.object(
+                            research_sessions,
+                            "_validate_guidance_acknowledgments",
+                            side_effect=research_sessions.ProjectError(
+                                "Agent response did not acknowledge delivered intervention"
+                            ),
+                        ),
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            failed = research_sessions.get_session(live_view.path, started["id"])
+                            if failed["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("invalid response did not reach a saved state")
+                        assert failed["status"] == "failed", failed["message"]
+                        assert failed["steps"][0]["failure_kind"] == "response_invalid"
+                        assert failed["steps"][0]["attempt_status"] == "usage_estimated"
+                        assert failed["steps"][0]["token_usage_status"] == "reported"
+                        assert failed["token_usage_status"] == "complete"
+                        assert failed["tokens_used"] == 120
+                        assert failed["tokens_reserved"] == 0
+                        assert "output" not in failed["steps"][0]
+                        with cloud_research._connect() as db:
+                            call = db.execute(
+                                "SELECT status,input_tokens,output_tokens FROM calls WHERE call_id=?",
+                                (failed["steps"][0]["id"],),
+                            ).fetchone()
+                            assert call["status"] == "usage_estimated"
+                            assert call["input_tokens"] == 90
+                            assert call["output_tokens"] == 30
+                        assert cloud_research.snapshot()["held_usd"] == before["held_usd"]
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_invalid_response())
+
+                async def run_rejected_call() -> None:
+                    """Explicit HTTP 429 cannot retain durable or session-local token holds."""
+                    before = cloud_research.snapshot()
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(
+                            research_sessions,
+                            "_call",
+                            new=AsyncMock(
+                                side_effect=research_sessions.ProjectError(
+                                    "ChatGPT plan or app usage limit reached (HTTP 429)."
+                                )
+                            ),
+                        ) as calls,
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            failed = research_sessions.get_session(live_view.path, started["id"])
+                            if failed["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError(
+                                "rejected provider call never reached a saved state"
+                            )
+                        assert calls.await_count == 1
+                        assert failed["status"] in {"ended", "failed"}, failed["message"]
+                        assert failed["steps"][0]["failure_kind"] == "provider_limited"
+                        assert failed["steps"][0]["attempt_status"] == "provider_rejected"
+                        assert failed["tokens_reserved"] == 0
+                        assert failed["estimated_cost_reserved_usd"] == 0
+                        with cloud_research._connect() as db:
+                            call = db.execute(
+                                "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
+                                (failed["steps"][0]["id"],),
+                            ).fetchone()
+                            assert call["status"] == "usage_estimated"
+                            assert call["amount_usd"] == 0
+                            assert call["token_reservation"] == 0
+                        after = cloud_research.snapshot()
+                        assert after["held_usd"] == before["held_usd"]
+                        assert (
+                            after["user_reserved_or_observed_tokens"]
+                            == (before["user_reserved_or_observed_tokens"])
+                        )
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_rejected_call())
+
+                async def run_aggregate_token_denial() -> None:
+                    """Pre-dispatch session-token denial cannot retain a hard-budget hold."""
+                    before = cloud_research.snapshot()
+                    original_save = research_sessions._save
+
+                    def save_with_tiny_token_limit(path, record):
+                        if (
+                            record.get("project_id") == live_view.project.id
+                            and record.get("status") == "queued"
+                            and record.get("calls_used") == 0
+                        ):
+                            record["total_token_limit"] = 1
+                        return original_save(path, record)
+
+                    with (
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        ),
+                        patch.object(
+                            research_sessions,
+                            "configuration",
+                            new=AsyncMock(return_value=model_config),
+                        ),
+                        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                        patch.object(
+                            research_sessions, "_save", side_effect=save_with_tiny_token_limit
+                        ),
+                        patch.object(research_sessions, "_call", new=AsyncMock()) as calls,
+                    ):
+                        started = await research_sessions.start_session(
+                            live_view.path,
+                            live_strategy.id,
+                            str(uuid4()),
+                            live_view.project.id,
+                            credential["identity"],
+                            session_limits,
+                        )
+                        for _ in range(300):
+                            current = research_sessions.get_session(live_view.path, started["id"])
+                            if current["status"] in {"ended", "failed", "paused"}:
+                                break
+                            await asyncio.sleep(0.01)
+                        else:
+                            raise AssertionError("session token preflight denial never terminated")
+                        assert calls.await_count == 0
+                        assert current["status"] in {"ended", "failed"}
+                        assert current["calls_used"] == 0
+                        assert current["tokens_reserved"] == 0
+                        assert current["hard_budget_ledger"]["calls"] == []
+                        after = cloud_research.snapshot()
+                        assert after["held_usd"] == before["held_usd"]
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    asyncio.run(run_aggregate_token_denial())
 
                 async def run_ambiguous_failure() -> None:
                     key = str(uuid4())
@@ -1440,6 +2167,133 @@ def main() -> None:
                 ).fetchone()[0]
                 db.close()
                 assert status == "interrupted" and attempt_status == "unknown"
+
+                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                    # Crash after cloud claim but before the queued session is
+                    # published as running: the ledger is "running", its saved
+                    # record is "queued", and no worker owns the advisory lock.
+                    # Reading it must preserve playback and release the stale slot.
+                    stale_project = initialize_project(
+                        a.path / "queued-after-claim.sigma", "Stale queue", "Recover a queue"
+                    )
+                    stale = job(a.workspace_id)
+                    stale.update(
+                        project_id=stale_project.project.id,
+                        project_path=stale_project.path,
+                        session_number=1,
+                        status="queued",
+                        created_at="2026-01-01T00:00:00+00:00",
+                        updated_at="2026-01-01T00:00:00+00:00",
+                        current_action="Queued",
+                        message="Research is queued.",
+                        events=[],
+                        steps=[],
+                        strategy_runs=[{"status": "queued", "strategy_id": "strategy-stale"}],
+                    )
+                    cloud_research.prepare_job(stale)
+                    assert cloud_research.claim_job(stale["id"])
+                    assert not cloud_research.claim_job(stale["id"])
+                    research_sessions._save(stale_project.path, stale)
+                    recovered_queue = research_sessions._recover(stale)
+                    assert recovered_queue["status"] == "paused"
+                    assert recovered_queue["strategy_runs"][0]["status"] == "paused"
+                    saved_queue = research_sessions._read(stale_project.path, stale["id"])
+                    assert saved_queue["status"] == "paused"
+                    assert saved_queue["steps"] == []
+                    assert saved_queue["events"][-1]["kind"] == "interrupted"
+                    assert cloud_research.job_status(stale["id"]) == "interrupted"
+
+                    # A reconnect can spawn a worker before anyone opens the
+                    # saved session. It must not repeatedly wait on a stale
+                    # running ledger slot, or execute a duplicate provider call.
+                    stale_worker_project = initialize_project(
+                        a.path / "queued-worker.sigma", "Stale worker", "Recover a worker"
+                    )
+                    stale_worker = job(a.workspace_id)
+                    stale_worker.update(
+                        project_id=stale_worker_project.project.id,
+                        project_path=stale_worker_project.path,
+                        session_number=1,
+                        status="queued",
+                        created_at="2026-01-01T00:00:00+00:00",
+                        updated_at="2026-01-01T00:00:00+00:00",
+                        current_action="Queued",
+                        message="Research is queued.",
+                        events=[],
+                        steps=[],
+                        strategy_runs=[{"status": "queued", "strategy_id": "strategy-worker"}],
+                    )
+                    cloud_research.prepare_job(stale_worker)
+                    assert cloud_research.claim_job(stale_worker["id"])
+                    research_sessions._save(stale_worker_project.path, stale_worker)
+                    assert (
+                        asyncio.run(
+                            research_sessions._claim_cloud_job(
+                                stale_worker["id"], stale_worker_project.path
+                            )
+                        )
+                        is False
+                    )
+                    worker_snapshot = research_sessions._read(
+                        stale_worker_project.path, stale_worker["id"]
+                    )
+                    assert worker_snapshot["status"] == "paused"
+                    assert worker_snapshot["strategy_runs"][0]["status"] == "paused"
+                    assert worker_snapshot["steps"] == []
+                    assert worker_snapshot["events"][-1]["kind"] == "interrupted"
+                    assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
+
+                    # A queued job that never claims capacity must terminate
+                    # with its strategy branches ended, not left "queued" in
+                    # the saved playback after the session deadline.
+                    expiry_project = initialize_project(
+                        a.path / "queue-expiry.sigma", "Queue expiry", "Check expiry"
+                    )
+                    expired = job(a.workspace_id)
+                    expired.update(
+                        project_id=expiry_project.project.id,
+                        project_path=expiry_project.path,
+                        session_number=1,
+                        status="queued",
+                        deadline_at="2026-01-01T00:00:00+00:00",
+                        created_at="2026-01-01T00:00:00+00:00",
+                        updated_at="2026-01-01T00:00:00+00:00",
+                        current_action="Queued",
+                        message="Research is queued.",
+                        events=[],
+                        steps=[],
+                        strategy_runs=[
+                            {
+                                "status": "queued",
+                                "strategy_id": "strategy-expired",
+                                "strategy_title": "Expired",
+                                "artifacts": [],
+                            }
+                        ],
+                    )
+                    cloud_research.prepare_job(expired)
+                    research_sessions._save(expiry_project.path, expired)
+                    with (
+                        patch.object(cloud_research, "claim_job", return_value=False),
+                        patch.object(
+                            research_sessions, "_outcome", return_value={"assessment": "pending"}
+                        ),
+                        patch.object(research_sessions, "_strategy_assessments", return_value=[]),
+                        patch.object(research_sessions, "_portfolio_decision", return_value={}),
+                    ):
+                        assert (
+                            asyncio.run(
+                                research_sessions._claim_cloud_job(
+                                    expired["id"], expiry_project.path
+                                )
+                            )
+                            is False
+                        )
+                    played = research_sessions._read(expiry_project.path, expired["id"])
+                    assert played["status"] == "ended"
+                    assert played["strategy_runs"][0]["status"] == "ended"
+                    assert played["events"][-1]["kind"] == "queue.expired"
+                    assert cloud_research.job_status(expired["id"]) == "terminal"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
@@ -1531,6 +2385,12 @@ def main() -> None:
         recovery_ledger = root / "orphan-recovery-ledger"
         recovery_ledger.mkdir(mode=0o700)
         test_orphaned_job_reconciliation(root, recovery_ledger, settings)
+        json_ledger = root / "json-project-orphan-ledger"
+        json_ledger.mkdir(mode=0o700)
+        test_json_project_orphan_recovery(root, json_ledger, settings)
+        json_playback_ledger = root / "json-playback-ledger"
+        json_playback_ledger.mkdir(mode=0o700)
+        test_json_project_session_playback(root, json_playback_ledger, settings)
 
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
@@ -1553,7 +2413,13 @@ def main() -> None:
             root, allowance_ledger
         )
         test_local_limits_remain_unmodified(root)
-        test_local_global_spend_default_stays_at_legacy_safe_ceiling()
+        test_local_global_spend_default_supports_small_team_pilot()
+        monthly_ledger = root / "monthly-global-ledger"
+        monthly_ledger.mkdir(mode=0o700)
+        test_monthly_global_budget_retains_unknown_provider_holds(root, monthly_ledger)
+        admin_monthly_ledger = root / "admin-monthly-ledger"
+        admin_monthly_ledger.mkdir(mode=0o700)
+        test_admin_unlimited_allowance_survives_monthly_global_renewal(root, admin_monthly_ledger)
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"

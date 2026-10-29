@@ -297,6 +297,10 @@ def _initialize(path: Path) -> None:
                     CHECK(invitation_welcome_pending IN (0,1)),
                 updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS personal_authorizations (
+                subject TEXT PRIMARY KEY,
+                authorized_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS flows (
                 state_hash TEXT PRIMARY KEY,
                 nonce TEXT NOT NULL,
@@ -510,6 +514,13 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
         except WorkspaceUnavailable as exc:
             raise RuntimeError("Private workspace is unavailable.") from exc
     with _db(cfg) as db:
+        first_member_session = (
+            principal.role == "member"
+            and db.execute(
+                "SELECT 1 FROM user_state WHERE subject=?", (principal.subject,)
+            ).fetchone()
+            is None
+        )
         sponsorship_eligible = _sponsorship_eligibility_in_db(
             db, cfg, principal.subject, principal.email, principal.role
         )
@@ -525,6 +536,14 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             sponsorship_eligible,
             model_access,
         )
+        if first_member_session:
+            # A local guest session can become a member when an administrator
+            # adds the grant. That path has no new OAuth callback to set the
+            # one-time welcome flag, so initialize it on first member access.
+            db.execute(
+                "UPDATE user_state SET invitation_welcome_pending=1 WHERE subject=? AND role='member'",
+                (principal.subject,),
+            )
         if not sponsored_access_enabled():
             db.execute(
                 "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
@@ -613,7 +632,9 @@ def set_model_access(subject: str, mode: str) -> None:
         raise RuntimeError("Hosted connection choice is unavailable.")
     with _db(cfg) as db:
         eligibility = db.execute(
-            "SELECT sponsorship_eligible FROM user_state WHERE subject=? AND access_active=1",
+            "SELECT sponsorship_eligible,"
+            "EXISTS(SELECT 1 FROM personal_authorizations WHERE subject=user_state.subject) "
+            "AS personal_authorized FROM user_state WHERE subject=? AND access_active=1",
             (subject,),
         ).fetchone()
         if (
@@ -627,6 +648,18 @@ def set_model_access(subject: str, mode: str) -> None:
             and eligibility["sponsorship_eligible"]
         ):
             raise PermissionError("Sponsored mode is required for this account.")
+        if (
+            mode == "personal"
+            and eligibility is not None
+            and eligibility["sponsorship_eligible"]
+            and not eligibility["personal_authorized"]
+        ):
+            # A mode flag is not evidence of OAuth. This subject-bound record
+            # is written only after a successful local OAuth callback with plan
+            # scopes, and survives later token/provider failures.
+            raise PermissionError(
+                "Connect your personal ChatGPT account before selecting personal access."
+            )
         changed = db.execute(
             "UPDATE user_state SET model_access=?,model_access_selected=1,model_access_explicit=1,updated_at=? WHERE subject=? AND access_active=1"
             + (" AND sponsorship_eligible=1" if mode == "sponsored" else ""),
@@ -634,6 +667,26 @@ def set_model_access(subject: str, mode: str) -> None:
         ).rowcount
         if changed != 1:
             raise PermissionError("This account is not eligible for the selected connection.")
+
+
+def record_personal_authorization(subject: str) -> None:
+    """Record successful plan-permitted OAuth for an eligible local subject."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.local:
+        return
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT access_active,sponsorship_eligible FROM user_state WHERE subject=?",
+            (subject,),
+        ).fetchone()
+        if row is None or not row["access_active"]:
+            raise RuntimeError("Authorized account state is unavailable.")
+        if row["sponsorship_eligible"]:
+            db.execute(
+                "INSERT INTO personal_authorizations(subject,authorized_at) VALUES(?,?) "
+                "ON CONFLICT(subject) DO UPDATE SET authorized_at=excluded.authorized_at",
+                (subject, _now()),
+            )
 
 
 def persist_model_connection_status(subject: str, status: str) -> None:
@@ -699,6 +752,11 @@ def resolve_session(raw: str | None) -> Principal | None:
         if not row or row["expires_at"] <= _now():
             return None
         role = _authorization(cfg, row["subject"], row["email"])
+        # A verified Google identity remains signed in locally while awaiting
+        # an invitation. This is identity only: middleware keeps guest access
+        # on the public sample and invitation paths below.
+        if not role and cfg.local:
+            return Principal(row["subject"], row["email"], "guest")
         if not role:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
             db.execute(
@@ -719,6 +777,110 @@ def resolve_session(raw: str | None) -> Principal | None:
         return Principal(row["subject"], row["email"], role)
 
 
+_GUEST_PROJECT_READ_PATHS = {
+    "/api/projects/inspect",
+    "/api/projects/strategies",
+    "/api/projects/events",
+    "/api/projects/research-limits",
+    "/api/projects/current-understanding",
+    "/api/projects/research-sessions",
+    "/api/projects/research-executions",
+    "/api/projects/papers",
+    "/api/projects/papers/preflight",
+    "/api/projects/proposals/config",
+    "/api/projects/text",
+    "/api/projects/recent",
+}
+
+
+def _guest_project_route_allowed(method: str, path: str) -> bool:
+    """Explicitly allow sample browsing and project reads inside a guest workspace."""
+    if method == "GET" and (path == "/api/projects/samples" or path in _GUEST_PROJECT_READ_PATHS):
+        return True
+    if method == "POST" and path in {
+        "/api/projects/samples/open",
+        "/api/projects/open",
+        "/api/projects/close",
+    }:
+        return True
+    if method != "GET":
+        return False
+    parts = path.split("/")
+    if len(parts) == 5 and parts[:3] == ["", "api", "projects"]:
+        resource, identifier = parts[3:]
+        if resource == "research-sessions" and identifier:
+            return True
+        if resource == "papers" and identifier and identifier != "preflight":
+            return True
+        if resource == "research-executions" and identifier:
+            return True
+    if (
+        len(parts) == 7
+        and parts[:3] == ["", "api", "projects"]
+        and parts[3] == "research-executions"
+        and parts[4]
+        and parts[5] == "artifacts"
+        and parts[6]
+    ):
+        return True
+    if (
+        len(parts) == 5
+        and parts[:3] == ["", "api", "projects"]
+        and parts[3] == "papers"
+        and parts[4]
+    ):
+        return True
+    return bool(
+        len(parts) == 6
+        and parts[:3] == ["", "api", "projects"]
+        and parts[3] == "papers"
+        and parts[4]
+        and parts[5] in {"pdf", "txt", "tex"}
+    )
+
+
+async def _guest_project_response(request: Request, call_next, principal: Principal | None = None):
+    """Run one allowlisted operation within a temporary guest-only workspace."""
+    from sigma import cloud_workspaces
+
+    cfg = config()
+    subject = principal.subject if principal is not None else None
+    token = request.cookies.get(_cookie_name(GUEST_COOKIE, cfg))
+    workspace = cloud_workspaces.guest_workspace(token, subject=subject) if token else None
+    if workspace is None:
+        token = secrets.token_hex(32)
+        workspace = cloud_workspaces.guest_workspace(token, create=True, subject=subject)
+    if workspace is None:
+        return _guest_secure_response(
+            JSONResponse({"error": "Guest workspace is unavailable."}, status_code=503)
+        )
+    request.state.cloud_guest_workspace = workspace
+    # Mark authenticated and anonymous guests so project reads can suppress
+    # provider discovery and queued session dispatch.
+    guest_principal = principal or Principal("guest-workspace", "guest@localhost.invalid", "guest")
+    request.state.cloud_principal = guest_principal
+    principal_token = _CURRENT_PRINCIPAL.set(guest_principal)
+    try:
+        response = await call_next(request)
+    finally:
+        _CURRENT_PRINCIPAL.reset(principal_token)
+    response.set_cookie(
+        _cookie_name(GUEST_COOKIE, cfg),
+        token,
+        **_cookie_options(cfg, GUEST_COOKIE, max_age=SESSION_SECONDS),
+    )
+    return _guest_secure_response(response)
+
+
+def _guest_secure_response(response: Response) -> Response:
+    """Keep guest-scoped project content out of shared caches and embedders."""
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    return response
+
+
 async def middleware(request: Request, call_next):
     cfg = config()
     if not cfg.enabled:
@@ -730,6 +892,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
+    public = public or (request.method == "GET" and path.startswith("/api/ai/auth/callback/"))
     public = public or (path == "/api/cloud-auth/mock/select" and _mock_enabled(cfg))
     public = public or (path == "/api/cloud-auth/invitation-request" and request.method == "POST")
     public = public or (path == "/api/cloud-auth/feedback" and request.method == "POST")
@@ -791,48 +954,35 @@ async def middleware(request: Request, call_next):
         create_guest = (path == "/api/projects/samples" and request.method == "GET") or (
             path == "/api/projects/samples/open" and request.method == "POST"
         )
-        if guest_workspace is None and create_guest:
-            from sigma import cloud_workspaces
-
-            guest_token = secrets.token_hex(32)
-            guest_workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
-            request.state.cloud_guest_cookie_token = guest_token
-        if guest_workspace is not None and path.startswith("/api/projects/"):
-            if (
-                path
-                in {
-                    "/api/projects/research-sessions/start",
-                    "/api/projects/proposals",
-                    "/api/projects/proposals/agentic",
-                    "/api/projects/strategy-suggestions",
-                    "/api/projects/text/convert",
-                    "/api/projects/papers",
-                    "/api/projects/papers/restart",
-                    "/api/projects/research-executions",
-                }
-                or path.startswith("/api/projects/research-sessions/")
-                and request.method == "POST"
-            ):
-                return JSONResponse(
-                    {"error": "Guest projects are available for local review only."},
-                    status_code=403,
+        if path.startswith("/api/projects/") and (guest_workspace is not None or create_guest):
+            if not _guest_project_route_allowed(request.method, path):
+                return _guest_secure_response(
+                    JSONResponse(
+                        {"error": "This project operation requires member access."},
+                        status_code=403,
+                    )
                 )
-            request.state.cloud_guest_workspace = guest_workspace
-            response = await call_next(request)
-            if getattr(request.state, "cloud_guest_cookie_token", None):
-                response.set_cookie(
-                    guest_cookie,
-                    guest_token,
-                    **_cookie_options(cfg, guest_cookie, max_age=SESSION_SECONDS),
-                )
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
-            return response
+            return await _guest_project_response(request, call_next)
         response = JSONResponse({"error": "Authentication required."}, status_code=401)
         _clear_cookie(response, cfg, SESSION_COOKIE)
         return response
+    if principal.role == "guest":
+        guest_auth_paths = {
+            ("POST", "/api/cloud-auth/logout"),
+            ("POST", "/api/cloud-auth/invitation-request"),
+            ("POST", "/api/cloud-auth/feedback"),
+        }
+        if path.startswith("/api/projects/"):
+            if not _guest_project_route_allowed(request.method, path):
+                return _guest_secure_response(
+                    JSONResponse(
+                        {"error": "This project operation requires member access."},
+                        status_code=403,
+                    )
+                )
+            return await _guest_project_response(request, call_next, principal)
+        if path != "/api/cloud-auth/status" and (request.method, path) not in guest_auth_paths:
+            return JSONResponse({"error": "Member access requires an invitation."}, status_code=403)
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
     # Local Google identity gates project access but does not replace the
@@ -844,6 +994,21 @@ async def middleware(request: Request, call_next):
         and not (
             (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
             or (request.method == "POST" and path == "/api/ai/mode")
+            or (
+                principal.role == "admin"
+                and request.method == "POST"
+                and path == "/api/ai/sponsor-auth/begin"
+            )
+            or (
+                principal.role == "admin"
+                and request.method == "GET"
+                and path.startswith(("/api/ai/auth/open/", "/api/ai/auth/attempt/"))
+            )
+            or (
+                principal.role == "admin"
+                and request.method == "POST"
+                and path.startswith("/api/ai/auth/cancel/")
+            )
         )
     ):
         return JSONResponse(
@@ -1208,7 +1373,23 @@ def status(request: Request):
     account = None
     if principal is not None:
         try:
-            account = _persist_user_state(cfg, principal)
+            if principal.role == "guest":
+                with _db(cfg) as db:
+                    invitation = db.execute(
+                        "SELECT status FROM invitation_requests WHERE subject=?",
+                        (principal.subject,),
+                    ).fetchone()
+                account = {
+                    "identity": {"email": principal.email, "verified": True},
+                    "access": {"status": "uninvited", "role": "guest"},
+                    "workspace": {"available": False, "id": None},
+                    "model_access": {"mode": "personal", "connection": "disconnected"},
+                    "sponsorship": {"eligible": False, "forced": False},
+                    "invitation_welcome_pending": False,
+                    "invitation_status": invitation["status"] if invitation else None,
+                }
+            else:
+                account = _persist_user_state(cfg, principal)
         except (sqlite3.Error, OSError, RuntimeError):
             return {
                 "enabled": cfg.enabled,
@@ -1293,8 +1474,23 @@ def login(
     cfg = config()
     if not cfg.enabled:
         return RedirectResponse("/")
-    if cfg.error or not cfg.origin or not cfg.client_id:
+    if cfg.error or not cfg.origin:
         raise HTTPException(503, "Cloud authentication is not ready.")
+    oauth_missing = [
+        key
+        for key, value in (
+            ("GOOGLE_OIDC_CLIENT_ID", cfg.client_id),
+            ("GOOGLE_OIDC_CLIENT_SECRET", cfg.client_secret),
+        )
+        if not value
+    ]
+    if oauth_missing:
+        raise HTTPException(
+            503,
+            "Google sign-in is not configured. Set "
+            + " and ".join(oauth_missing)
+            + " and restart SIGMA.",
+        )
     state, nonce, verifier = (
         secrets.token_urlsafe(32),
         secrets.token_urlsafe(32),
@@ -1456,6 +1652,34 @@ async def callback(
     invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
     role = _authorization(cfg, subject, email)
     if not role:
+        if cfg.local:
+            # Local Google identity is independent of invitation membership.
+            # role=guest keeps all member and research routes denied below.
+            raw = secrets.token_urlsafe(32)
+            with _db(cfg) as db:
+                if session_cookie:
+                    db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
+                db.execute(
+                    "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
+                    "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+                    (subject, email, _now()),
+                )
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (_hash(raw), subject, email, _now() + SESSION_SECONDS),
+                )
+            response = RedirectResponse("/", status_code=303)
+            response.set_cookie(
+                _cookie_name(SESSION_COOKIE, cfg),
+                raw,
+                **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+            )
+            _clear_cookie(response, cfg, FLOW_COOKIE)
+            _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
+            _clear_cookie(response, cfg, DENIED_COOKIE)
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            return response
         denied_token = secrets.token_urlsafe(32)
         with _db(cfg) as db:
             if session_cookie:
@@ -1501,7 +1725,7 @@ async def callback(
 
         from sigma import cloud_workspaces, projects
 
-        guest_workspace = cloud_workspaces.guest_workspace(guest_token)
+        guest_workspace = cloud_workspaces.guest_workspace(guest_token, subject=subject)
         if guest_workspace is not None:
             return_query = parse_qs(
                 urlsplit(return_to).query, keep_blank_values=True, max_num_fields=8
@@ -1734,6 +1958,10 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         if not sponsored_access_enabled() or eligible is None:
             raise HTTPException(403, "This account is not eligible for sponsored reload requests.")
         identity = {"email": principal.email, "subject": principal.subject}
+    elif (
+        authenticated := resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+    ) is not None and authenticated.role == "guest":
+        identity = {"email": authenticated.email, "subject": authenticated.subject}
     else:
         denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
         if not denied_cookie or len(denied_cookie) > 128:
@@ -1787,6 +2015,11 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
                     (identity["email"], now, subject),
                 )
                 existing = None
+            elif existing["status"] in {"reviewed", "declined"}:
+                # A closed request must not permanently block a user who has
+                # since lost access. Active members are rejected above; a
+                # guest may submit a fresh request for administrator review.
+                existing = None
             else:
                 return {"status": existing["status"], "duplicate": True}
         if existing and body.request_type == "reload":
@@ -1814,13 +2047,16 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
     try:
         if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
             _deliver_invitation(identity["email"], requested_at, request_type=body.request_type)
-    except RuntimeError as exc:
+    except RuntimeError:
         with _db(cfg) as db:
             db.execute(
                 "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? WHERE subject=?",
                 ("delivery failed", subject),
             )
-        raise HTTPException(503, "Your request could not be sent. Please try again later.") from exc
+        # The durable request is already recorded and visible to administrators.
+        # Notification delivery is best-effort; returning an error here would
+        # tell the user to retry an action that has already succeeded.
+        return {"status": "pending", "duplicate": bool(existing)}
     with _db(cfg) as db:
         db.execute(
             "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL WHERE subject=?",
@@ -2004,6 +2240,23 @@ def update_feedback(feedback_id: str, body: FeedbackStatusUpdate, request: Reque
             (actor.email, "feedback_" + body.status, "feedback", feedback_id, _now()),
         )
     return {"status": body.status}
+
+
+@router.delete("/admin/feedback/{feedback_id}")
+def remove_feedback(feedback_id: str, request: Request):
+    cfg = config()
+    if not re.fullmatch(r"[0-9a-f]{32}", feedback_id):
+        raise HTTPException(404, "Feedback not found.")
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        result = db.execute("DELETE FROM feedback_requests WHERE id=?", (feedback_id,))
+        if not result.rowcount:
+            raise HTTPException(404, "Feedback not found.")
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "feedback_removed", "feedback", feedback_id, _now()),
+        )
+    return {"removed": True}
 
 
 @router.post("/logout")

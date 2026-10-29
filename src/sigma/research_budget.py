@@ -74,13 +74,19 @@ def reserve_before_dispatch(
         raise BudgetExceeded("Research arm call limit would be exceeded")
     if used_input + input_token_bound > int(ledger["input_token_limit"]):
         raise BudgetExceeded("Research arm cumulative input-token limit would be exceeded")
-    if used_cost + _cost_bound(ledger, input_token_bound, output_reservation) > float(
-        ledger["cost_limit_usd"]
-    ):
-        raise BudgetExceeded("Research arm reserved cost limit would be exceeded")
+    call_cost_bound = _cost_bound(ledger, input_token_bound, output_reservation)
+    if used_cost + call_cost_bound > float(ledger["cost_limit_usd"]):
+        remaining = max(0.0, float(ledger["cost_limit_usd"]) - used_cost)
+        raise BudgetExceeded(
+            "Research arm reserved cost limit would be exceeded: "
+            f"the next call needs a conservative ${call_cost_bound:.4f} reservation, "
+            f"but only ${remaining:.4f} remains of the project session cap. "
+            "No provider call was dispatched. Increase the session cost limit "
+            "or lower its output-token limit in Project Settings → Limits."
+        )
     if used_output + output_reservation > int(ledger["call_limit"]) * output_reservation:
         raise BudgetExceeded("Research arm cumulative output-token limit would be exceeded")
-    cost = _cost_bound(ledger, input_token_bound, output_reservation)
+    cost = call_cost_bound
     reservation = {
         "call_id": call_id,
         "status": "reserved",

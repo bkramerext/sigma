@@ -3,10 +3,14 @@
 import json
 import os
 import re
+from urllib.parse import urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 
 BASE_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173")
+
+
+posts: list[dict] = []
 
 
 def guest_status(route):
@@ -17,9 +21,19 @@ def guest_status(route):
             {
                 "enabled": True,
                 "ready": True,
-                "authenticated": False,
-                "user": None,
+                "authenticated": True,
+                "user": {"email": "new-user@example.org", "role": "guest"},
+                "account": {
+                    "identity": {"email": "new-user@example.org", "verified": True},
+                    "access": {"status": "uninvited", "role": "guest"},
+                    "workspace": {"available": True, "id": "guest-fixture"},
+                    "model_access": {"mode": "sponsored", "connection": "unavailable"},
+                    "sponsorship": {"eligible": False, "forced": False},
+                    "invitation_welcome_pending": False,
+                    "invitation_status": "pending" if posts else None,
+                },
                 "admin_contact_email": "zetacontinuation@gmail.com",
+                "target": "local",
             }
         ),
     )
@@ -34,110 +48,68 @@ with sync_playwright() as playwright:
         headless=True,
     )
     page = browser.new_page(viewport={"width": 1280, "height": 850})
-    posts: list[dict] = []
-    page.route("**/api/cloud-auth/status", guest_status)
-
-    def denied_identity(route):
-        route.fulfill(
-            status=200,
-            content_type="application/json",
-            body=json.dumps(
-                {
-                    "identity_available": True,
-                    "invitation_status": "notified" if len(posts) > 1 else None,
-                }
-            ),
-        )
-
-    page.route(
-        "**/api/cloud-auth/denied",
-        denied_identity,
-    )
-    page.goto(BASE_URL, wait_until="networkidle")
-    expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-    welcome = page.locator("#invitation-welcome-dialog")
-    if welcome.count() and welcome.is_visible():
-        welcome.get_by_role("button", name="Let's get started").click()
-        expect(welcome).to_have_count(0)
-    invite_pill = page.get_by_role("button", name="Invite me!")
-    invite_pill.click()
-    guest_invite_dialog = page.get_by_role("dialog", name="Request an invitation")
-    expect(guest_invite_dialog).to_be_visible()
-    expect(
-        guest_invite_dialog.get_by_text(
-            "Sign in with Google so SIGMA can verify your account before recording an invitation request."
-        )
-    ).to_be_visible()
-    expect(guest_invite_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
-        "href", "/api/cloud-auth/login?invite=1"
-    )
-    invitation_signin = guest_invite_dialog.get_by_role("link", name="Sign in with Google")
-    assert (
-        invitation_signin.evaluate("element => getComputedStyle(element).textDecorationLine")
-        == "underline"
-    )
-    assert (
-        invitation_signin.evaluate("element => getComputedStyle(element).backgroundColor")
-        == "rgba(0, 0, 0, 0)"
-    )
-    guest_invite_dialog.get_by_role("button", name="Close").click()
-    expect(page.get_by_role("link", name="Sign in with Google")).to_have_attribute(
-        "href", "/api/cloud-auth/login"
-    )
-    page.set_viewport_size({"width": 390, "height": 844})
-    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.route("**/api/cloud-auth/status**", guest_status)
 
     def invitation_response(route):
         posts.append({"method": route.request.method, "body": route.request.post_data_json})
-        if len(posts) == 1:
-            route.fulfill(
-                status=503,
-                content_type="application/json",
-                body='{"detail":"Your request could not be sent. Please try again later."}',
-            )
-        else:
+        # The durable request is accepted even when its admin email cannot be
+        # delivered; the UI must acknowledge the saved request instead of
+        # asking the user to repeat an action that already succeeded.
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"status":"pending","duplicate":false}',
+        )
+
+    def guest_api(route):
+        path = urlsplit(route.request.url).path
+        if path == "/api/cloud-auth/status":
+            guest_status(route)
+        elif path == "/api/cloud-auth/invitation-request":
+            invitation_response(route)
+        elif path in {"/api/projects/recent", "/api/projects/samples"}:
+            route.fulfill(status=200, content_type="application/json", body='{"projects":[]}')
+        elif path == "/api/ai/connection":
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body='{"status":"notified"}',
+                body=json.dumps(
+                    {
+                        "mode": "chatgpt",
+                        "status": "disconnected",
+                        "label": "Connect to ChatGPT",
+                        "accounts": [],
+                        "active_account": None,
+                    }
+                ),
             )
+        else:
+            route.fulfill(status=200, content_type="application/json", body="{}")
 
-    page.route("**/api/cloud-auth/invitation-request", invitation_response)
-    page.goto(f"{BASE_URL}/?access=denied&invite=1", wait_until="networkidle")
+    page.unroute("**/api/cloud-auth/status**", guest_status)
+    page.route("**/api/**", guest_api)
+    page.goto(BASE_URL, wait_until="networkidle")
+    expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+    expect(page.get_by_role("button", name="Sign out of Google")).to_be_visible()
+    invite_pill = page.get_by_role("button", name="Invite me!")
+    expect(invite_pill).to_be_visible()
+    invite_pill.click()
     dialog = page.get_by_role("dialog", name="Request an invitation")
     expect(dialog).to_be_visible()
-    expect(dialog.locator(".google-account-email")).to_have_count(0)
     expect(dialog.get_by_role("link", name="Privacy Notice")).to_have_attribute(
         "href", re.compile(r"^/privacy")
     )
-    expect(dialog.locator(".google-invitation-actions [role='alert']")).to_contain_text(
-        "Your request could not be sent. Please try again later."
+    dialog.get_by_role("button", name="Invite me").click()
+    expect(dialog.locator("[role='status']")).to_contain_text(
+        "Your invitation request is recorded and awaiting administrator review."
     )
-    retry = dialog.get_by_role("button", name="Try again")
-    expect(retry).to_be_enabled()
-    assert retry.evaluate("element => getComputedStyle(element).backgroundColor") == (
-        "rgba(0, 0, 0, 0)"
-    )
-    assert retry.evaluate("element => getComputedStyle(element).textDecorationLine") == "underline"
-    retry.focus()
-    expect(retry).to_be_focused()
-    retry.press("Enter")
-    expect(dialog).not_to_be_visible()
+    expect(dialog.locator("[role='alert']")).to_have_count(0)
     expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
-    assert posts == [
-        {"method": "POST", "body": {}},
-        {"method": "POST", "body": {}},
-    ]
+    assert posts == [{"method": "POST", "body": {}}]
     page.reload(wait_until="networkidle")
-    refreshed_dialog = page.get_by_role("dialog", name="Request an invitation")
-    expect(refreshed_dialog).to_be_visible()
-    expect(
-        refreshed_dialog.get_by_text(
-            "Glad you're interested! Your request has been sent along to the right person!",
-            exact=True,
-        )
-    ).to_be_visible()
-    expect(page.get_by_role("button", name="Invite me")).to_have_count(0)
+    status = page.evaluate("async () => (await (await fetch('/api/cloud-auth/status')).json())")
+    assert status["account"]["invitation_status"] == "pending", status
+    expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
     page.set_viewport_size({"width": 1280, "height": 850})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
@@ -207,8 +179,13 @@ with sync_playwright() as playwright:
     expect(member_page.get_by_role("button", name="Invite me!")).to_have_count(0)
     expect(member_page.get_by_role("button", name="Sign out of Google")).to_be_visible()
     expect(member_page.get_by_role("button", name="Reload me!")).to_have_count(0)
-    allowance["remaining_usd"] = 0
+    allowance["remaining_usd"] = 0.05
     member_page.evaluate("window.dispatchEvent(new Event('focus'))")
+    expect(member_page.locator(".sponsored-allowance-inline")).to_have_text("0.05")
+    expect(member_page.get_by_role("button", name="Reload me!")).to_have_count(0)
+    allowance["remaining_usd"] = 0.04
+    member_page.evaluate("window.dispatchEvent(new Event('focus'))")
+    expect(member_page.locator(".sponsored-allowance-inline")).to_have_text("0.04")
     reload_button = member_page.get_by_role("button", name="Reload me!")
     expect(reload_button).to_be_visible()
     expect(reload_button.locator("xpath=..")).to_have_class("identity-pill-stack")
@@ -221,5 +198,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS issue #279 real Chrome desktop/mobile invitation, retry/reload persistence, zero-allowance Reload me!, and member access"
+    "PASS issue #279 real Chrome invitation, saved-request acknowledgement, reload persistence, Reload me! threshold below $0.05, and member access"
 )

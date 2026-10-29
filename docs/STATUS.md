@@ -7817,3 +7817,116 @@ UNVERIFIED; no paid calls were made. The 8 MB per-response limit and 1.01 MB
 accept/8 MB overflow regressions remain in place. Three concurrent local
 responses could hold 24 MB raw buffers plus parsing allocations; production
 payload and peak-memory behavior remain UNVERIFIED. No deployment or merge.
+
+## PR #297 Green post-Red integration (2026-10-29)
+
+Integrated `origin/main` at `2d4368adf341aca105f5b645c676909da71ed5fb` without rewriting the published branch. Red #317's scheduler/session changes, Blue #314 Markdown improvements, and the approved About diagram are retained. The merge HEAD is `681fe09648c223119fa5022c63bc06b0ef93c634`; final evidence is in `messages/pr297_green_consolidated_r4r.md`.
+
+Real Chromium reproduced the sign-in obstruction: the first-visit Welcome dialog covered the visible Google pill. The dialog now contains a Google sign-in link. The real-backend check clicks that link and, after continuing past Welcome, the actual header pill; both reach SIGMA's real `/api/cloud-auth/login` endpoint and validate its 302 Google authorization URL through a deterministic local fixture. No live Google OAuth call was made.
+
+`Reload me!` now appears when the member's remaining allowance is below $0.05. Chromium confirms it is hidden at $0.05, appears at $0.04, and submits a real API reload request at $0.03. The built-in administrator's actual dialog reads that request and the pending guest invitation from the durable database; it approves the invitation, and a fresh deterministic session resolves as a member. The invitation email boundary is stubbed, and no email is sent.
+
+Verification passed: `./sigma test`; real Chromium for Google sign-in/invitation/admin approval/reload, public guest samples, Red's deterministic Maximum Regions lifecycle, Blue #314 math rendering, and About diagram layouts at 1440/390/320 plus touch help. The existing graph-present sandbox subcase was skipped because the local Python sandbox image is unavailable. Product feedback API/admin behavior is covered by `tests/cloud_auth.py`; a dedicated product-feedback browser acceptance was not part of this pass. No paid provider calls, deployment, or merge to main.
+
+## PR #297 local Google sign-in startup correction (2026-10-28)
+
+The reported local `/api/cloud-auth/login` 503 reproduced on the already-running
+backend. Its status showed `GOOGLE_OIDC_CLIENT_ID` and
+`GOOGLE_OIDC_CLIENT_SECRET` missing. The checkout `.env` contains both, and a
+fresh `./sigma shutdown && ./sigma start` loaded them; local status then had no
+missing setup and login redirected through Google's real account-selection
+page. The observed blocker was a backend process running without the checkout's
+OAuth settings. The exact reason that process had been started in that state
+could not be established from retained logs.
+
+The local launcher now prints a credential-safe, actionable warning when Google
+OAuth or the designated administrator setting is absent. The login endpoint
+names missing OAuth setting keys rather than returning the generic “Cloud
+authentication is not ready” response. No credential values are logged or
+returned.
+
+Verification: `./sigma test` passed all steps, including 72 cloud-auth tests,
+Ruff, formatting, Pyright, frontend typecheck, and production build. The
+graph-present Python sandbox case skipped because its local image is unavailable.
+Real Chrome clicked the sign-in link from the local first-visit dialog and
+reached `accounts.google.com` (“Sign in - Google Accounts”); this verified the
+real configured redirect and chooser page, not completion of Google OAuth or
+callback. No paid provider calls were made. `git diff --check` passed.
+
+## PR #297 invitation reapplication and feedback UI correction (2026-10-28)
+
+Persisted local auth data for N showed a `reviewed` invitation request and a
+member grant with `active=0`. The audit has an earlier grant/review action and
+a later admin revoke action. There was no pending request and N had no active
+membership. The UI hid Invite me for any non-null invitation status, while the
+API returned a duplicate for reviewed/declined rows, leaving this revoked
+guest unable to reapply. The UI now suppresses the action only for open
+requests (`pending`, `sending`, `notified`); a guest can reopen a reviewed or
+declined request. The API persists that as a fresh request and continues to
+deduplicate it while open. Server authorization still rejects active members.
+
+Feedback now has a left-aligned, underlined yellow action button directly below
+the message editor, with no background. The admin table labels the identity
+column **Google account**, gives it more width, displays the verified account
+email or **Not signed in**, and removes the duplicate email under the message.
+**Remove** now deletes a feedback row and records an audit action; **Close**
+retains the row with closed status, and **Mark reviewed** retains it with
+reviewed status.
+
+Verification passed: full `./sigma test`; 72 cloud-auth tests; frontend
+typecheck; Ruff check/format; and real-Chrome
+`browser_checks/local_auth_real_backend.py`. Chrome used a real local API and
+durable fixture database to verify the reviewed-but-revoked guest sees Invite
+me, resubmits, and appears in admin requests; it also verified signed-in and
+anonymous feedback identity display, submission button style/position, and
+Remove deleting the row. No live Google callback or paid provider call was
+made. The graph-present Python sandbox case skipped because its image is
+unavailable.
+
+## PR #297 invitation acknowledgement and admin layout follow-up (2026-10-28)
+
+An invitation is durably stored before the notification email is attempted. If
+delivery fails, the request remains `pending` and visible to administrators;
+the API now returns a successful pending response so the UI acknowledges the
+saved request instead of inviting a duplicate retry. The local real-backend
+Chrome check exercises this exact delivery-failure path with SMTP unconfigured.
+
+Administrator Settings is wider and taller, with separate collapsible sections
+for invitation/reload requests, product feedback, authorized users, and account
+usage. The tab bar is removed. Feedback actions stay on one line, use one shared
+color, and have a wider Actions column; table headers and disclosure triangles
+are larger.
+
+Verification passed: full `./sigma test`; 72 cloud-auth tests; frontend
+typecheck/build; Ruff and formatting; `git diff --check`; real-Chrome
+`browser_checks/local_auth_real_backend.py`, `browser_checks/issue279_invite_me.py`,
+and the updated admin dialog flow. Chrome verified a pending saved invitation
+is acknowledged, admin feedback identity and removal, action alignment/colors,
+larger headers/arrows, and collapsible sections. No live
+Google OAuth callback or paid provider call was made. The graph-present Python
+sandbox case remains skipped because its local image is unavailable.
+
+## PR #297 invited-user welcome follow-up (2026-10-28)
+
+Manual acceptance found that N could become a member without seeing the
+invitation welcome. The pending flag was present, but the frontend suppressed
+the dialog when Google sign-in returned to `/project` after starting from guest
+play. Removed that suppression; the pending server flag remains authoritative
+and dismissal is still persisted by the welcome endpoint. The real-Chrome
+regression now sets the project sign-in return marker, loads `/project`, checks
+that **You have been invited!** appears, dismisses it, and verifies persistence.
+
+Verification: 72 cloud-auth tests and frontend typecheck passed. The real-Chrome
+local-auth flow passed, including the project-return welcome and the existing
+invitation, admin, feedback, cache-header, and identity-isolation checks. A
+full `./sigma test` passed on the immediately prior SHA; it has not yet been
+rerun after this frontend condition and browser-check update. No live Google
+OAuth callback or paid provider call was made.
+
+The guest welcome dialog no longer contains a Google sign-in link; users sign
+in with the persistent Google account pill. Updated real-Chrome coverage
+asserts the link is absent, dismisses the welcome, then clicks the actual pill
+and follows a deterministic OAuth redirect fixture. `./sigma test`, frontend
+typecheck, `browser_checks/local_auth_real_backend.py`, and
+`browser_checks/guest_samples.py` passed with this update in the worktree. No
+live Google OAuth callback or paid provider call was made.

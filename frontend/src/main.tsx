@@ -2168,9 +2168,9 @@ function FeedbackForm() {
     <div className="about-disclosure-content">
       {sent ? <p role="status">Thanks for your feedback. It has been sent for administrator review.</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
+        <button type="submit" className="admin-text-action about-feedback-send" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send Feedback'}</button>
         <label>Contact email <span>(optional)</span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>
         <p>Your feedback is stored for SIGMA administrator review and is not sent to an AI provider. Read the <a href={privacyNoticeHref('about')}>Privacy Notice</a>.</p>
-        <button type="submit" className="cloud-secondary-button" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send feedback'}</button>
         {error && <p role="alert">{error}</p>}
       </form>}
     </div>
@@ -2226,7 +2226,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean }) {
   const cloud = useCloudIdentity();
-  const showConnectionStatus = !cloud?.enabled || cloud.authenticated;
+  const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
@@ -2953,6 +2953,10 @@ type CloudResearchBudget = {
   held_usd: number;
   reserved_and_estimated_usd: number;
   remaining_usd: number;
+  global_remaining_usd?: number;
+  global_ceiling_usd?: number;
+  global_spend_period?: 'cumulative' | 'calendar_month';
+  global_reset_at?: string | null;
   unknown_provider_attempts: number;
 };
 
@@ -2960,7 +2964,7 @@ function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
-  const showConnectionStatus = !cloud?.enabled || cloud.authenticated;
+  const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   useEffect(() => {
@@ -3043,12 +3047,12 @@ function Home({ initialPath, onOpen }: {
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
-          {(!cloud?.enabled || cloud.authenticated) && <>
+          {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
             <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
           <button type="button" className="home-project-action" data-tooltip="Import a portable JSON project" onClick={() => setEntry('import')}>Import</button>
           </>}
         </div>
-        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
+        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
@@ -3393,7 +3397,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const cloud = useCloudIdentity();
-  const guest = !!cloud?.enabled && !cloud.authenticated;
+  const guest = !!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest');
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
@@ -3812,7 +3816,7 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
@@ -3924,6 +3928,10 @@ function MockAuthSelector() {
   </span>;
 }
 
+function hasOpenInvitationRequest(status?: string | null) {
+  return status === 'pending' || status === 'sending' || status === 'notified';
+}
+
 function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boolean }) {
   const cloud = useCloudIdentity();
   const signedInAccountTooltip = cloud?.user?.email
@@ -3933,26 +3941,26 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
-  // The denied-identity cookie proves Google verified an account, but SIGMA
-  // did not authorize it. Signed-out guests and already-invited accounts
-  // must never see an invitation action.
-  const canRequestInvitation = !!cloud?.enabled && !cloud.authenticated
-    && deniedIdentityAvailable && cloud.deniedInvitationStatus === null
+  // A local Google guest is authenticated but has no member permissions.
+  const authenticatedGuest = cloud?.authenticated && cloud.user?.role === 'guest';
+  const invitationStatus = authenticatedGuest ? cloud?.account?.invitation_status : cloud?.deniedInvitationStatus;
+  const invitationRequestOpen = hasOpenInvitationRequest(invitationStatus);
+  const invitationIdentity = !!cloud?.enabled && (authenticatedGuest || (!cloud.authenticated && deniedIdentityAvailable));
+  const canRequestInvitation = invitationIdentity
+    && !invitationRequestOpen
     && !invitationRecorded;
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
     ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?path=${currentProjectPath}&resume_play=1` })}`
     : '/api/cloud-auth/login';
   useEffect(() => {
-    if (cloud?.deniedInvitationStatus && cloud.deniedInvitationStatus !== 'pending') {
-      setInvitationRecorded(true);
-    }
-  }, [cloud?.deniedInvitationStatus]);
+    setInvitationRecorded(invitationRequestOpen);
+  }, [cloud?.deniedInvitationStatus, authenticatedGuest, invitationStatus]);
   useEffect(() => {
     const inviteIntent = new URLSearchParams(window.location.search).get('invite') === '1';
-    if (canRequestInvitation && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
-    if (!canRequestInvitation && dialog.current?.open) dialog.current.close();
-  }, [canRequestInvitation]);
+    if (canRequestInvitation && deniedIdentityAvailable && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
+    if (!invitationIdentity && dialog.current?.open) dialog.current.close();
+  }, [canRequestInvitation, invitationIdentity]);
   useEffect(() => {
     const open = () => {
       document
@@ -4009,7 +4017,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         ? new URLSearchParams(window.location.search).get('path')
         : null;
       let destination = '/';
-      if (currentProjectPath) {
+      if (currentProjectPath && !authenticatedGuest) {
         const copied = await fetch('/api/projects/guest-copy', {
           method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
@@ -4019,6 +4027,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         const result = await copied.json() as { path: string };
         destination = projectUrl(result.path);
         currentProjectPath = result.path;
+      } else if (currentProjectPath) {
+        destination = projectUrl(currentProjectPath);
       }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
@@ -4037,21 +4047,21 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     {cloud?.enabled && cloud.authenticated
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
-        {!canRequestInvitation && <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>}
+        <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
-    {!cloud?.authenticated && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
+    {(!cloud?.authenticated || authenticatedGuest) && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
       <div className="privacy-notice-heading google-invitation-heading"><h2 id="google-invitation-heading">Request an invitation</h2><button type="button" className="privacy-close-button" onClick={() => dialog.current?.close()}>Close</button></div>
-      {deniedIdentityAvailable
+      {(deniedIdentityAvailable || authenticatedGuest)
         ? <p>We couldn’t find an active SIGMA invitation for this Google account. You can request access here.</p>
         : <p>Sign in with Google so SIGMA can verify your account before recording an invitation request.</p>}
-      {deniedIdentityAvailable
+      {(deniedIdentityAvailable || authenticatedGuest)
         ? invitationRecorded
-          ? <p role="status">{cloud?.deniedInvitationStatus === 'sending' ? 'Your invitation request is already recorded and being processed.' : "Glad you're interested! Your request has been sent along to the right person!"}</p>
-          : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); window.dispatchEvent(new Event('sigma-invitation-recorded')); dialog.current?.close(); }}/>
+          ? <p role="status">Your invitation request is recorded and awaiting administrator review.</p>
+          : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); if (authenticatedGuest) window.dispatchEvent(new Event('sigma-cloud-auth-refresh')); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}/>
         : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
-      {deniedIdentityAvailable && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
+      {deniedIdentityAvailable && !authenticatedGuest && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>}
   </>;
@@ -4060,16 +4070,20 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
 function HomeInvitationAction() {
   const cloud = useCloudIdentity();
   const [recorded, setRecorded] = useState(false);
+  const uninvited = cloud?.user?.role === 'guest' || cloud?.deniedIdentityAvailable;
+  const invitationStatus = cloud?.user?.role === 'guest'
+    ? cloud.account?.invitation_status
+    : cloud?.deniedInvitationStatus;
   useEffect(() => {
-    if (cloud?.deniedInvitationStatus !== null && cloud?.deniedInvitationStatus !== undefined) setRecorded(true);
-  }, [cloud?.deniedInvitationStatus]);
+    setRecorded(hasOpenInvitationRequest(invitationStatus));
+  }, [invitationStatus]);
   useEffect(() => {
     const onRecorded = () => setRecorded(true);
     window.addEventListener('sigma-invitation-recorded', onRecorded);
     return () => window.removeEventListener('sigma-invitation-recorded', onRecorded);
   }, []);
-  if (!cloud?.enabled || cloud.authenticated || !cloud.deniedIdentityAvailable
-    || cloud.deniedInvitationStatus !== null || recorded) return null;
+  if (!cloud?.enabled || !uninvited
+    || hasOpenInvitationRequest(invitationStatus) || recorded) return null;
   return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}>Invite me!</button>;
 }
 
@@ -4077,7 +4091,7 @@ function ReloadMeAction({ connectionPill = false }: { connectionPill?: boolean }
   const cloud = useCloudIdentity();
   const [state, setState] = useState<'idle' | 'sending' | 'requested' | 'error'>('idle');
   const budget = cloud?.funding.budget;
-  if (!cloud?.authenticated || cloud.user?.role === 'admin' || !cloud.funding.sponsorshipEligible || !budget || budget.remaining_usd > 0) return null;
+  if (!cloud?.authenticated || cloud.user?.role === 'admin' || !cloud.funding.sponsorshipEligible || !budget || budget.remaining_usd >= 0.05) return null;
   async function requestReload() {
     setState('sending');
     try {
@@ -4115,7 +4129,7 @@ function InvitationRequestControls({ error, onError, onRecorded }: { error: stri
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
 type CloudInvitationRequest = { subject: string; email: string; requested_at: number; status: string; request_type?: 'invitation' | 'reload' };
 type CloudFeedbackRequest = { id: string; account_email: string | null; contact_email: string | null; message: string; submitted_at: number; status: string };
-function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, onClose, onAdd, onSave, onRevoke, onReload, onUpdateInvitation, onUpdateFeedback }: {
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRequests, feedbackRequests, error, busy, onClose, onAdd, onSave, onRevoke, onReload, onUpdateInvitation, onUpdateFeedback, onRemoveFeedback }: {
   bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   invitationRequests: CloudInvitationRequest[];
   feedbackRequests: CloudFeedbackRequest[];
@@ -4126,6 +4140,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   onReload: (grant: CloudGrant) => Promise<void>;
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
   onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
+  onRemoveFeedback: (request: CloudFeedbackRequest) => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
@@ -4143,7 +4158,6 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   const removeConfirmation = useRef<HTMLDivElement>(null);
   const removeConfirmButton = useRef<HTMLButtonElement>(null);
   const [message, setMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<'access' | 'usage'>('access');
   useEffect(() => {
     setDrafts(Object.fromEntries(grants.map(grant => [`${grant.kind}:${grant.value}`, { role: grant.role, allowance: allowanceInput(grant.allowance_usd) }])));
   }, [grants]);
@@ -4307,25 +4321,18 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   });
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
-    <div className="admin-tabs" role="tablist" aria-label="Administrator settings" onKeyDown={event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const next = event.key === 'Home' ? 'access' : event.key === 'End' ? 'usage' : event.key === 'ArrowRight' ? (activeTab === 'access' ? 'usage' : 'access') : (activeTab === 'usage' ? 'access' : 'usage');
-      setActiveTab(next); requestAnimationFrame(() => document.getElementById(next === 'access' ? 'access-management-tab' : 'account-usage-tab')?.focus());
-    }}>
-      <button type="button" role="tab" id="access-management-tab" aria-controls="access-management-panel" aria-selected={activeTab === 'access'} tabIndex={activeTab === 'access' ? 0 : -1} onClick={() => setActiveTab('access')}>Access Management</button>
-      <button type="button" role="tab" id="account-usage-tab" aria-controls="account-usage-panel" aria-selected={activeTab === 'usage'} tabIndex={activeTab === 'usage' ? 0 : -1} onClick={() => setActiveTab('usage')}>Account usage</button>
-    </div>
-    <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
+    <section className="admin-access-panel">
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
-      <div className="admin-table-heading"><h3>Invitation/reload requests</h3></div>
+      <details className="admin-collapsible-section admin-invitation-section" open><summary><h3>Invitation/reload requests</h3></summary>
       {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {
         return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void addInvitation(item)}>Add</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void removeInvitation(item)}>Remove</button></div></td></tr>;
       })}</tbody></table></div> : <p className="cloud-access-bootstrap">No invitation requests.</p>}
-      <div className="admin-table-heading"><h3>Product feedback</h3></div>
-      {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><thead><tr><th scope="col">Feedback</th><th scope="col">Contact</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}{item.account_email && <small>Signed-in account: {item.account_email}</small>}</th><td>{item.contact_email || 'Not provided'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td>{item.status !== 'closed' && <><button type="button" className="admin-text-action" disabled={busy || item.status === 'reviewed'} onClick={() => void onUpdateFeedback(item, 'reviewed')}>Mark reviewed</button> <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateFeedback(item, 'closed')}>Close</button></>}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
-      <div className="admin-authorized-users-section"><div className="admin-table-heading"><h3>Authorized users</h3></div>
+      </details>
+      <details className="admin-collapsible-section admin-feedback-section" open><summary><h3>Product feedback</h3></summary>
+      {feedbackRequests.length ? <div className="admin-table-scroll admin-feedback-scroll"><table className="admin-grants-table admin-feedback-table"><colgroup><col style={{ width: '33%' }}/><col style={{ width: '22%' }}/><col style={{ width: '15%' }}/><col style={{ width: '9%' }}/><col style={{ width: '21%' }}/></colgroup><thead><tr><th scope="col">Feedback</th><th scope="col">Google account</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>{feedbackRequests.map(item => <tr key={item.id}><th scope="row" className="admin-feedback-message">{item.message}</th><td className="admin-feedback-account">{item.account_email || 'Not signed in'}</td><td>{new Date(item.submitted_at * 1000).toLocaleString()}</td><td>{item.status}</td><td><div className="admin-feedback-actions">{item.status !== 'closed' && <><button type="button" className="admin-text-action" disabled={busy || item.status === 'reviewed'} onClick={() => void onUpdateFeedback(item, 'reviewed')}>Mark reviewed</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onUpdateFeedback(item, 'closed')}>Close</button></>}<button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void onRemoveFeedback(item)}>Remove</button></div></td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No product feedback.</p>}
+      </details>
+      <details className="admin-collapsible-section admin-authorized-users-section" open><summary><h3>Authorized users</h3></summary>
       <div className="admin-table-scroll admin-authorized-table-scroll"><table className="admin-grants-table admin-authorized-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col" className="admin-allowance-heading">Sponsorship allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
@@ -4342,13 +4349,12 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
         <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action admin-remove" aria-expanded={addOpen} onClick={() => setAddOpen(true)}>New</button></td></tr>
-      </tbody></table></div></div>
+      </tbody></table></div></details>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
-    </section>
-    <section id="account-usage-panel" role="tabpanel" tabIndex={0} aria-labelledby="account-usage-tab" className="admin-usage-panel" hidden={activeTab !== 'usage'}>
-      <h3>Account usage</h3>
-      {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{session.role === 'admin' ? 'Unlimited' : currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{session.role === 'admin' ? 'Unlimited' : currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
+      <details className="admin-collapsible-section admin-account-usage-section" open><summary><h3>Account usage</h3></summary>
+      {sessions.length ? <div className="admin-table-scroll admin-account-usage-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{session.role === 'admin' ? 'Unlimited' : currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{session.role === 'admin' ? 'Unlimited' : currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
+      </details>
     </section>
     {addOpen && createPortal(<div ref={newEntryPanel} className="admin-new-entry-panel" role="group" aria-label="Add authorized user" style={newEntryPosition ? { left: newEntryPosition.left, top: newEntryPosition.top, maxHeight: newEntryPosition.maxHeight } : { left: -10000, top: -10000 }}>
       <div className="admin-new-entry-heading"><h3>New Email or Domain</h3><div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || (newRole !== 'admin' && !validation(newAllowance)) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><button type="button" className="admin-text-action" disabled={busy} onClick={cancelAdd}>Cancel</button></div></div>
@@ -4565,6 +4571,14 @@ function CloudAuthGate() {
       await loadGrants();
     } finally { setBusy(false); }
   }
+  async function removeFeedback(item: CloudFeedbackRequest) {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/feedback/${encodeURIComponent(item.id)}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) throw await cloudFailure(response, 'Feedback could not be removed.');
+      setFeedbackRequests(current => current.filter(request => request.id !== item.id));
+    } finally { setBusy(false); }
+  }
   const selectConnection = useCallback(async (mode: 'personal' | 'sponsored') => {
     if (selectingConnection) return;
     setSelectingConnection(true); setConnectionError(null);
@@ -4589,10 +4603,7 @@ function CloudAuthGate() {
   const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
   const context: CloudIdentityState | null = status ? { ...status, deniedIdentityAvailable, deniedInvitationStatus, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-  const showSponsorWelcome = navigationEntry?.type !== 'reload'
-    && (!!status?.account?.invitation_welcome_pending
-      || (!!status?.account?.sponsorship.eligible && status?.user?.role !== 'admin'))
-    && !(playSignInReturn && window.location.pathname === '/project')
+  const showSponsorWelcome = !!status?.account?.invitation_welcome_pending
     && !welcomeDismissedForPage;
   const showGuestWelcome = !!status?.enabled && !status?.authenticated
     && window.location.pathname !== '/demo'
@@ -4603,7 +4614,7 @@ function CloudAuthGate() {
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedIdentityAvailable={deniedIdentityAvailable} authenticated={status.authenticated} user={status.user}/>;
   return <CloudIdentityContext.Provider value={context}>
-    <AIProvider unavailable={!status.authenticated}><App/>
+    <AIProvider unavailable={!status.authenticated || status.user?.role === 'guest'}><App/>
     {status.authenticated && showSponsorWelcome && <InvitationWelcomeDialog
       audience={status.account?.sponsorship.eligible ? 'sponsored' : 'invited'}
       allowance={budgetEmail === status.user?.email ? budget?.remaining_usd ?? null : null}
@@ -4618,7 +4629,7 @@ function CloudAuthGate() {
       allowanceLoading={false}
       onDismiss={async () => { window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true'); setWelcomeDismissedForPage(true); }}
     />}
-    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onReload={reloadGrantAllowance} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}
+    {accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onReload={reloadGrantAllowance} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback} onRemoveFeedback={removeFeedback}/>}
     </AIProvider>
   </CloudIdentityContext.Provider>;
 }

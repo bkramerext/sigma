@@ -207,6 +207,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
             expect(session_row.locator(".session-row-content")).to_be_visible()
             outcome = session_row.get_by_role("region", name="Research outcome")
             expect(outcome).to_be_visible()
+            advanced = outcome.get_by_role("button", name="Advanced Outcome")
+            if advanced.count():
+                advanced.click()
+                expect(outcome.locator(".outcome-subsections.outcome-advanced")).to_be_visible()
             review = session["outcome"]["solution_review"]
             expect(outcome).to_contain_text(review["claim"])
             expect(outcome).to_contain_text(review["argument_summary"])
@@ -263,7 +267,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
                 page.screenshot(
                     path=f"/tmp/sigma-t17-8-markdown-toggle-{width}.png", full_page=True
                 )
-            outcome.get_by_text("Citations, Evidence & Obligations", exact=True).click()
+            outcome.get_by_text("Citations, evidence & obligations", exact=True).click()
             artifacts = session_row.get_by_role("region", name="Research artifacts")
             expect(artifacts).to_be_visible()
             expect(artifacts.locator("li")).to_have_count(len(session["artifacts"]))

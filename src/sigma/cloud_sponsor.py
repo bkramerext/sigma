@@ -32,13 +32,9 @@ def _diagnose(issue: str | None) -> None:
 
 def inference_provider() -> str:
     """Return the provider bound to sponsored inference in this deployment."""
-    from sigma import cloud_auth, cloud_workspaces
-
-    if cloud_auth.config().local and not cloud_workspaces.enabled():
-        # Local sponsored access defaults to the designated ChatGPT session.
-        # A service API key is used only when the operator selects it explicitly.
-        return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
-    return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+    # Sponsored inference uses the designated ChatGPT account by default in
+    # both local and hosted modes. API billing requires explicit operator opt-in.
+    return os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt").strip()
 
 
 def expected_email() -> str:
@@ -122,11 +118,8 @@ async def import_session(source: Path) -> None:
     """
     from sigma import cloud_workspaces
 
-    if (
-        not cloud_workspaces.enabled()
-        or os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER") != "chatgpt"
-    ):
-        raise ProjectError("Sponsor import requires explicit hosted ChatGPT configuration.")
+    if not cloud_workspaces.enabled() or inference_provider() != "chatgpt":
+        raise ProjectError("Sponsor import requires hosted ChatGPT sponsorship.")
     email = expected_email()
     if not source.is_absolute():
         raise ProjectError("Use an absolute path to the protected credential file.")

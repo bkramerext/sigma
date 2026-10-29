@@ -74,7 +74,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
     async def sponsor_context(self):
         return await openai_connection.sponsored_auth_context("a" * 64)
 
-    async def test_local_sponsor_defaults_to_the_designated_admin_identity(self):
+    async def test_local_sponsor_defaults_to_designated_admin_identity(self):
         from sigma import cloud_auth
 
         with patch.dict(
@@ -89,6 +89,189 @@ class SponsorTests(IsolatedAsyncioTestCase):
             self.assertEqual(cloud_sponsor.expected_email(), cloud_auth.INVITATION_RECIPIENT)
             os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
             self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
+
+    async def test_hosted_admin_connection_is_role_based(self):
+        from types import SimpleNamespace
+        from typing import cast
+
+        from fastapi import HTTPException
+        from starlette.requests import Request
+
+        from sigma import api, cloud_auth
+
+        principal = SimpleNamespace(
+            role="admin", email="admin@example.test", subject="admin-subject"
+        )
+        request = cast(Request, SimpleNamespace(state=SimpleNamespace(cloud_principal=principal)))
+        cfg = SimpleNamespace(enabled=True, local=False)
+        with (
+            patch.object(cloud_auth, "config", return_value=cfg),
+            patch.object(cloud_auth, "Principal", SimpleNamespace),
+            patch.object(
+                cloud_sponsor,
+                "sponsor_account_id",
+                AsyncMock(side_effect=ProjectError("missing")),
+            ),
+            patch.object(chatgpt_auth, "begin", AsyncMock(return_value={"id": "attempt"})) as begin,
+        ):
+            # The Google administrator identity is deliberately different from
+            # the ChatGPT sponsor identity. Authorization is by verified role.
+            result = await api.sponsor_auth_begin(request)
+            self.assertEqual(result["id"], "attempt")
+            begin.assert_awaited_once_with(account_id=None, sponsor=True)
+
+            principal.role = "member"
+            with self.assertRaises(HTTPException) as rejected:
+                await api.sponsor_auth_begin(request)
+            self.assertEqual(rejected.exception.status_code, 403)
+
+    async def test_hosted_sponsor_oauth_callback_persists_connected_credentials(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        from sigma import cloud_auth, cloud_workspaces
+
+        oauth_account = self.account | {
+            "email": "zetacontinuation@gmail.com",
+            "subject": "zetacontinuation-sponsor-subject",
+        }
+
+        with (
+            patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com"}),
+            patch.object(cloud_workspaces, "enabled", return_value=True),
+            patch.object(
+                cloud_auth,
+                "config",
+                return_value=type(
+                    "Config",
+                    (),
+                    {"origin": "https://sigma.example.test", "local": False},
+                )(),
+            ),
+            patch.object(
+                chatgpt_auth,
+                "discovery",
+                AsyncMock(
+                    return_value={"authorization_endpoint": "https://auth.openai.com/authorize"}
+                ),
+            ),
+            patch.object(
+                chatgpt_auth,
+                "http",
+                AsyncMock(return_value=(200, {"access_token": "oauth-access"})),
+            ) as exchange,
+            patch.object(
+                chatgpt_auth,
+                "validate_tokens",
+                AsyncMock(return_value=oauth_account),
+            ) as validate,
+        ):
+            started = await chatgpt_auth.begin(sponsor=True)
+            authorization_url = chatgpt_auth.authorization_url(started["id"])
+            params = parse_qs(urlsplit(authorization_url).query)
+            attempt = chatgpt_auth._attempts[started["id"]]
+            self.assertEqual(
+                params["redirect_uri"],
+                [f"https://sigma.example.test/api/ai/auth/callback/{started['id']}"],
+            )
+
+            await chatgpt_auth.hosted_callback(
+                started["id"],
+                f"state={attempt.state}&code=fixture-code&client_id=oaiapp_fixture",
+            )
+
+        self.assertEqual(chatgpt_auth.attempt_status(started["id"])["status"], "connected")
+        exchange.assert_awaited_once()
+        validate.assert_awaited_once()
+        with patch.dict(os.environ, {"SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com"}):
+            async with ai_store.sponsor_transaction() as persisted:
+                # Re-read through the store service after OAuth completion; the
+                # connection state must come from the saved sponsor record.
+                self.assertEqual(len(persisted["accounts"]), 1)
+                saved = next(iter(persisted["accounts"].values()))
+                self.assertEqual(saved["access_token"], "fixture-access")
+                self.assertEqual(saved["email"], "zetacontinuation@gmail.com")
+            connected = await cloud_sponsor.sponsor_session()
+            self.assertEqual(connected["status"], "connected")
+            context = await self.sponsor_context()
+            self.assertEqual(context["status"], "connected")
+            self.assertEqual(context["account_label"], "zetacontinuation@gmail.com")
+
+            async def checked_connection(*args, **kwargs):
+                result = {
+                    "status": "connected",
+                    "checked_at": "2026-10-28T00:00:00Z",
+                    "ttl_seconds": 60,
+                }
+                return result
+
+            with patch.object(
+                openai_connection, "_check", AsyncMock(side_effect=checked_connection)
+            ):
+                view = await openai_connection.connection(context=context)
+            self.assertEqual(view["status"], "connected")
+            self.assertEqual(view["account_label"], "zetacontinuation@gmail.com")
+            self.assertNotIn("fixture-access", repr(view))
+
+    async def test_hosted_sponsor_connection_reads_saved_credentials(self):
+        async with ai_store.sponsor_transaction() as state:
+            state["accounts"]["sponsor"] = dict(self.account)
+            state["active"] = "sponsor"
+            state["mode"] = "chatgpt"
+        result = await cloud_sponsor.sponsor_session()
+        self.assertEqual(result["status"], "connected")
+        self.assertEqual(result["account"]["email"], "sponsor@example.test")
+
+    async def test_personal_connection_identifies_selected_designated_sponsor(self):
+        from sigma import cloud_workspaces
+
+        with (
+            patch.object(cloud_workspaces, "enabled", return_value=False),
+            patch.object(
+                chatgpt_auth,
+                "preferences",
+                AsyncMock(
+                    return_value={
+                        "mode": "chatgpt",
+                        "active_account": "sponsor",
+                        "accounts": [],
+                        "welcome_pending": False,
+                    }
+                ),
+            ),
+        ):
+            result = await openai_connection.connection(
+                context={
+                    "identity": "local_personal_unconnected",
+                    "token": "",
+                    "mode": "chatgpt",
+                    "status": "disconnected",
+                    "account_label": None,
+                }
+            )
+        self.assertTrue(result["sponsor_account_selected"])
+
+    async def test_hosted_sponsor_defaults_to_chatgpt_without_api_billing(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "false",
+                "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
+                "SIGMA_CLOUD_OPENAI_API_KEY": "must-not-be-used",
+            },
+        ):
+            os.environ.pop("SIGMA_CLOUD_INFERENCE_PROVIDER", None)
+            self.assertEqual(cloud_sponsor.inference_provider(), "chatgpt")
+            self.assertEqual(cloud_sponsor.expected_email(), "zetacontinuation@gmail.com")
+            with patch.object(
+                cloud_sponsor,
+                "sponsor_session",
+                AsyncMock(return_value={"status": "disconnected"}),
+            ) as sponsor:
+                context = await self.sponsor_context()
+            sponsor.assert_awaited_once()
+            self.assertEqual(context["mode"], "chatgpt")
+            self.assertEqual(context["status"], "disconnected")
+            self.assertEqual(context["token"], "")
 
     async def test_local_service_key_requires_explicit_provider_and_dedicated_secret(self):
         with (
@@ -282,8 +465,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
                 },
             )
 
-        openai_connection._identity = ""
-        openai_connection._cached = None
+        openai_connection.clear_cache_for_tests()
         with patch.object(
             openai_connection.httpx,
             "AsyncClient",

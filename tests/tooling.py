@@ -341,6 +341,11 @@ def check_sponsored_local_startup() -> None:
 
 
 def check_local_google_setup_warning() -> None:
+    with patch.dict("os.environ", {}, clear=True):
+        warning = local_google_configuration_warning()
+    assert warning is not None
+    assert "GOOGLE_OIDC_CLIENT_ID" in warning
+    assert "GOOGLE_OIDC_CLIENT_SECRET" in warning
     with patch.dict(
         "os.environ",
         {
@@ -353,7 +358,7 @@ def check_local_google_setup_warning() -> None:
         warning = local_google_configuration_warning()
     assert warning is not None
     assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in warning
-    assert "source ~/.bashrc" in warning
+    assert "administrator access is unavailable" in warning
     assert "server-secret" not in warning
     with patch.dict(
         "os.environ",
@@ -398,7 +403,8 @@ def check_partial_google_startup_remains_guest_without_admin() -> None:
         redirect_stderr(warning_output),
     ):
         assert run_ui() == 0
-    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in warning_output.getvalue()
+    assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" in warning_output.getvalue()
+    assert "administrator access is unavailable" in warning_output.getvalue()
     backend_env = launch.call_args_list[0].kwargs["env"]
     assert backend_env["SIGMA_CLOUD_AUTH_ENABLED"] == "true"
     assert backend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"

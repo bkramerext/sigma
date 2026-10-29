@@ -10,7 +10,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import httpx
@@ -263,6 +263,9 @@ def main(mode: str = "api_key") -> None:
                 assert sponsor_status.json()["mode"] == "sponsored"
                 assert sponsor_status.json()["status"] == "connected"
                 assert "authorization" not in sponsor_status.json()
+                # Readiness discloses aggregate funding only to verified admins,
+                # and must never trigger an inference call or expose credentials.
+                assert client.get("/api/cloud-research/readiness").status_code == 403
                 # Administrators receive the same per-identity sponsored
                 # allowance; role grants administration authority, not an
                 # inference-budget exemption.
@@ -285,6 +288,48 @@ def main(mode: str = "api_key") -> None:
                 assert admin_budget.json()["remaining_usd"] == float(
                     cloud_research._spend_ceiling_decimal()
                 )
+                with patch(
+                    "sigma.api.connection",
+                    new=AsyncMock(return_value={"status": "connected"}),
+                ) as catalog_check:
+                    readiness = client.get("/api/cloud-research/readiness")
+                assert readiness.status_code == 200, readiness.text
+                data = readiness.json()
+                assert catalog_check.await_count == 1
+                assert data["provider"] == mode
+                assert data["provider_status"] == "connected"
+                assert data["global_remaining_usd"] == float(
+                    cloud_research._spend_ceiling_decimal()
+                )
+                assert data["live_inference_verified"] is False
+                assert data["preflight_ready"] is True
+                assert "sponsored_provider_invalid" not in data["blockers"]
+                assert "fake-server-credential" not in readiness.text
+                assert "fake-plan-credential" not in readiness.text
+                assert "admin@example.test" not in readiness.text
+                assert readiness.headers["cache-control"] == "no-store"
+                # The diagnostic must remain readable when production's
+                # deployment provider or spending cap is broken; neither
+                # failure may leak provider exceptions or credentials.
+                from sigma.projects import ProjectError
+
+                with patch(
+                    "sigma.api.sponsored_auth_context",
+                    new=AsyncMock(side_effect=ProjectError("private auth failure")),
+                ):
+                    no_provider = client.get("/api/cloud-research/readiness")
+                assert no_provider.status_code == 200
+                assert "sponsored_provider_credential_missing" in no_provider.json()["blockers"]
+                assert "private auth failure" not in no_provider.text
+                with patch(
+                    "sigma.api.cloud_research.snapshot",
+                    side_effect=cloud_research.CloudResearchUnavailable("private ledger failure"),
+                ):
+                    no_budget = client.get("/api/cloud-research/readiness")
+                assert no_budget.status_code == 200
+                assert no_budget.json()["global_remaining_usd"] is None
+                assert "shared_spending_policy_unavailable" in no_budget.json()["blockers"]
+                assert "private ledger failure" not in no_budget.text
                 client.headers.pop("X-Test-Role")
                 client.headers.update(
                     {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
