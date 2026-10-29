@@ -5,9 +5,40 @@
 .home-page .about-provenance p { margin: 0 0 12px; }
 .home-page .about-provenance p:last-child { margin-bottom: 0; }
 .home-page .about-provenance strong { color: #f1cd9f; }
+.home-page .about-provenance-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0 0 14px;
+}
+.home-page .about-provenance-comparison > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #4b6579;
+  border-radius: 7px;
+  background: linear-gradient(145deg, #172735, #101b26);
+}
+.home-page .about-provenance-comparison > div + div {
+  border-color: #698e82;
+  background: linear-gradient(145deg, #16342f, #101c24);
+}
+.home-page .about-provenance-comparison span {
+  color: #e3edf4;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.home-page .about-provenance-comparison small {
+  color: #aebfca;
+  font-size: 10px;
+}
 .home-page .about-provenance-figure { margin: 14px 0; }
 .home-page .about-provenance-diagram-scroll {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   border: 1px solid #36536a;
@@ -21,7 +52,8 @@
 .home-page .about-provenance-diagram {
   display: block;
   width: 100%;
-  min-width: 610px;
+  min-width: 0;
+  max-width: 100%;
   height: auto;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
@@ -31,5 +63,7 @@
   font-size: 11px;
 }
 @media (max-width: 600px) {
-  .home-page .about-provenance-diagram { min-width: 760px; }
+  .home-page .about-provenance-comparison { grid-template-columns: minmax(0, 1fr); }
+  /* Keep labels readable on phones; scroll only inside the diagram, not the dialog. */
+  .home-page .about-provenance-diagram { min-width: 760px; max-width: none; }
 }
