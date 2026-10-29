@@ -316,3 +316,94 @@ final pushed HEAD is the acceptance gate and remains to be observed after push.
   branch, live provider-backed Play session, live provider response sizes and
   memory behavior, live model quality, actual provider usage/cost, and normal
   same-origin/CORS behavior of the deterministic Chrome harness.
+
+## Consolidated R4R — final review gates (2026-10-29)
+
+### Final repository and branch state
+
+- PR #317; issues #306 and #302.
+- Branch: `red/issue-306-happy-path`.
+- Base `main`: `4cff1e544bc30f14096073ee6c7440c45bb5e499` (T314 merged).
+- Current implementation HEAD at verification: `f7ce1dafe6c513db995ab847e16f7bea66439e07`.
+- T314 merge commit: `099fe0584c3d8ac207373362a251b82a62b4293e`.
+- PR: https://github.com/bkramerext/sigma/pull/317 (open; not merged).
+- No deployment and no paid provider calls.
+
+### Terminal CI and local checks
+
+All six GitHub Actions workflows on implementation HEAD `f7ce1daf` reached a
+terminal `success` result:
+
+- T201 obligation recovery browser acceptance: run `40813340833`.
+- T249 integrated project verification: run `40813340817`.
+- SIGMA verification: run `40813340820`.
+- Research Outcome browser acceptance: run `40813340819`.
+- T92 Recent Projects: run `40813340813`.
+- T200 Model availability: run `40813340805`.
+
+After installing dependencies from the merged lockfile, local `./sigma test`
+passed all steps, including Ruff, formatting, Pyright, frontend typecheck and
+production build. Its graph-present sandbox subcase explicitly skipped because
+the local sandbox image is unavailable; T249 CI built that image and passed its
+integrated verification. `tests/storage.py` passed both standalone and inside
+the final successful local full-suite run.
+
+Real Chrome checks on the reconciled tree passed:
+
+- T201 `browser_checks/guest_samples.py`: Cancel hit testing and complete guest
+  sample workflow (68 transient guest workspaces observed). The CI T201 workflow
+  also passed its overflow and public legal checks.
+- T301 Markdown math rendering and T47 saved Research Outcome rendering.
+- Deterministic Maximum Regions two-round scripted lifecycle, report, accounting
+  and persistence (details below).
+
+### MET / UNMET / UNVERIFIED
+
+- **MET:** #306 terminology, conservative defaults, frontend/backend validation
+  parity, currency input normalization, fair shared-turn scheduling, pending
+  Skeptic final-turn use, no orphan Investigator calls, and explicit deferred
+  outcomes.
+- **MET:** completion guards and adversarial tests ensure open obligations,
+  contradictory achieved claims, challenged reasoning, and exact budget
+  termination do not produce an unsupported achieved solution.
+- **MET:** Maximum Regions deterministic lifecycle: sample creation, four
+  scripted roles in exact order `Investigator → Skeptic → Investigator →
+  Skeptic`, flawed claim and objection, revised candidate and review, two saved
+  artifacts, fixture usage/cost reconciliation, terminal `ended`, report, and
+  refresh/reopen persistence. Usage was scripted: 3,600 input (400 cached),
+  4,800 output tokens; the estimate reconciled below $2. No real usage or
+  provider cost is represented.
+- **MET:** T201 and T249 terminal CI on implementation HEAD above; full CI and
+  relevant browser checks passed.
+- **MET:** finite 8,000,000-byte response/stream limit retained. Regression
+  accepts 1,010,000 bytes and rejects responses/streams crossing 8 MB. No
+  further cap increase was made.
+- **UNMET:** none among authorized deterministic and CI verification criteria.
+- **UNVERIFIED:** live provider-backed Play, live model correctness, actual
+  provider usage/cost, live provider payload size distribution, response parsing
+  peak memory, and production browser-origin/CORS security behavior. No paid
+  provider calls were authorized or made.
+
+### Bound and browser-harness limitations
+
+The 8 MB bound is per response, not a total process-memory ceiling. Local
+portfolio mode may hold three 8 MB response bodies concurrently (24 MB raw
+body buffers in the theoretical maximum) before parsing/object allocation;
+actual peak memory and live payload sizes were not measured. Hosted sponsored
+calls serialize to one. The limit stays finite and must not be raised without
+provider evidence.
+
+The deterministic Chrome test launches with `--disable-web-security` and routes
+API traffic from the UI origin to a separate fixture origin. It establishes
+scripted SIGMA UI/backend orchestration, persistence and simulated accounting;
+it is not production-origin, same-origin, CORS, or browser-security acceptance,
+and it does not establish live model quality or real provider cost.
+
+### Remaining integration risks
+
+- Live provider behavior remains unverified until separately authorized.
+- The per-response bound allows bounded but material buffering; memory behavior
+  under production concurrency still needs measurement if provider payloads
+  approach the limit.
+- Current `main` may advance again before merge; coordinator should recheck the
+  base and CI after any further main changes.

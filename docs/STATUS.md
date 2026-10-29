@@ -7770,3 +7770,23 @@ memory, and live provider behavior remain **UNVERIFIED**. Local portfolio
 execution can buffer three 8 MB responses concurrently (24 MB raw bodies in
 theoretical aggregate, excluding parser/object overhead); hosted execution
 serializes calls. This is not a total process-memory ceiling.
+
+Final review gates for PR #317 are met on implementation HEAD
+`f7ce1dafe6c513db995ab847e16f7bea66439e07`, based on current main
+`4cff1e544bc30f14096073ee6c7440c45bb5e499`. All six associated GitHub Actions
+runs succeeded: T201 `40813340833`, T249 `40813340817`, SIGMA verification
+`40813340820`, Research Outcome `40813340819`, T92 `40813340813`, and T200
+`40813340805`. Local `./sigma test` also passed all steps after installing the
+merged lockfile; the local graph-present sandbox subcase skipped because the
+image is unavailable, while T249 CI passed its sandbox build/integration.
+Real Chrome passed guest samples (including Cancel), T301 Markdown, T47
+Research Outcome, and the two-round scripted Maximum Regions lifecycle.
+
+The Chrome Maximum Regions fixture scripts all four responses and token counts;
+it verifies deterministic orchestration/persistence/simulated accounting only.
+It uses `--disable-web-security` and a separate fixture origin, so does not
+verify normal origin/CORS behavior. Live provider behavior and cost remain
+UNVERIFIED; no paid calls were made. The 8 MB per-response limit and 1.01 MB
+accept/8 MB overflow regressions remain in place. Three concurrent local
+responses could hold 24 MB raw buffers plus parsing allocations; production
+payload and peak-memory behavior remain UNVERIFIED. No deployment or merge.
