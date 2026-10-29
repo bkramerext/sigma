@@ -1904,15 +1904,19 @@ function AboutArchitecture() {
     strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
     strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
-    session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
+    session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over several rounds, within the limits you set.',
     orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
     investigatorFollowup: 'A later Investigator turn can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
     tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
     workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
     skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
+    investigatorRound2: 'The Investigator sees the Skeptic’s objections and can change the idea, the assumptions, or the experiment.',
+    skepticRound2: 'The Skeptic checks the revised argument and searches for what is still missing.',
+    investigatorRound3: 'The Investigator can pursue a promising result or try a new test based on the earlier exchange.',
+    skepticRound3: 'The Skeptic challenges the latest claim, including its remaining assumptions and counterexamples.',
     decision: 'After a review, SIGMA applies the recorded assessment, next question and remaining work within resource limits. A strategy can remain available for later revision or another session.',
-    savedEvidence: 'Persisted artifacts preserve findings, reasoning, objections, execution results and open questions. Researchers can revisit prior evidence to guide later sessions or strategy revisions.',
+    savedEvidence: 'Persisted artifacts and outcomes expose findings, objections, test results, remaining obligations and uncertainty. Research can be reviewed and reused, but the outcome is not automatic proof certification.',
   } as const;
   type DiagramNode = keyof typeof descriptions;
   const [activeInfoNode, setActiveInfoNode] = useState<DiagramNode | null>(null);
@@ -2029,10 +2033,17 @@ function AboutArchitecture() {
     </div>, tone);
   }
   const strategyExamples = [
-    { id: 'strategyA' as const, title: 'Strategy A', subtitle: 'Explore a pattern' },
-    { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another model' },
-    { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Challenge assumptions' },
+    { id: 'strategyA' as const, title: 'Strategy A', subtitle: 'Look for a pattern' },
+    { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another method' },
+    { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Look for a counterexample' },
   ];
+  // A single strategy's illustrative six turns. These are successive calls
+  // using two agent roles, not six persistent agents or a scheduling promise.
+  const exampleRounds = [
+    { round: 1, title: 'Try an idea', investigator: 'Propose an approach', skeptic: 'Look for flaws', investigatorKey: 'investigator', skepticKey: 'skeptic' },
+    { round: 2, title: 'Improve it', investigator: 'Revise after critique', skeptic: 'Challenge the revision', investigatorKey: 'investigatorRound2', skepticKey: 'skepticRound2' },
+    { round: 3, title: 'Dig deeper', investigator: 'Test a stronger idea', skeptic: 'Check what remains uncertain', investigatorKey: 'investigatorRound3', skepticKey: 'skepticRound3' },
+  ] as const;
   function toggleSession() {
     const next = !sessionExpanded;
     if (!next && activeInfoNode === 'session') setActiveInfoNode(null);
@@ -2044,10 +2055,10 @@ function AboutArchitecture() {
 
   return <section className="about-architecture" aria-label="How SIGMA Works: Multi-Agentic Research">
     <div className="about-research-flow">
-      <div className="about-flow-project">{card('project', 'Research Project', 'The overarching hard question')}</div>
-      <div className="about-flow-connector"><span>Branches into distinct research directions</span><i aria-hidden="true"/></div>
+      <div className="about-flow-project">{card('project', 'Research Question', 'Start with a question you want to solve')}</div>
+      <div className="about-flow-connector"><span>Try more than one way to answer it</span><i aria-hidden="true"/></div>
       <div className="about-strategy-group">
-        {infoRegion('strategies', <div className="about-strategy-group-heading"><span>Project Strategies</span>{help('strategies', 'Project Strategies')}</div>)}
+        {infoRegion('strategies', <div className="about-strategy-group-heading"><span>Strategies · Different Approaches</span>{help('strategies', 'Project Strategies')}</div>)}
         <div className="about-strategy-cards">
           {strategyExamples.map(strategy => {
             return infoRegion(strategy.id, <div className="about-strategy-card">
@@ -2055,63 +2066,80 @@ function AboutArchitecture() {
                 <span className="about-diagram-node-title">{strategy.title}</span>
                 <span className="about-diagram-node-subtitle">{strategy.subtitle}</span>
               </div>
+              <div className="about-strategy-round" aria-label="Research round: Investigator turn followed by Skeptic turn">
+                <span>Investigator</span><b aria-hidden="true">→</b><span>Skeptic</span>
+              </div>
               {help(strategy.id, strategy.title)}
             </div>);
           })}
         </div>
+        <p className="about-strategy-round-note">Each approach can be tried, challenged, and improved over several rounds.</p>
       </div>
-      <div className="about-flow-connector about-strategy-parallel-note"><span>Several selected directions can advance side by side</span><i aria-hidden="true"/></div>
+      <div className="about-flow-connector about-strategy-parallel-note"><span>Press Play to investigate the selected approaches</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
-        <div className="about-session-heading">{card('session', 'Research Session', 'Brings specialist agent turns together')}</div>
+        <div className="about-session-heading">{card('session', 'Research Session', 'A run where SIGMA investigates your selected approaches')}</div>
         <div className="about-agent-cycle-preview">
-          <span className="about-agent-role">Investigator<small>AI agent</small></span>
+          <span className="about-agent-role">Investigator<small>Tries an idea</small></span>
           <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          <span className="about-agent-role">Skeptic<small>AI agent</small></span>
-          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show Me') + ' Investigator and Skeptic details'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show Me'}</button>
+          <span className="about-agent-role">Skeptic<small>Looks for flaws</small></span>
+          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show') + ' Investigator and Skeptic example'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show'}</button>
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">Different minds take turns on the same hard question</h4>
-            <p className="about-multi-agent-intro">SIGMA brings specialist AI agents into the research. Investigators develop ideas and test possibilities. Skeptics challenge assumptions and probe the evidence. Investigators return with the critique in view, and the exchange can continue. Each turn adds another perspective while the work stays together in the research session.</p>
-            <section className="about-agent-instantiation" aria-label="Different AI agents contribute successive research turns">
-              <h5>One investigation. Multiple agent turns.</h5>
+            <h4 id="about-session-detail-heading">How an idea grows over six agent turns</h4>
+            <p className="about-multi-agent-intro">Here is one possible path for <strong>one strategy</strong>. The Investigator makes an attempt; the Skeptic tests it; then the Investigator can build on what was learned. The process can repeat instead of ending after the first answer.</p>
+            <p className="about-round-definition"><strong>One research round</strong> is an Investigator → Skeptic exchange within a strategy. <strong>One agent turn</strong> is a single contribution from either role.</p>
+            <section className="about-agent-instantiation" aria-label="Example of three research rounds and six agent turns within one strategy">
+              <h5>One strategy · Three rounds · Six turns</h5>
               <div className="about-agent-turns">
-                <div className="about-agent-turn">
-                  <span className="about-turn-number">01 · INVESTIGATE</span>
-                  {card('investigator', 'Investigator', 'Develops an approach and tests ideas', 'blue')}
-                  <span className="about-turn-detail">Explores the direction</span>
-                </div>
-                <span className="about-turn-arrow" aria-hidden="true">→</span>
-                <div className="about-agent-turn">
-                  <span className="about-turn-number">02 · CHALLENGE</span>
-                  {card('skeptic', 'Skeptic', 'Questions assumptions and probes evidence', 'blue')}
-                  <span className="about-turn-detail">Finds gaps and next questions</span>
-                </div>
-                <div className="about-agent-return">
-                  <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-turn-return-metal" x1="1" x2="0"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M510 3 V27 H170 V72 M162 62 L170 72 L178 62" fill="none" stroke="url(#about-turn-return-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  <span>The Skeptic's critique feeds the next Investigator turn</span>
-                  <b aria-hidden="true">↓</b>
-                </div>
-                <div className="about-agent-turn about-agent-turn--return">
-                  <span className="about-turn-number">03 · BUILD ON IT</span>
-                  {card('investigatorFollowup', 'Investigator', 'Takes up the critique and continues', 'blue')}
-                  <span className="about-turn-detail">Carries the research forward</span>
-                </div>
+                {exampleRounds.map((round, index) => <div className="about-agent-round" key={round.round}>
+                  <div className="about-agent-round-heading"><strong>Round {round.round}</strong><span>{round.title}</span></div>
+                  <div className="about-agent-round-pair">
+                    <div className="about-agent-turn">
+                      <span className="about-turn-number">TURN {round.round * 2 - 1}</span>
+                      {card(round.investigatorKey, 'Investigator', round.investigator, 'blue')}
+                    </div>
+                    <span className="about-turn-arrow" aria-hidden="true">→</span>
+                    <div className="about-agent-turn">
+                      <span className="about-turn-number">TURN {round.round * 2}</span>
+                      {card(round.skepticKey, 'Skeptic', round.skeptic, 'blue')}
+                    </div>
+                  </div>
+                  {index < exampleRounds.length - 1 && <div className="about-agent-return">
+                    <svg viewBox="0 0 600 42" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                      <path d="M505 3 V15 H155 V38 M147 30 L155 38 L163 30" fill="none" stroke="#75b7ef" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>The Skeptic's feedback shapes the next attempt</span>
+                    <b aria-hidden="true">↓</b>
+                  </div>}
+                </div>)}
               </div>
-              <div className="about-agent-turn-more"><span aria-hidden="true">···</span> More Investigator and Skeptic turns can follow as the research develops</div>
-              <p className="about-agent-instantiation-note">Investigator turns can draw on tools such as SciPy and SageMath. Every turn and its research stay with the session for complete recoverability and auditing.</p>
+              <p className="about-agent-instantiation-note">These six turns show how <strong>one strategy</strong> can develop. Another strategy may take a different path—or stop early. Python and SageMath experiments may help when available. SIGMA saves the arguments, challenges, and results for review.</p>
             </section>
+            <p className="about-shared-budget"><strong>Why repeat?</strong> A Skeptic may find a flaw the Investigator can fix or a question worth testing. Each new attempt can build on the last one.</p>
+            <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
+              <p className="about-exploration-title">How much can one session explore?</p>
+              <p>Suppose you select all three strategies and allow <strong>three rounds per strategy</strong>:</p>
+              <div className="about-exploration-grid">
+                {strategyExamples.map(strategy => <div className="about-exploration-row" key={strategy.id}>
+                  <span className="about-exploration-strategy">{strategy.title}</span>
+                  {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>2 turns</small></span>)}
+                </div>)}
+              </div>
+              <p className="about-session-exploration-example">That's <strong>9 possible rounds, or 18 agent turns</strong>. You also choose a <strong>maximum number of turns for the whole session</strong>. With a 12-turn limit, SIGMA could run at most 6 complete rounds across the three strategies. Some strategies might stop early or never start.</p>
+            </div>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
-            <p className="about-multiple-strategies-note">A project can explore several strategies. Each gives agents another direction to investigate, and the saved findings remain available for later work.</p>
-            <p className="about-multiple-sessions-note">Multiple sessions let researchers revisit a strategy with new evidence, try revised approaches, and compare results over time.</p>
+            <p className="about-multiple-strategies-note">Each selected strategy has its own sequence of attempts. All strategies draw from the same session-wide turn limit.</p>
+            <p className="about-multiple-sessions-note">You can run another session later to revisit a strategy with new evidence or compare what changed.</p>
           </div>
         </div>
       </div>
-      <div className="about-flow-connector"><span>Save findings</span><i aria-hidden="true"/></div>
+      <div className="about-flow-connector"><span>Keep the ideas, tests, criticisms and unanswered questions</span><i aria-hidden="true"/></div>
       <div className="about-flow-evidence">{card('savedEvidence', 'Saved Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
+      <div className="about-evidence-report-note">Review what worked, what failed, and what still needs proof. Export the research or write a report.</div>
       <div className="about-history-return"><span aria-hidden="true">↶</span> Findings may inform later sessions or researcher-approved strategy revisions.</div>
     </div>
-    <p className="about-architecture-caption">SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find.</p>
+    <p className="about-architecture-caption">SIGMA can try several approaches, challenge each attempt, and try again. It saves the reasoning and evidence instead of giving only a one-shot answer. An AI critique is not a mathematical proof.</p>
   </section>;
 }
 function FeedbackForm() {

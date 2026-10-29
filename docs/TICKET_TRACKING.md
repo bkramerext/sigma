@@ -1,5 +1,11 @@
 # SIGMA Ticket Tracking
 
+## Current main assignment update (2026-10-28)
+
+| Ticket | Owner | Status | Branch / handoff |
+|---|---|---|---|
+| T301 — Context-aware mathematical Markdown | Blue | **R4R** · [PR #314](https://github.com/bkramerext/sigma/pull/314), open and not merged | [ticket](../tickets/t301.md) · `blue/t301-math-markdown` · [handoff](../messages/t301_blue_math_markdown_r4r.md) |
+
 ## Current main assignment update (2026-10-26)
 
 | Issue | Owner | Status | Branch / handoff |
