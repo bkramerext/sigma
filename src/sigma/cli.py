@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from dataclasses import asdict
+from pathlib import Path
 
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.local_config import load_local_config
@@ -26,6 +27,8 @@ from sigma.projects import (
 from sigma.text_views import inspect_text, save_source
 from sigma.tooling import run_tooling
 from sigma.ui import run_shutdown, run_ui
+
+DEFAULT_CLOUD_TOKEN = Path.home() / ".sigma" / "cloud-cli" / "token"
 
 COMMAND_DETAILS = {
     "init": (
@@ -147,6 +150,11 @@ COMMAND_DETAILS = {
         "Stop identifiable local SIGMA UI servers safely.",
         "./sigma shutdown",
         "Only processes identifiable as SIGMA instances are stopped; unrelated port owners are left alone.",
+    ),
+    "cloud": (
+        "Authenticate to hosted SIGMA and inspect, configure, run, and export hosted projects.",
+        "./sigma cloud login --host https://sigma.example.org",
+        "Cloud commands use hosted APIs and Google sign-in. They never synthesize a local identity.",
     ),
 }
 
@@ -290,6 +298,73 @@ def main() -> None:
         help="Open SIGMA in a browser tab after startup",
     )
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
+    cloud = add_command(commands, "cloud")
+    cloud_commands = cloud.add_subparsers(dest="cloud_command", required=True)
+    cloud_login = cloud_commands.add_parser(
+        "login", help="Sign in through Google using loopback PKCE"
+    )
+    cloud_login.add_argument("--host", required=True)
+    cloud_login.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_status = cloud_commands.add_parser("status", help="Show verified hosted account identity")
+    cloud_status.add_argument("--host", required=True)
+    cloud_status.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_logout = cloud_commands.add_parser(
+        "logout", help="Revoke and remove the hosted CLI credential"
+    )
+    cloud_logout.add_argument("--host", required=True)
+    cloud_logout.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_param = cloud_commands.add_parser(
+        "set-param", help="Change an allowlisted project research limit"
+    )
+    cloud_param.add_argument("--host", required=True)
+    cloud_param.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_param.add_argument(
+        "--project", required=True, help="Hosted project path from SIGMA's API"
+    )
+    cloud_param.add_argument(
+        "name",
+        choices=[
+            "research-rounds",
+            "model-calls",
+            "session-duration-minutes",
+            "output-tokens-per-call",
+            "maximum-estimated-cost-usd",
+            "maximum-input-tokens-per-session",
+            "max-concurrent-sessions",
+            "title",
+            "problem",
+            "research-mode",
+            "model",
+            "thinking",
+            "difficulty",
+            "show-advanced-outcome-details",
+        ],
+    )
+    cloud_param.add_argument("value")
+    cloud_export = cloud_commands.add_parser(
+        "export", help="Save an importable hosted project bundle"
+    )
+    cloud_export.add_argument("--host", required=True)
+    cloud_export.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_export.add_argument("--project", required=True)
+    cloud_export.add_argument("--output", type=Path, required=True)
+    cloud_open = cloud_commands.add_parser(
+        "open-sample", help="Create a working copy of a hosted SIGMA sample"
+    )
+    cloud_open.add_argument("--host", required=True)
+    cloud_open.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_open.add_argument("sample_id")
+    cloud_run = cloud_commands.add_parser(
+        "run", help="Run and archive one normal hosted research session"
+    )
+    cloud_run.add_argument("--host", required=True)
+    cloud_run.add_argument("--token-file", type=Path, default=DEFAULT_CLOUD_TOKEN)
+    cloud_run.add_argument("--project", required=True)
+    cloud_run.add_argument("--strategy-ids", nargs="+", required=True)
+    cloud_run.add_argument("--require-email", required=True)
+    cloud_run.add_argument("--artifact-directory", type=Path, required=True)
+    cloud_run.add_argument("--poll-interval", type=float, default=5)
+    cloud_run.add_argument("--timeout-seconds", type=int, default=3600)
     for command_parser in commands.choices.values():
         for action in command_parser._actions:
             if action.help is None:
@@ -301,6 +376,65 @@ def main() -> None:
     if len(argv) == 2 and argv[0] in {"-h", "--help"} and argv[1] in COMMAND_DETAILS:
         argv = [argv[1], "--help"]
     args = parser.parse_args(argv)
+    if args.command == "cloud":
+        from sigma import cloud_cli
+
+        try:
+            if args.cloud_command == "login":
+                result = cloud_cli.login(args.host, args.token_file)
+            else:
+                token = cloud_cli._load_token(args.token_file, args.host)
+                if args.cloud_command == "status":
+                    result = cloud_cli.request(args.host, token, "GET", "/api/cloud-auth/status")
+                elif args.cloud_command == "logout":
+                    cloud_cli.request(args.host, token, "POST", "/api/cloud-auth/logout")
+                    args.token_file.expanduser().unlink(missing_ok=True)
+                    result = {"revoked": True}
+                elif args.cloud_command == "set-param":
+                    result = cloud_cli.set_param(
+                        args.host, args.token_file, args.project, args.name, args.value
+                    )
+                elif args.cloud_command == "export":
+                    content = cloud_cli.request(
+                        args.host,
+                        token,
+                        "GET",
+                        "/api/projects/export",
+                        params={"path": args.project},
+                    )
+                    output = cloud_cli.write_export(content, args.output)
+                    result = {
+                        "project": args.project,
+                        "export": str(output),
+                        "bytes": output.stat().st_size,
+                    }
+                elif args.cloud_command == "run":
+                    result = cloud_cli.run_session(
+                        args.host,
+                        args.token_file,
+                        args.project,
+                        args.strategy_ids,
+                        args.artifact_directory,
+                        required_email=args.require_email,
+                        poll_interval=args.poll_interval,
+                        timeout_seconds=args.timeout_seconds,
+                        on_update=lambda update: print(
+                            json.dumps(update), file=sys.stderr, flush=True
+                        ),
+                    )
+                else:
+                    result = cloud_cli.request(
+                        args.host,
+                        token,
+                        "POST",
+                        "/api/projects/samples/open",
+                        body={"sample_id": args.sample_id},
+                    )
+            cloud_cli.print_json(result)
+        except cloud_cli.CloudCliError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(2)
+        sys.exit(0)
     if args.command == "make_sample":
         from sigma.samples import make_sample
 
@@ -317,7 +451,6 @@ def main() -> None:
         sys.exit(build_sandbox(args.runtime))
     if args.command in {"sandbox-execute", "sandbox-capabilities"}:
         import asyncio
-        from pathlib import Path
 
         from sigma.python_sandbox import execute_research_code
         from sigma.research_tools import execution_capabilities

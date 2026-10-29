@@ -791,6 +791,115 @@ class CloudAuthTests(TestCase):
         flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
         return query["state"][0], response.cookies[flow_cookie]
 
+    def test_cli_pkce_exchange_issues_revocable_bearer_and_rejects_reuse(self):
+        import base64
+
+        redirect_uri = "http://127.0.0.1:49152/callback"
+        verifier = "v" * 48
+        challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+            .rstrip(b"=")
+            .decode()
+        )
+        code = "c" * 48
+        with cloud_auth._db(cloud_auth.config()) as db:
+            db.execute(
+                "INSERT INTO cli_codes(code_hash,subject,email,challenge,redirect_uri,expires_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    cloud_auth._hash(code),
+                    "google-sub-1",
+                    "admin@example.org",
+                    challenge,
+                    redirect_uri,
+                    int(time.time()) + 60,
+                ),
+            )
+        exchanged = self.client.post(
+            "/api/cloud-auth/cli/exchange",
+            json={"code": code, "verifier": verifier, "redirect_uri": redirect_uri},
+        )
+        self.assertEqual(exchanged.status_code, 200, exchanged.text)
+        access_token = exchanged.json()["access_token"]
+        status = self.client.get(
+            "/api/cloud-auth/status", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        self.assertEqual(status.json()["user"]["email"], "admin@example.org")
+        signed_out = self.client.post(
+            "/api/cloud-auth/logout", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        self.assertEqual(signed_out.status_code, 204)
+        revoked = self.client.get(
+            "/api/cloud-auth/status", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        self.assertFalse(revoked.json()["authenticated"])
+        reused = self.client.post(
+            "/api/cloud-auth/cli/exchange",
+            json={"code": code, "verifier": verifier, "redirect_uri": redirect_uri},
+        )
+        self.assertEqual(reused.status_code, 401)
+
+    def test_cli_google_flow_returns_code_to_bound_loopback(self):
+        import base64
+
+        verifier = "loopback-pkce-verifier-value-123456789012345678901234567890"
+        challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+            .rstrip(b"=")
+            .decode()
+        )
+        cli_state = "S" * 43
+        redirect_uri = "http://127.0.0.1:49231/callback"
+        begun = self.client.get(
+            "/api/cloud-auth/cli/login",
+            params={"redirect_uri": redirect_uri, "cli_state": cli_state, "challenge": challenge},
+            follow_redirects=False,
+        )
+        self.assertEqual(begun.status_code, 302, begun.text)
+        google_state = parse_qs(urlsplit(begun.headers["location"]).query)["state"][0]
+        cfg = cloud_auth.config()
+        flow_cookie = cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cfg)
+        self.client.cookies.set(flow_cookie, begun.cookies[flow_cookie])
+        with cloud_auth._db(cfg) as db:
+            nonce = db.execute(
+                "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(google_state),)
+            ).fetchone()["nonce"]
+        GoogleClient.token = token(nonce=nonce, email="admin@example.org")
+        with patch.object(cloud_auth.httpx, "AsyncClient", GoogleClient):
+            callback = self.client.get(
+                "/api/cloud-auth/callback",
+                params={"state": google_state, "code": "fixture"},
+                follow_redirects=False,
+            )
+        self.assertEqual(callback.status_code, 303, callback.text)
+        returned = urlsplit(callback.headers["location"])
+        self.assertEqual(f"{returned.scheme}://{returned.netloc}{returned.path}", redirect_uri)
+        handoff = parse_qs(returned.query)
+        self.assertEqual(handoff["state"], [cli_state])
+        exchanged = self.client.post(
+            "/api/cloud-auth/cli/exchange",
+            json={"code": handoff["code"][0], "verifier": verifier, "redirect_uri": redirect_uri},
+        )
+        self.assertEqual(exchanged.status_code, 200, exchanged.text)
+        self.assertEqual(
+            self.client.get(
+                "/api/cloud-auth/status",
+                headers={"Authorization": f"Bearer {exchanged.json()['access_token']}"},
+            ).json()["user"]["email"],
+            "admin@example.org",
+        )
+
+    def test_cli_login_rejects_non_loopback_redirect(self):
+        response = self.client.get(
+            "/api/cloud-auth/cli/login",
+            params={
+                "redirect_uri": "https://attacker.example/callback",
+                "cli_state": "S" * 43,
+                "challenge": "C" * 43,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_google_login_reports_missing_local_oauth_settings_before_redirect(self):
         with patch.dict(
             os.environ,

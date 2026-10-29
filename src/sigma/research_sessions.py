@@ -2790,19 +2790,35 @@ def _call_cost_reservation(
     return None
 
 
-def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
+def save_limits(
+    path: str, raw: dict[str, Any], expected_limits: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    expected = _validate_limits(expected_limits) if expected_limits is not None else None
     if project_path(path).suffix == ".json":
+        import base64
+
         from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+        def update(members: dict[str, bytes]) -> dict[str, bytes | None]:
+            current_data = members.get("research-sessions/limits.json")
+            current = dict(DEFAULT_LIMITS)
+            if current_data is not None:
+                try:
+                    parsed = json.loads(base64.b64decode(current_data, validate=True))
+                    current = _validate_limits(parsed)
+                except (ValueError, TypeError, ProjectError) as exc:
+                    raise ProjectError(
+                        "Current research limits are invalid; refresh before editing"
+                    ) from exc
+            if expected is not None and current != expected:
+                raise ProjectError("Research limits changed; refresh before editing")
+            return {"research-sessions/limits.json": encoded}
+
         try:
-            transform_members(
-                path,
-                lambda members: {
-                    "research-sessions/limits.json": encoded,
-                },
-            )
+            transform_members(path, update)
         except (OSError, ValueError) as exc:
             raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
@@ -2812,6 +2828,16 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     with _project_manager_lock(path):
         if target.is_symlink():
             raise ProjectError("Research limits file must not be a symbolic link")
+        current = dict(DEFAULT_LIMITS)
+        if target.exists():
+            try:
+                current = _validate_limits(json.loads(target.read_text(encoding="utf-8")))
+            except (OSError, ValueError, TypeError, ProjectError) as exc:
+                raise ProjectError(
+                    "Current research limits are invalid; refresh before editing"
+                ) from exc
+        if expected is not None and current != expected:
+            raise ProjectError("Research limits changed; refresh before editing")
         encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
         staged = _stage(directory, encoded)
         try:

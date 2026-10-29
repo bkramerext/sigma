@@ -2669,6 +2669,23 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     assert research_sessions.get_limits(str(path)) == future
 
 
+def test_project_limits_compare_and_swap(path: Path):
+    """CLI parameter edits cannot overwrite settings changed since their read."""
+    initialize_project(path, "Limits CAS", "A bounded test project")
+    before = research_sessions.get_limits(str(path))
+    changed = {**before, "research_rounds": 2, "model_calls": 4}
+    assert research_sessions.save_limits(str(path), changed, expected_limits=before) == changed
+    try:
+        research_sessions.save_limits(
+            str(path), {**changed, "research_rounds": 3, "model_calls": 6}, expected_limits=before
+        )
+    except ProjectError as exc:
+        assert "changed" in str(exc)
+    else:
+        raise AssertionError("Stale project limits update was accepted")
+    assert research_sessions.get_limits(str(path)) == changed
+
+
 async def test_prior_obligation_reference_compaction_keeps_text_and_traceability(path: Path):
     view, strategy, _, _ = await setup(path)
     obligation_texts = [
@@ -8302,6 +8319,7 @@ def main():
             )
         )
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
+        test_project_limits_compare_and_swap(root / "limits-cas.sigma")
         asyncio.run(
             test_prior_obligation_reference_compaction_keeps_text_and_traceability(
                 root / "prior-obligation-compaction.sigma"

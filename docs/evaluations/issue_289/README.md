@@ -22,6 +22,24 @@ The original production project/session export is still needed to determine the 
 
 No production credentials or ledger access were present in this workspace. No live Google sign-in or paid Sol/High request was made. The requested explicit ceiling for a live run is pending; the deterministic test limits are not a production-setting change. Production sponsorship, project, and global limits were not changed.
 
+## Local authenticated CLI workflow
+
+PR #323 adds `sigma cloud` commands so project setup, session execution, polling, and bundle capture use SIGMA's normal APIs without driving the research UI. Sign-in remains Google OIDC: SIGMA's local or hosted callback issues a one-use PKCE-bound loopback code, which the CLI exchanges for a revocable SIGMA session. The token file is permission-restricted and bound to the selected SIGMA origin. `sigma cloud logout` revokes the server-side session and deletes the local token file.
+
+For a local SIGMA instance, use its loopback origin; hosted origins must use HTTPS:
+
+```sh
+./sigma cloud login --host http://127.0.0.1:5173
+./sigma cloud status --host http://127.0.0.1:5173
+./sigma cloud open-sample --host http://127.0.0.1:5173 operation-narrow-passage
+./sigma cloud set-param --host http://127.0.0.1:5173 --project PROJECT_PATH maximum-estimated-cost-usd 15
+./sigma cloud run --host http://127.0.0.1:5173 --project PROJECT_PATH \\
+  --strategy-ids STRATEGY_ID_1 STRATEGY_ID_2 --require-email zetacontinuation@gmail.com \\
+  --artifact-directory docs/evaluations/issue_289/live-runs
+```
+
+Use the `path` and strategy IDs returned by `open-sample`. `set-param` supports an allowlist of project research limits and project settings. Research-limit writes carry the exact prior values and fail on stale edits. `run` refuses a different account, project category, or model/thinking pair; it uses the normal session-start route and writes separate full-project bundle snapshots before start, on session updates, and on interruption or failure. Local login and fixtures do not themselves authorize provider spending; review project and active funding settings before starting research.
+
 ## Verification
 
 - `uv run --project . python tests/cloud_research.py` — passed, including the new global-reservation pause/resume flow.
@@ -30,4 +48,4 @@ No production credentials or ledger access were present in this workspace. No li
 - `uv run --with playwright python browser_checks/t95_paused_session.py` — real Chrome passed stopped/paused guidance, reload, guarded resume and responsive checks. This does not exercise live provider authentication or billing.
 - `npm --prefix frontend run build` — passed.
 
-No live research claim or mathematical success is asserted by the fixture run.
+No live research result is claimed by the fixture run.

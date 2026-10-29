@@ -306,7 +306,18 @@ def _initialize(path: Path) -> None:
                 nonce TEXT NOT NULL,
                 verifier TEXT NOT NULL,
                 expires_at INTEGER NOT NULL,
-                return_to TEXT
+                return_to TEXT,
+                cli_redirect_uri TEXT,
+                cli_challenge TEXT,
+                cli_state TEXT
+            );
+            CREATE TABLE IF NOT EXISTS cli_codes (
+                code_hash TEXT PRIMARY KEY,
+                subject TEXT NOT NULL,
+                email TEXT NOT NULL,
+                challenge TEXT NOT NULL,
+                redirect_uri TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS denied_access (
                 token_hash TEXT PRIMARY KEY,
@@ -379,6 +390,12 @@ def _initialize(path: Path) -> None:
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
         if "return_to" not in flow_columns:
             db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
+        if "cli_redirect_uri" not in flow_columns:
+            db.execute("ALTER TABLE flows ADD COLUMN cli_redirect_uri TEXT")
+        if "cli_challenge" not in flow_columns:
+            db.execute("ALTER TABLE flows ADD COLUMN cli_challenge TEXT")
+        if "cli_state" not in flow_columns:
+            db.execute("ALTER TABLE flows ADD COLUMN cli_state TEXT")
     if not existed:
         path.chmod(0o600)
 
@@ -777,6 +794,15 @@ def resolve_session(raw: str | None) -> Principal | None:
         return Principal(row["subject"], row["email"], role)
 
 
+def _bearer_session(request: Request) -> str | None:
+    """Return an explicitly supplied bearer credential for authenticated CLI calls."""
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.casefold() != "bearer" or not token or len(token) > 128:
+        return None
+    return token
+
+
 _GUEST_PROJECT_READ_PATHS = {
     "/api/projects/inspect",
     "/api/projects/strategies",
@@ -889,6 +915,8 @@ async def middleware(request: Request, call_next):
     public = path == "/api/ui-instance" or path in {
         "/api/cloud-auth/status",
         "/api/cloud-auth/login",
+        "/api/cloud-auth/cli/login",
+        "/api/cloud-auth/cli/exchange",
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
@@ -933,12 +961,20 @@ async def middleware(request: Request, call_next):
             return await call_next(request)
         return JSONResponse({"error": "Cloud authentication is not ready."}, status_code=503)
     origin = request.headers.get("origin")
-    if request.method not in {"GET", "HEAD", "OPTIONS"} and origin != cfg.origin:
+    bearer = _bearer_session(request)
+    if (
+        not bearer
+        and request.method not in {"GET", "HEAD", "OPTIONS"}
+        and path != "/api/cloud-auth/cli/exchange"
+        and origin != cfg.origin
+    ):
         return JSONResponse({"error": "Request origin is not authorized."}, status_code=403)
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+        principal = resolve_session(
+            bearer or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+        )
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
@@ -1358,7 +1394,10 @@ def status(request: Request):
         ]
     try:
         principal = (
-            resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
+            getattr(request.state, "cloud_principal", None)
+            or resolve_session(
+                _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+            )
             if cfg.enabled and not cfg.error
             else None
         )
@@ -1463,6 +1502,125 @@ def _safe_login_return_to(value: str) -> str | None:
     return "/project?" + urlencode(
         {"path": paths[0], **({"resume_play": "1"} if resume_play == ["1"] else {})}
     )
+
+
+def _safe_cli_redirect_uri(value: str) -> bool:
+    """Accept only an ephemeral loopback callback controlled by the CLI."""
+    try:
+        parsed = urlsplit(value)
+        return (
+            parsed.scheme == "http"
+            and parsed.hostname == "127.0.0.1"
+            and parsed.port is not None
+            and 1 <= parsed.port <= 65535
+            and parsed.path == "/callback"
+            and not parsed.username
+            and not parsed.password
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except ValueError:
+        return False
+
+
+@router.get("/cli/login")
+def cli_login(redirect_uri: str, cli_state: str, challenge: str):
+    """Begin hosted Google sign-in for the loopback-authenticated CLI."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
+        raise HTTPException(503, "Cloud authentication is not ready.")
+    if (
+        not _safe_cli_redirect_uri(redirect_uri)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", cli_state)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{43,128}", challenge)
+    ):
+        raise HTTPException(400, "Invalid CLI sign-in request.")
+    state, nonce, verifier = (
+        secrets.token_urlsafe(32),
+        secrets.token_urlsafe(32),
+        secrets.token_urlsafe(48),
+    )
+    google_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    )
+    with _db(cfg) as db:
+        db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
+        db.execute("DELETE FROM cli_codes WHERE expires_at<=?", (_now(),))
+        db.execute(
+            "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to,cli_redirect_uri,cli_challenge,cli_state) "
+            "VALUES(?,?,?,?,NULL,?,?,?)",
+            (
+                _hash(state),
+                nonce,
+                verifier,
+                _now() + FLOW_SECONDS,
+                redirect_uri,
+                challenge,
+                cli_state,
+            ),
+        )
+    params = {
+        "client_id": cfg.client_id,
+        "redirect_uri": cfg.origin + "/api/cloud-auth/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": google_challenge,
+        "code_challenge_method": "S256",
+        "access_type": "online",
+        "prompt": "select_account",
+    }
+    response = RedirectResponse(
+        "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), status_code=302
+    )
+    response.set_cookie(
+        _cookie_name(FLOW_COOKIE, cfg),
+        state,
+        **_cookie_options(cfg, FLOW_COOKIE, max_age=FLOW_SECONDS),
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+class CliExchangeRequest(BaseModel):
+    code: str = Field(min_length=32, max_length=128)
+    verifier: str = Field(min_length=43, max_length=128)
+    redirect_uri: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/cli/exchange")
+def cli_exchange(body: CliExchangeRequest):
+    """Exchange a short-lived one-time CLI code for a normal revocable SIGMA session."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not _safe_cli_redirect_uri(body.redirect_uri):
+        raise HTTPException(503, "Cloud authentication is not ready.")
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(body.verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT subject,email,challenge,redirect_uri,expires_at FROM cli_codes WHERE code_hash=?",
+            (_hash(body.code),),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(401, "CLI sign-in code is invalid or already used.")
+        db.execute("DELETE FROM cli_codes WHERE code_hash=?", (_hash(body.code),))
+        if (
+            row["expires_at"] <= _now()
+            or not hmac.compare_digest(row["challenge"], challenge)
+            or not hmac.compare_digest(row["redirect_uri"], body.redirect_uri)
+        ):
+            raise HTTPException(401, "CLI sign-in code is invalid or expired.")
+        token = secrets.token_urlsafe(32)
+        db.execute(
+            "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+            (_hash(token), row["subject"], row["email"], _now() + SESSION_SECONDS),
+        )
+    return {"access_token": token, "token_type": "Bearer", "expires_in": SESSION_SECONDS}
 
 
 @router.get("/login")
@@ -1575,7 +1733,7 @@ async def callback(
         raise HTTPException(400, "Sign-in could not be verified.")
     with _db(cfg) as db:
         flow = db.execute(
-            "SELECT nonce,verifier,expires_at,return_to FROM flows WHERE state_hash=?",
+            "SELECT nonce,verifier,expires_at,return_to,cli_redirect_uri,cli_challenge,cli_state FROM flows WHERE state_hash=?",
             (_hash(state),),
         ).fetchone()
         db.execute("DELETE FROM flows WHERE state_hash=?", (_hash(state),))
@@ -1753,6 +1911,7 @@ async def callback(
                 # workspace. The original guest copy remains intact until expiry.
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
+    cli_code = secrets.token_urlsafe(32) if flow["cli_redirect_uri"] else None
     with _db(cfg) as db:
         existing_account = db.execute(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
@@ -1802,6 +1961,33 @@ async def callback(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
+        if cli_code:
+            db.execute(
+                "INSERT INTO cli_codes(code_hash,subject,email,challenge,redirect_uri,expires_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    _hash(cli_code),
+                    subject,
+                    email,
+                    flow["cli_challenge"],
+                    flow["cli_redirect_uri"],
+                    _now() + 120,
+                ),
+            )
+    if cli_code:
+        from urllib.parse import urlencode
+
+        response = RedirectResponse(
+            flow["cli_redirect_uri"]
+            + "?"
+            + urlencode({"code": cli_code, "state": flow["cli_state"]}),
+            status_code=303,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        _clear_cookie(response, cfg, FLOW_COOKIE)
+        _clear_cookie(response, cfg, SESSION_COOKIE)
+        return response
     response = RedirectResponse(return_to, status_code=303)
     response.set_cookie(
         _cookie_name(SESSION_COOKIE, cfg),
@@ -2262,7 +2448,7 @@ def remove_feedback(feedback_id: str, request: Request):
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
-    raw = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    raw = _bearer_session(request) or request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))

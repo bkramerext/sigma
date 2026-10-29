@@ -8044,3 +8044,28 @@ rows remain unavailable, so its exact denial boundary is unverified. No
 production settings were changed, no Google production sign-in was performed,
 and no paid provider calls were made; explicit paid-call approval and the
 source production export are still required for production acceptance.
+
+## Issue #289 follow-up — local authenticated CLI evaluation (2026-10-29)
+
+Added a `sigma cloud` CLI for Google OIDC/PKCE loopback sign-in, verified
+account status, sign-out/revocation, sample-copy opening, project parameter
+updates, complete project export, and running/polling a normal hosted or local
+research session. CLI run refuses an identity mismatch, non-Military project,
+or non-Sol/High configuration and writes separate private full-project JSON
+snapshots before start, after session updates, and for interrupted/failed
+attempts. `set-param` supports project limits and editable project settings;
+research-limit writes compare the exact prior snapshot under the storage lock.
+No mock identity or local-admin bypass is used by CLI sign-in.
+
+Verification: focused CLI fixtures, 75 cloud-auth tests (including mocked
+Google callback → one-time PKCE exchange → bearer revocation), persistent
+research-session tests, and full `./sigma test` all passed. The full suite's
+existing graph-present sandbox case skipped because its Docker image is not
+available. No paid provider call has occurred. Two locally completed Google
+sign-ins failed to persist their CLI tokens because the selected token
+directories were not private; the server revoked both temporary sessions.
+The default token location is now `~/.sigma/cloud-cli/token`, with a tested
+0700 directory and 0600 host-bound file. The live local CLI research run has
+not yet been executed; it awaits one successful local CLI sign-in and funding
+preflight. The project remains category Military and the scenario remains a
+fictional high-level strategic/humanitarian exercise.

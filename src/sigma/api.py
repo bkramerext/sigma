@@ -439,6 +439,7 @@ class ResearchLimitsRequest(OpenRequest):
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
     maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)
     max_concurrent_sessions: int | str = "1"
+    expected_limits: dict[str, Any] | None = None
 
 
 class PaperGenerateRequest(OpenRequest):
@@ -613,6 +614,7 @@ def research_limits_update(body: ResearchLimitsRequest):
             "maximum_input_tokens_per_session": body.maximum_input_tokens_per_session,
             "max_concurrent_sessions": body.max_concurrent_sessions,
         },
+        expected_limits=body.expected_limits,
     )
     return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
 
