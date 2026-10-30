@@ -427,7 +427,7 @@ _SUPERSCRIPT_SUFFIX = re.compile(
 def _safe_math(source: str) -> bool:
     # Common TeX spacing commands are safe within math. Normalize only for
     # token validation; preserve the original commands in rendered TeX.
-    validated = re.sub(r"\\[,;!: ]", " ", source)
+    validated = re.sub(r"\\[,;!: {}]", " ", source)
     position = 0
     for match in _MATH_TOKEN.finditer(validated):
         if match.start() != position:
