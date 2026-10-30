@@ -2033,8 +2033,11 @@ def test_fast_planner_preview_bounds_input_and_preserves_source_coverage() -> No
     assert {ref for item in preview for ref in item["evidence_refs"]} == set(sources)
     assert {item["kind"] for item in preview} == {"result", "negative"}
     assert len(notes) == 450
-    # EvidenceNote preserves the original trailing space in research text.
-    assert notes[-1].statement.endswith("plausible. " * 5)
+    # The preview must not mutate the last indexed research statement.
+    assert notes[-1].statement == (
+        f"Source {sources[-1]}, observation 89: "
+        + ("Evidence is incomplete; the alternative remains plausible. " * 5)
+    )
 
 
 def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
