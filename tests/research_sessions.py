@@ -6415,10 +6415,11 @@ async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
 
     assert calls == ["research_investigator"]
     assert finished["calls_used"] == 1 and finished["call_limit"] == 6, finished
-    assert finished["status"] == "ended"
-    assert "round 1 of 3, after 1/6 agent turns" in finished["message"]
+    assert finished["status"] == "paused", finished
+    assert finished["current_action"] == "Paused · cost limit"
     assert "configured session cost limit" in finished["message"]
-    assert "No Skeptic agent turn was dispatched" in finished["message"]
+    assert "Completed research and cost reservations are preserved" in finished["message"]
+    assert finished["strategy_runs"][0]["funding_resume_allowed"] is True
     assert "conservative cost reserve" in finished["outcome"]["summary"]
 
 
@@ -8201,6 +8202,35 @@ def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
     assert "conservative cost reserve" in outcome["caveats"][-1]
 
 
+def test_unknown_provider_attempt_keeps_held_session_cost() -> None:
+    record = {
+        "model": MODEL,
+        "cost_status": "unavailable",
+        "estimated_cost_usd": None,
+        "estimated_cost_reserved_usd": 0.24,
+        "steps": [
+            {
+                "status": "completed",
+                "token_usage": {
+                    "input_tokens": 10_000,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 4_000,
+                },
+            },
+            {"status": "failed", "attempt_status": "unknown"},
+        ],
+    }
+    step = {"cost_reserve": 0.24}
+
+    research_sessions._retain_unknown_cost_reservation(record, step)
+
+    assert record["cost_status"] == "available"
+    assert record["estimated_cost_usd"] == research_sessions._estimate_cost(
+        MODEL, record["steps"][0]["token_usage"]
+    )
+    assert record["estimated_cost_reserved_usd"] == 0.24
+
+
 def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     record = {
         "mode": "chatgpt",
@@ -8275,6 +8305,7 @@ def main():
     test_project_cost_denial_reports_affordable_first_call()
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
+    test_unknown_provider_attempt_keeps_held_session_cost()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
@@ -8534,7 +8565,7 @@ def main():
         assert research_sessions.coordinate_decision(
             "continue", "recoverable_objection", "Next test", [], 3, 3, 6, 6
         ) == ("stop_budget_exhausted", "")
-    print("Persistent research session scenarios passed.")
+    print("Persistent research session scenarios passed.")  # CI retrigger
 
 
 if __name__ == "__main__":

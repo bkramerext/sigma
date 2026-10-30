@@ -19,7 +19,12 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from sigma import cloud_research, cloud_workspaces, openai_connection, research_sessions
-from sigma.projects import ProjectError, create_strategy, initialize_project
+from sigma.projects import (
+    ProjectError,
+    create_strategy,
+    export_complete_project,
+    initialize_project,
+)
 
 
 def research_outputs() -> tuple[dict, dict]:
@@ -1625,6 +1630,286 @@ def test_failed_session_releases_project_slot(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_issue289_global_funding_pause_can_resume(
+    root: Path, ledger_root: Path, limits_env: dict[str, str]
+) -> None:
+    """A global reserve denial pauses a real sample session; replenishment resumes without replay."""
+    from sigma.projects import update_project
+    from sigma.samples import open_sample_project
+
+    member = workspace(root / "issue289-funding", "9" * 32)
+    export_root = os.environ.get("SIGMA_ISSUE_289_EXPORT_DIR")
+    exported: list[dict[str, str]] = []
+    with (
+        patch.dict(
+            os.environ,
+            {
+                **limits_env,
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "0.06",
+                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+            },
+            clear=False,
+        ),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=True),
+    ):
+        binding = cloud_workspaces._CURRENT.set(member)
+        try:
+            project = open_sample_project("operation-narrow-passage")
+            # The built-in ONP sample now carries real, saved investigation
+            # history for reviewers. This regression is specifically about a
+            # fresh funding interruption, so remove that history only from
+            # this disposable test copy while retaining its project setup.
+            sample_session_dir = Path(project.path) / "research-sessions"
+            for prior_session in research_sessions.list_sessions(project.path):
+                (sample_session_dir / f"{prior_session['id']}.json").unlink()
+            settings = project.project
+            expected = {
+                "title": settings.title,
+                "problem": settings.problem,
+                "investigation_type": settings.investigation_type.value,
+                "ai_model": settings.ai_model,
+                "reasoning_effort": settings.reasoning_effort,
+                "difficulty": settings.difficulty.value if settings.difficulty else None,
+                "show_advanced_outcome_details": settings.show_advanced_outcome_details,
+            }
+            project = update_project(
+                project.path,
+                "Operation Narrow Passage v2",
+                settings.problem,
+                settings.investigation_type.value,
+                "gpt-6.1-sol",
+                "high",
+                expected,
+                difficulty="hard",
+            )
+            limits = research_sessions.save_limits(
+                project.path,
+                {
+                    **research_sessions.DEFAULT_LIMITS,
+                    "research_rounds": 2,
+                    "model_calls": 4,
+                    "session_duration_minutes": 15,
+                    "output_tokens_per_call": 4000,
+                    "maximum_estimated_cost_usd": None,
+                    "max_concurrent_sessions": 1,
+                },
+            )
+            strategy = next(
+                item
+                for item in project.project.strategies
+                if item.id in project.project.active_order
+            )
+            credential = {
+                "mode": "api_key",
+                "identity": "cloud_service_api_key:" + member.subject_hash,
+                "token": "fixture-service-key",
+                "status": "connected",
+            }
+            config = {"available": True, "model": "gpt-6.1-sol", "reasoning_effort": "high"}
+            investigator, skeptic = research_outputs()
+            investigator.update(
+                {
+                    "claim": "A time-limited humanitarian evacuation with parallel deconfliction is a conditional option, not an established solution.",
+                    "method": "Compare the first response options against casualty protection, sovereignty, escalation risk, reversibility, and information gaps in the fictional brief.",
+                    "assumptions": [
+                        "The stated casualty and deadline details are scenario facts, not verified external intelligence."
+                    ],
+                    "evidence_status": "Fixture-reported analysis of the saved fictional scenario; no external sources or computations were used.",
+                    "open_obligations": [
+                        "Test whether a temporary evacuation arrangement can protect personnel without silently conceding the outpost question."
+                    ],
+                }
+            )
+            skeptic.update(
+                {
+                    "response": "The option depends on Chinese cooperation and Philippine consent, neither of which is established. It may save lives while leaving the outpost dispute unresolved.",
+                    "objections": [
+                        "The brief gives no verified command authority, evacuation capacity, or enforceable guarantee."
+                    ],
+                    "remaining_obligations": [
+                        "Identify a reversible trigger and a credible fallback if the deadline or safe-passage terms change."
+                    ],
+                    "next_question": "Which decision trigger changes the recommendation without treating disputed video as verified evidence?",
+                    "solution_claim": "No strategy is established; a reversible humanitarian option remains conditional and incomplete.",
+                    "argument_summary": "The response preserves a possible humanitarian off-ramp but cannot establish its feasibility or settle the sovereignty dispute.",
+                    "assumptions_reviewed": [
+                        "The stated casualty and deadline details are scenario facts, not verified external intelligence."
+                    ],
+                    "proof_obligations": [
+                        "Test the safe-passage guarantee, decision authority, and fallback conditions."
+                    ],
+                }
+            )
+            provider_outputs = [investigator, skeptic, investigator, skeptic]
+            roles: list[str] = []
+
+            async def fixture_call(record, role, context, timeout_seconds=None, step_id=None):
+                del record, context, timeout_seconds
+                assert isinstance(step_id, str)
+                roles.append(role)
+                output = provider_outputs.pop(0)
+                return output, {
+                    "input_tokens": 1200,
+                    "cached_input_tokens": 200,
+                    "output_tokens": 250,
+                }
+
+            async def launch() -> dict[str, Any]:
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions, "configuration", new=AsyncMock(return_value=config)
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "execution_capabilities", return_value=[])
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "_reserve_cost", return_value=0.03)
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "_estimate_cost", return_value=0.025)
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions, "_call", new=AsyncMock(side_effect=fixture_call)
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(openai_connection, "cloud_credential", return_value=True)
+                    )
+                    started = await research_sessions.start_session(
+                        project.path,
+                        strategy.id,
+                        str(uuid4()),
+                        project.project.id,
+                        credential["identity"],
+                        limits,
+                    )
+                    task = research_sessions._tasks[started["id"]]
+                    await asyncio.wait_for(task, timeout=30)
+                    return research_sessions.get_session(project.path, started["id"])
+
+            # No provider is contacted: reserve_call and settlement use SIGMA's
+            # real SQLite ledger while _call is a deterministic fixture.
+            failed = asyncio.run(launch())
+            assert failed["calls_used"] == 2, failed
+            assert failed["estimated_cost_usd"] == 0.05, failed
+            assert failed["status"] == "paused", failed
+            assert "global inference-spend ceiling" in failed["message"], failed["message"]
+            assert roles == ["investigator", "skeptic"], roles
+            assert cloud_research.job_status(failed["id"]) == "paused"
+            denied_steps = [
+                step for step in failed["steps"] if step.get("failure_kind") == "budget_denied"
+            ]
+            assert len(denied_steps) == 1 and denied_steps[0]["attempt_status"] == "not_dispatched"
+            with cloud_research._connect() as db:
+                ledger_calls = db.execute(
+                    "SELECT COUNT(*),SUM(amount_usd) FROM calls WHERE session_id=?",
+                    (failed["id"],),
+                ).fetchone()
+            assert ledger_calls[0] == 2 and abs(ledger_calls[1] - 0.05) < 0.000001
+            if export_root:
+                destination = Path(export_root)
+                destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+                bundle_path = destination / "deterministic-funding-denied.json"
+                bundle_path.write_bytes(export_complete_project(project.path))
+                exported.append({"path": str(bundle_path), "phase": "funding-denied"})
+
+            # Replenish only the isolated fixture's global ceiling. Resume must
+            # continue at the undispatched role and retain the earlier two calls.
+            os.environ["SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"] = "0.20"
+
+            async def resume_and_wait() -> dict[str, Any]:
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions,
+                            "auth_context",
+                            new=AsyncMock(return_value=credential),
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions, "configuration", new=AsyncMock(return_value=config)
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "execution_capabilities", return_value=[])
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "_reserve_cost", return_value=0.03)
+                    )
+                    stack.enter_context(
+                        patch.object(research_sessions, "_estimate_cost", return_value=0.025)
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            research_sessions, "_call", new=AsyncMock(side_effect=fixture_call)
+                        )
+                    )
+                    stack.enter_context(
+                        patch.object(openai_connection, "cloud_credential", return_value=True)
+                    )
+                    resumed = await research_sessions.control_session(
+                        project.path, failed["id"], "resume"
+                    )
+                    if resumed["status"] == "queued":
+                        await asyncio.wait_for(research_sessions._tasks[failed["id"]], timeout=30)
+                        resumed = research_sessions.get_session(project.path, failed["id"])
+                    return resumed
+
+            resumed = asyncio.run(resume_and_wait())
+            assert [step["role"] for step in resumed["steps"][:2]] == ["investigator", "skeptic"]
+            assert len(resumed["steps"]) >= 4, resumed
+            assert resumed["steps"][0]["id"] != resumed["steps"][2]["id"]
+            assert resumed["status"] == "ended", resumed
+            assert roles == ["investigator", "skeptic", "investigator", "skeptic"], roles
+            assert len(resumed["artifacts"]) >= 2
+            if export_root:
+                destination = Path(export_root)
+                bundle_path = destination / "deterministic-funding-resumed.json"
+                bundle_path.write_bytes(export_complete_project(project.path))
+                exported.append({"path": str(bundle_path), "phase": "resumed-terminal"})
+                manifest = {
+                    "fixture": "deterministic mocked provider; no paid or live calls",
+                    "source_sample": "samples/operation-narrow-passage",
+                    "project_id": project.project.id,
+                    "session_id": failed["id"],
+                    "session_number": failed["session_number"],
+                    "model": "gpt-6.1-sol",
+                    "reasoning_effort": "high",
+                    "configured_rounds": 2,
+                    "configured_agent_turns": 4,
+                    "global_ceiling_usd": 0.06,
+                    "fixture_call_estimate_usd": 0.025,
+                    "rejected_reservation_usd": 0.03,
+                    "activities": [
+                        "2 successful fixture calls",
+                        "3rd call rejected before dispatch",
+                        "global ceiling replenished",
+                        "same session resumed",
+                    ],
+                    "exports": exported,
+                    "omissions": [
+                        "Original production Session #1 is not present in the checkout or connected Drive; these exports reproduce the accounting boundary from a fresh copy of the shipped sample."
+                    ],
+                }
+                (destination / "manifest.json").write_text(
+                    json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+                )
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_hosted_deployment_forwards_global_spend_window() -> None:
     compose = (Path(__file__).resolve().parents[1] / "deploy" / "compose.yaml").read_text(
         encoding="utf-8"
@@ -2587,6 +2872,9 @@ def main() -> None:
         failed_session_ledger = root / "failed-session-ledger"
         failed_session_ledger.mkdir(mode=0o700)
         test_failed_session_releases_project_slot(root, failed_session_ledger, settings)
+        issue289_ledger = root / "issue289-funding-ledger"
+        issue289_ledger.mkdir(mode=0o700)
+        test_issue289_global_funding_pause_can_resume(root, issue289_ledger, settings)
 
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)

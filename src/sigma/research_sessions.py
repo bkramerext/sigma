@@ -2482,6 +2482,23 @@ def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
     return round((input_cost + cached_cost + output_cost) / 1_000_000, 9)
 
 
+def _retain_unknown_cost_reservation(record: dict[str, Any], step: dict[str, Any]) -> None:
+    """Keep a bounded unknown call in the session budget as a held reserve."""
+    if step.get("cost_reserve") is None:
+        record["cost_status"] = "unavailable"
+        record["estimated_cost_usd"] = None
+        return
+    known_cost = 0.0
+    for saved_step in record.get("steps", []):
+        usage = saved_step.get("token_usage")
+        if isinstance(usage, dict):
+            estimate = _estimate_cost(record["model"], usage)
+            if estimate is not None:
+                known_cost += estimate
+    record["cost_status"] = "available"
+    record["estimated_cost_usd"] = round(known_cost, 9)
+
+
 def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     """Persist bounded response classification without storing provider bodies."""
     if isinstance(exc, ChatGPTProviderRejection):
@@ -4865,6 +4882,26 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record["guard_hash"] = guard
             record["guard_state_hash"] = guard_state_hash
             current_limits = get_limits(path)
+            previous_cost_limit = record.get("maximum_estimated_cost_usd")
+            resumed_cost_limit = current_limits["maximum_estimated_cost_usd"]
+            if previous_cost_limit != resumed_cost_limit:
+                record["maximum_estimated_cost_usd"] = resumed_cost_limit
+                _event(
+                    record,
+                    "session.limits_updated",
+                    "The project cost limit was updated for this resumed session: "
+                    f"{previous_cost_limit!r} → {resumed_cost_limit!r} USD.",
+                )
+            previous_output_limit = record.get("output_token_limit")
+            resumed_output_limit = current_limits["output_tokens_per_call"]
+            if previous_output_limit != resumed_output_limit:
+                record["output_token_limit"] = resumed_output_limit
+                _event(
+                    record,
+                    "session.limits_updated",
+                    "The per-call output token limit was updated for this resumed session: "
+                    f"{previous_output_limit!r} → {resumed_output_limit!r} tokens.",
+                )
             others = [
                 recovered
                 for item in _all(path)
@@ -8022,6 +8059,11 @@ async def _portfolio_role_call(
                         f"Session stopped at round {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
                         f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} agent turns "
                         f"because the hard token/cost budget refused another provider call. {exc}"
+                        + (
+                            " No Skeptic agent turn was dispatched for this round."
+                            if role == "skeptic"
+                            else ""
+                        )
                     )
                     record["outcome"] = _outcome(record)
                     record["strategy_assessments"] = _strategy_assessments(record)
@@ -8075,11 +8117,24 @@ async def _portfolio_role_call(
                         record["tokens_reserved"] = max(
                             0, int(record.get("tokens_reserved", 0)) - token_reserve
                         )
-                    branch["status"] = "ended"
+                    branch["status"] = "paused"
                     branch["reason"] = (
                         "A conservative cost reserve prevented another provider call."
                     )
                     branch["current_action"] = "Cost limit"
+                    branch["funding_resume_allowed"] = True
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · cost limit"
+                    record["message"] = (
+                        "Research paused before provider dispatch because the configured session cost limit cannot cover another call. "
+                        "Completed research and cost reservations are preserved. Review the limit, then resume."
+                    )
+                    record["terminal_reason"] = branch["reason"]
+                    record["updated_at"] = _now()
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
+                    _event(record, "cost.limit", record["message"])
                     _save(path, record)
                     return False
                 record["estimated_cost_reserved_usd"] = reserved_cost + reserve
@@ -8198,9 +8253,31 @@ async def _portfolio_role_call(
                             "finished_at": _now(),
                         }
                     )
-                    branch["status"] = "ended"
+                    # The cloud ledger refused this reservation before dispatch.
+                    # Keep it retryable after allowance/ceiling replenishment.
+                    branch["status"] = "paused"
+                    branch["funding_resume_allowed"] = True
                     branch["current_action"] = "Budget limit"
                     branch["reason"] = str(exc)
+                    # Publish the pause while still holding the session lock so
+                    # another queued branch cannot dispatch after this refusal.
+                    for sibling in record.get("strategy_runs", []):
+                        if sibling is not branch and sibling.get("status") in {"queued", "running"}:
+                            sibling["status"] = "paused"
+                            sibling["reason"] = (
+                                "Deferred while a provider-call funding reservation is unavailable."
+                            )
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · funding limit"
+                    record["message"] = (
+                        "Research paused before provider dispatch because a required funding reservation was refused. "
+                        "Completed research and findings are saved. Replenish the applicable allowance or global ceiling, then resume this session. "
+                        + str(exc)
+                    )
+                    record["terminal_reason"] = str(exc)
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
                     _event(record, "call.not_dispatched", str(exc), role)
                     record["current_step"] = None
                     record["current_steps"] = [
@@ -8301,15 +8378,14 @@ async def _portfolio_role_call(
                     budget_error = _settle_request_budget(record, step, exc.usage)
                     if budget_error:
                         step["hard_budget_error"] = budget_error
-                    if step.get("cost_reserve") is not None:
+                    if step.get("cost_reserve") is not None and estimate is not None:
                         record["estimated_cost_reserved_usd"] = max(
                             0.0,
                             float(record.get("estimated_cost_reserved_usd", 0.0))
                             - float(step["cost_reserve"]),
                         )
                     if estimate is None:
-                        record["cost_status"] = "unavailable"
-                        record["estimated_cost_usd"] = None
+                        _retain_unknown_cost_reservation(record, step)
                     elif record.get("cost_status") == "available":
                         record["estimated_cost_usd"] = round(
                             float(record.get("estimated_cost_usd", 0.0)) + estimate, 9
@@ -8568,15 +8644,14 @@ async def _portfolio_role_call(
             _refresh_token_accounting(record)
             if record.get("mode") == "api_key" or record.get("cloud_sponsored") is True:
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
-                if step.get("cost_reserve") is not None:
+                if step.get("cost_reserve") is not None and estimate is not None:
                     record["estimated_cost_reserved_usd"] = max(
                         0.0,
                         float(record.get("estimated_cost_reserved_usd", 0.0))
                         - float(step["cost_reserve"]),
                     )
                 if estimate is None:
-                    record["cost_status"] = "unavailable"
-                    record["estimated_cost_usd"] = None
+                    _retain_unknown_cost_reservation(record, step)
                 elif record.get("cost_status") == "available":
                     record["estimated_cost_usd"] = round(
                         record.get("estimated_cost_usd", 0.0) + estimate, 9
@@ -9160,6 +9235,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         )
         async with state_lock:
             record = _read(path, session_id)
+            if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return
             for branch in record["strategy_runs"]:
                 if branch.get("pending_skeptic") is not None:
                     _commit_portfolio_review_safely(record, session_id, branch)

@@ -120,8 +120,8 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
   if (session.cost_status !== 'available' || typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) {
     return `${label} unavailable`;
   }
-  // Avoid reporting nonzero usage as $0.00 after rounding.
-  return cost > 0 && cost < 0.01 ? `${label} <$0.01` : `${label} $${cost.toFixed(2)}`;
+  // Four decimal places keep small API-rate equivalents visible without implying a paid charge.
+  return cost > 0 && cost < 0.0001 ? `${label} <$0.0001` : `${label} ${cost.toFixed(4)}`;
 }
 
 function liveResearchSummary(session: ResearchSession): string | null {
