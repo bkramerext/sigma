@@ -1182,6 +1182,57 @@ def _work_file(path: str, *, create: bool) -> Path:
     return directory / "checkpoint.json"
 
 
+def _frozen_source_file(path: str, *, create: bool = False) -> Path:
+    return _work_file(path, create=create).with_name("source-snapshot.json")
+
+
+def _load_frozen_source(
+    path: str, checkpoint: Mapping[str, Any] | None
+) -> dict[str, Any] | None:
+    """Use the original authoring evidence rather than a newer live export."""
+    if checkpoint is None:
+        return None
+    file = _frozen_source_file(path)
+    if not file.exists() and not file.is_symlink():
+        return None  # Existing checkpoints predate frozen evidence retention.
+    if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_CONTEXT_BYTES:
+        raise ProjectError("The paper's frozen evidence snapshot is unsafe")
+    try:
+        value = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ProjectError("The paper's frozen evidence snapshot is unreadable") from exc
+    if (
+        not isinstance(value, dict)
+        or value.get("schema") != "sigma-paper-evidence-v2"
+        or value.get("project_id") != checkpoint.get("project_id")
+        or not isinstance(value.get("sources"), list)
+        or len(_json(value)) > MAX_CONTEXT_BYTES
+        or hashlib.sha256(_json(value)).hexdigest() != checkpoint.get("snapshot_sha256")
+    ):
+        raise ProjectError("The paper's frozen evidence snapshot does not match its checkpoint")
+    return value
+
+
+def _save_frozen_source(path: str, package: Mapping[str, Any]) -> None:
+    """Save once per authoring attempt; don't rewrite large evidence on each stage."""
+    file = _frozen_source_file(path, create=True)
+    if file.is_symlink():
+        raise ProjectError("The paper's frozen evidence snapshot is unsafe")
+    encoded = _json(package)
+    if len(encoded) > MAX_CONTEXT_BYTES:
+        raise ProjectError("Paper evidence exceeds the frozen snapshot safety bound")
+    staged = _stage(file.parent, encoded)
+    try:
+        os.replace(staged, file)
+        fd = os.open(file.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
 def _load_work(path: str) -> dict[str, Any] | None:
     file = _work_file(path, create=False)
     if not file.exists() and not file.is_symlink():
@@ -1425,9 +1476,11 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
 
 def _clear_work(path: str) -> None:
     file = _work_file(path, create=False)
-    if file.is_symlink():
+    frozen = _frozen_source_file(path)
+    if file.is_symlink() or frozen.is_symlink():
         raise ProjectError("Long-paper checkpoint is unsafe")
     file.unlink(missing_ok=True)
+    frozen.unlink(missing_ok=True)
 
 
 def progress_status(path: str) -> dict[str, Any] | None:
@@ -1624,6 +1677,7 @@ async def _restart_work_locked(
         ),
     )
     restarted["explicit_restart_pending"] = True
+    _save_frozen_source(path, package)
     _save_work(path, restarted)
     return {
         "provider_calls_attempted": 0,
