@@ -25,6 +25,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     papers,
+    proposals,
     python_sandbox,
     research_sessions,
     session_log,
@@ -56,7 +57,6 @@ from sigma.projects import (
 )
 from sigma.proposals import (
     accepted_provenance,
-    cancel_request,
     configuration,
     generate_proposal,
     register_request,
@@ -1072,6 +1072,7 @@ def reorder_view(body: ReorderRequest):
 class ProposalRequest(OpenRequest):
     seed: str = ""
     expected_binding: str | None = None
+    expected_mode: str | None = None
     expected_project_id: str | None = None
     request_id: UUID | None = None
 
@@ -1089,8 +1090,93 @@ async def strategy_suggestion_view(body: ProposalRequest):
     )
 
 
+@app.post("/api/projects/strategy-inference")
+async def strategy_inference_view(body: ProposalRequest):
+    if not body.expected_binding or not body.expected_mode or not body.expected_project_id:
+        raise ProjectError(
+            "Inference requires the current AI account and project identity; reopen the project and retry."
+        )
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    credential = await auth_context()
+    if body.expected_binding != credential["identity"] or body.expected_mode != credential["mode"]:
+        raise ProjectError(
+            "AI account or billing mode changed. Review the current connection and retry; no request was sent."
+        )
+    if body.request_id is None:
+        raise ProjectError("Inference request identifier is required; no request was sent.")
+    request_id = str(body.request_id)
+    action, record = proposals.begin_inference(
+        body.path,
+        body.expected_project_id,
+        request_id,
+        body.expected_binding,
+        body.expected_mode,
+    )
+    if action == "return":
+        current = proposals.inference_status(body.path, body.expected_project_id, request_id)
+        return {**current, "inference_status": current["status"]}
+    if action == "uncertain":
+        raise ProjectError(
+            "This inference request may already have reached the provider. It will not be sent again; refresh the project to check persisted strategies."
+        )
+    if action == "in_progress":
+        raise ProjectError(
+            "This inference request is already being processed; it was not sent again."
+        )
+    if action == "commit":
+        return proposals.commit_inference_candidate(body.path, request_id, record)
+    task = asyncio.create_task(
+        generate_proposal(
+            body.path,
+            expected_binding=body.expected_binding,
+            expected_mode=body.expected_mode,
+            expected_project_id=body.expected_project_id,
+            infer_strategy=True,
+            request_id=request_id,
+            inference_owner=record["owner"],
+        )
+    )
+    try:
+        register_request(request_id, task)
+    except ProjectError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+    try:
+        try:
+            await task
+            current = proposals.inference_status(body.path, body.expected_project_id, request_id)
+            if current.get("status") in {"completed", "no_strategy"}:
+                return {**current, "inference_status": current["status"]}
+            return current
+        except asyncio.CancelledError:
+            proposals.fail_inference(body.path, request_id, record["owner"], uncertain=True)
+            return JSONResponse(
+                {
+                    "error": "Cancellation was requested. The provider outcome may be uncertain; this request will not be repeated.",
+                    "inference_status": proposals.inference_status(
+                        body.path, body.expected_project_id, request_id
+                    )["status"],
+                },
+                status_code=409,
+            )
+        except Exception:
+            proposals.fail_inference(body.path, request_id, record["owner"], uncertain=True)
+            raise
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        unregister_request(request_id, task)
+
+
 class ProposalCancelRequest(BaseModel):
     request_id: UUID
+    path: str
+    expected_project_id: str
+    expected_binding: str
 
 
 @app.get("/api/projects/proposals/config")
@@ -1164,8 +1250,30 @@ async def proposal_view(body: ProposalRequest, request: Request):
 
 @app.post("/api/projects/proposals/cancel")
 async def cancel_proposal(body: ProposalCancelRequest):
-    await cancel_request(str(body.request_id))
-    return {"cancelled": True}
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    credential = await auth_context()
+    if credential["identity"] != body.expected_binding:
+        raise ProjectError(
+            "AI account changed; reopen the connection before checking cancellation status."
+        )
+    return await proposals.cancel_inference(
+        body.path, body.expected_project_id, str(body.request_id)
+    )
+
+
+@app.get("/api/projects/strategy-inference/status")
+async def strategy_inference_status(
+    path: str, expected_project_id: str, expected_binding: str, request_id: UUID
+):
+    await require_cloud_inference_binding(expected_binding, expected_project_id, path)
+    credential = await auth_context()
+    if credential["identity"] != expected_binding:
+        raise ProjectError(
+            "AI account changed; reopen the connection before checking inference status."
+        )
+    return proposals.inference_status(path, expected_project_id, str(request_id))
 
 
 @app.post("/api/projects/proposals/agentic")

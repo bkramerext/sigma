@@ -2874,6 +2874,20 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
+    # Inference commits compare Current Understanding while holding this same
+    # lock, so evidence cannot change between its final check and strategy save.
+    from sigma.projects import project_write_lock
+
+    # Preserve injected persistence seams that use symbolic test labels rather
+    # than filesystem project paths. Production project paths use the lock.
+    if Path(path).suffix not in {".sigma", ".json"}:
+        _save_unlocked(path, record)
+        return
+    with project_write_lock(path):
+        _save_unlocked(path, record)
+
+
+def _save_unlocked(path: str, record: dict[str, Any]) -> None:
     if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
@@ -3918,7 +3932,12 @@ def _remove_terminal_session(
     path: str, session_id: str, expected_updated_at: str
 ) -> dict[str, Any]:
     """Delete a stopped session after its execution owner has exited."""
-    with _project_manager_lock(path):
+    from sigma.projects import project_write_lock
+
+    # Keep the manager -> project-write order used by session admission. The
+    # write lock makes evidence deletion atomic with inference's final context
+    # check and strategy commit.
+    with _project_manager_lock(path), project_write_lock(path):
         record = _read(path, session_id)
         if record.get("updated_at") != expected_updated_at:
             raise ProjectError("Session changed; refresh its status before removing it")
@@ -3936,7 +3955,11 @@ def _remove_terminal_session(
             from sigma.project_bundle import delete_file
 
             delete_file(path, f"research-sessions/{session_id}.json")
-            return {"removed": True, "id": session_id, "session_number": record["session_number"]}
+            return {
+                "removed": True,
+                "id": session_id,
+                "session_number": record["session_number"],
+            }
         target = _directory(path) / f"{session_id}.json"
         if target.is_symlink() or not target.is_file():
             raise ProjectError("Research session not found")

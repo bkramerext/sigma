@@ -1,3 +1,23 @@
+## Issue #332 — Current Understanding strategy inference (2026-10-29)
+
+Current Understanding now offers **Infer strategy #n**. The ordinal comes from
+the complete persisted strategy history, including removed entries. Inference
+uses bounded Current Understanding and source-linked evidence, validates a
+strict title/summary/approach result, rejects nonnovel directions, and saves
+through the shared strategy service with model/reasoning provenance. A durable
+request ledger and strategy provenance make retries, process restarts, and
+replay after removal idempotent; replay returns a freshly inspected project
+view. Ambiguous provider dispatches are terminal and never silently retried.
+A shared project write lock serializes the final account/project/context/
+settings/history check with session evidence, settings, and strategy writes.
+Cancellation reports reconciled authoritative state without promising that no
+strategy was saved. Generate remains the separate proposal/review/accept
+workflow. Both actions have accessible in-app tooltip guidance, and the
+ephemeral Markdown/copy block is gone.
+
+Verification and CI investigation, including actual results and limitations,
+are recorded in [the issue #332 handoff](../messages/issue_332_gray_r4r.txt).
+
 ## PR #325 — documentation accuracy and onboarding verification (2026-10-29)
 
 README setup and local Google-auth claims were checked against `./sigma`,
