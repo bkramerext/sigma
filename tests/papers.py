@@ -695,7 +695,8 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
     math = papers._latex_prose(r"Use $\sum_{j=1}^k j^2$ and $\omega^3=1$.")
     assert r"$\sum_{j=1}^k j^2$" in math
     assert r"$\omega^3=1$" in math
-    assert r"\[\sum_{j=1}^k j^2\]" in papers._latex_prose(r"$$\sum_{j=1}^k j^2$$")
+    assert r"\[\sum_{j=1}^k j^2\]" in papers._latex_prose(r"$\sum_{j=1}^k j^2$")
+    assert r"NF-$\kappa$B" in papers._latex_prose("NF-κB signaling")
 
     paper = draft()
     sections = list(paper.sections)
