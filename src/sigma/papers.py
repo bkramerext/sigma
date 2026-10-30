@@ -2435,7 +2435,13 @@ def _tex(
     material_omissions: list[dict[str, Any]] | None = None,
     integrity_excerpts: bool = False,
     include_research_details: bool = True,
+    include_claim_details: bool = False,
+    include_validation_notes: bool = False,
+    include_research_excerpts: bool = False,
 ) -> str:
+    include_claim_details = include_claim_details or include_research_details
+    include_validation_notes = include_validation_notes or include_research_details
+    include_research_excerpts = include_research_excerpts or include_research_details
     esc = _latex
     prose = _latex_prose
 
@@ -2467,7 +2473,7 @@ def _tex(
         r"\begin{document}",
         r"\maketitle",
     ]
-    if include_research_details:
+    if include_validation_notes:
         parts.append(
             r"\begin{center}\small\textit{AI-generated research synthesis \textperiodcentered{} SIGMA}\end{center}"
         )
@@ -2480,7 +2486,7 @@ def _tex(
         article_paragraph(draft.abstract),
         r"\end{abstract}",
     ]
-    if include_research_details:
+    if include_validation_notes:
         parts += [
             r"\section*{About this paper}",
             prose(
@@ -2508,17 +2514,17 @@ def _tex(
                 "and omission ledger are retained with the generation record."
             ),
         ]
-    if include_research_details and draft.abstract_claim_ids:
+    if include_claim_details and draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
     parts.append(r"\section{" + esc(opening_heading) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.problem_framing]
-    if include_research_details and draft.problem_framing_claim_ids:
+    if include_claim_details and draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
     parts.append(r"\section{" + esc(methods_heading) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.methods]
-    if include_research_details and draft.methods_claim_ids:
+    if include_claim_details and draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
     for section in draft.sections:
         parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
@@ -2543,7 +2549,7 @@ def _tex(
             if claim.evidence_refs:
                 parts.append(r"\textit{Evidence: }" + esc(", ".join(claim.evidence_refs)))
 
-    if include_research_details and not math_style:
+    if include_claim_details and not math_style:
         claim_register()
     parts.append(
         r"\section{Verification status and limitations}" if math_style else r"\section{Limitations}"
@@ -2560,7 +2566,7 @@ def _tex(
             + [r"\item " + prose(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
-    if include_research_details and obligation_reconciliation:
+    if include_validation_notes and obligation_reconciliation:
         parts.append(r"\section{Frozen obligation reconciliation}")
         parts.append(
             prose(
@@ -2594,11 +2600,11 @@ def _tex(
             )
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [article_paragraph(item) + "\n" for item in draft.conclusions]
-    if include_research_details and draft.conclusion_claim_ids:
+    if include_claim_details and draft.conclusion_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
-    if math_style and include_research_details:
+    if math_style and include_claim_details:
         claim_register()
-    if include_research_details and integrity_records:
+    if include_research_excerpts and integrity_records:
         parts += [
             r"\appendix",
             (
@@ -2655,7 +2661,7 @@ def _tex(
                     "are retained in the archived source snapshot."
                 )
             )
-    if include_research_details:
+    if include_validation_notes:
         parts += [
             r"\section*{Evidence and authorship note}",
             esc("Snapshot SHA-256: " + snapshot_hash),
@@ -3755,6 +3761,9 @@ async def _generate_impl(
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
     include_research_details: bool = False,
+    include_claim_details: bool = False,
+    include_validation_notes: bool = False,
+    include_research_excerpts: bool = False,
 ) -> dict[str, Any]:
     if _gate.locked():
         raise ProjectError("A paper generation is already active; wait or cancel it")
@@ -4051,6 +4060,9 @@ async def _generate_impl(
                 ),
                 "long_form": long_form,
                 "include_research_details": include_research_details,
+                "include_claim_details": include_claim_details,
+                "include_validation_notes": include_validation_notes,
+                "include_research_excerpts": include_research_excerpts,
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
                 "snapshot_size_bytes": len(_json(package)),
@@ -4121,6 +4133,9 @@ async def _generate_impl(
                 material_omissions=material_omissions,
                 integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
                 include_research_details=include_research_details,
+                include_claim_details=include_claim_details,
+                include_validation_notes=include_validation_notes,
+                include_research_excerpts=include_research_excerpts,
             )
             await report("compile", None, None)
             pdf = await asyncio.to_thread(
@@ -4168,6 +4183,9 @@ async def generate(
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
     include_research_details: bool = False,
+    include_claim_details: bool = False,
+    include_validation_notes: bool = False,
+    include_research_excerpts: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())
@@ -4183,6 +4201,9 @@ async def generate(
             force_long_form,
             expected_snapshot_sha256,
             include_research_details,
+            include_claim_details,
+            include_validation_notes,
+            include_research_excerpts,
         )
     )
     _generation_tasks[key] = task
