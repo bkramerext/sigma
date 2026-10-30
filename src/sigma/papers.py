@@ -2875,7 +2875,8 @@ that occur in the input. Do not add scientific claims or outside citations."""
     )
     plan_instructions = (
         INSTRUCTIONS
-        + "\n\n" + PUBLICATION_INSTRUCTIONS
+        + "\n\n"
+        + PUBLICATION_INSTRUCTIONS
         + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
         + (
