@@ -153,15 +153,21 @@ def main() -> None:
             encoding="utf-8"
         )
 
-        # The candidate checkout must precede image build so tags cannot lie
-        # about which source tree produced them.
+        # Candidate tooling must be checked out before image build so the
+        # requested commit's builder receives its own build inputs.
+        checkout_index = next(
+            index
+            for index, argv in enumerate(calls)
+            if argv[:5] == ["git", "-C", str(repo), "checkout", "--detach"]
+            and argv[5] == NEW
+        )
         build_index = next(
             index
             for index, argv in enumerate(calls)
             if argv[:2] == ["python3", str(repo / "deploy/release_image.py")]
             and argv[2:] == ["build", str(repo), NEW]
         )
-        assert build_index >= 0
+        assert checkout_index < build_index
 
         print(
             "GCE release automation idempotency, missing config, startup rollback, and state preservation passed."

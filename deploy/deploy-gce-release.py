@@ -210,6 +210,13 @@ class Deployment:
         candidate_checkout_changed = False
         release_pin_changed = False
         try:
+            # Load candidate deployment tooling before invoking the candidate
+            # image builder. The current builder may not know the candidate's
+            # build inputs (for example, the frontend SHA argument).
+            _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
+            candidate_checkout_changed = True
+            self.sync_preflight()
+            self.check_preflight()
             _call(
                 self.runner,
                 [
@@ -223,9 +230,6 @@ class Deployment:
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True
-            _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
-            candidate_checkout_changed = True
-            self.sync_preflight()
             _replace_release(self.env_file, original_env, sha, owner)
             self.check_preflight()
             _call(self.runner, ["systemctl", "start", "sigma.service"])
