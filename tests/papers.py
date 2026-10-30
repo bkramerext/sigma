@@ -1916,6 +1916,33 @@ def test_bounded_index_keeps_constructive_proof_amid_many_objections() -> None:
     assert any("unresolved counterexample" in note.statement for note in notes)
 
 
+def test_fast_planner_preview_bounds_input_and_preserves_source_coverage() -> None:
+    """Large index previews stay bounded; section writers retain full research."""
+    sources = [f"session:research-{index}" for index in range(1, 6)]
+    notes = [
+        papers.EvidenceNote(
+            statement=(
+                f"Source {source}, observation {number}: "
+                + ("Evidence is incomplete; the alternative remains plausible. " * 5)
+            ),
+            kind=("negative" if number % 2 else "result"),
+            evidence_refs=[source],
+        )
+        for number in range(90)
+        for source in sources
+    ]
+    full_size = len(papers._json([note.model_dump() for note in notes]))
+    preview, skipped = papers._fast_planner_preview(notes)
+    assert full_size > papers.FAST_PLANNER_PREVIEW_BYTES
+    assert len(papers._json(preview)) <= papers.FAST_PLANNER_PREVIEW_BYTES
+    assert skipped > 0
+    assert skipped + len(preview) == len(notes)
+    assert {ref for item in preview for ref in item["evidence_refs"]} == set(sources)
+    assert {item["kind"] for item in preview} == {"result", "negative"}
+    assert len(notes) == 450
+    assert notes[-1].statement.endswith("plausible. " * 5)
+
+
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
         "biology": ("Introduction and biological context", "cross-species limitations"),
@@ -3107,6 +3134,7 @@ def main() -> None:
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
     test_structured_fast_index_preserves_math_review_and_bounds_omissions()
     test_bounded_index_keeps_constructive_proof_amid_many_objections()
+    test_fast_planner_preview_bounds_input_and_preserves_source_coverage()
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_military_style_guidance_reaches_all_authoring_paths()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
