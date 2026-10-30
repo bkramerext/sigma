@@ -3793,7 +3793,7 @@ def main() -> None:
     ):
         assert outcome_text in outcome_json
     outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=[session_outcome])
-    assert r"\\section{Structured reasoning and review records}" in outcome_tex
+    assert r"\section{Structured reasoning and review records}" in outcome_tex
     assert "Conditional conclusion" in outcome_tex
     assert "The argument remains unverified." in outcome_tex
 
