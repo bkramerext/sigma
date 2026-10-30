@@ -4206,10 +4206,10 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     setInvitationRecorded(invitationRequestOpen);
   }, [cloud?.deniedInvitationStatus, authenticatedGuest, invitationStatus]);
   useEffect(() => {
-    const inviteIntent = new URLSearchParams(window.location.search).get('invite') === '1';
-    if (canRequestInvitation && deniedIdentityAvailable && !inviteIntent && dialog.current && !dialog.current.open) dialog.current.showModal();
+    // A newly signed-in non-member receives the shared welcome screen first.
+    // Keep this invitation dialog available for explicit requests and retries.
     if (!invitationIdentity && dialog.current?.open) dialog.current.close();
-  }, [canRequestInvitation, invitationIdentity]);
+  }, [invitationIdentity]);
   useEffect(() => {
     const open = () => {
       document
@@ -4284,6 +4284,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       // Signing out is not a first visit. Keep the post-logout guest view
       // quiet for this tab instead of presenting its introductory welcome.
       window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
+      window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed');
       if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
       window.location.assign(destination);
     } catch (cause) {
@@ -4357,7 +4358,10 @@ function ReloadMeAction({ connectionPill = false }: { connectionPill?: boolean }
   return <button type="button" className={`administrator-settings-link reload-me-pill${connectionPill ? ' reload-me-connection' : ''}`} disabled={state === 'sending'} onClick={() => void requestReload()}>{state === 'sending' ? 'Requesting…' : state === 'error' ? 'Try reload again' : 'Reload me!'}</button>;
 }
 
-function InvitationRequestControls({ error, onError, onRecorded }: { error: string; onError: (error: string) => void; onRecorded: () => void }) {
+function InvitationRequestControls({ error, onError, onRecorded, buttonLabel = 'Invite me', buttonClassName = 'cloud-text-button' }: {
+  error: string; onError: (error: string) => void; onRecorded: () => void;
+  buttonLabel?: string; buttonClassName?: string;
+}) {
   const [busy, setBusy] = useState(false);
   async function requestInvitation() {
     setBusy(true); onError('');
@@ -4370,8 +4374,8 @@ function InvitationRequestControls({ error, onError, onRecorded }: { error: stri
   }
   return <div className="google-invitation-actions">
     {error
-      ? <p role="alert">{error} <button type="button" className="cloud-text-button google-invitation-retry" aria-busy={busy} disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : 'Try again'}</button></p>
-      : <button type="button" className="cloud-text-button" aria-busy={busy} disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : 'Invite me'}</button>}
+      ? <p role="alert">{error} <button type="button" className={buttonClassName} aria-busy={busy} disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : 'Try again'}</button></p>
+      : <button type="button" className={buttonClassName} aria-busy={busy} disabled={busy} onClick={() => void requestInvitation()}>{busy ? 'Sending…' : buttonLabel}</button>}
   </div>;
 }
 
@@ -4854,7 +4858,22 @@ function CloudAuthGate() {
   const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const showSponsorWelcome = !!status?.account?.invitation_welcome_pending
     && !welcomeDismissedForPage;
+  const nonMemberIdentity = !!status?.enabled
+    && ((status.authenticated && status.user?.role === 'guest')
+      || (!status.authenticated && deniedIdentityAvailable));
+  const invitationStatus = status?.authenticated
+    ? status.account?.invitation_status
+    : deniedInvitationStatus;
+  const inviteParams = new URLSearchParams(window.location.search);
+  const showNonMemberWelcome = nonMemberIdentity && !showSponsorWelcome
+    && window.location.pathname !== '/demo'
+    && navigationEntry?.type !== 'reload'
+    && inviteParams.get('invite') !== '1'
+    && inviteParams.get('show_invitation') !== '1'
+    && window.sessionStorage.getItem('sigma.nonMemberWelcomeDismissed') !== 'true'
+    && !welcomeDismissedForPage;
   const showGuestWelcome = !!status?.enabled && !status?.authenticated
+    && !deniedIdentityAvailable
     && window.location.pathname !== '/demo'
     && navigationEntry?.type !== 'reload'
     && window.sessionStorage.getItem('sigma.guestWelcomeDismissed') !== 'true'
@@ -4871,6 +4890,17 @@ function CloudAuthGate() {
       allowanceLoading={budgetLoading && budgetEmail !== status.user?.email}
       onDismiss={async () => { setWelcomeDismissedForPage(true); await refresh(); }}
     />}
+    {showNonMemberWelcome && <InvitationWelcomeDialog
+      audience="nonmember"
+      invitationPending={hasOpenInvitationRequest(invitationStatus)}
+      allowance={null}
+      allowanceUsed={0}
+      allowanceLoading={false}
+      onDismiss={async () => {
+        window.sessionStorage.setItem('sigma.nonMemberWelcomeDismissed', 'true');
+        setWelcomeDismissedForPage(true);
+      }}
+    />}
     {showGuestWelcome && <InvitationWelcomeDialog
       audience="guest"
       allowance={null}
@@ -4883,10 +4913,15 @@ function CloudAuthGate() {
   </CloudIdentityContext.Provider>;
 }
 
-function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowanceLoading, onDismiss }: { audience: 'guest' | 'invited' | 'sponsored'; allowance: number | null; allowanceUsed: number; allowanceLoading: boolean; onDismiss: () => Promise<void> }) {
+function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowanceLoading, invitationPending = false, onDismiss }: {
+  audience: 'guest' | 'nonmember' | 'invited' | 'sponsored';
+  allowance: number | null; allowanceUsed: number; allowanceLoading: boolean;
+  invitationPending?: boolean; onDismiss: () => Promise<void>;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [invitationRequested, setInvitationRequested] = useState(false);
   const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
@@ -4896,7 +4931,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     if (busy) return;
     setBusy(true); setError('');
     try {
-      if (audience !== 'guest') {
+      if (audience !== 'guest' && audience !== 'nonmember') {
         const response = await fetch('/api/cloud-auth/welcome', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         if (!response.ok) throw await cloudFailure(response, 'Your invitation welcome could not be saved.');
       }
@@ -4904,7 +4939,8 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
-  const heading = audience === 'guest' ? 'Welcome to SIGMA!' : 'You have been invited!';
+  const heading = audience === 'guest' || audience === 'nonmember'
+    ? 'Welcome to SIGMA!' : 'You have been invited!';
   const allowanceMessage = allowance === null || allowance > 1
     ? null
     : audience === 'sponsored'
@@ -4917,11 +4953,25 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     {allowanceMessage && <p className="invitation-welcome-allowance">{allowanceMessage}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
     {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore as a guest without running or saving projects, or request an invitation to become a member. The administrator decides whether to include sponsorship when granting your invitation.</p>}
+    {audience === 'nonmember' && <p className="invitation-welcome-intro">Your Google account does not yet have SIGMA membership. Request an invitation to join the research workspace, or explore as a guest while an administrator reviews your request.</p>}
     {audience === 'sponsored' && <p className="invitation-welcome-intro">SIGMA tracks your sponsored allowance as you use ChatGPT. When you’re ready, you can connect your own ChatGPT account from the Sponsored ChatGPT pill.</p>}
     {audience === 'invited' && <p className="invitation-welcome-intro">Welcome to SIGMA.</p>}
     <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
-    {error && <p role="alert">{error}</p>}
-    <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : "Let's get started"}</button>
+    {error && audience !== 'nonmember' && <p role="alert">{error}</p>}
+    {audience === 'nonmember' && (invitationPending || invitationRequested
+      ? <p className="invitation-welcome-requested" role="status">Your invitation request is recorded and awaiting administrator review.</p>
+      : <InvitationRequestControls
+          error={error}
+          onError={setError}
+          onRecorded={() => {
+            setInvitationRequested(true);
+            window.dispatchEvent(new Event('sigma-invitation-recorded'));
+            window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
+          }}
+          buttonLabel="Request invitation"
+          buttonClassName="google-text-action invitation-welcome-dismiss invitation-welcome-request"
+        />)}
+    <button type="button" className={audience === 'nonmember' ? 'invitation-welcome-secondary' : 'google-text-action invitation-welcome-dismiss'} disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : audience === 'nonmember' ? 'Explore as guest' : "Let's get started"}</button>
   </dialog>;
 }
 
