@@ -251,8 +251,9 @@ the reasoning uses. Explain the logical bridge for each important step: why the 
 has the stated structure, why the bound applies, why equality can be attained (if claimed), and how
 the recurrence or sum yields the conclusion. Explain constructions concretely and verify their
 key property; include base cases, edge cases, or induction steps when they matter. Do not compress
-these steps into “it follows” or a formula-only summary. Use precise, economical prose and separate sections to make the proof readable. Each paragraph
-should develop one idea, normally in two to five sentences. Never restate an already established
+these steps into “it follows” or a formula-only summary. Use precise, economical prose and
+separate sections to make the proof readable. Each paragraph should develop one idea,
+normally in two to five sentences. Never restate an already established
 definition, calculation, or caveat merely to increase length. Only include steps supported by the
 saved evidence; if a needed step is absent, identify the gap once in its appropriate place.
 
@@ -262,8 +263,7 @@ failed approaches when they matter. In mathematics, enclose ALL variables and ex
 in explicit LaTeX math delimiters ($...$ inline and $...$ for important standalone equations);
 write $a_{n+3}$, not a_(n+3), and $\\omega^3=1$, not a bare omega glyph.
 Use ordinary prose outside the math delimiters; no TeX document commands or environments.
-In validation_warnings,
-report unsupported claims, contradictory evidence, and omitted proof obligations you notice; these
+In validation_warnings, report unsupported claims, contradictory evidence, and omitted proof obligations you notice; these
 are the author's self-review, not independent verification. List unresolved obligations separately.
 Include no bibliography unless the evidence package itself contains genuine cited sources. If
 evidence is insufficient or mixed, say so explicitly. Return only the requested JSON structure."""
