@@ -4175,6 +4175,14 @@ def preflight(
     )
     if not resume_available and _can_rebase_explicit_restart(work_state, view.project.id):
         resume_available = True
+    saved_progress = work_state.get("progress") or {}
+    planning_fallback_available = bool(
+        resume_available
+        and long_form
+        and not work_state.get("plan")
+        and saved_progress.get("stage") == "planning"
+        and saved_progress.get("status") in {"failed", "cancelled", "running"}
+    )
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
     )
@@ -4274,6 +4282,7 @@ def preflight(
             work_state.get("reduction_next_group", 0) if resume_available else 0
         ),
         "outline_complete": bool(work_state.get("plan")) if resume_available else False,
+        "planning_fallback_available": planning_fallback_available,
         "completed_sections": len(work_state.get("section_drafts", {})) if resume_available else 0,
         "evidence_fields_omitted": (
             len(work_state.get("omitted_evidence", [])) if resume_available else 0
