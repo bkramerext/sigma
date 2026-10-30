@@ -65,7 +65,7 @@ chown root:root "$temporary"
 chmod 0600 "$temporary"
 mv -f "$temporary" "$env_file"
 rollback_active=1
-if ! /usr/local/libexec/sigma/gce_preflight.py --json; then
+if ! /usr/local/libexec/sigma/gce_preflight.py --json --repository /opt/sigma/current; then
   restore_previous_env
   rollback_active=0
   fail 'preflight rejected rollback candidate; original release pin restored'
