@@ -284,13 +284,18 @@ def _global_call_amount_units(db: sqlite3.Connection) -> int:
 
 
 def _evaluation_queue_limits() -> tuple[int, int, int, int]:
-    per_user_running = _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 1)
-    global_running = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 2)
-    per_user_queued = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 2)
+    """Independent per-workspace and global worker/queue capacities.
+
+    Project-specific session admission is enforced separately and atomically.
+    Raising these limits does not bypass provider spend or per-user allowances.
+    """
+    per_user_running = _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 2)
+    global_running = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 4)
+    per_user_queued = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 4)
     global_queued = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_QUEUED", 16)
-    if per_user_running > 1 or global_running > 2 or per_user_queued > 2:
+    if global_running < per_user_running:
         raise CloudResearchUnavailable(
-            "Cloud research concurrency and queue limits exceed the external-evaluation policy."
+            "The global research concurrency limit cannot be lower than the per-user limit."
         )
     return per_user_running, global_running, per_user_queued, global_queued
 
