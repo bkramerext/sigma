@@ -17,3 +17,7 @@ The coordinator reviewed the complete four generated TeX manuscripts, not the bi
 - Xenopus: abstract and falsification framing are promising; verify statistical expression and punctuation across pages.
 
 Do not assume these additional observations have all been fixed in code. The coordinator's attempted follow-up fallback-abstract source edit was blocked; it is NOT in the specified code SHA. Report each remaining defect precisely. This is still ROUND 9; do not start round 10. Wait for explicit resume authorization from the human/coordinator before starting generation.
+
+## Evaluation method clarification
+
+Blue may self-evaluate paper quality by reading the complete generated `.tex` manuscript rather than visually inspecting the `.pdf`. This round is **not** intended to validate the `.tex` → `.pdf` conversion pipeline. Prioritize substantive quality: coherent argument, completeness, evidence fidelity, publication-appropriate prose, claims and definitions, section structure, and unresolved research gaps. TeX inspection may also reveal obviously malformed notation, but do not spend time on PDF visual/layout checks solely to validate conversion. Still generate and report the normal artifacts. This clarification supersedes earlier round-9 instructions requiring full visual inspection of every PDF page.
