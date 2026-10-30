@@ -4297,7 +4297,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     {cloud?.enabled && cloud.authenticated
       ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" title={signedInAccountTooltip} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
       : <>
-        <a className="project-google-signin" href={projectReturn}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
+        <a className="project-google-signin" href={projectReturn} onClick={() => window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed')}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}
       </>}
     {(!cloud?.authenticated || authenticatedGuest) && <dialog id="google-invitation-dialog" ref={dialog} className="google-account-dialog google-invitation-dialog" aria-labelledby="google-invitation-heading" onCancel={event => { if (deniedIdentityAvailable) event.preventDefault(); }}>
@@ -4311,7 +4311,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
           : <InvitationRequestControls error={error} onError={setError} onRecorded={() => { setInvitationRecorded(true); if (authenticatedGuest) window.dispatchEvent(new Event('sigma-cloud-auth-refresh')); window.dispatchEvent(new Event('sigma-invitation-recorded')); }}/>
         : <a className="cloud-text-button google-invitation-signin" href="/api/cloud-auth/login?invite=1">Sign in with Google</a>}
       {error && !deniedIdentityAvailable && <p role="alert">{error}</p>}
-      {deniedIdentityAvailable && !authenticatedGuest && <a className="cloud-text-button google-invitation-signin" href={projectReturn}>Use another Google account</a>}
+      {deniedIdentityAvailable && !authenticatedGuest && <a className="cloud-text-button google-invitation-signin" href={projectReturn} onClick={() => window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed')}>Use another Google account</a>}
       <footer className="about-dialog-footer google-invitation-footer"><nav className="about-legal-links" aria-label="Legal information"><a className="about-privacy-link" href={privacyNoticeHref('invitation')}>Privacy Notice</a></nav></footer>
     </dialog>}
   </>;
