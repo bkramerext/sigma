@@ -2562,6 +2562,8 @@ def _repair_paper_references(
             diagnostics.append(
                 f"Claim {identity} cited evidence not in the saved research index; unsupported links were removed."
             )
+        elif not sources and claim.status == "established":
+            diagnostics.append(f"Claim {identity} had no saved evidence and was marked unresolved.")
         claims.append(
             claim.model_copy(
                 update={"id": identity, "evidence_refs": sources, "status": status}
