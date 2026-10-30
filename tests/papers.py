@@ -3780,7 +3780,9 @@ def main() -> None:
         if item["source_ref"] == "session:session-1" and item["field"] == "outcome"
     )
     assert session_outcome["content"] == evidence_export["research_sessions"][0]["outcome"]
-    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=outcome_records)
+    # The frozen integrity records retain every source detail. The opt-in
+    # publication appendix is intentionally bounded and only selects excerpts.
+    outcome_json = json.dumps(outcome_records, ensure_ascii=False)
     for outcome_text in (
         "Conditional conclusion",
         "The result holds under assumption A.",
@@ -3789,7 +3791,11 @@ def main() -> None:
         "Check the base case.",
         "Verify the base case.",
     ):
-        assert outcome_text in outcome_tex
+        assert outcome_text in outcome_json
+    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=[session_outcome])
+    assert r"\\section{Structured reasoning and review records}" in outcome_tex
+    assert "Conditional conclusion" in outcome_tex
+    assert "The argument remains unverified." in outcome_tex
 
     without_conclusion = json.loads(json.dumps(evidence_export))
     without_conclusion["research_sessions"][0]["outcome"].pop("conclusion")
