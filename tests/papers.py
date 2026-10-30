@@ -697,6 +697,10 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
     assert r"$\omega^3=1$" in math
     assert r"\[\sum_{j=1}^k j^2\]" in papers._latex_prose(r"$\sum_{j=1}^k j^2$")
     assert r"NF-$\kappa$B" in papers._latex_prose("NF-κB signaling")
+    delta = r"$\delta=\beta_{46}-\beta_{40}$"
+    integral = r"$P_i=\int_{1}^{6}N_i(t)\,dt$"
+    assert delta in papers._latex_prose(delta)
+    assert integral in papers._latex_prose(integral)
 
     paper = draft()
     sections = list(paper.sections)
