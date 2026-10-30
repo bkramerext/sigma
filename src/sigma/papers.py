@@ -1099,12 +1099,7 @@ def _evidence_based_long_plan(
     for heading, purpose, kinds in categories:
         relevant = [note for note in notes if note.kind in kinds]
         refs = list(
-            dict.fromkeys(
-                ref
-                for note in relevant
-                for ref in note.evidence_refs
-                if ref in source_ids
-            )
+            dict.fromkeys(ref for note in relevant for ref in note.evidence_refs if ref in source_ids)
         )
         if refs:
             groups.append((heading, purpose, refs, relevant))
@@ -1139,7 +1134,8 @@ def _evidence_based_long_plan(
                     ),
                     evidence_refs=list(
                         dict.fromkeys(
-                            ref for ref in (matching.evidence_refs if matching else chunk)
+                            ref
+                            for ref in (matching.evidence_refs if matching else chunk)
                             if ref in source_ids
                         )
                     )[:20],
@@ -1196,9 +1192,11 @@ def _evidence_based_long_plan(
 
     questions = [note.statement for note in notes if note.kind == "question"]
     warnings = [
-        "The AI planning stage did not yield a usable outline. A conservative, "
-        "source-linked outline was reconstructed from saved evidence without "
-        "repeating the planning request; review the resulting paper's structure."
+        (
+            "The AI planning stage did not yield a usable outline. A conservative, "
+            "source-linked outline was reconstructed from saved evidence without "
+            "repeating the planning request; review the resulting paper's structure."
+        )
     ]
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
     if indexed_refs - covered:
@@ -1220,20 +1218,26 @@ def _evidence_based_long_plan(
         problem_framing=[f"The investigation asks: {question}"],
         problem_framing_claim_ids=[claims[0].id],
         methods=[
-            "This synthesis organizes the project's frozen research records "
-            "and their saved evidence references. It does not claim new experiments."
+            (
+                "This synthesis organizes the project's frozen research records "
+                "and their saved evidence references. It does not claim new experiments."
+            )
         ],
         methods_claim_ids=[],
         claims=claims,
         sections=sections,
         limitations=[
-            "The saved record may contain unverified interpretations and "
-            "unresolved evidence conflicts; these require independent assessment."
+            (
+                "The saved record may contain unverified interpretations and "
+                "unresolved evidence conflicts; these require independent assessment."
+            )
         ],
         open_obligations=questions[:16],
         conclusions=[
-            "Conclusions are limited to the findings and uncertainties documented "
-            "in the cited saved research, as examined in the sections above."
+            (
+                "Conclusions are limited to the findings and uncertainties documented "
+                "in the cited saved research, as examined in the sections above."
+            )
         ],
         conclusion_claim_ids=[claims[-1].id],
         validation_warnings=warnings,
@@ -1429,6 +1433,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "one_shot_draft",
         "progress",
         "explicit_restart_pending",
+        "planning_fallback_pending",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
@@ -1442,6 +1447,8 @@ def _load_work(path: str) -> dict[str, Any] | None:
     value.setdefault("reduction_source_refs_omitted", [])
     if type(value.get("explicit_restart_pending", False)) is not bool:
         raise ProjectError("Long-paper checkpoint restart state is invalid")
+    if type(value.get("planning_fallback_pending", False)) is not bool:
+        raise ProjectError("Long-paper checkpoint planning recovery state is invalid")
     value["schema_version"] = 2
     if value.get("frozen_package") is not None:
         frozen = value["frozen_package"]
@@ -2536,9 +2543,7 @@ def _tex(
         parts.append(r"\begin{itemize}")
         for item in distinct_obligations[:18]:
             source_count = len(item["source_refs"])
-            annotation = (
-                f" ({item['status']}; {source_count} saved source reference(s))"
-            )
+            annotation = f" ({item['status']}; {source_count} saved source reference(s))"
             parts.append(r"\item " + prose(item["text"]) + r" \textit{" + esc(annotation) + "}")
         parts.append(r"\end{itemize}")
         if len(distinct_obligations) > 18:
@@ -3071,8 +3076,13 @@ async def _generate_long_draft(
     previous_progress = state.get("progress") or {}
     previous_planning_failed = bool(
         not state.get("plan")
-        and previous_progress.get("stage") == "planning"
-        and previous_progress.get("status") in {"failed", "cancelled", "running"}
+        and (
+            state.get("planning_fallback_pending") is True
+            or (
+                previous_progress.get("stage") == "planning"
+                and previous_progress.get("status") in {"failed", "cancelled", "running"}
+            )
+        )
     )
 
     def before_provider_call(
@@ -3481,6 +3491,7 @@ Return the complete plan JSON matching the schema."""
                 # Cancellation still propagates without publishing.
                 long_plan = _evidence_based_long_plan(project_data, notes, source_ids)
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
+        state.pop("planning_fallback_pending", None)
         save_state(state)
         if progress:
             await progress("planning", None, None, "milestone")
@@ -3757,7 +3768,7 @@ async def _generate_impl(
             raise ProjectError(config["message"])
         checkpoint = _load_work(path)
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
-        if isinstance(frozen, dict) and checkpoint.get("project_id") == view.project.id:
+        if isinstance(frozen, dict) and checkpoint is not None and checkpoint.get("project_id") == view.project.id:
             package = frozen
             snapshot_hash = checkpoint["snapshot_sha256"]
         else:
@@ -3804,6 +3815,18 @@ async def _generate_impl(
                 raise ProjectError(
                     "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
                 )
+        # Preserve the decision to recover an interrupted planning call before
+        # report() replaces the old stage with this run's progress. A second
+        # interruption must not silently dispatch the ambiguous paid call again.
+        if long_form and checkpoint is not None and compatible and not work.get("plan"):
+            prior = work.get("progress") or {}
+            if prior.get("stage") == "planning" and prior.get("status") in {
+                "failed",
+                "cancelled",
+                "running",
+            }:
+                work["planning_fallback_pending"] = True
+                _save_work(path, work)
         one_shot_validation_started = False
         if not long_form:
             # A one-shot request can consume allowance even when its response
@@ -4109,7 +4132,11 @@ async def generate(
     except Exception as exc:
         # The SSE error can disappear on page reload; retain only the same
         # user-safe ProjectError text in checkpointed progress.
-        reason = str(exc) if isinstance(exc, ProjectError) else "Unexpected paper-generation error; review server logs."
+        reason = (
+            str(exc)
+            if isinstance(exc, ProjectError)
+            else "Unexpected paper-generation error; review server logs."
+        )
         finish_progress(path, "failed", reason)
         raise
     finally:
@@ -4143,7 +4170,7 @@ def preflight(
     # A running or resumable paper uses the original saved evidence. Avoid
     # refreshing live research at all when a frozen checkpoint is available.
     frozen = existing.get("frozen_package") if existing is not None else None
-    if isinstance(frozen, dict) and existing.get("project_id") == view.project.id:
+    if isinstance(frozen, dict) and existing is not None and existing.get("project_id") == view.project.id:
         package = frozen
         fingerprint = existing["snapshot_sha256"]
     else:
@@ -4208,8 +4235,13 @@ def preflight(
         resume_available
         and long_form
         and not work_state.get("plan")
-        and saved_progress.get("stage") == "planning"
-        and saved_progress.get("status") in {"failed", "cancelled", "running"}
+        and (
+            work_state.get("planning_fallback_pending") is True
+            or (
+                saved_progress.get("stage") == "planning"
+                and saved_progress.get("status") in {"failed", "cancelled", "running"}
+            )
+        )
     )
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
