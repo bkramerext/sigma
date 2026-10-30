@@ -1,3 +1,22 @@
+## Local sponsor renewal in Administrator Settings (2026-10-29)
+
+Administrator Settings now exposes a local-only **Renew sponsor ChatGPT
+connection** action for authenticated administrators. It invokes the existing
+`/api/ai/sponsor-auth/begin` flow, which resolves SIGMA's pinned sponsor account
+on the server; it does not pass a selected personal account ID. The panel
+explains that Google administrator identity and the designated ChatGPT sponsor
+are separate, and shows in-context sign-in progress and errors. This makes the
+documented admin renewal path available and avoids the `/api/ai/auth/begin`
+guard that rejects sponsor accounts on the personal route.
+
+Verification: `browser_checks/local_sponsor_renewal_admin.py` passed in real
+Chrome with mocked endpoints, proving the action calls only the sponsor auth
+route and renders a recoverable route error. The human completed the actual
+normal SIGMA renewal; token-free local diagnostics recorded sponsor OAuth
+`started` and `connected`. `npm run build` and `./sigma test` passed. The full
+suite includes Ruff, formatting, Pyright, frontend typecheck and production
+build. No provider inference or paper generation occurred.
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the

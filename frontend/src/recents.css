@@ -271,6 +271,12 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .admin-tabs [role="tab"][aria-selected="true"] { border-bottom-color: #d9a66c; color: #f0cca0; }
 .admin-tabs [role="tab"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .admin-access-note { margin: 0 0 7px; color: #c0cad2; font-size: 12px; }
+.admin-sponsor-connection { margin: 16px 0; padding: 14px 16px; border: 1px solid #a9654875; border-radius: 10px; background: #101c29; }
+.admin-sponsor-connection h3 { margin: 0 0 7px; color: #e5ad8f; font: 400 20px/1.25 Georgia, serif; }
+.admin-sponsor-connection p { margin: 0 0 10px; color: #c0cad2; font-size: 12px; line-height: 1.5; }
+.admin-sponsor-connection p[role="status"], .admin-sponsor-connection p[role="alert"] { margin: 10px 0 0; }
+.admin-sponsor-connection p[role="alert"] { color: #ffb6a9; }
+.admin-sponsor-connection a { color: #f0c29e; }
 .cloud-access-bootstrap { margin: 4px 0 10px; color: #aeb9c4; font-size: 11px; }
 .admin-table-heading { display: flex; align-items: center; gap: 12px; margin: 15px 0 7px; }
 .admin-table-heading h3 { color: #e5ad8f; font: 400 20px/1.25 Georgia, serif; }

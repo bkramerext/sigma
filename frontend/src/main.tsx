@@ -4102,6 +4102,8 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   onUpdateInvitation: (request: CloudInvitationRequest, status: 'reviewed' | 'declined') => Promise<void>;
   onUpdateFeedback: (request: CloudFeedbackRequest, status: 'reviewed' | 'closed') => Promise<void>;
 }) {
+  const ai = useAI();
+  const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
   const [addOpen, setAddOpen] = useState(false);
@@ -4294,6 +4296,15 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
+      {cloud?.target === 'local' && <section className="admin-sponsor-connection" aria-labelledby="admin-sponsor-connection-title">
+        <h3 id="admin-sponsor-connection-title">Designated sponsor connection</h3>
+        <p>SIGMA-sponsored research uses the designated ChatGPT account, separate from your Google sign-in. Renew it here and choose <strong>zetacontinuation@gmail.com</strong> if ChatGPT asks which account to use.</p>
+        <button type="button" className="admin-text-action" disabled={ai.connecting} onClick={() => void (async () => {
+          if (await ai.signIn({ sponsor: true })) await ai.refresh('manual');
+        })()}>{ai.connecting ? 'Connecting…' : 'Renew sponsor ChatGPT connection'}</button>
+        {ai.connecting && <p role="status">Complete sign-in in the ChatGPT window. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}</p>}
+        {ai.error && <p role="alert">{ai.error}</p>}
+      </section>}
       <div className="admin-table-heading"><h3>Invitation/reload requests</h3></div>
       {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {
         return <tr key={item.subject}><th scope="row">{item.email}{item.request_type === 'reload' && <small>Allowance reload request</small>}</th><td>{new Date(item.requested_at * 1000).toLocaleString()}</td><td><div className="admin-invitation-actions"><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void addInvitation(item)}>Add</button><button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void removeInvitation(item)}>Remove</button></div></td></tr>;
