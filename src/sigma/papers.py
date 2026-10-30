@@ -1669,6 +1669,33 @@ async def _provider_structured(
                 pass
 
 
+def _complete_evidence_field_partition(
+    batch_field_refs: set[str], result: EvidenceBatchResult
+) -> int:
+    """Treat provider-unclassified fields as explicitly omitted, never covered."""
+    covered_refs = result.covered_field_refs
+    omitted_refs = [item.field_ref for item in result.omitted_fields]
+    if (
+        len(set(covered_refs)) != len(covered_refs)
+        or len(set(omitted_refs)) != len(omitted_refs)
+        or set(covered_refs).intersection(omitted_refs)
+        or (set(covered_refs) | set(omitted_refs)) - batch_field_refs
+    ):
+        raise ProjectError("Evidence index contains duplicate or foreign field references")
+    unclassified = sorted(batch_field_refs - set(covered_refs) - set(omitted_refs))
+    result.omitted_fields.extend(
+        OmittedEvidenceField(
+            field_ref=field_ref,
+            reason=(
+                "Provider left this field unclassified; SIGMA conservatively omitted it "
+                "from the evidence index."
+            ),
+        )
+        for field_ref in unclassified
+    )
+    return len(unclassified)
+
+
 async def _generate_long_draft(
     package: dict[str, Any],
     binding: Mapping[str, Any],
@@ -1729,17 +1756,7 @@ distinct whenever merging would obscure differences between sessions or experime
             parsed = EvidenceBatchResult.model_validate(result)
             batch_refs = {field["source_ref"] for field in batch["fields"]}
             batch_field_refs = {field["field_ref"] for field in batch["fields"]}
-            covered_refs = parsed.covered_field_refs
-            omitted_refs = [item.field_ref for item in parsed.omitted_fields]
-            if (
-                len(set(covered_refs)) != len(covered_refs)
-                or len(set(omitted_refs)) != len(omitted_refs)
-                or set(covered_refs).intersection(omitted_refs)
-                or set(covered_refs).union(omitted_refs) != batch_field_refs
-            ):
-                raise ProjectError(
-                    f"Evidence index did not account for every field in batch {batch['batch_id']}"
-                )
+            _complete_evidence_field_partition(batch_field_refs, parsed)
             for note in parsed.notes:
                 unknown = sorted(set(note.evidence_refs) - batch_refs)
                 if unknown:

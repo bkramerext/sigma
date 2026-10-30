@@ -97,6 +97,22 @@ def test_strict_paper_response_schemas_require_every_property() -> None:
         check(response_model.model_json_schema(), response_model.__name__)
 
 
+def test_unclassified_evidence_fields_are_conservatively_omitted() -> None:
+    covered = "a" * 64
+    unclassified = "b" * 64
+    result = papers.EvidenceBatchResult(
+        notes=[],
+        conflicts_or_gaps=[],
+        covered_field_refs=[covered],
+        omitted_fields=[],
+    )
+    assert papers._complete_evidence_field_partition({covered, unclassified}, result) == 1
+    assert result.covered_field_refs == [covered]
+    assert len(result.omitted_fields) == 1
+    assert result.omitted_fields[0].field_ref == unclassified
+    assert "conservatively omitted" in result.omitted_fields[0].reason
+
+
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "resp-paper"}},
@@ -1003,6 +1019,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 
 def main() -> None:
     test_strict_paper_response_schemas_require_every_property()
+    test_unclassified_evidence_fields_are_conservatively_omitted()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
