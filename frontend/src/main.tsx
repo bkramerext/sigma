@@ -1408,7 +1408,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
-  const [includeResearchDetails, setIncludeResearchDetails] = useState(false);
+  const [includeClaimDetails, setIncludeClaimDetails] = useState(false);
+  const [includeValidationNotes, setIncludeValidationNotes] = useState(false);
+  const [includeResearchExcerpts, setIncludeResearchExcerpts] = useState(false);
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
@@ -1606,7 +1608,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       requestDispatched = true;
       window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_research_details: includeResearchDetails }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -1683,7 +1685,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
       <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
       <p className="settings-hint">Paper generation may take five minutes or longer. Keep this dialog open to follow its progress.</p>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchDetails} disabled={generating} onChange={event => setIncludeResearchDetails(event.target.checked)}/>Include claim details, validation notes, and research excerpts</label>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => setIncludeClaimDetails(event.target.checked)}/>Include claim details</label>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => setIncludeValidationNotes(event.target.checked)}/>Include validation notes</label>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => setIncludeResearchExcerpts(event.target.checked)}/>Include research excerpts</label>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
           ? 'The last writing attempt did not save a draft. Start over to generate again.'
