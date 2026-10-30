@@ -9117,6 +9117,25 @@ def _affordable_portfolio_branches(
     return selected, next_cursor
 
 
+async def _portfolio_role_call_with_recovery(
+    session_id: str,
+    path: str,
+    strategy_id: str,
+    role: str,
+    cycle: int,
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+) -> bool:
+    """Replay only settled, explicitly clipped calls, with a hard attempt bound."""
+    for _ in range(MAX_CLIPPED_AUTO_RETRIES + 1):
+        result = await _portfolio_role_call(
+            session_id, path, strategy_id, role, cycle, semaphore, state_lock
+        )
+        if result != "retry":
+            return result
+    raise ProjectError("Clipped response exceeded bounded recovery attempts")
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     # A sponsored call holds a conservative allowance reservation until usage
@@ -9175,14 +9194,30 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 context_paused = [branch for branch in runs if branch.get("status") == "paused"]
                 if context_paused and remaining >= 1:
                     record["status"] = "paused"
-                    record["current_action"] = "Paused · context limit"
-                    record["message"] = context_paused[0].get("reason") or (
+                    clipped_pause = next(
+                        (
+                            branch for branch in context_paused
+                            if branch.get("current_action") == "Paused · clipped response"
+                        ),
+                        None,
+                    )
+                    record["current_action"] = (
+                        "Paused · output limit" if clipped_pause else "Paused · context limit"
+                    )
+                    record["message"] = (
+                        clipped_pause.get("reason")
+                        if clipped_pause
+                        else context_paused[0].get("reason") or
                         "Research paused before dispatch because mandatory evidence exceeded the context bound."
                     )
                     record["updated_at"] = _now()
                     record["outcome"] = _outcome(record)
                     record["strategy_assessments"] = _strategy_assessments(record)
-                    _event(record, "research.context_blocked", record["message"])
+                    _event(
+                        record,
+                        "call.recovery_paused" if clipped_pause else "research.context_blocked",
+                        record["message"],
+                    )
                     _save(path, record)
                     return
                 for branch in active:
@@ -9298,7 +9333,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         ]
         await run_wave(
             [
-                _portfolio_role_call(
+                _portfolio_role_call_with_recovery(
                     session_id,
                     path,
                     branch["strategy_id"],
@@ -9312,7 +9347,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         )
         investigators = await run_wave(
             [
-                _portfolio_role_call(
+                _portfolio_role_call_with_recovery(
                     session_id,
                     path,
                     branch["strategy_id"],
@@ -9331,7 +9366,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         ]
         await run_wave(
             [
-                _portfolio_role_call(
+                _portfolio_role_call_with_recovery(
                     session_id,
                     path,
                     branch["strategy_id"],
