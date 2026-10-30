@@ -2450,7 +2450,7 @@ def _tex(
             {item.get("source_ref", "unknown") for item in material_omissions}
         )
         parts += [
-            r"\\section*{Evidence coverage limitation}",
+            r"\section*{Evidence coverage limitation}",
             prose(
                 f"The evidence index omitted {len(material_omissions)} material saved research "
                 f"field fragment(s) across {affected_source_count} source(s). These fragments "
