@@ -75,6 +75,10 @@ with sync_playwright() as playwright:
     progress = dialog.locator(".ai-paper-progress")
     expect(progress).to_contain_text("Planning the paper", timeout=30_000)
     assert "Planning the paper" in progress.inner_text()
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("button", name="Close", exact=True)).to_be_disabled()
+    # Escape must not abort the active request: the same generation completes.
     expect(progress).to_contain_text("Writing sections", timeout=30_000)
     expect(progress).to_contain_text("Compiling PDF", timeout=60_000)
     progress_card = dialog.locator(".saved-paper-card").first
