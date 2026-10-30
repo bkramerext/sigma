@@ -2,6 +2,8 @@
 
 **Ticket:** [#337](https://github.com/bkramerext/sigma/issues/337)
 
+**PR:** [#338](https://github.com/bkramerext/sigma/pull/338) (open; independent review requested)
+
 **Branch:** `red/v0.1.5-release` from `main` at
 `5d1a4f51c4a2cd33b0854a19564d37bebac15b3d` (#330 merge)
 
