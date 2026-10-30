@@ -1561,7 +1561,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   }
   const planningRetry = continuationAvailable && resumeDetails !== null &&
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available;
-  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+  const generating = busy || request.current !== null || paperProgress?.status === 'active';
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
+    onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
+    onCancel={event => { event.preventDefault(); if (!generating) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
