@@ -2936,6 +2936,9 @@ without repetition. Respect the project's investigation type. For mathematics, d
 proof from an unverified proof candidate, preserve definitions, constructions, counterexamples
 and gaps, and do not invent bridging steps. For experimental research, distinguish observations,
 analyses, hypotheses and proposed experiments; never present an unrun experiment as a result.
+Use the representative preview to choose an outline, not to assert complete evidence
+coverage. Additional indexed source IDs, if supplied, can be assigned to sections
+to retrieve their full notes when writing; do not infer their contents from IDs.
 Return the complete plan JSON matching the schema."""
     )
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
@@ -2945,6 +2948,11 @@ Return the complete plan JSON matching the schema."""
             project_data, preview, len(source_ids), len(batches)
         )
         plan_input["index_origin"] = "bounded_outline_preview_from_structured_research"
+        # A bounded preview is not the evidence limit. The planner may cite
+        # additional indexed sources in section plans; those sections retrieve
+        # all notes for their cited sources from the full saved index.
+        preview_refs = {ref for note in preview for ref in note["evidence_refs"]}
+        plan_input["additional_indexed_source_refs"] = sorted(indexed_refs - preview_refs)
         plan_input["outline_preview_skipped_notes"] = excluded_from_planner
         plan_input["indexed_fragments_not_selected"] = len(state.get("omitted_evidence", []))
     else:
