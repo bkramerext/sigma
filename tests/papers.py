@@ -784,7 +784,7 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
     assert first_claim == "Saved claim"
 
 
-def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
+def test_api_disconnect_preserves_running_paper_until_explicit_cancel(path: Path) -> None:
     async def check() -> None:
         started = asyncio.Event()
         cancelled = asyncio.Event()
@@ -843,9 +843,27 @@ def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
             await asyncio.wait_for(started.wait(), timeout=2)
             await queue.put({"type": "http.disconnect"})
             await asyncio.wait_for(serving, timeout=2)
+            assert not cancelled.is_set(), "Browser disconnect must not cancel the provider"
+            assert papers.progress_status(str(path))["status"] == "active"
+            # A separate authenticated request, not the SSE connection, cancels.
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+            ) as client:
+                response = await client.post(
+                    "/api/projects/papers/cancel",
+                    json={
+                        "path": str(path),
+                        "expected_project_id": body["expected_project_id"],
+                        "expected_binding": credential["identity"],
+                    },
+                )
+            assert response.status_code == 200
+            assert response.json()["cancelled"] is True
+            await asyncio.wait_for(cancelled.wait(), timeout=2)
+            await asyncio.sleep(0)
         assert papers.list_papers(str(path)) == []
-        assert cancelled.is_set()
         assert not papers._gate.locked()
+        assert papers.progress_status(str(path))["status"] == "cancelled"
 
     asyncio.run(check())
 
@@ -3410,7 +3428,7 @@ def main() -> None:
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
-        test_api_disconnect_cancels_paper_before_publication(cancelled_path)
+        test_api_disconnect_preserves_running_paper_until_explicit_cancel(cancelled_path)
 
     class StreamResponse:
         def __init__(self, content: bytes):
