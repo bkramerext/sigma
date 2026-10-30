@@ -2211,28 +2211,24 @@ def _material_evidence_omissions(omissions: list[dict[str, Any]]) -> list[dict[s
 
 
 def _apply_omission_limits(draft: PaperDraft, omissions: list[dict[str, Any]]) -> PaperDraft:
+    """Keep coverage uncertainty auditable without corrupting the scholarly narrative.
+
+    The PDF renderer prints a single, prominent coverage disclosure. Its exact
+    counts and the affected source IDs remain in saved generation metadata.
+    Never prepend accounting prose to (or truncate) the author's abstract, and
+    never repeat the same disclaimer in every conclusion paragraph.
+    """
     if not omissions:
         return draft
     disclosure = (
-        f"IMPORTANT EVIDENCE COVERAGE LIMITATION: {len(omissions)} saved research field "
-        "fragment(s) were omitted during indexing and were not reviewed for this paper. "
-        "The synthesis below is provisional and reflects covered evidence only; no conclusion "
-        "is drawn from omitted material or its absence. Consult the complete frozen evidence "
-        "snapshot and omission ledger before relying on these findings."
+        f"Evidence indexing omitted {len(omissions)} material saved research field "
+        "fragment(s). Those fragments were not reviewed for this paper; the "
+        "interpretation is provisional where the omitted evidence may matter. "
+        "Consult the frozen source snapshot and omission ledger for full details."
     )
-    abstract_prefix = disclosure + "\n\nProvisional synthesis from covered evidence only: "
-    abstract_room = max(0, 1600 - len(abstract_prefix))
-    abstract_body = draft.abstract
-    if len(abstract_body) > abstract_room:
-        abstract_body = abstract_body[:abstract_room].rsplit(" ", 1)[0].rstrip() + "…"
-    draft.abstract = abstract_prefix + abstract_body
-    draft.limitations = [disclosure, *draft.limitations[:11]]
-    draft.validation_warnings = [disclosure, *draft.validation_warnings[:11]]
-    draft.conclusions = [
-        "PROVISIONAL — based only on covered evidence; omitted material was not reviewed: "
-        + conclusion
-        for conclusion in draft.conclusions
-    ]
+    draft.validation_warnings = list(
+        dict.fromkeys([disclosure, *draft.validation_warnings])
+    )[:12]
     for claim in draft.claims:
         if claim.status == "established":
             claim.status = "unresolved"
@@ -2450,25 +2446,17 @@ def _tex(
             prose("Research style: " + style_note),
         ]
     if material_omissions:
-        affected_sources = sorted(
+        affected_source_count = len(
             {item.get("source_ref", "unknown") for item in material_omissions}
         )
         parts += [
-            r"\section*{Important evidence coverage limitation}",
+            r"\\section*{Evidence coverage limitation}",
             prose(
                 f"The evidence index omitted {len(material_omissions)} material saved research "
-                f"field fragment(s) across {len(affected_sources)} source(s), and those fields "
-                "were not reviewed for this paper. The synthesis is provisional and describes "
-                "covered evidence only; no conclusion is drawn from omitted material or its "
-                "absence. Claims that depend on omitted evidence are not established. Review "
-                "the complete frozen snapshot and its omission ledger before relying on the "
-                "interpretation. Affected source records: "
-                + ", ".join(affected_sources[:80])
-                + (
-                    "; additional sources are listed in generation metadata."
-                    if len(affected_sources) > 80
-                    else "."
-                )
+                f"field fragment(s) across {affected_source_count} source(s). These fragments "
+                "were not reviewed for this paper. Interpretations that could depend on "
+                "omitted material remain provisional; the complete frozen source snapshot "
+                "and omission ledger are retained with the generation record."
             ),
         ]
     if include_research_details and draft.abstract_claim_ids:
