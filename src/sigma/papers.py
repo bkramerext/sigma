@@ -1094,6 +1094,7 @@ def _evidence_based_long_plan(
     sections: list[LongSectionPlan] = []
     claims: list[PaperClaim] = []
     covered: set[str] = set()
+    groups: list[tuple[str, str, list[str], list[EvidenceNote]]] = []
     for heading, purpose, kinds in categories:
         relevant = [note for note in notes if note.kind in kinds]
         refs = list(
@@ -1104,13 +1105,17 @@ def _evidence_based_long_plan(
                 if ref in source_ids
             )
         )
-        if not refs:
-            continue
-        # Each section can request full notes and original excerpts for up to
-        # forty saved sources. Split large groups without losing provenance.
-        for offset in range(0, len(refs), 40):
-            if len(sections) >= FAST_MAX_SECTIONS:
-                break
+        if refs:
+            groups.append((heading, purpose, refs, relevant))
+
+    # Give every represented evidence category a section before allocating
+    # extra sections to large categories. Otherwise a huge background group
+    # could crowd out all the negative findings and open questions.
+    maximum_refs = max((len(group[2]) for group in groups), default=0)
+    for offset in range(0, maximum_refs, 40):
+        for heading, purpose, refs, relevant in groups:
+            if offset >= len(refs) or len(sections) >= FAST_MAX_SECTIONS:
+                continue
             chunk = refs[offset : offset + 40]
             matching = next(
                 (note for note in relevant if set(note.evidence_refs) & set(chunk)),
