@@ -1968,7 +1968,11 @@ def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
             additional.extend(input_value["additional_indexed_source_refs"])
             assert input_value["outline_preview_skipped_notes"] > 0
             assert additional
-            return plan, "fixture-model"
+            targeted_sections = list(plan.sections)
+            targeted_sections[0] = targeted_sections[0].model_copy(
+                update={"evidence_refs": [additional[0]]}
+            )
+            return plan.model_copy(update={"sections": targeted_sections}), "fixture-model"
         sections_seen.append(input_value["evidence_notes"])
         return papers.LongSectionDraft(
             paragraphs=["The evidence remains uncertain and source-linked."]
@@ -1996,6 +2000,7 @@ def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
     }
     assert set(additional) <= indexed_refs
     assert all(sections_seen)
+    assert any(additional[0] in note["evidence_refs"] for note in sections_seen[0])
 
 
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
