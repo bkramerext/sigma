@@ -451,6 +451,11 @@ class PaperGenerateRequest(OpenRequest):
     include_research_details: bool = False
 
 
+class PaperCancelRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+
+
 class PaperRestartRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -488,6 +493,14 @@ def papers_preflight_view(
 @app.get("/api/projects/papers/progress")
 def papers_progress_view(path: str):
     return {"progress": papers.progress_status(path)}
+
+
+@app.post("/api/projects/papers/cancel")
+async def paper_cancel_view(body: PaperCancelRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return {"cancelled": await papers.cancel_generation(body.path)}
 
 
 @app.post("/api/projects/papers/restart")
@@ -556,23 +569,44 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         body.expected_binding, body.expected_project_id, body.path
     )
 
-    async def stream():
-        updates: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    # This task belongs to the project, not the SSE subscriber. Sleeping
+    # laptops and mobile browsers routinely drop streams; that must not turn
+    # into a provider cancellation or lost paper.
+    updates: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=64)
+    viewer_connected = True
 
-        async def progress(event: papers.PaperProgressEvent) -> None:
-            await updates.put(dict(event))
+    async def progress(event: papers.PaperProgressEvent) -> None:
+        if not viewer_connected:
+            return
+        if updates.full():
+            updates.get_nowait()
+        updates.put_nowait(dict(event))
 
-        task = asyncio.create_task(
-            papers.generate(
-                body.path,
-                body.expected_binding,
-                body.expected_project_id,
-                progress=progress,
-                force_long_form=body.long_form,
-                expected_snapshot_sha256=body.expected_snapshot_sha256,
-                include_research_details=body.include_research_details,
-            )
+    task = asyncio.create_task(
+        papers.generate(
+            body.path,
+            body.expected_binding,
+            body.expected_project_id,
+            progress=progress,
+            force_long_form=body.long_form,
+            expected_snapshot_sha256=body.expected_snapshot_sha256,
+            include_research_details=body.include_research_details,
         )
+    )
+
+    def observe_detached_result(completed: asyncio.Task[dict[str, Any]]) -> None:
+        if completed.cancelled():
+            return
+        error = completed.exception()
+        if error is not None and not isinstance(error, ProjectError):
+            logging.getLogger(__name__).error(
+                "Detached paper generation failed: %s", type(error).__name__
+            )
+
+    task.add_done_callback(observe_detached_result)
+
+    async def stream():
+        nonlocal viewer_connected
         try:
             while not task.done() or not updates.empty():
                 try:
@@ -621,13 +655,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 + "\n\n"
             )
         finally:
-            if not task.done():
-                task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-            if task.cancelled():
-                papers.finish_progress(body.path, "cancelled")
-            elif task.exception() is not None:
-                papers.finish_progress(body.path, "failed")
+            # Stream teardown only disconnects the viewer. The independent
+            # generation task retains its own checkpoints and lifecycle.
+            viewer_connected = False
 
     return StreamingResponse(
         stream(),
