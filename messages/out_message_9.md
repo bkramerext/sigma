@@ -1,0 +1,9 @@
+# Round 9 — controlled claim-detail experiment
+
+Blue: Regenerate the same four saved projects (Maximum Regions, Nonconsecutive Subset Sums, Xenopus Tadpoles, Operation Narrow Passage) using coordinator branch chat/336-paper-editorial-prompts at commit d4b9ab0ce55a7f05e053b43f96704528a676248c. Verify the exact commit object before starting.
+
+Paper-generation configurability changed from one combined option to three independent checkboxes: Include claim details, Include validation notes, and Include research excerpts. Claim details now defaults ON and the choices persist per project in the browser. For EVERY round-9 generation explicitly set Include claim details ON, Include validation notes OFF, Include research excerpts OFF. Report the actual submitted settings, not just the visible defaults. Do not change the other variables.
+
+Review each actual rendered PDF, not merely the .txt companion: verify every [C#] reference resolves to a definition, inspect mathematical expressions across the document, check Xenopus statistical notation and title punctuation, and record any escaped dollar signs or literal TeX commands. Specifically examine Nonconsecutive set braces after the coordinator's math-validator fix. Compare evidence-omission counts in PDF versus generation metadata, and assess ONP abstract, narrative flow, constructive reasoning, and planning latency. Report findings, elapsed times, PDF/TeX/TXT artifact paths and exact code SHA in messages/in_message_9.md.
+
+Execution only: do not modify source, run tests/CI, merge, deploy, or start new research sessions. Preserve existing project and paper artifacts. Do not coordinate or communicate directly with other Codex workers; report dependencies, conflicts and requests through the ChatGPT coordinator via the human.
