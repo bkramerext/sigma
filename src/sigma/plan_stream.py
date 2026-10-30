@@ -10,7 +10,7 @@ from sigma.openai_connection import inference_failure
 from sigma.projects import ProjectError
 
 MAX_STREAM_BYTES = 1000000
-MAX_EVENTS = 4096
+MAX_EVENTS = 65536
 KNOWN_ERRORS = {
     "subscription_sharing_usage_limit_exceeded": (
         "limited",
@@ -263,7 +263,7 @@ async def completed(
                 continue
             event_count += 1
             if event_count > MAX_EVENTS:
-                raise ValueError("plan_stream:event_after_terminal")
+                raise ValueError("plan_stream:event_limit")
             event = json.loads(data)
             kind = event.get("type")
             seq = event.get("sequence_number")

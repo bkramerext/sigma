@@ -1085,6 +1085,22 @@ def main() -> None:
     terminal_stream = asyncio.run(completed(cast(httpx.Response, StreamResponse(trailing))))
     assert terminal_stream["status"] == "completed"
     assert terminal_stream["output"] == []
+    event_count = 4100
+    streamed_text = "x" * event_count
+    many_events = (
+        b'data: {"type":"response.created","sequence_number":0,"response":{"id":"r"}}\n\n'
+        + b"".join(
+            (
+                f'data: {{"type":"response.output_text.delta","sequence_number":{index + 1},"delta":"x"}}\n\n'
+            ).encode()
+            for index in range(event_count)
+        )
+        + (
+            f'data: {{"type":"response.completed","sequence_number":{event_count + 1},"response":{{"id":"r","status":"completed","output":[]}}}}\n\n'
+        ).encode()
+    )
+    many_event_result = asyncio.run(completed(cast(httpx.Response, StreamResponse(many_events))))
+    assert many_event_result["output"][0]["content"][0]["text"] == streamed_text
     try:
         asyncio.run(
             completed(

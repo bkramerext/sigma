@@ -17,14 +17,18 @@ not modified or migrated.
 ## Responses stream completion handling (2026-10-30)
 
 Three real sponsored long-paper attempts on Maximum Regions v2, Xenopus v9, and
-the compatible ONP v3 copy failed locally with the same
-`plan_stream:event_after_terminal` parser error after receiving the provider's
-`response.completed` event. SIGMA now treats a validated completed response as
-authoritative and stops parsing the remaining stream tail. The exact trailing
-event payload was not captured; no provider content was logged. A focused
-regression covers trailing SSE data after the completed response. The Responses
-API reference defines `response.completed` as the event emitted when the model
-response is complete: https://developers.openai.com/api/reference/resources/responses/streaming-events
+the compatible ONP v3 copy failed locally with
+`plan_stream:event_after_terminal`. A retry after the first parser adjustment
+showed the legacy error label conflated a terminal-tail check with the 4,096
+event-count limit; the failing structured stream exceeded that limit before a
+completed response was accepted. SIGMA now allows up to 65,536 parsed events,
+still bounded by the existing stream-byte cap, and reports an explicit
+`event_limit` diagnostic if that cap is reached. A validated `response.completed`
+also ends semantic parsing of the stream tail. Focused regressions cover a
+completed response with trailing stream data and 4,100 output deltas. The
+Responses API reference defines `response.completed` as the event emitted when
+the model response is complete:
+https://developers.openai.com/api/reference/resources/responses/streaming-events
 
 Focused `tests/papers.py`, Ruff, formatting, and diff checks passed. After
 publishing this fix, continue the saved checkpoints where their project,
