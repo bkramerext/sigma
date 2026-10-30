@@ -1233,7 +1233,7 @@ def _evidence_based_long_plan(
                 return sentence
         return None
 
-    first_question = re.split(r"(?<=[.!?])\\s+", question, maxsplit=1)[0]
+    first_question = re.split(r"(?<=[.!?])\s+", question, maxsplit=1)[0]
     if len(first_question) > 320 or not first_question.endswith((".", "!", "?")):
         first_question = title.rstrip(".") + "."
     reported_result = complete_excerpt("result")
