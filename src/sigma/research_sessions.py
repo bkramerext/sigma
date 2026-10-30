@@ -8456,16 +8456,60 @@ async def _portfolio_role_call(
                         record["estimated_cost_usd"] = round(
                             float(record.get("estimated_cost_usd", 0.0)) + estimate, 9
                         )
-                    branch["status"] = "ended"
-                    branch["current_action"] = "Incomplete · output limit"
-                    branch["reason"] = str(exc)
-                    record["status"] = "ended"
-                    record["current_action"] = "Incomplete · output limit"
-                    record["terminal_reason"] = "Provider response clipped at max_output_tokens."
-                    record["message"] = (
-                        "The provider response was clipped at the output-token limit. "
-                        "Partial output and usage were preserved; the run is incomplete and was not retried."
+                    remaining_calls = int(record["call_limit"]) - int(record["calls_used"])
+                    # Keep at least one turn for a Skeptic after Investigator recovery.
+                    enough_calls = remaining_calls >= (2 if role == "investigator" else 1)
+                    known_usage = (
+                        isinstance(exc.usage, dict)
+                        and type(exc.usage.get("input_tokens")) is int
+                        and type(exc.usage.get("output_tokens")) is int
+                        and estimate is not None
                     )
+                    retry_allowed = (
+                        clipped_prior_attempts < MAX_CLIPPED_AUTO_RETRIES
+                        and enough_calls
+                        and known_usage
+                        and not budget_error
+                        and _call_timeout_seconds(record) > 0
+                    )
+                    if retry_allowed:
+                        branch["status"] = "queued"
+                        branch["current_action"] = "Retrying clipped response"
+                        branch["reason"] = str(exc)
+                        record["current_action"] = "Retrying clipped response"
+                        record["message"] = (
+                            "The provider clipped a response at the output-token limit. "
+                            "Partial output and usage were saved. Retrying the same role "
+                            "once with a compact response request, within the existing "
+                            "turn, time and spending limits."
+                        )
+                    elif enough_calls and not budget_error and _call_timeout_seconds(record) > 0:
+                        branch["status"] = "paused"
+                        branch["current_action"] = "Paused · clipped response"
+                        branch["reason"] = (
+                            "The provider response was clipped at the output-token limit. "
+                            "The automatic retry is exhausted or cannot be safely billed. "
+                            "Review the per-call output-token limit before resuming."
+                        )
+                        record["current_action"] = "Clipped response · recovery available"
+                        record["message"] = (
+                            "A provider response was clipped; the incomplete text and "
+                            "usage were preserved, but no finding was saved. Research "
+                            "will pause for a reviewed retry."
+                        )
+                    else:
+                        branch["status"] = "ended"
+                        branch["current_action"] = "Incomplete · output limit"
+                        branch["reason"] = (
+                            "The provider response was clipped. No safe retry fits "
+                            "within the remaining turns, time or hard budget."
+                        )
+                        record["current_action"] = "Incomplete · output limit"
+                        record["message"] = (
+                            "A provider response was clipped at the output-token limit. "
+                            "Partial output and usage were preserved; the configured "
+                            "turn, time or hard budget prevents another attempt."
+                        )
                     record["current_step"] = None
                     record["current_steps"] = [
                         item["id"] for item in record["steps"] if item.get("status") == "running"
@@ -8473,7 +8517,7 @@ async def _portfolio_role_call(
                     _refresh_token_accounting(record)
                     _event(record, "call.incomplete", record["message"], role)
                     _save(path, record)
-                return False
+                return "retry" if retry_allowed else False
             if isinstance(exc, ProjectError) and _is_guard_failure(str(exc)):
                 raise
             async with state_lock:
