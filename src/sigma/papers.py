@@ -2285,15 +2285,36 @@ def _tex(
         parts.append(r"\section{Frozen obligation reconciliation}")
         parts.append(
             prose(
-                "Each item is compared with the complete frozen evidence snapshot. An item not listed by the author is not presumed resolved. Source references identify the saved record and field."
+                "Unlisted obligations are not presumed resolved. The archived research "
+                "snapshot retains complete source references and the full reconciliation."
             )
         )
-        parts.append(r"\begin{longtable}{p{0.25\textwidth}p{0.65\textwidth}}")
-        parts.append(r"\textbf{Status and source} & \textbf{Obligation}\\\hline")
+        # The reconciliation often repeats the same outstanding question across
+        # sessions and artifacts. The paper is a readable selection, not a raw
+        # database listing; the complete ledger stays in saved paper metadata.
+        distinct_obligations: list[dict[str, Any]] = []
+        seen_obligations: set[str] = set()
         for item in obligation_reconciliation:
-            refs = ", ".join(item["source_refs"]) or "No exact frozen-record match"
-            parts.append(prose(item["status"] + "; " + refs) + " & " + prose(item["text"]) + r"\\")
-        parts.append(r"\end{longtable}")
+            normalized = " ".join(item["text"].split()).casefold()
+            if normalized in seen_obligations:
+                continue
+            seen_obligations.add(normalized)
+            distinct_obligations.append(item)
+        parts.append(r"\begin{itemize}")
+        for item in distinct_obligations[:18]:
+            source_count = len(item["source_refs"])
+            annotation = (
+                f" ({item['status']}; {source_count} saved source reference(s))"
+            )
+            parts.append(r"\item " + prose(item["text"]) + r" \textit{" + esc(annotation) + "}")
+        parts.append(r"\end{itemize}")
+        if len(distinct_obligations) > 18:
+            parts.append(
+                prose(
+                    f"{len(distinct_obligations) - 18} further distinct obligations "
+                    "are retained in the archived reconciliation."
+                )
+            )
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [article_paragraph(item) + "\n" for item in draft.conclusions]
     if include_research_details and draft.conclusion_claim_ids:
@@ -2319,9 +2340,44 @@ def _tex(
                 "narrative. These records are not independent verification."
             ),
         ]
-        for item in integrity_records:
-            parts.append(r"\subsection{" + esc(item["source_ref"] + ": " + item["field"]) + "}")
-            parts.append(prose(json.dumps(item["content"], ensure_ascii=False, indent=2)))
+        # An opt-in appendix should show representative primary evidence, not
+        # balloon into dozens of pages of repeated JSON snapshots.
+        selected: list[dict[str, Any]] = []
+        chosen_ids: set[int] = set()
+        source_counts: dict[str, int] = {}
+        for limit_per_source in (1, 2):
+            for index, item in enumerate(integrity_records):
+                if len(selected) >= 16:
+                    break
+                source = str(item["source_ref"])
+                if index in chosen_ids or source_counts.get(source, 0) >= limit_per_source:
+                    continue
+                selected.append(item)
+                chosen_ids.add(index)
+                source_counts[source] = source_counts.get(source, 0) + 1
+        for index, item in enumerate(selected, start=1):
+            parts.append(r"\subsection{" + esc(f"Research excerpt {index}") + "}")
+            parts.append(
+                r"\textit{Source and field: }"
+                + esc(str(item["source_ref"]) + ": " + str(item["field"]))
+                + r"\par"
+            )
+            content = item["content"]
+            excerpt = (
+                content["excerpt"]
+                if isinstance(content, dict) and isinstance(content.get("excerpt"), str)
+                else json.dumps(content, ensure_ascii=False, indent=2)
+            )
+            if len(excerpt) > 1_600:
+                excerpt = excerpt[:1_600].rsplit(" ", 1)[0].rstrip() + "…"
+            parts.append(article_paragraph(excerpt) + "\n")
+        if len(integrity_records) > len(selected):
+            parts.append(
+                prose(
+                    f"{len(integrity_records) - len(selected)} further research records "
+                    "are retained in the archived source snapshot."
+                )
+            )
     if include_research_details:
         parts += [
             r"\section*{Evidence and authorship note}",
