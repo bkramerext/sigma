@@ -9015,27 +9015,26 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
     semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
 
     async def run_wave(calls: list[Any]) -> list[Any]:
-        gates = await _acquire_gates()
-        try:
-            results = await asyncio.gather(*calls, return_exceptions=True)
-            failure = next(
-                (result for result in results if isinstance(result, BaseException)), None
-            )
-            if isinstance(failure, asyncio.CancelledError):
-                raise failure
-            if isinstance(failure, ProjectError):
-                raise failure
-            if failure is not None:
-                # A coordination/preflight exception is session-wide. Returning it as
-                # an ordinary branch result leaves that branch queued forever.
-                raise ProjectError(
-                    "Portfolio coordination failed before completing a strategy wave: "
-                    f"{str(failure).strip()[:700]}"
-                ) from failure
-            return results
-        finally:
-            for gate in reversed(gates):
-                gate.release()
+        # Each session owns its state lock and cloud worker reservation.
+        # Holding the old process-wide proposal/agent/research gates across
+        # provider I/O serialized unrelated users and different projects.
+        # Python/Sage execution retains its separate _python_gate.
+        results = await asyncio.gather(*calls, return_exceptions=True)
+        failure = next(
+            (result for result in results if isinstance(result, BaseException)), None
+        )
+        if isinstance(failure, asyncio.CancelledError):
+            raise failure
+        if isinstance(failure, ProjectError):
+            raise failure
+        if failure is not None:
+            # A coordination/preflight exception is session-wide. Returning it as
+            # an ordinary branch result leaves that branch queued forever.
+            raise ProjectError(
+                "Portfolio coordination failed before completing a strategy wave: "
+                f"{str(failure).strip()[:700]}"
+            ) from failure
+        return results
 
     while True:
         async with state_lock:
