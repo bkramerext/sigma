@@ -1279,9 +1279,11 @@ def test_evidence_envelope_budget_resumes_without_repacking() -> None:
                 raise AssertionError("Fixture must stop after completing E2")
 
     asyncio.run(check())
-    assert seen == ["sigma_paper_evidence_batch", "sigma_long_paper_plan"]
+    assert seen[:2] == ["sigma_paper_evidence_batch", "sigma_long_paper_plan"]
+    assert seen[2] == "sigma_long_paper_section"
     assert state["next_batch"] == 2
-    assert state["provider_calls"] == 3  # Prior E1 + E2 + blocked planning attempt.
+    assert state["provider_calls"] == 4  # E1 + E2 + failed plan + first section.
+    assert state["plan"]  # Planning failure preserved a local source-linked outline.
 
 
 def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog() -> None:
@@ -1352,27 +1354,26 @@ def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog(
                 ],
             }
         )
+        async def section_only(input_value, _binding, _config, *, schema_name, **_kwargs):
+            assert schema_name == "sigma_long_paper_section"
+            return papers.LongSectionDraft(
+                paragraphs=["The saved evidence requires additional verification."]
+            ), "fixture"
+
         with (
             patch.object(papers, "_long_plan_input", return_value={"padding": "x" * 220_000}),
-            patch.object(
-                papers,
-                "_provider_structured",
-                side_effect=AssertionError("oversized planning input must not dispatch"),
-            ),
+            patch.object(papers, "_provider_structured", new=section_only),
         ):
-            try:
-                await papers._generate_long_draft(
-                    package,
-                    {"mode": "api_key", "identity": "fixture", "token": "unused"},
-                    {"model": "fixture", "reasoning_effort": "high"},
-                    state,
-                    lambda _state: None,
-                )
-            except ProjectError as exc:
-                assert "Paper planning input" in str(exc), str(exc)
-            else:
-                raise AssertionError("Oversized planning input must be rejected")
-        assert state["provider_calls"] == 0
+            generated, calls, _ = await papers._generate_long_draft(
+                package,
+                {"mode": "api_key", "identity": "fixture", "token": "unused"},
+                {"model": "fixture", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+            )
+        assert generated.sections
+        assert state["plan"]  # Oversized planning input falls back locally.
+        assert calls == len(generated.sections)  # No planning provider call was sent.
 
     asyncio.run(over_limit())
     asyncio.run(rejects_before_counting_a_provider_call())
@@ -2221,34 +2222,40 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
 
     uncertain_state = papers._new_work("c" * 64, "fast-fixture", "d" * 64, "fixture-model", "high")
     uncertain_attempts = 0
+    section_attempts = 0
 
     async def uncertain_provider(_input, _binding, _config, *, schema_name, **_kwargs):
-        nonlocal uncertain_attempts
-        uncertain_attempts += 1
-        assert schema_name == "sigma_long_paper_plan"
-        raise ProjectError("fixture post-dispatch timeout; consumption is unknown")
+        nonlocal uncertain_attempts, section_attempts
+        if schema_name == "sigma_long_paper_plan":
+            uncertain_attempts += 1
+            raise ProjectError("fixture post-dispatch timeout; consumption is unknown")
+        assert schema_name == "sigma_long_paper_section"
+        section_attempts += 1
+        return papers.LongSectionDraft(
+            paragraphs=["The saved research reports an unresolved argument."]
+        ), "fixture-model"
 
     async def check_uncertain() -> None:
         with patch.object(papers, "_provider_structured", new=uncertain_provider):
-            try:
-                await papers._generate_long_draft(
-                    package,
-                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
-                    {"model": "fixture-model", "reasoning_effort": "high"},
-                    uncertain_state,
-                    lambda _value: None,
-                    structured_fast_path=True,
-                )
-            except ProjectError as exc:
-                assert "consumption is unknown" in str(exc)
-            else:
-                raise AssertionError("Unknown-consumption failures must remain visible")
+            generated, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                uncertain_state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert len(generated.sections) >= 2
+        assert calls == 1 + len(generated.sections)
+        assert any("planning stage did not" in warning for warning in generated.validation_warnings)
 
     asyncio.run(check_uncertain())
     assert uncertain_attempts == 1
-    assert uncertain_state["provider_calls"] == 1
-    assert uncertain_state["provider_calls_total"] == 1
+    assert section_attempts >= 2
+    assert uncertain_state["provider_calls"] == 1 + section_attempts
+    assert uncertain_state["provider_calls_total"] == 1 + section_attempts
     assert uncertain_state["evidence_indexed"] is True
+    assert uncertain_state["plan"]
 
 
 def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
