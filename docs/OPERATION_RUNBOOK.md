@@ -117,7 +117,7 @@ host.
 3. Stage reviewed code at `/opt/sigma/current` and run `sudo /opt/sigma/current/deploy/install-gce-host.sh`. Install/configure the dedicated `sigma-sandbox` rootless Docker daemon.
 4. Build Python and Sage runner images **under the rootless daemon** using `deploy/build-sandbox-images.sh`, as described in the Cloud Deployment host setup contract.
 5. Set `/etc/sigma/deploy.env` with release SHA, domain, OAuth client ID, approved limits and secret-file paths; protect it `root:root 0600`. Use `deploy/fetch-secrets.sh` for named secrets. Never print secret values.
-6. Run `sudo /usr/local/libexec/sigma/gce_preflight.py --json`; proceed only on PASS/exit 0. Run `python -m sigma.cloud_runtime_check` against the **actual rootless** daemon without development overrides.
+6. Run `sudo /usr/local/libexec/sigma/gce_preflight.py --json --repository /opt/sigma/current`; proceed only on PASS/exit 0. The installed script is outside the checkout, so pass the repository path explicitly for Compose checks. Run `python -m sigma.cloud_runtime_check` against the **actual rootless** daemon only as a separately approved sandbox exercise; it starts a runtime probe and writes temporary evidence.
 7. Configure DuckDNS A record to the reserved static IP; verify external DNS and HTTPS/Caddy certificate. Set Google OAuth allowed origin `https://sigma-research.duckdns.org` and callback `https://sigma-research.duckdns.org/api/cloud-auth/callback`.
 8. Start with `sudo systemctl enable --now sigma.service`. Check Caddy/API/frontend health, auth mode, private state mounts, logs and research sandbox isolation. Record actual endpoint results.
 9. Complete hosted acceptance before inviting users: two distinct Google identities, unauthorized access rejection, workspace isolation, bounded sponsored inference, Python/Sage, sessions/recovery, Markdown/TeX/PDF/report export, browser restart and data persistence. **Desktop browser is the release target; mobile-specific acceptance is out of scope.**
@@ -258,7 +258,8 @@ restore the 14-point retention invariant.
    ```sh
    sudo systemctl status 'srv-sigma\x2dstate.mount' docker.service sigma-sandbox.service sigma.service --no-pager
    findmnt /srv/sigma-state
-   sudo /usr/local/libexec/sigma/gce_preflight.py --json
+   sudo /usr/local/libexec/sigma/gce_preflight.py --json \
+     --repository /opt/sigma/current
    sudo systemctl status sigma-backup.timer sigma-monitor.timer --no-pager
    sudo systemctl start sigma-monitor.service
    sudo journalctl -b -u 'srv-sigma\x2dstate.mount' -u sigma-sandbox.service -u sigma.service --no-pager
