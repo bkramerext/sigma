@@ -60,6 +60,10 @@ class ReleaseImageTests(unittest.TestCase):
             self.assertIn(f"org.opencontainers.image.revision={self.first}", args)
             image_name = "backend" if index == 0 else "frontend"
             self.assertIn(f"sigma-{image_name}:{self.first}", args)
+            if image_name == "frontend":
+                self.assertIn(f"SIGMA_BUILD_COMMIT={self.first}", args)
+            else:
+                self.assertNotIn("SIGMA_BUILD_COMMIT", args)
             self.assertNotIn("uncommitted", marker)
 
     def test_unresolvable_or_malformed_requested_sha_fails_before_docker(self) -> None:

@@ -37,7 +37,11 @@ smallest safe recovery path. Resume only after the owner reviews any new scope.
 1. Select one full lowercase 40-character release commit SHA. Run CI on that
    exact SHA and record its successful result. Build from that SHA using
    `deploy/release_image.py`; verify both `linux/amd64` image revision labels
-   and immutable image IDs. Do not substitute a tag or a moving branch name.
+   and immutable image IDs. The release builder also passes the full commit as
+   the frontend Docker build argument `SIGMA_BUILD_COMMIT`; Vite displays its
+   seven-character prefix in About. Do not substitute a tag or a moving branch
+   name. Verify the built frontend bundle contains the expected seven-character
+   prefix before deployment.
 2. Before stopping production, verify the actual host checkout, protected
    `SIGMA_RELEASE`, running image tags/labels, mounted state disk, service
    health, and the last recovery point. Record observed values and resolve

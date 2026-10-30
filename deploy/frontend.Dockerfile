@@ -5,7 +5,8 @@ RUN npm --prefix frontend ci --no-audit --no-fund
 COPY frontend ./frontend
 COPY assets ./assets
 COPY pyproject.toml ./pyproject.toml
-RUN npm --prefix frontend run build
+ARG SIGMA_BUILD_COMMIT
+RUN SIGMA_BUILD_COMMIT="$SIGMA_BUILD_COMMIT" npm --prefix frontend run build
 
 FROM nginx:1.27.4-alpine@sha256:a71e0884a7f1192ecf5decf062b67d46b54ad63f0cc1b8aa7e705f739a97c2fc
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf

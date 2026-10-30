@@ -49,21 +49,22 @@ def build(repository: Path, requested: str, runner=_run) -> None:
             ("backend", "Dockerfile"),
             ("frontend", "deploy/frontend.Dockerfile"),
         ):
-            runner(
-                [
-                    "docker",
-                    "build",
-                    "--platform",
-                    "linux/amd64",
-                    "--label",
-                    f"{LABEL}={commit}",
-                    "--tag",
-                    f"sigma-{name}:{commit}",
-                    "--file",
-                    str(context / dockerfile),
-                    str(context),
-                ]
-            )
+            args = [
+                "docker",
+                "build",
+                "--platform",
+                "linux/amd64",
+                "--label",
+                f"{LABEL}={commit}",
+                "--tag",
+                f"sigma-{name}:{commit}",
+                "--file",
+                str(context / dockerfile),
+            ]
+            if name == "frontend":
+                args.extend(["--build-arg", f"SIGMA_BUILD_COMMIT={commit}"])
+            args.append(str(context))
+            runner(args)
 
 
 def image_info(image: str, requested: str, runner=_run) -> dict[str, Any]:

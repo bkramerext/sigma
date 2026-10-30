@@ -1,3 +1,19 @@
+## Production About build SHA correction (2026-10-30)
+
+Production About displayed version `0.1.5` but build `unknown`. Root cause:
+release images are built from an exact Git archive (which has no `.git`), and
+the frontend Docker build did not receive the source commit. The correction
+passes the full requested SHA to the frontend Docker build as
+`SIGMA_BUILD_COMMIT`; Vite embeds its expected seven-character prefix. The
+deployment runbook now requires checking that prefix in the built bundle.
+
+On branch `red/v015-about-build-sha`, focused release-image tests passed (3).
+A production frontend build with `SIGMA_BUILD_COMMIT=aa23f4b393f4ef657471705f467f9beecbb0689a`
+completed, and the bundle contained `aa23f4b`; `git diff --check` passed. The
+production quick-patch deployment is pending merge and exact-SHA build. No
+production changes or provider calls were made in this correction step. See
+[`messages/v015_about_build_sha_r4r.md`](../messages/v015_about_build_sha_r4r.md).
+
 ## Issue #337 — v0.1.5 Stage B readiness (2026-10-29)
 
 Release candidate work starts from merged `main` at the #330 merge SHA
