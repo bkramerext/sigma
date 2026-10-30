@@ -1235,10 +1235,12 @@ def _evidence_based_long_plan(
 
     first_question = re.split(r"(?<=[.!?])\s+", question, maxsplit=1)[0]
     if len(first_question) > 320 or not first_question.endswith((".", "!", "?")):
-        first_question = title.rstrip(".") + "."
+        opening = f"This paper investigates {title.rstrip('.')}."
+    else:
+        opening = f"The investigation asks: {first_question}"
     reported_result = complete_excerpt("result")
     recorded_failure = complete_excerpt("negative")
-    abstract_parts = [f"The investigation asks: {first_question}"]
+    abstract_parts = [opening]
     if reported_result:
         abstract_parts.append(
             "The saved research reports a provisional finding, not independently "
