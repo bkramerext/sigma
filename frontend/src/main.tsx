@@ -4950,7 +4950,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
     {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore as a guest without running or saving projects, or request an invitation to become a member. The administrator decides whether to include sponsorship when granting your invitation.</p>}
     {audience === 'nonmember' && <p className="invitation-welcome-intro">Your Google account does not yet have SIGMA membership. Request an invitation to join the research workspace, or explore as a guest while an administrator reviews your request.</p>}
-    {audience === 'returning' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore the research workspace as a guest.</p>}
+    {audience === 'returning' && <p className="invitation-welcome-intro">Your invitation request is in! We're looking forward to welcoming you as a member. In the meantime, feel free to explore as a guest.</p>}
     {audience === 'sponsored' && <p className="invitation-welcome-intro">SIGMA tracks your sponsored allowance as you use ChatGPT. When you’re ready, you can connect your own ChatGPT account from the Sponsored ChatGPT pill.</p>}
     {audience === 'invited' && <p className="invitation-welcome-intro">Welcome to SIGMA.</p>}
     <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
