@@ -4877,6 +4877,7 @@ function CloudAuthGate() {
     && window.location.pathname !== '/demo'
     && navigationEntry?.type !== 'reload'
     && navigationEntry?.type !== 'back_forward'
+    && window.sessionStorage.getItem('sigma.guestWelcomeDismissed') !== 'true'
     && !welcomeDismissedForPage;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
