@@ -3199,9 +3199,16 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             result["next_step_guidance"] = (
                 "The provider ran out of output tokens before completing a research finding. "
                 "Its partial response is preserved but is not saved as evidence; the call "
-                "may have consumed allowance. Review the per-call output-token limit in "
-                "Project Settings → Limits, increase it if appropriate, then Resume. "
-                "Another attempt consumes a model call and may incur a charge."
+                "may have consumed allowance. "
+                + (
+                    "ChatGPT controls its own output ceiling; changing SIGMA's "
+                    "per-call token setting cannot increase that provider ceiling. "
+                    if record.get("mode") == "chatgpt"
+                    else "Review the per-call output-token limit in Project Settings → Limits "
+                    "and increase it if appropriate. "
+                )
+                + "Resume to request a new complete response. Another attempt consumes "
+                "a model call and may incur a charge."
                 if record.get("status") in {"paused", "stopped"}
                 or result["recoverable_clipped_response"]
                 else "The provider response was clipped and no further calls were available. "
@@ -8489,7 +8496,12 @@ async def _portfolio_role_call(
                         branch["reason"] = (
                             "The provider response was clipped at the output-token limit. "
                             "The automatic retry is exhausted or cannot be safely billed. "
-                            "Review the per-call output-token limit before resuming."
+                            + (
+                                "ChatGPT's output ceiling is provider-controlled; "
+                                "review provider usage before resuming."
+                                if record.get("mode") == "chatgpt"
+                                else "Review the per-call output-token limit before resuming."
+                            )
                         )
                         record["current_action"] = "Clipped response · recovery available"
                         record["message"] = (
