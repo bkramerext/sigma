@@ -2,8 +2,9 @@
 
 **Ticket:** [#337](https://github.com/bkramerext/sigma/issues/337)
 
-**PR:** separate readiness/correction PR from merged #338; PR URL will be
-provided in the R4R notice after opening.
+**PR:** [#339](https://github.com/bkramerext/sigma/pull/339), open and unmerged.
+
+**Implementation commit:** `2ef858818a5c8cc406e3058f89a77362c78e8e54`.
 
 **Branch:** `red/v015-stageb-readiness`
 
