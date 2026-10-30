@@ -239,8 +239,9 @@ class Deployment:
             if initial:
                 _call(self.runner, ["systemctl", "enable", "sigma.service"])
         except DeployFailure as failure:
-            # A build failure occurs before the active checkout, release pin, or
-            # service changes. Leave the running release entirely untouched.
+            # A preflight or build failure occurs before the release pin or
+            # service changes. Restore the candidate checkout and leave the
+            # running release entirely untouched.
             if not (
                 service_stopped
                 or candidate_started
