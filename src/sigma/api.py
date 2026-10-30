@@ -448,6 +448,7 @@ class PaperGenerateRequest(OpenRequest):
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     long_form: bool = False
+    include_research_details: bool = False
 
 
 class PaperRestartRequest(OpenRequest):
