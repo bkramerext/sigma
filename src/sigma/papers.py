@@ -533,10 +533,12 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
         )
     for session in data.get("research_sessions", []):
         session_data = dict(session)
-        # elapsed_seconds is a live UI projection. It changes while a session
-        # is paused even though its saved research is unchanged, so it cannot
-        # participate in the paper evidence fingerprint.
+        # Display-only elapsed time and bookkeeping modification timestamps
+        # are not scientific evidence. Session recovery/heartbeat updates can
+        # change them while a paper is being written (or the laptop sleeps).
+        # Keep substantive outcomes, arguments and session status in the hash.
         session_data.pop("elapsed_seconds", None)
+        session_data.pop("updated_at", None)
         artifacts = session_data.pop("artifacts", [])
         sources.append(
             {"id": f"session:{session.get('id')}", "kind": "session", "data": session_data}
