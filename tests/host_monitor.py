@@ -216,6 +216,7 @@ class HostMonitorTests(unittest.TestCase):
         script = (ROOT / "deploy/rollback-gce-release.sh").read_text()
         self.assertIn("--backup-verified", script)
         self.assertIn("--schema-compatible", script)
+        self.assertIn("gce_preflight.py --json --repository /opt/sigma/current", script)
         self.assertIn('docker image inspect "sigma-backend:$target"', script)
         self.assertIn("systemctl restart sigma.service", script)
         self.assertIn("rollback_active=1", script)
