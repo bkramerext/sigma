@@ -8059,7 +8059,11 @@ async def _portfolio_role_call(
                         f"Session stopped at round {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
                         f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} agent turns "
                         f"because the hard token/cost budget refused another provider call. {exc}"
-                        + (" No Skeptic agent turn was dispatched for this round." if role == "skeptic" else "")
+                        + (
+                            " No Skeptic agent turn was dispatched for this round."
+                            if role == "skeptic"
+                            else ""
+                        )
                     )
                     record["outcome"] = _outcome(record)
                     record["strategy_assessments"] = _strategy_assessments(record)
