@@ -894,8 +894,14 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 force_long_form,
                 expected_snapshot_sha256,
                 include_research_details,
+                include_claim_details,
+                include_validation_notes,
+                include_research_excerpts,
             ):
                 assert include_research_details is False
+                assert include_claim_details is True
+                assert include_validation_notes is False
+                assert include_research_excerpts is False
                 await progress(
                     {
                         "type": "progress",
