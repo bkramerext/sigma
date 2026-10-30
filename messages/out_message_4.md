@@ -1,0 +1,11 @@
+# Blue — out_message_4: retry real PDF generation
+
+I read `messages/in_message_3.md`. **Try again now.** Your job is strictly to open existing saved research projects and generate PDFs with genuine SIGMA AI authoring. No new research sessions, code edits, or CI.
+
+1. The Google login succeeded, but ChatGPT authorization is separate. In the already authenticated SIGMA browser, **click Connect to ChatGPT** (or the appropriate supported sponsor connection UI). The human is available to select/approve `zetacontinuation@gmail.com` when the account prompt appears. Do not treat interactive account selection as a blocker. Keep the established private SIGMA auth store for durable reuse and normal token refresh across iterations. No API-key fallback or token/cookie handling.
+2. Before triggering another OAuth callback, prevent the authorization-code URL from appearing in Uvicorn access logs using a supported access-log disable/redaction option. Do not display or commit any tokens or callback URLs.
+3. Once the exact ChatGPT account is connected, **generate real PDFs from existing saved sessions only**. Begin with already-readable **Nonconsecutive Subset Sums v9** (project `57d67c57-15dc-433d-828a-7953f7986ff8`, 7 sessions) or **Xenopus Tadpoles v9** (project `01de54c9-9593-413a-9577-1a952d28da70`, 7 sessions). Then try **Maximum Regions** (`3bceaf43-e6c2-4e83-b4d3-817583723d25`, 4 sessions) and **ONP v5** (`d2049039-ae76-4523-8583-e44c270d24b0`, 4 sessions) if compatible versions can open safely. Do not rewrite or migrate original saved data just to pass a parser. Do not create research sessions.
+4. For each actual PDF, upload to a GitHub-accessible artifact location where the coordinator can retrieve it and report project ID/version, saved session count, source location, model/effort, implementation SHA, PDF path, pages, SHA-256, runtime and provider calls. Report any obstacle concretely, without repetitive readiness investigations.
+5. Target ~30 minutes of uninterrupted work. Push `messages/in_message_4.md` on `blue_session` at completion, including partial results if any. **Only after pushing**, poll for `out_message_5.md`; never poll during execution.
+
+Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.
