@@ -2280,14 +2280,25 @@ async def test_clipped_investigator_automatically_recovers(path: Path):
         role = payload["text"]["format"]["name"]
         if len(submitted) == 1:
             assert role == "research_investigator"
-            return httpx.Response(200, json={
-                "status": "incomplete",
-                "incomplete_details": {"reason": "max_output_tokens"},
-                "usage": {"input_tokens": 120, "output_tokens": 4000},
-                "output": [{"type": "message", "content": [
-                    {"type": "output_text", "text": '{"claim": "partial untrusted statement'}
-                ]}],
-            })
+            return httpx.Response(
+                200,
+                json={
+                    "status": "incomplete",
+                    "incomplete_details": {"reason": "max_output_tokens"},
+                    "usage": {"input_tokens": 120, "output_tokens": 4000},
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": '{"claim": "partial untrusted statement',
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
         if len(submitted) == 2:
             assert role == "research_investigator"
             assert "retry_after_clipped_response" in json.loads(payload["input"])
@@ -2313,10 +2324,14 @@ async def test_clipped_investigator_automatically_recovers(path: Path):
     assert len(submitted) == 3
     assert finished["calls_used"] == 3
     assert [step["status"] for step in finished["steps"]] == [
-        "incomplete", "completed", "completed"
+        "incomplete",
+        "completed",
+        "completed",
     ]
     assert [step["role"] for step in finished["steps"]] == [
-        "investigator", "investigator", "skeptic"
+        "investigator",
+        "investigator",
+        "skeptic",
     ]
     assert finished["steps"][0]["token_usage"]["output_tokens"] == 4000
     assert finished["steps"][0]["partial_output"].startswith('{"claim": "partial')
@@ -2334,14 +2349,15 @@ async def test_legacy_ended_clipped_response_can_resume(path: Path):
         started_calls.append(json.loads(request.content))
         role = started_calls[-1]["text"]["format"]["name"]
         return httpx.Response(
-            200, json=provider_response(
-                investigation(1) if role == "research_investigator"
-                else skeptic(1, "stop")
-            )
+            200,
+            json=provider_response(
+                investigation(1) if role == "research_investigator" else skeptic(1, "stop")
+            ),
         )
 
     limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
     research_sessions.save_limits(str(path), limits)
+
     async def parked_worker(_session_id, _path):
         await asyncio.Event().wait()
 
@@ -2373,17 +2389,27 @@ async def test_legacy_ended_clipped_response_can_resume(path: Path):
             "The provider response was clipped at the output-token limit. "
             "Partial output and usage were preserved; the run is incomplete and was not retried."
         )
-        old["steps"] = [{
-            "id": str(uuid4()), "role": "investigator", "cycle": 1,
-            "strategy_id": strategy.id, "status": "incomplete",
-            "incomplete_reason": "max_output_tokens", "partial_output": "partial",
-            "token_usage": {"input_tokens": 120, "output_tokens": 500},
-            "finished_at": old["updated_at"],
-        }]
-        old["strategy_runs"][0].update({
-            "status": "ended", "current_action": "Incomplete · output limit",
-            "calls_used": 1, "cycle": 1,
-        })
+        old["steps"] = [
+            {
+                "id": str(uuid4()),
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": strategy.id,
+                "status": "incomplete",
+                "incomplete_reason": "max_output_tokens",
+                "partial_output": "partial",
+                "token_usage": {"input_tokens": 120, "output_tokens": 500},
+                "finished_at": old["updated_at"],
+            }
+        ]
+        old["strategy_runs"][0].update(
+            {
+                "status": "ended",
+                "current_action": "Incomplete · output limit",
+                "calls_used": 1,
+                "cycle": 1,
+            }
+        )
         # Keep cost accounting stable; avoid fabricating billed calls.
         research_sessions._save(str(path), old)
         assert research_sessions.get_session(str(path), started["id"])[
@@ -8484,8 +8510,12 @@ def main():
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
-        asyncio.run(test_clipped_investigator_automatically_recovers(root / "clipped-auto-recovery.sigma"))
-        asyncio.run(test_legacy_ended_clipped_response_can_resume(root / "clipped-legacy-resume.sigma"))
+        asyncio.run(
+            test_clipped_investigator_automatically_recovers(root / "clipped-auto-recovery.sigma")
+        )
+        asyncio.run(
+            test_legacy_ended_clipped_response_can_resume(root / "clipped-legacy-resume.sigma")
+        )
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
         asyncio.run(
             test_portfolio_stops_after_chatgpt_usage_limit(root / "chatgpt-http-limit.sigma")
