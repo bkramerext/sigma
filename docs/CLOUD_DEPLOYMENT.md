@@ -1,12 +1,13 @@
 # SIGMA Cloud Deployment
 
-**Current state (2026-10-29):** SIGMA v0.1.4 is deployed on the GCE host
-listed below. Public anonymous checks and production container health passed.
-Authenticated hosted acceptance is partial: no Google account was authenticated
-and no production research session was started. See [Status](STATUS.md) for the
-latest evidence. This document describes the observed deployment and links to
-operator procedures; it does not authorize infrastructure, billing, credential,
-production-setting, or provider changes.
+**Current state (2026-10-30):** SIGMA v0.1.5 at source
+`83c89f20e19ea87c4a3b4934942d0a78c2019973` is deployed on the GCE host listed
+below. Read-only host inspection, all three container health checks, and the
+public endpoint probe passed. The latest listed READY snapshot predates the
+v0.1.5 deployment; the release runbook requires a fresh application-consistent
+snapshot and restore verification before the next cutover. See [Status](STATUS.md)
+for the latest evidence. This document describes observed deployment state and
+links to operator procedures.
 
 Use [Operations Runbook](OPERATION_RUNBOOK.md) for commands that operate on the
 host. Historical planning notes are retained at the end of this document and
@@ -23,8 +24,8 @@ proposal into the production project.
 | State disk | `sigma-state`, 30 GB `pd-balanced`, `us-west1-b` | Mounted at `/srv/sigma-state`; UUID-backed mount survived reboot. Never format this existing disk. |
 | Public address and DNS | `136.66.128.82`; `sigma-research.duckdns.org` | DNS, public HTTPS and API probe passed. Public TCP 80/443 terminate at host Caddy; SSH is IAP-only. |
 | Runtime identity | `sigma-runtime` service account | Attached and used. Its full effective IAM grants have not been independently audited. |
-| Deployed release | `6fa626bdfc1f07cb873103dfed2323864d4fb280` (v0.1.4) | Read-only GCE inspection on 2026-10-29 confirmed host checkout, protected `SIGMA_RELEASE`, Python version, running backend/frontend image tags and OCI revision labels all match; all three containers healthy. The earlier `2761c0e12190807bafabe58445d6beac479140c4` release record was timestamped 06:09:49Z; the active `6fa626bdfc1f07cb873103dfed2323864d4fb280` record followed at 06:12:04Z. The earlier record is historical, not an unresolved active-SHA discrepancy. |
-| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Read-only GCE inspection on 2026-10-29 confirmed READY and `sigma-state` source. A restore drill of this exact snapshot was not done. The daily backup timer and `/etc/sigma/backup.env` are absent. An earlier snapshot clone passed the offline restore verifier; see Status and Runbook. |
+| Deployed release | `83c89f20e19ea87c4a3b4934942d0a78c2019973` (v0.1.5) | Read-only GCE inspection on 2026-10-30 confirmed protected release pin, running image tags, mounted state disk, and all three container health checks. Public endpoint verification passed. |
+| Recovery | `sigma-state-v015-pre-20261030-0506` READY from `sigma-state` | This snapshot predates the v0.1.5 deployment. A fresh application-consistent snapshot and isolated restore verification are required before the next release cutover. The daily backup timer and `/etc/sigma/backup.env` remain absent. |
 | Billing and current spend | Unknown | Prior console screenshots and estimates are historical observations, not current billing evidence. Budget alerts do not cap charges. OpenAI billing is separate from GCP. |
 
 The production endpoint reported hosted auth ready with `mock_auth=false`;

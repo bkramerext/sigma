@@ -150,3 +150,24 @@ schema change. The existing READY snapshot
 `sigma-state-v015-pre-20261030-0506` was retained; no new snapshot or restore
 drill was done. No paid provider call or local SIGMA server request occurred.
 The `v0.1.5` tag was not created.
+
+## Authorization record — SIGMA v0.1.6 release
+
+On 2026-10-30, the operator assigned Red ownership of release preparation,
+local validation, release PR review and merge, GCP deployment, and production
+smoke testing from the latest `main`. The operator explicitly authorized Red to
+review and merge its own release PR. GitHub Actions is unavailable through
+October 31 because of account billing/budget restrictions; the release gate for
+this deployment is one clean `./sigma test` on the exact release candidate,
+release-specific validation, and production deployment/smoke testing. Do not
+modify Actions configuration or wait for Actions. Preserve production identity,
+configuration, persistent projects, research, and accounting; avoid paid AI
+calls, paper-quality work, Round 11, and unrelated product changes.
+
+The release version is v0.1.6, following the deployed v0.1.5. Release source
+must be the tested merged candidate SHA. The existing snapshot
+`sigma-state-v015-pre-20261030-0506` predates the v0.1.5 deployment, so it is
+not by itself a current recovery point for this release. The remaining release
+record must include the fresh recovery point and restore evidence, exact image
+labels/IDs, deployment result, and smoke-test outcome. No v0.1.6 tag is
+authorized by this record.
