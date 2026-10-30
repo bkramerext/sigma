@@ -683,6 +683,72 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
     assert r"\section*{Authorship note}" in concise
 
 
+def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
+    """Readable PDF prose without losing math or overflowing the evidence appendix."""
+    source = " ".join(
+        f"This is substantive statement {number}. It advances the argument."
+        for number in range(32)
+    )
+    paragraphs = papers._publication_paragraphs(source)
+    assert len(paragraphs) >= 2
+    assert " ".join(paragraphs) == source
+
+    math = papers._latex_prose(r"Use $\sum_{j=1}^k j^2$ and $\omega^3=1$.")
+    assert r"\[\sum_{j=1}^k j^2\]" in math
+    assert r"$\omega^3=1$" in math
+
+    paper = draft()
+    sections = list(paper.sections)
+    sections[0] = sections[0].model_copy(
+        update={
+            "heading": "3. Counting argument",
+            "paragraphs": [
+                "The construction satisfies the prescribed boundary condition.",
+                "The next step requires a separate supporting argument.",
+                source,
+            ],
+        }
+    )
+    paper = paper.model_copy(update={"sections": sections})
+    integrity = [
+        {
+            "source_ref": f"session:{index}",
+            "field": "proof_obligations",
+            "content": {"excerpt": "An unresolved argument remains. " * 120},
+        }
+        for index in range(28)
+    ]
+    obligations = [
+        {
+            "text": f"Check the distinct boundary case {index}.",
+            "source_refs": [f"session:{index}"],
+            "status": "Not listed by author; not presumed resolved",
+        }
+        for index in range(28)
+    ]
+    tex = papers._tex(
+        paper,
+        [],
+        "f" * 64,
+        math_style=True,
+        include_research_details=True,
+        integrity_records=integrity,
+        integrity_excerpts=True,
+        obligation_reconciliation=obligations,
+    )
+    assert r"\section{Counting argument}" in tex
+    assert r"\section{3. Counting argument}" not in tex
+    assert (
+        "The construction satisfies the prescribed boundary condition.\n\n"
+        "The next step requires a separate supporting argument."
+    ) in tex
+    assert tex.count(r"\subsection{Research excerpt ") == 16
+    assert "further research records" in tex
+    assert "further distinct obligations" in tex
+    assert r"\begin{longtable}" not in tex
+    assert len(tex) < 50_000
+
+
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
     export = {
         "project": {"id": "snapshot-project", "title": "Snapshot stability"},
@@ -3299,6 +3365,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 def main() -> None:
     test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
+    test_publication_paragraphs_math_and_bounded_optional_appendix()
     test_summary_only_research_uses_zero_paid_evidence_extraction_calls()
     test_one_shot_provider_failure_requires_explicit_reset_without_rebilling()
     test_structured_index_retains_session_narrative_and_original_question()
