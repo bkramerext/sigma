@@ -8196,9 +8196,10 @@ live Google OAuth callback or paid provider call was made.
 
 ## Issue #337 — v0.1.5 Stage B readiness update (2026-10-29)
 
-**Scope:** readiness review only. Production deployment, release tagging,
-production configuration changes, and snapshot/restore operations are not
-authorized and were not performed. No local SIGMA server was targeted.
+**Initial scope:** read-only readiness review before the operator authorized
+Stage B. That initial review did not perform a deployment, release tag, or
+snapshot/restore. No local SIGMA server was targeted. The follow-up table below
+records the later explicit authorization and subsequent recovery work.
 
 | Gate | Status | Evidence / remaining condition |
 | --- | --- | --- |
@@ -8216,8 +8217,23 @@ authorized and were not performed. No local SIGMA server was targeted.
 | Focused Chrome issue #329 | **MET** | `browser_checks/issue329_fast_paper.py` passed real Chrome against a fresh isolated temporary project/auth/state store: plan and section progress, Escape does not cancel, pre-dispatch retry, section failure with Continue and usage warning, PDF completion, no-AI Start over/cancel/restart, AI-binding mismatch reset, and final responsive-layout check. Fixture API/provider responses were deterministic and local; no live/paid provider or local SIGMA server was used. |
 | Production cutover / release health | **UNMET** | No cutover authorization was given; restore and schema-rollback gates remain unmet. |
 
+### Post-authorization follow-up (2026-10-30)
+
+| Gate | Status | Evidence / remaining condition |
+| --- | --- | --- |
+| Stage B deployment authorization | **MET** | Operator explicitly authorized deployment after initially withholding it. The authorization record is in [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md). |
+| Selected exact deployment SHA CI | **MET** | Target tree `aa23f4b393f4ef657471705f467f9beecbb0689a` contains the v0.1.5 release source and rollback-preflight correction; exact post-merge `verify` succeeded in [run 41006080748](https://github.com/bkramerext/sigma/actions/runs/41006080748/job/123901170598). The version-bump source commit remains `2026f1e5b167ec76289ba2335d369603e4f377ee`. |
+| Fresh application-consistent snapshot | **MET** | `sigma-state-v015-pre-20261030-0506` reached READY from `sigma-state` at 2026-10-29 22:06:32 PDT after service stop, container-stop confirmation, and disk sync. SIGMA restarted healthy. |
+| Isolated restore verification | **MET** | Clone attached READ_ONLY to a no-public-IP, no-service-account VM and mounted `ro,nosuid,nodev,noexec,norecovery`. Offline verifier passed three DB integrity checks, 3 identities/mappings, 12 projects, 30 artifacts, zero paper pairs, 17 accounting calls with five reserved/unknown, and ten terminal historical jobs across two removed workspaces. No active job or call references those workspaces. Updated verifier code is in PR #343; exact-head CI/merge is pending. |
+| Pre-cutover project schema compatibility | **MET** | Aggregate scan of the read-only clone found 11 project records at schema 8 and one at schema 9, with no missing/invalid versions. v0.1.5 supports 1–10; v0.1.4 supports 1–9. This does not demonstrate v0.1.4 compatibility after a schema 10 write. |
+| v0.1.4 code rollback after schema 10 | **UNMET** | The exact v0.1.4 parser rejects schema 10. After a schema 10 write, use a forward fix or the separately authorized pre-release restore path; do not restart v0.1.4 against schema 10. |
+| Target-host v0.1.5 Docker build | **UNVERIFIED** | No candidate images have been built. Next build exact SHA `aa23f4b393f4ef657471705f467f9beecbb0689a`, verify both OCI revision labels and immutable image IDs, then run host preflight and the approved sandbox runtime check. |
+| Production cutover / release health | **UNMET** | Authorized, but not yet performed. Production remains v0.1.4 at `6fa626bdfc1f07cb873103dfed2323864d4fb280`. |
+| Recovery-resource cleanup | **UNMET** | Temporary restore VM and clone disk remain until evidence is recorded; cleanup is limited to these temporary resources. Retain the recovery snapshot. |
+| v0.1.5 release tag | **UNMET** | No tag has been created. |
+
 The target-host release build must resolve exactly
-`2026f1e5b167ec76289ba2335d369603e4f377ee`, export that commit with
+`aa23f4b393f4ef657471705f467f9beecbb0689a`, export that commit with
 `git archive`, and build `sigma-backend:<SHA>` and `sigma-frontend:<SHA>` for
 `linux/amd64` with `org.opencontainers.image.revision=<SHA>`. The builder must
 verify both image labels and immutable image IDs. Before deploy, require a clean
@@ -8232,12 +8248,12 @@ starts a temporary sandbox execution and writes runtime evidence, so use it
 only as an approved exercise. Deployment starts from systemd/Compose
 `--no-build` and records container IDs and image IDs. The documented preflight
 passed against the active v0.1.4 checkout; no candidate images were built.
-After separate operator deployment authorization, the
-guarded invocation is:
+Under the operator's explicit deployment authorization, after remaining gates
+pass, use the guarded invocation:
 
 ```sh
 sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py \
-  2026f1e5b167ec76289ba2335d369603e4f377ee --backup-verified --schema-compatible
+  aa23f4b393f4ef657471705f467f9beecbb0689a --backup-verified --schema-compatible
 ```
 
 The final flags are assertions enforced by the guarded helper, not proof that

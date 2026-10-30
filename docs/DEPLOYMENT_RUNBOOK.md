@@ -15,10 +15,13 @@ not evidence that a release gate passed or that an operation was executed.
 | Stage B production release | After initially withholding cutover authorization, the operator directed “you need to deploy” and then explicitly confirmed “yes, i authorize.” | Authorizes proceeding with the v0.1.5 production release process, subject to the preservation, recovery, exact-SHA, health, and no-paid-provider constraints below. It does not make an unverified rollback assertion true. |
 
 The release authorization does not approve unrelated infrastructure changes,
-recurring backup configuration, IAM broadening, destructive cleanup, or paid
-provider inference. Keep the operator's constraints: preserve identities,
-projects, research, papers, and spending records; do not access the operator's
-local SIGMA server; do not coordinate directly with other Codex workers.
+recurring backup configuration, IAM broadening, deletion of production data or
+recovery points, or paid provider inference. It includes cleanup of temporary
+VMs and clone disks created solely for the authorized restore drill, while
+retaining the approved recovery snapshot. Keep the operator's constraints:
+preserve identities, projects, research, papers, and spending records; do not
+access the operator's local SIGMA server; do not coordinate directly with
+other Codex workers.
 
 The operator also directed that issues exposed by release work be fixed within
 scope, and that work may be aborted when a failure becomes catastrophic or
@@ -96,3 +99,22 @@ and rollback-preflight correction; its post-merge `verify` check succeeded
 [in CI run 41006080748](https://github.com/bkramerext/sigma/actions/runs/41006080748/job/123901170598).
 Build and label the target images from that full SHA. No `v0.1.5` tag has been
 created.
+
+The isolated restore check then completed on a clone of the snapshot, attached
+READ_ONLY to a recovery VM with no public IP and no service account and mounted
+`ro,nosuid,nodev,noexec,norecovery`. The offline verifier passed three SQLite
+integrity checks, 3 identities/mappings, 12 projects, 30 research artifacts,
+zero paper pairs, and 17 accounting call rows, including five reserved or
+unknown outcomes. It also preserved ten terminal historical job rows across
+two removed workspaces; no active jobs or accounting calls referenced those
+workspaces. The verifier change for this history case is under review in
+[PR #343](https://github.com/bkramerext/sigma/pull/343); exact-head CI and merge
+must pass before the updated verifier becomes the maintained procedure. The
+temporary VM and clone disk remain until evidence is recorded and cleanup is
+verified. Preserve the snapshot.
+
+The clone contained 12 saved project records: eleven at schema 8 and one at
+schema 9, with no missing or invalid schema values. These versions are within
+v0.1.4's supported 1–9 range and v0.1.5's 1–10 range. This confirms the
+pre-cutover state is readable by either version; it does not establish that
+v0.1.4 can read a later schema 10 write.

@@ -92,9 +92,9 @@ class StateBackupTests(unittest.TestCase):
         ledger = workspaces / "cloud-research.sqlite3"
         with closing(sqlite3.connect(ledger)) as db:
             db.executescript(
-                "CREATE TABLE jobs(session_id TEXT,workspace_id TEXT,project_id TEXT);"
+                "CREATE TABLE jobs(session_id TEXT,workspace_id TEXT,project_id TEXT,status TEXT NOT NULL DEFAULT 'terminal');"
                 "CREATE TABLE calls(call_id TEXT,session_id TEXT,workspace_id TEXT,amount_usd REAL,status TEXT);"
-                "INSERT INTO jobs VALUES('j1','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','p0');"
+                "INSERT INTO jobs(session_id,workspace_id,project_id,status) VALUES('j1','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','p0','terminal');"
                 "INSERT INTO calls VALUES('c1','j1','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0.25,'unknown');"
             )
             db.commit()
@@ -159,6 +159,35 @@ class StateBackupTests(unittest.TestCase):
                 )
             with self.assertRaisesRegex(ValueError, "unmapped workspace"):
                 restore.verify(root, 2, 1, 1, 1)
+
+    def test_restore_verifier_retains_terminal_job_history_for_removed_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            databases = self.make_state(root)
+            with sqlite3.connect(databases[2]) as db:
+                db.execute(
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,status) VALUES(?,?,?,?)",
+                    ("terminal-history", "d" * 32, "old-project", "terminal"),
+                )
+            result = restore.verify(root, 2, 2, 2, 1)
+            self.assertTrue(
+                any(
+                    "retained terminal history rows=1 across 1 unmapped workspaces" in line
+                    for line in result
+                )
+            )
+
+    def test_restore_verifier_rejects_active_job_for_unmapped_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            databases = self.make_state(root)
+            with sqlite3.connect(databases[2]) as db:
+                db.execute(
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,status) VALUES(?,?,?,?)",
+                    ("active-orphan", "d" * 32, "old-project", "running"),
+                )
+            with self.assertRaisesRegex(ValueError, "active_jobs=1"):
+                restore.verify(root, 2, 2, 2, 1)
 
     def test_generated_snapshot_name_matches_gce_resource_contract(self) -> None:
         script = (ROOT / "deploy/backup-state.sh").read_text()

@@ -214,13 +214,18 @@ def verify(
         f"file:{(auth / 'workspaces/cloud-research.sqlite3').resolve()}?mode=ro", uri=True
     )
     try:
-        job_workspaces = {
-            row[0] for row in ledger.execute("SELECT DISTINCT workspace_id FROM jobs")
-        }
+        job_rows = ledger.execute("SELECT workspace_id,status FROM jobs").fetchall()
         call_workspaces = {
             row[0] for row in ledger.execute("SELECT DISTINCT workspace_id FROM calls")
         }
-        invalid_jobs = len(job_workspaces - mapped)
+        unmapped_jobs = [row for row in job_rows if row[0] not in mapped]
+        active_unmapped_jobs = {
+            workspace_id for workspace_id, status in unmapped_jobs if status != "terminal"
+        }
+        terminal_history_rows = sum(1 for _, status in unmapped_jobs if status == "terminal")
+        terminal_history_workspaces = {
+            workspace_id for workspace_id, status in unmapped_jobs if status == "terminal"
+        }
         invalid_calls = len(call_workspaces - mapped)
         totals = ledger.execute(
             "SELECT COUNT(*), COALESCE(SUM(amount_usd),0), "
@@ -229,10 +234,16 @@ def verify(
         ledger_fk_errors = ledger.execute("PRAGMA foreign_key_check").fetchall()
     finally:
         ledger.close()
-    if invalid_jobs or invalid_calls:
+    if active_unmapped_jobs or invalid_calls:
         raise ValueError(
-            f"accounting ledger references unmapped workspace: jobs={invalid_jobs}, calls={invalid_calls}"
+            "accounting ledger references unmapped workspace: "
+            f"active_jobs={len(active_unmapped_jobs)}, calls={invalid_calls}"
         )
+    results.append(
+        "PASS job history: all active jobs map to current workspaces; "
+        f"retained terminal history rows={terminal_history_rows} across "
+        f"{len(terminal_history_workspaces)} unmapped workspaces"
+    )
     if ledger_fk_errors:
         raise ValueError(
             f"research accounting ledger has {len(ledger_fk_errors)} foreign key error(s)"
