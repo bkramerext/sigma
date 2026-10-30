@@ -323,6 +323,26 @@ _SAFE_MATH_COMMANDS = {
     "alpha",
     "beta",
     "gamma",
+    "omega",
+    "Omega",
+    "Delta",
+    "epsilon",
+    "varepsilon",
+    "theta",
+    "vartheta",
+    "lambda",
+    "mu",
+    "nu",
+    "rho",
+    "sigma",
+    "tau",
+    "chi",
+    "phi",
+    "varphi",
+    "xi",
+    "zeta",
+    "eta",
+    "kappa",
     "sum",
     "prod",
     "binom",
@@ -359,7 +379,7 @@ _SAFE_MATH_COMMANDS = {
     "partial",
     "nabla",
 }
-_MATH_SPAN = re.compile(r"(\$\$.*?\$\$|(?<!\\)\$[^$\n]+\$)")
+_MATH_SPAN = re.compile(r"(\$\$[\s\S]*?\$\$|(?<!\\)\$[^$\n]+\$)")
 _UNICODE_MATH = {
     "−": "-",
     "≤": r"\leq",
@@ -372,6 +392,13 @@ _UNICODE_MATH = {
     "α": r"\alpha",
     "β": r"\beta",
     "γ": r"\gamma",
+    "ω": r"\omega",
+    "Ω": r"\Omega",
+    "θ": r"\theta",
+    "λ": r"\lambda",
+    "μ": r"\mu",
+    "σ": r"\sigma",
+    "Δ": r"\Delta",
     "∑": r"\sum",
     "∏": r"\prod",
 }
@@ -447,6 +474,34 @@ def _latex_prose(source: str) -> str:
         position = match.end()
     output.append(plain(source[position:]))
     return "".join(output)
+
+
+def _publication_paragraphs(source: str) -> list[str]:
+    """Keep authored prose readable without editing the scientific claims.
+
+    Explicit paragraph boundaries win. For legacy one-block AI prose, split
+    only at complete sentence boundaries; never truncate or paraphrase.
+    """
+    result: list[str] = []
+    for block in re.split(r"\n\s*\n", source.strip()):
+        if not block.strip():
+            continue
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z(])", block.strip())
+        current = ""
+        for sentence in sentences:
+            if current and len(current) + len(sentence) > 750 and len(current) >= 220:
+                result.append(current)
+                current = sentence
+            else:
+                current = (current + " " + sentence).strip()
+        if current:
+            result.append(current)
+    return result or [source]
+
+
+def _publication_heading(heading: str) -> str:
+    """LaTeX already numbers sections; never duplicate model-generated numbers."""
+    return re.sub(r"^\s*\d+[.)]\s+", "", heading).strip() or heading
 
 
 def _now() -> str:
@@ -2096,6 +2151,10 @@ def _tex(
 ) -> str:
     esc = _latex
     prose = _latex_prose
+
+    def article_paragraph(text: str) -> str:
+        return "\n\n".join(prose(chunk) for chunk in _publication_paragraphs(text))
+
     if math_style:
         investigation_type = "mathematical"
     opening_heading, methods_heading, findings_heading, style_note = _paper_style(
@@ -2109,6 +2168,9 @@ def _tex(
         r"\usepackage{amsmath,amssymb,booktabs,longtable}",
         r"\usepackage{microtype}",
         r"\usepackage{titlesec}",
+        r"\emergencystretch=2em",
+        r"\raggedbottom",
+        r"\linespread{1.07}",
         r"\usepackage{xcolor}",
         r"\definecolor{blue}{HTML}{24485E}",
         r"\titleformat{\section}{\Large\bfseries\sffamily\color{blue}}{\thesection}{0.8em}{}",
@@ -2128,7 +2190,7 @@ def _tex(
     parts.insert(3, r"\author{SIGMA AI-assisted research synthesis}")
     parts += [
         r"\begin{abstract}",
-        prose(draft.abstract),
+        article_paragraph(draft.abstract),
         r"\end{abstract}",
     ]
     if include_research_details:
@@ -2170,18 +2232,18 @@ def _tex(
     if include_research_details and draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
     parts.append(r"\section{" + esc(opening_heading) + "}")
-    parts += [prose(text) for text in draft.problem_framing]
+    parts += [article_paragraph(text) + "\n" for text in draft.problem_framing]
     if include_research_details and draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
     parts.append(r"\section{" + esc(methods_heading) + "}")
-    parts += [prose(text) for text in draft.methods]
+    parts += [article_paragraph(text) + "\n" for text in draft.methods]
     if include_research_details and draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
     for section in draft.sections:
-        parts.append(r"\section{" + esc(section.heading) + "}")
-        parts += [prose(text) for text in section.paragraphs]
+        parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
+        parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
         if include_research_details and section.claim_ids:
             parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
 
@@ -2233,7 +2295,7 @@ def _tex(
             parts.append(prose(item["status"] + "; " + refs) + " & " + prose(item["text"]) + r"\\")
         parts.append(r"\end{longtable}")
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
-    parts += [prose(item) for item in draft.conclusions]
+    parts += [article_paragraph(item) + "\n" for item in draft.conclusions]
     if include_research_details and draft.conclusion_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
     if math_style and include_research_details:
