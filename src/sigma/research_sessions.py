@@ -4811,6 +4811,26 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             await asyncio.gather(task, return_exceptions=True)
         return _public(_read(record["project_path"], session_id))
     record = _recover(_read(path, session_id))
+    # Legacy sessions ended after a known clipped response even with unused turns.
+    # Convert only this exact terminal state to a paused, resumable session.
+    if action == "resume" and _public(record).get("recoverable_clipped_response"):
+        clipped = next(
+            step for step in reversed(record["steps"])
+            if step.get("status") == "incomplete"
+            and step.get("incomplete_reason") == "max_output_tokens"
+        )
+        record["status"] = "paused"
+        record["stopped_at"] = clipped.get("finished_at") or record["updated_at"]
+        for branch in record.get("strategy_runs", []):
+            if branch.get("current_action") == "Incomplete · output limit":
+                branch["status"] = "paused"
+                branch["current_action"] = "Paused · clipped response"
+        record["message"] = (
+            "Previously ended clipped response is now recoverable. Saved partial "
+            "output and usage remain recorded; resuming requires a new provider call."
+        )
+        _event(record, "call.recovery_enabled", record["message"])
+        _save(path, record)
     if record["status"] not in {"paused", "stopped"}:
         return _public(record)
     if action == "resume":
@@ -7941,7 +7961,7 @@ async def _portfolio_role_call(
     cycle: int,
     semaphore: asyncio.Semaphore,
     state_lock: asyncio.Lock,
-) -> bool:
+) -> bool | Literal["retry"]:
     if role == "skeptic":
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
     async with semaphore:
@@ -7957,6 +7977,16 @@ async def _portfolio_role_call(
                 return False
             try:
                 context = _portfolio_context(record, branch, role, cycle)
+                clipped_prior_attempts = sum(
+                    step.get("status") == "incomplete"
+                    and step.get("incomplete_reason") == "max_output_tokens"
+                    and step.get("role") == role
+                    and step.get("cycle") == cycle
+                    and step.get("strategy_id") == strategy_id
+                    for step in record.get("steps", [])
+                )
+                if clipped_prior_attempts:
+                    context["retry_after_clipped_response"] = True
                 context["execution_tools"] = tools
                 human_guidance = _guidance_for_target(record, strategy_id, role)
                 context["human_guidance"] = human_guidance
