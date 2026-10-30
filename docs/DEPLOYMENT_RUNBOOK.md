@@ -122,3 +122,31 @@ schema 9, with no missing or invalid schema values. These versions are within
 v0.1.4's supported 1–9 range and v0.1.5's 1–10 range. This confirms the
 pre-cutover state is readable by either version; it does not establish that
 v0.1.4 can read a later schema 10 write.
+
+## 2026-10-30 About build SHA spot correction
+
+PR [#344](https://github.com/bkramerext/sigma/pull/344) fixed frontend build
+provenance by passing the full requested commit as `SIGMA_BUILD_COMMIT`; Vite
+embeds its seven-character prefix. PR
+[#345](https://github.com/bkramerext/sigma/pull/345) changed the guarded helper
+to check out and validate candidate tooling before image construction. Both
+PRs were self-reviewed under the operator's standing authorization and passed
+exact-head CI. The final deployed merge commit is
+`83c89f20e19ea87c4a3b4934942d0a78c2019973`.
+
+Production deployment used the candidate helper extracted from that exact
+commit because the previously installed helper did not yet include the
+candidate-tooling ordering fix. The guarded command fetched and verified the
+full SHA, checked out candidate tooling, passed host preflight, built both
+images from the candidate archive, then stopped/restarted the service and
+verified health. The active checkout and protected pin now match the deployed
+SHA. Both release image labels/IDs verified; all three containers are healthy;
+systemd is active with no pending unit reload; `/srv/sigma-state` is mounted.
+Public root and bundle returned HTTP 200, and the bundle contains `83c89f2`.
+The unauthenticated health API returned expected HTTP 401.
+
+This was a build-metadata correction with no backend application-code or state
+schema change. The existing READY snapshot
+`sigma-state-v015-pre-20261030-0506` was retained; no new snapshot or restore
+drill was done. No paid provider call or local SIGMA server request occurred.
+The `v0.1.5` tag was not created.
