@@ -3088,7 +3088,9 @@ def test_live_research_change_does_not_discard_completed_paper() -> None:
         def changing_snapshot(_path):
             nonlocal snapshots
             snapshots += 1
-            return (original, original_hash) if snapshots == 1 else (advanced, advanced_hash)
+            if snapshots != 1:
+                raise AssertionError("Do not recheck changing live evidence after authoring")
+            return original, original_hash
 
         async def provider(_context, *_args):
             nonlocal calls
@@ -3112,8 +3114,72 @@ def test_live_research_change_does_not_discard_completed_paper() -> None:
         assert calls == 1
         assert saved["snapshot_sha256"] == original_hash
         assert saved["snapshot"] == original
-        assert saved["generation"]["research_changed_during_generation"] is True
+        assert snapshots == 1
         assert papers._load_work(str(path)) is None
+
+
+def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
+    """Resuming a paid draft must not read new research or require Start over."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "frozen-checkpoint.sigma"
+        view = initialize_project(path, "Frozen paper", "Saved evidence")
+        identity = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": identity["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        package, fingerprint = papers._snapshot(str(path))
+        work = papers._new_work(
+            fingerprint,
+            view.project.id,
+            papers.hashlib.sha256(
+                (identity["mode"] + "\\0" + identity["identity"]).encode()
+            ).hexdigest(),
+            config["model"],
+            config["reasoning_effort"],
+            kind="one_shot",
+        )
+        work["frozen_package"] = package
+        work["provider_calls"] = 1
+        work["provider_calls_total"] = 1
+        work["one_shot_draft"] = draft(package["sources"][0]["id"]).model_dump()
+        papers._save_work(str(path), work)
+
+        with (
+            patch.object(papers, "_snapshot", side_effect=AssertionError("live evidence re-read")),
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=identity)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(
+                papers, "_provider", side_effect=AssertionError("paid draft must be reused")
+            ),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            preflight = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=identity["identity"],
+                mode=identity["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert preflight["resume_available"] is True
+            assert preflight["snapshot_sha256"] == fingerprint
+            completed = asyncio.run(
+                papers.generate(
+                    str(path),
+                    identity["identity"],
+                    view.project.id,
+                    expected_snapshot_sha256="0" * 64,
+                )
+            )
+        saved = papers.get_paper(str(path), completed["paper_id"])
+        assert saved["snapshot_sha256"] == fingerprint
+        assert saved["snapshot"] == package
+        assert saved["generation"]["provider_calls_attempted"] == 1
 
 
 def test_one_shot_publishes_with_repaired_claim_links() -> None:
@@ -3448,6 +3514,7 @@ def main() -> None:
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
     test_one_shot_publishes_with_repaired_claim_links()
     test_live_research_change_does_not_discard_completed_paper()
+    test_frozen_evidence_checkpoint_survives_live_research_drift()
     test_one_shot_validation_failure_preserves_paid_draft_for_continue()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
