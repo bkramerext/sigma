@@ -75,7 +75,6 @@ Docker and the sandbox image are **not required** for the basic local UI. See [P
 
 - [Getting Started](docs/GETTING_STARTED.md) — workflows, setup, and troubleshooting
 - [Journal](docs/JOURNAL.md) — day-by-day story of building SIGMA
-- [Status](docs/STATUS.md) — a recent snapshot of features, verification, and known limits; GitHub issues and pull requests are the official record
 - [Product Rationale](docs/PRODUCT_RATIONALE.md) and [Research Quality Charter](docs/RESEARCH_QUALITY_CHARTER.md) — research goals and evidence standards
 - [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md) and [Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md) — hosted configuration and release procedure
 - [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md) — developer-only account and provider-state simulation
