@@ -4320,6 +4320,29 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
 function HomeInvitationAction() {
   const cloud = useCloudIdentity();
   const [recorded, setRecorded] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [requestError, setRequestError] = useState('');
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  async function requestInvitation() {
+    if (sending) return;
+    setSending(true);
+    setRequestError('');
+    try {
+      const response = await fetch('/api/cloud-auth/invitation-request', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
+      setRecorded(true);
+      setConfirmationOpen(true);
+      window.dispatchEvent(new Event('sigma-invitation-recorded'));
+      window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
+    } catch (cause) {
+      setRequestError(errorMessage(cause));
+    } finally {
+      setSending(false);
+    }
+  }
   const uninvited = cloud?.user?.role === 'guest' || cloud?.deniedIdentityAvailable;
   const invitationStatus = cloud?.user?.role === 'guest'
     ? cloud.account?.invitation_status
@@ -4332,9 +4355,20 @@ function HomeInvitationAction() {
     window.addEventListener('sigma-invitation-recorded', onRecorded);
     return () => window.removeEventListener('sigma-invitation-recorded', onRecorded);
   }, []);
-  if (!cloud?.enabled || !uninvited
-    || hasOpenInvitationRequest(invitationStatus) || recorded) return null;
-  return <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => window.dispatchEvent(new Event('sigma-open-invitation'))}>Invite me!</button>;
+  if (!cloud?.enabled || !uninvited) return null;
+  return <>
+    {confirmationOpen && <InvitationWelcomeDialog
+      audience="requested"
+      allowance={null}
+      allowanceUsed={0}
+      allowanceLoading={false}
+      onDismiss={async () => { setConfirmationOpen(false); }}
+    />}
+    {!hasOpenInvitationRequest(invitationStatus) && !recorded && <>
+      <button type="button" className="project-google-signin project-invite-me" disabled={sending} aria-busy={sending} onClick={() => void requestInvitation()}>{sending ? 'Sending…' : 'Invite me!'}</button>
+      {requestError && <span role="alert">{requestError} <button type="button" className="cloud-text-button" onClick={() => void requestInvitation()}>Try again</button></span>}
+    </>}
+  </>;
 }
 
 function ReloadMeAction({ connectionPill = false }: { connectionPill?: boolean }) {
@@ -4911,7 +4945,7 @@ function CloudAuthGate() {
 }
 
 function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowanceLoading, onDismiss }: {
-  audience: 'guest' | 'nonmember' | 'returning' | 'invited' | 'sponsored';
+  audience: 'guest' | 'nonmember' | 'returning' | 'requested' | 'invited' | 'sponsored';
   allowance: number | null; allowanceUsed: number; allowanceLoading: boolean;
   onDismiss: () => Promise<void>;
 }) {
@@ -4928,7 +4962,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     if (busy) return;
     setBusy(true); setError('');
     try {
-      if (audience !== 'guest' && audience !== 'nonmember' && audience !== 'returning') {
+      if (audience !== 'guest' && audience !== 'nonmember' && audience !== 'returning' && audience !== 'requested') {
         const response = await fetch('/api/cloud-auth/welcome', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         if (!response.ok) throw await cloudFailure(response, 'Your invitation welcome could not be saved.');
       }
@@ -4936,7 +4970,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
-  const heading = audience === 'guest' || audience === 'nonmember' || audience === 'returning'
+  const heading = audience === 'requested' ? 'Your invitation request is in!' : audience === 'guest' || audience === 'nonmember' || audience === 'returning'
     ? 'Welcome to SIGMA!' : 'You have been invited!';
   const allowanceMessage = allowance === null || allowance > 1
     ? null
@@ -4952,6 +4986,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore as a guest without running or saving projects, or request an invitation to become a member. The administrator decides whether to include sponsorship when granting your invitation.</p>}
     {audience === 'nonmember' && <p className="invitation-welcome-intro">Your Google account does not yet have SIGMA membership. Request an invitation to join the research workspace, or explore as a guest while an administrator reviews your request.</p>}
     {audience === 'returning' && <p className="invitation-welcome-intro">Your invitation request is in! We're looking forward to welcoming you as a member. In the meantime, feel free to explore as a guest.</p>}
+    {audience === 'requested' && <p className="invitation-welcome-intro">We've received your request and will get back to you soon. In the meantime, feel free to explore SIGMA as a guest.</p>
     {audience === 'sponsored' && <p className="invitation-welcome-intro">SIGMA tracks your sponsored allowance as you use ChatGPT. When you’re ready, you can connect your own ChatGPT account from the Sponsored ChatGPT pill.</p>}
     {audience === 'invited' && <p className="invitation-welcome-intro">Welcome to SIGMA.</p>}
     <p id="invitation-welcome-phrase" className="invitation-welcome-phrase">{phrase}</p>
@@ -4976,7 +5011,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
           />}
           <button type="button" className="invitation-welcome-link" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : 'Explore as guest'}</button>
         </div>
-      : <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : "Let's get started"}</button>}
+      : <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : audience === 'requested' ? 'Continue as guest' : "Let's get started"}</button>}
   </dialog>;
 }
 
