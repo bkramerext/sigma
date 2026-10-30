@@ -1343,6 +1343,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
+  const [includeResearchDetails, setIncludeResearchDetails] = useState(false);
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
@@ -1498,7 +1499,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         : 'Generating paper…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_research_details: includeResearchDetails }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -1568,6 +1569,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
       <p className="settings-hint">Paper planning and section writing use this project's selected AI model and Thinking level. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
       <p className="settings-hint ai-paper-model">Project AI model: <strong>{model || 'Loading…'}</strong> · Thinking level: <strong>{effort || 'Loading…'}</strong></p>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchDetails} disabled={busy} onChange={event => setIncludeResearchDetails(event.target.checked)}/>Include research details</label>
       {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
           ? 'The last writing attempt did not save a draft. Start over to generate again.'
