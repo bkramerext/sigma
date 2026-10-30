@@ -3133,6 +3133,7 @@ async def _generate_impl(
     progress: PaperProgressCallback | None = None,
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
+    include_research_details: bool = False,
 ) -> dict[str, Any]:
     if _gate.locked():
         raise ProjectError("A paper generation is already active; wait or cancel it")
@@ -3397,6 +3398,7 @@ async def _generate_impl(
                     )
                 ),
                 "long_form": long_form,
+                "include_research_details": include_research_details,
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
                 "snapshot_size_bytes": len(_json(package)),
@@ -3466,6 +3468,7 @@ async def _generate_impl(
                 ),
                 material_omissions=material_omissions,
                 integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
+                include_research_details=include_research_details,
             )
             await report("compile", None, None)
             pdf = await asyncio.to_thread(
@@ -3512,6 +3515,7 @@ async def generate(
     progress: PaperProgressCallback | None = None,
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
+    include_research_details: bool = False,
 ) -> dict[str, Any]:
     """Run one generation task so activity cleanup is independent of its caller."""
     task = asyncio.create_task(
@@ -3522,6 +3526,7 @@ async def generate(
             progress,
             force_long_form,
             expected_snapshot_sha256,
+            include_research_details,
         )
     )
     try:
