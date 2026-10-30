@@ -19,7 +19,7 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) 
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
 | Billing account / current spend | Unknown | October 25 console screenshot is historical; current association, available credit, alert delivery and spend not verified |
 | Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Read-only GCE inspection on 2026-10-29 confirmed READY and `sigma-state` source. Exact snapshot not restore-tested. Daily backup timer and `/etc/sigma/backup.env` absent. |
-| Production release | `6fa626bdfc1f07cb873103dfed2323864d4fb280` (v0.1.4) | Read-only GCE inspection on 2026-10-29 confirmed configured release and backend/frontend image labels match; all three containers healthy, service active and public endpoint probe passed. This differs from the previously recorded `2761c0e12190807bafabe58445d6beac479140c4`; reconcile release-record/history provenance before cutover. Hosted acceptance remains partial. See [Status](STATUS.md). |
+| Production release | `6fa626bdfc1f07cb873103dfed2323864d4fb280` (v0.1.4) | Read-only GCE inspection on 2026-10-29 confirmed host checkout, protected `SIGMA_RELEASE`, Python version, backend/frontend tags and OCI revision labels match; all three containers healthy and service active. Release record `2761c0e12190807bafabe58445d6beac479140c4` at 06:09:49Z precedes active record `6fa626bdfc1f07cb873103dfed2323864d4fb280` at 06:12:04Z. The earlier record is historical, not an unresolved active-SHA discrepancy. Hosted acceptance remains partial. See [Status](STATUS.md). |
 
 **Change log**
 
@@ -284,6 +284,63 @@ restore the 14-point retention invariant.
 
 ## 5. Daily state-disk backup
 
+### Fresh pre-release recovery point and restore verification (v0.1.5 readiness)
+
+No new snapshot or production setting change is authorized by this readiness
+review. The existing `sigma-state-v014-20261029-0606` is READY but has not been
+restore-tested; it is not evidence of current v0.1.4 data recoverability. The
+daily backup timer and `/etc/sigma/backup.env` were absent at the read-only
+inspection. Before any cutover, an operator must review and authorize a fresh
+application-consistent point and an isolated restore drill:
+
+1. Audit current project billing, quota, effective operator IAM, VM service
+   account grants and metadata credential isolation. The backup script needs
+   Compute permissions to get the source disk, create a snapshot, inspect/list
+   snapshots, and delete only managed expired snapshots. Grant only the
+   approved least-privilege role to the operator executing the drill; do not
+   broaden the runtime service account as a shortcut. The restore clone needs
+   disk create/attach permissions and an isolated recovery host needs only the
+   access needed for the offline verifier. These permissions have not been
+   observed or approved as of this review.
+2. Agree on a cost ceiling and confirm current billing/quota. Costs may include
+   changed-block snapshot storage, a clone disk, temporary recovery compute,
+   and access logging. Current spend and rates were not verified; no amount is
+   asserted here. A budget alert is not a spending cap.
+3. Schedule a maintenance window. The backup script stops `sigma.service`,
+   confirms Compose writers stopped, syncs the mounted source disk, waits for a
+   READY snapshot before pruning, records the result, and restarts the service
+   on exit. Production downtime lasts through snapshot completion and restart;
+   the duration is unknown until measured. Confirm no other writer is active,
+   and monitor the systemd journal and external health after restart.
+4. After explicit approval, invoke the already-installed script with
+   one-shot parameters (this does not install persistent backup configuration):
+
+   ```sh
+   sudo env SIGMA_BACKUP_PROJECT=sigma-research-prod \
+     SIGMA_BACKUP_ZONE=us-west1-b SIGMA_BACKUP_DISK=sigma-state \
+     SIGMA_BACKUP_RETENTION=14 /opt/sigma/current/deploy/backup-state.sh
+   ```
+
+   Require exit 0, a named READY snapshot with source `sigma-state`, and a
+   healthy restarted service. Do not prune manually or continue after a failed
+   snapshot or restart.
+5. Create a named clone from that exact snapshot and attach it only to a
+   temporary recovery host with no public IP, no production service account,
+   no OAuth/provider credentials and no ingress. Mount the clone read-only
+   with `ro,noload,nosuid,nodev,noexec`; verify the device, filesystem UUID,
+   and mount options before running the packaged `verify-state-restore.py`.
+   Set minimum expected identity/workspace/project/artifact/paper and
+   accounting thresholds from an operator-approved aggregate baseline. Require
+   every verifier check to pass, preserve sanitized evidence and the snapshot,
+   and separately authorize cleanup of temporary resources. Never mount the
+   clone writable or attach it to the production VM. The verifier is read-only
+   and offline; it does not prove browser/API behavior or a production restore.
+
+Restore requires operator review because clone disk/VM and snapshot storage
+incur charges and the source snapshot requires downtime. Do not start until
+IAM, billing, quotas, maintenance window, expected data thresholds and cleanup
+owner are recorded. None of these actions has been performed for v0.1.5.
+
 The installed `sigma-backup.timer` runs at 10:17 UTC daily with `Persistent=true`
 (about 02:17 or 03:17 in Oregon, depending on daylight saving time).
 `sigma-backup.service` stops `sigma.service`, verifies that no SIGMA Compose
@@ -473,10 +530,29 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
 ## 7. Rollback code (not data)
 
-1. Identify the current and target SHAs. Confirm target images exist locally, a
-   recent recovery point is verified, the rollback is compatible with current
-   data/schema, and no backup is running. If compatibility is unknown, stop and
-   escalate; a code rollback never rewinds SQLite or provider charges.
+**Schema 10 is a forward-only boundary for the currently available v0.1.4
+binary.** v0.1.4 accepts project schemas 1–9; v0.1.5 accepts 1–10 and can
+write schema 10 when saving strategy provenance including
+`inference_request_id`. Therefore `--schema-compatible` is an operator
+assertion, not a compatibility test. Do not use the existing v0.1.4 image as
+code rollback after any v0.1.5 schema 10 write. No v0.1.4 compatibility bridge
+has been implemented or tested. The rollback readiness gate remains unmet.
+
+The safe default after a schema 10 write is forward-fix on v0.1.5-compatible
+code. If service must be stopped, stop writers and preserve the post-cutover
+disk and logs. If the owner chooses recovery to pre-release state, that is a
+separate data restore incident: use the isolated, verified pre-cutover
+snapshot, declare the data-loss interval from its creation time, preserve the
+post-cutover disk for forensics, and obtain explicit owner authorization before
+any production disk swap. Never imply that reverting the release pin rolls
+back or preserves schema 10 data. A compatibility bridge would need its own
+implementation and tests against real schema 10 fixture data before it can
+change this policy.
+
+1. Identify current and target SHAs. Confirm target images exist locally, a
+   recent recovery point has passed isolated restore verification, data/schema
+   compatibility has been demonstrated for the exact older binary, and no
+   backup is running. If any condition is unknown, do not perform code rollback.
 2. Run the guarded helper with explicit operator assertions:
 
    ```sh
@@ -546,7 +622,8 @@ The release operator must use a full lowercase 40-character commit SHA. The depl
 sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA --initial
 ```
 
-Upgrade (only after verifying a recovery-point backup and schema compatibility):
+Upgrade (only after verifying a recovery point and exact target/rollback
+compatibility; for schema 10, the v0.1.4 fallback is not compatible):
 
 ```sh
 sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py FULL_40_CHAR_SHA \

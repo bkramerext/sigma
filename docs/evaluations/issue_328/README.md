@@ -29,3 +29,17 @@ uv run --with playwright --no-sync python browser_checks/issue328_paper_progress
 The fixture-origin option exists only in `provider_fixture.py` and rewrites the
 origin for the test API to the already trusted local Vite origin. It is disabled
 by default. The browser captures are review examples, not production data.
+
+## Post-merge #337 regression update (2026-10-29)
+
+The corrected `browser_checks/issue328_paper_progress.py` passed real Chrome
+against a fresh isolated local fixture run (Vite `127.0.0.1:5182`, deterministic
+API `127.0.0.1:8012`, separate temporary project/auth/state directories).
+It verifies short-form writing progress and elapsed seconds, cancellation,
+explicit checkpoint reset before retry after an unknown one-shot attempt,
+successful retry/PDF, then active long-form progress, automatic durable
+recovery in a fresh tab after closing the original connection, and detached
+generation completion with a saved PDF. No local SIGMA server, production
+service, or paid provider was used. Screenshots in this directory are historical
+captures from the earlier test flow; the passing run wrote fresh captures under
+`/tmp/sigma-issue328-*.png`.

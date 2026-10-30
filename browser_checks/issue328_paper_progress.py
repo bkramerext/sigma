@@ -1,6 +1,7 @@
 """Real-Chrome paper progress, reconnect, retry and PDF check using local fixtures."""
 
 import os
+import re
 from urllib.parse import quote
 
 from playwright.sync_api import expect, sync_playwright
@@ -26,7 +27,7 @@ with sync_playwright() as playwright:
         """async () => {
           const body = {title: `T328 live paper progress ${Date.now()}`,
             problem: 'Prepare an evidence-bound research note from this saved question.',
-            investigation_type: 'mathematical', difficulty: 'easy'};
+            investigation_type: 'mathematical', difficulty: 'hard'};
           const response = await fetch('/api/projects/create', {method:'POST',
             headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
           return {status:response.status, body:await response.json()};
@@ -50,11 +51,16 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_have_css(
         "text-decoration-line", "underline"
     )
-    expect(status).to_contain_text("Elapsed")
+    expect(status).to_contain_text(re.compile(r"· \d+s"))
     page.screenshot(path="/tmp/sigma-issue328-short-progress.png", full_page=True)
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(status).to_contain_text("Generation cancelled", timeout=10000)
     expect(status).to_contain_text("Writing the paper")
+    expect(dialog).to_contain_text("last writing attempt did not save a draft")
+    dialog.get_by_role("button", name="Start over", exact=True).click()
+    expect(dialog.locator(".ai-paper-status:not(.ai-paper-progress)")).to_contain_text(
+        "Unfinished paper work cleared", timeout=10000
+    )
     generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=10000)
     generate.click()
@@ -69,7 +75,7 @@ with sync_playwright() as playwright:
         """async () => {
           const body = {title: `T328 long progress recovery ${Date.now()}`,
             problem: 'Review the saved observations and preserve uncertainty. '.repeat(200),
-            investigation_type: 'mathematical', difficulty: 'easy'};
+            investigation_type: 'mathematical', difficulty: 'hard'};
           const response = await fetch('/api/projects/create', {method:'POST',
             headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
           if (!response.ok) return {status:response.status, body:await response.json()};
@@ -78,7 +84,7 @@ with sync_playwright() as playwright:
             const strategy = await fetch('/api/projects/strategies', {method:'POST',
               headers:{'Content-Type':'application/json'}, body:JSON.stringify({
                 path:project.path, title:`Long evidence strategy ${index}`,
-                approach:'Compare the complete observation set, limitations, and next tests. '.repeat(220)})});
+                approach:'Compare the complete observation set, limitations, and next tests. '.repeat(280)})});
             if (!strategy.ok) return {status:strategy.status, body:await strategy.json()};
           }
           return {status:response.status, body:project};
@@ -86,6 +92,15 @@ with sync_playwright() as playwright:
     )
     assert created["status"] == 201, created
     long_path = created["body"]["path"]
+    preflight = page.evaluate(
+        """async path => {
+          const query = new URLSearchParams({path, long_form:'false'});
+          const response = await fetch('/api/projects/papers/preflight?' + query);
+          return {status:response.status, body:await response.json()};
+        }""",
+        long_path,
+    )
+    assert preflight["status"] == 200 and preflight["body"]["long_form"], preflight
     page.goto(UI_ORIGIN + "/project?path=" + quote(long_path, safe=""))
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
@@ -93,34 +108,33 @@ with sync_playwright() as playwright:
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
     progress = dialog.locator(".ai-paper-progress")
-    expect(progress).to_contain_text("Extracting evidence", timeout=20000)
-    expect(progress).to_contain_text("of")
+    expect(progress).to_contain_text("Planning the paper", timeout=20000)
     page.screenshot(path="/tmp/sigma-issue328-long-progress.png", full_page=True)
 
-    # A page reload drops the SSE connection. The next dialog reads the durable
-    # checkpoint and shows the last real operation instead of an empty busy state.
-    page.reload()
-    page.get_by_role("button", name="LaTeX research paper", exact=True).click()
+    # Closing the original tab drops its SSE connection. A fresh tab reads the
+    # durable checkpoint and recovers the active operation independently.
+    page.close()
+    page = context.new_page()
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(UI_ORIGIN + "/project?path=" + quote(long_path, safe=""))
+    # An active durable checkpoint should open the recovery dialog automatically.
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     progress = dialog.locator(".ai-paper-progress")
     expect(progress).to_be_visible(timeout=10000)
-    expect(progress).to_contain_text("Generation cancelled", timeout=10000)
-    expect(progress).to_contain_text("Elapsed")
+    # The server owns generation independently of the browser stream. Reconnect
+    # must recover the live operation, not mark it cancelled or replay it.
+    expect(progress).to_contain_text("Generating paper", timeout=10000)
+    expect(progress).to_contain_text(re.compile(r"· \d+s"))
     page.screenshot(path="/tmp/sigma-issue328-reconnected.png", full_page=True)
 
-    generate = dialog.get_by_role("button", name="Generate", exact=True)
-    expect(generate).to_be_enabled(timeout=20000)
-    generate.click()
-    expect(dialog.locator(".ai-paper-progress")).to_contain_text("Compiling PDF", timeout=60000)
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
     expect(card.get_by_role("link", name="Download PDF")).to_be_visible()
-    expect(dialog.get_by_role("status")).to_contain_text("Paper saved in Saved versions.")
     page.screenshot(path="/tmp/sigma-issue328-complete.png", full_page=True)
     assert not errors, errors
     context.close()
     browser.close()
 
 print(
-    "PASS T328 real Chrome: one-shot writing progress, evidence batching, persisted reconnect state, retry, PDF completion and saved versions; provider calls were served by the local deterministic fixture."
+    "PASS T328 real Chrome: one-shot progress/cancel/retry, active long-form progress recovery in a fresh tab, and detached completion with a saved PDF; provider calls were served by the local deterministic fixture."
 )
