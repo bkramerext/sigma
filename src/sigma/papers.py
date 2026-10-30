@@ -2568,9 +2568,7 @@ def _repair_paper_references(
         elif not sources and claim.status == "established":
             diagnostics.append(f"Claim {identity} had no saved evidence and was marked unresolved.")
         claims.append(
-            claim.model_copy(
-                update={"id": identity, "evidence_refs": sources, "status": status}
-            )
+            claim.model_copy(update={"id": identity, "evidence_refs": sources, "status": status})
         )
 
     claim_ids = {claim.id for claim in claims}
@@ -2586,13 +2584,13 @@ def _repair_paper_references(
     for section in paper.sections:
         section_claims = links(section.claim_ids, f"section {section.heading}")
         if isinstance(section, LongSectionPlan):
-            refs = list(dict.fromkeys(ref for ref in section.evidence_refs if ref in known_evidence))
+            refs = list(
+                dict.fromkeys(ref for ref in section.evidence_refs if ref in known_evidence)
+            )
             if not refs:
                 refs = list(
                     dict.fromkeys(
-                        ref
-                        for claim_id in section_claims
-                        for ref in claim_sources[claim_id]
+                        ref for claim_id in section_claims for ref in claim_sources[claim_id]
                     )
                 )[:40]
             if not refs and known_evidence:
@@ -3045,9 +3043,7 @@ Return the complete plan JSON matching the schema."""
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
     if fast_path:
         preview, excluded_from_planner = _fast_planner_preview(notes)
-        plan_input = _long_plan_input(
-            project_data, preview, len(source_ids), len(batches)
-        )
+        plan_input = _long_plan_input(project_data, preview, len(source_ids), len(batches))
         plan_input["index_origin"] = "bounded_outline_preview_from_structured_research"
         # A bounded preview is not the evidence limit. The planner may cite
         # additional indexed sources in section plans; those sections retrieve
@@ -3062,9 +3058,7 @@ Return the complete plan JSON matching the schema."""
     if state.get("plan"):
         try:
             long_plan = LongPaperPlan.model_validate(
-                _repair_paper_references(
-                    LongPaperPlan.model_validate(state["plan"]), indexed_refs
-                )
+                _repair_paper_references(LongPaperPlan.model_validate(state["plan"]), indexed_refs)
             )
             _validate_long_plan_references(long_plan, indexed_refs)
             if long_plan.model_dump() != state["plan"]:
@@ -3466,9 +3460,7 @@ async def _generate_impl(
                 await report("writing", None, None)
                 draft, model = await _provider(package, initial_auth, config, view.project.id, path)
                 draft = PaperDraft.model_validate(
-                    _repair_paper_references(
-                        draft, {item["id"] for item in package["sources"]}
-                    )
+                    _repair_paper_references(draft, {item["id"] for item in package["sources"]})
                 )
                 # Cache a repaired and validated draft so compiler recovery
                 # never needs another paid model request.
