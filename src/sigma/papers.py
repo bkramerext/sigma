@@ -3498,6 +3498,14 @@ state consequential evidence limitations once where they matter. Develop the sec
 argument without restating the introduction, other sections, or the same result. Write
 short, purposeful paragraphs, typically two to five sentences with one idea each; do not place
 a whole section into one paragraph. Favor economy and precision over rhetorical padding.
+Use the supplied paper-wide thesis and section-role map as editorial constraints.
+Advance this section's specific claim or analysis; do not re-explain background,
+methods, objections, or caveats assigned to other sections. Open with a substantive
+topic sentence explaining what this section contributes to the central argument.
+Close by stating what the evidence changes about that argument, without a generic
+summary or repeated provisional-status disclaimer. The paper-wide abstract and
+other section purposes provide structure, NOT additional factual evidence; support
+all claims only with this section's supplied research notes and original excerpts.
 Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical expression;
 write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
 or document markup."""
@@ -3530,6 +3538,19 @@ or document markup."""
             ],
             "section_number": section_number,
             "section_plan": section.model_dump(),
+            # Each section is authored independently (and may run concurrently).
+            # Share the whole paper's argument arc so separate calls do not each
+            # reintroduce the thesis, methods and the same limitations.
+            # This editorial map is not evidence and cannot authorize new claims.
+            "paper_wide_thesis": long_plan.abstract,
+            "paper_section_roles": [
+                {
+                    "number": index,
+                    "heading": planned.heading,
+                    "purpose": planned.purpose,
+                }
+                for index, planned in enumerate(long_plan.sections, start=1)
+            ],
             "evidence_notes": relevant,
         }
         if fast_path:
