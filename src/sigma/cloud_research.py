@@ -293,10 +293,6 @@ def _evaluation_queue_limits() -> tuple[int, int, int, int]:
     global_running = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 4)
     per_user_queued = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 4)
     global_queued = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_QUEUED", 16)
-    if global_running < per_user_running:
-        raise CloudResearchUnavailable(
-            "The global research concurrency limit cannot be lower than the per-user limit."
-        )
     return per_user_running, global_running, per_user_queued, global_queued
 
 
