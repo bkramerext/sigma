@@ -1221,13 +1221,45 @@ def _evidence_based_long_plan(
             "The fallback outline selected representative indexed sources; "
             "the complete frozen research snapshot remains available for review."
         )
-    abstract = (
-        f"This paper examines the research question: {question[:450]}. "
-        "It synthesizes saved observations, methods, unsuccessful approaches, "
-        "limitations, and open questions. Recorded claims are distinguished "
-        "from independently verified findings, and no unperformed experiments "
-        "or missing proof steps are presented as established results."
-    )[:1600]
+    # A failed paid planning call must not turn the paper into a generic status
+    # report. Build a *specific but qualified* abstract from the saved index;
+    # never infer a proof, experiment, or resolution from a result-shaped note.
+    def complete_excerpt(kind: str) -> str | None:
+        for note in notes:
+            if note.kind != kind:
+                continue
+            sentence = " ".join(note.statement.split())
+            if 24 <= len(sentence) <= 260 and sentence.endswith((".", "!", "?")):
+                return sentence
+        return None
+
+    first_question = re.split(r"(?<=[.!?])\\s+", question, maxsplit=1)[0]
+    if len(first_question) > 320 or not first_question.endswith((".", "!", "?")):
+        first_question = title.rstrip(".") + "."
+    reported_result = complete_excerpt("result")
+    recorded_failure = complete_excerpt("negative")
+    abstract_parts = [f"The investigation asks: {first_question}"]
+    if reported_result:
+        abstract_parts.append(
+            "The saved research reports a provisional finding, not independently "
+            f"verified here: {reported_result}"
+        )
+    else:
+        abstract_parts.append(
+            "The indexed saved evidence does not establish an independently "
+            "verified resolution of the question."
+        )
+    if recorded_failure:
+        abstract_parts.append(
+            "A consequential recorded limitation or unsuccessful approach is: "
+            + recorded_failure
+        )
+    abstract_parts.append(
+        "The analysis distinguishes recorded arguments from demonstrated "
+        "results, identifies remaining gaps, and does not claim experiments "
+        "or proof steps absent from the frozen record."
+    )
+    abstract = " ".join(abstract_parts)
     return LongPaperPlan(
         title=title,
         abstract=abstract,
