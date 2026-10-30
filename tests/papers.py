@@ -899,7 +899,7 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 include_research_excerpts,
             ):
                 assert include_research_details is False
-                assert include_claim_details is True
+                assert include_claim_details is False
                 assert include_validation_notes is False
                 assert include_research_excerpts is False
                 await progress(
