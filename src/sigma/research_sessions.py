@@ -4822,7 +4822,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
     # Convert only this exact terminal state to a paused, resumable session.
     if action == "resume" and _public(record).get("recoverable_clipped_response"):
         clipped = next(
-            step for step in reversed(record["steps"])
+            step
+            for step in reversed(record["steps"])
             if step.get("status") == "incomplete"
             and step.get("incomplete_reason") == "max_output_tokens"
         )
@@ -9210,7 +9211,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     record["status"] = "paused"
                     clipped_pause = next(
                         (
-                            branch for branch in context_paused
+                            branch
+                            for branch in context_paused
                             if branch.get("current_action") == "Paused · clipped response"
                         ),
                         None,
@@ -9221,8 +9223,8 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     record["message"] = (
                         clipped_pause.get("reason")
                         if clipped_pause
-                        else context_paused[0].get("reason") or
-                        "Research paused before dispatch because mandatory evidence exceeded the context bound."
+                        else context_paused[0].get("reason")
+                        or "Research paused before dispatch because mandatory evidence exceeded the context bound."
                     )
                     record["updated_at"] = _now()
                     record["outcome"] = _outcome(record)
