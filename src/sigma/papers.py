@@ -46,6 +46,7 @@ MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
 CALL_SECONDS = 120
+LONG_PAPER_STAGE_SECONDS = 300
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
 _CITATION_LIKE = re.compile(
@@ -116,8 +117,8 @@ class EvidenceBatchResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     notes: list[EvidenceNote] = Field(max_length=3)
     conflicts_or_gaps: list[EvidenceConflict] = Field(max_length=4)
-    covered_field_refs: list[str] = Field(default_factory=list, max_length=600)
-    omitted_fields: list[OmittedEvidenceField] = Field(default_factory=list, max_length=600)
+    covered_field_refs: list[str] = Field(max_length=600)
+    omitted_fields: list[OmittedEvidenceField] = Field(max_length=600)
 
 
 class LongSectionPlan(BaseModel):
@@ -1598,9 +1599,9 @@ async def _provider_structured(
         if attempt is not None:
             attempt.dispatched = True
         async with (
-            asyncio.timeout(CALL_SECONDS),
+            asyncio.timeout(LONG_PAPER_STAGE_SECONDS),
             httpx.AsyncClient(
-                timeout=CALL_SECONDS, trust_env=False, follow_redirects=False
+                timeout=LONG_PAPER_STAGE_SECONDS, trust_env=False, follow_redirects=False
             ) as client,
             client.stream(
                 "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload

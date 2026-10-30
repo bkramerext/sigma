@@ -57,6 +57,46 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
     )
 
 
+def test_strict_paper_response_schemas_require_every_property() -> None:
+    response_models = (
+        papers.PaperClaim,
+        papers.PaperSection,
+        papers.PaperDraft,
+        papers.EvidenceNote,
+        papers.OmittedEvidenceField,
+        papers.EvidenceConflict,
+        papers.EvidenceBatchResult,
+        papers.LongSectionPlan,
+        papers.LongPaperPlan,
+        papers.LongSectionDraft,
+    )
+
+    def check(node: object, path: str) -> None:
+        if not isinstance(node, dict):
+            return
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            assert node.get("additionalProperties") is False, path
+            assert set(properties) == set(node.get("required", [])), path
+            for name, child in properties.items():
+                check(child, f"{path}.{name}")
+        items = node.get("items")
+        if isinstance(items, dict):
+            check(items, f"{path}.items")
+        definitions = node.get("$defs")
+        if isinstance(definitions, dict):
+            for name, child in definitions.items():
+                check(child, f"{path}.$defs.{name}")
+        for keyword in ("anyOf", "oneOf", "allOf"):
+            variants = node.get(keyword)
+            if isinstance(variants, list):
+                for index, child in enumerate(variants):
+                    check(child, f"{path}.{keyword}[{index}]")
+
+    for response_model in response_models:
+        check(response_model.model_json_schema(), response_model.__name__)
+
+
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
     events = [
         {"type": "response.created", "sequence_number": 0, "response": {"id": "resp-paper"}},
@@ -130,6 +170,7 @@ def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
 
 def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
     requests: list[dict] = []
+    client_timeouts: list[float] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append(json.loads(request.content))
@@ -146,9 +187,14 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         )
 
     real_client = httpx.AsyncClient
+
+    def make_client(**kwargs):
+        client_timeouts.append(kwargs["timeout"])
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
     with patch(
         "sigma.papers.httpx.AsyncClient",
-        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+        side_effect=make_client,
     ):
 
         async def exercise() -> None:
@@ -180,6 +226,7 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         asyncio.run(exercise())
 
     assert len(requests) == 2  # one attempt per path; no retry/fallback
+    assert client_timeouts == [papers.CALL_SECONDS, papers.LONG_PAPER_STAGE_SECONDS]
     for request in requests:
         assert request["model"] == "gpt-6.1-sol"
         assert request["reasoning"] == {"effort": "high"}
@@ -493,6 +540,8 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
                                 )
                             ],
                             conflicts_or_gaps=[],
+                            covered_field_refs=[],
+                            omitted_fields=[],
                         ),
                         config["model"],
                     )
@@ -520,6 +569,7 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
                             else []
                         ),
                         covered_field_refs=[field["field_ref"] for field in fields],
+                        omitted_fields=[],
                     ),
                     config["model"],
                 )
@@ -952,6 +1002,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 
 
 def main() -> None:
+    test_strict_paper_response_schemas_require_every_property()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
