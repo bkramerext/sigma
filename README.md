@@ -8,6 +8,15 @@ A project contains a question, candidate strategies, research sessions, and save
 
 SIGMA does **not** establish that an answer is correct. Investigator and Skeptic currently use the same underlying model; their exchange is structured criticism, not independent validation. Model agreement and computational results are evidence to examine, not mathematical proof. The Riemann Hypothesis sample is an open problem, not a claimed solution. Whether persistent multi-agent investigation produces better-supported research than a simpler assistant given comparable resources remains unproven. See [Product Rationale](docs/PRODUCT_RATIONALE.md) and [Research Quality Charter](docs/RESEARCH_QUALITY_CHARTER.md).
 
+## Research papers
+
+Four examples of the research SIGMA can preserve and communicate, spanning proven arguments, partial results, and carefully stated hypotheses. **These papers are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its [TeX source](papers/).
+
+| | |
+| :--- | :--- |
+| **🧮 Mathematics · [Maximum Regions by Lines](papers/maximum-regions.pdf)**<br><br>A complete geometric argument for the greatest number of regions formed by straight lines, including an explicit construction attaining the bound.<br><br>**[Read the paper (PDF)](papers/maximum-regions.pdf)** | **🧮 Mathematics · [Nonconsecutive Subset Sums](papers/nonconsecutive-subset-sums.pdf)**<br><br>Exact enumeration and a corrected combinatorial identity, with an unproved recurrence and density limit clearly identified. TeX formatting was manually repaired for this example.<br><br>**[Read the paper (PDF)](papers/nonconsecutive-subset-sums.pdf)** |
+| **🧬 Biology · [Xenopus Tail Regeneration](papers/xenopus-tail-regeneration.pdf)**<br><br>A testable hypothesis about the developmental loss of regeneration competence, distinguishing what existing data might show from what remains untested.<br><br>**[Read the paper (PDF)](papers/xenopus-tail-regeneration.pdf)** | **🛡️ Military planning · [Operation Narrow Passage](papers/operation-narrow-passage.pdf)**<br><br>Conditional analysis of a fictional maritime crisis: competing objectives, uncertainty, and why no response can be guaranteed to succeed.<br><br>**[Read the paper (PDF)](papers/operation-narrow-passage.pdf)** |
+
 ## Using SIGMA
 
 Create a project or copy a sample, write or generate strategies, and select strategies for a research session. Configure research rounds, a shared maximum number of agent turns, duration, and optional spending limits. A round is an Investigator–Skeptic exchange for one strategy; the turn limit bounds the total agent contributions across strategies. A session can be stopped and its saved record reviewed or resumed where supported. Review its Outcome alongside findings, objections, experiments, and open questions. Reports and exports preserve records for inspection; they do not verify conclusions.
