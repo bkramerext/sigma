@@ -695,7 +695,12 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
     math = papers._latex_prose(r"Use $\sum_{j=1}^k j^2$ and $\omega^3=1$.")
     assert r"$\sum_{j=1}^k j^2$" in math
     assert r"$\omega^3=1$" in math
-    assert r"\[\sum_{j=1}^k j^2\]" in papers._latex_prose(r"$$\sum_{j=1}^k j^2$$")
+    assert r"$\sum_{j=1}^k j^2$" in papers._latex_prose(r"$\sum_{j=1}^k j^2$")
+    assert r"NF-$\kappa$B" in papers._latex_prose("NF-κB signaling")
+    delta = r"$\delta=\beta_{46}-\beta_{40}$"
+    integral = r"$P_i=\int_{1}^{6}N_i(t)\,dt$"
+    assert delta in papers._latex_prose(delta)
+    assert integral in papers._latex_prose(integral)
 
     paper = draft()
     sections = list(paper.sections)
@@ -889,8 +894,14 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 force_long_form,
                 expected_snapshot_sha256,
                 include_research_details,
+                include_claim_details,
+                include_validation_notes,
+                include_research_excerpts,
             ):
                 assert include_research_details is False
+                assert include_claim_details is False
+                assert include_validation_notes is False
+                assert include_research_excerpts is False
                 await progress(
                     {
                         "type": "progress",
@@ -3917,11 +3928,12 @@ def main() -> None:
         material_omissions=[
             {"field": "data/negative_findings", "source_ref": "session:xenopus-negative"}
         ],
+        include_research_excerpts=True,
     )
     assert r"\section{Structured reasoning and review records}" in integrity_tex
-    assert r"\section*{Important evidence coverage limitation}" in integrity_tex
+    assert r"\section*{Evidence coverage limitation}" in integrity_tex
     opening_heading = papers._paper_style("default")[0]
-    assert integrity_tex.index("Important evidence coverage limitation") < integrity_tex.index(
+    assert integrity_tex.index("Evidence coverage limitation") < integrity_tex.index(
         r"\section{" + opening_heading + "}"
     )
     material = papers._material_evidence_omissions(
@@ -3938,21 +3950,15 @@ def main() -> None:
     original_abstract = substantive.abstract
     original_conclusions = list(substantive.conclusions)
     limited = papers._apply_omission_limits(substantive, material)
-    assert limited.claims[0].status == "unresolved"
-    assert limited.abstract.startswith("IMPORTANT EVIDENCE COVERAGE LIMITATION:")
-    assert original_abstract in limited.abstract
-    assert "Provisional synthesis from covered evidence only" in limited.abstract
-    assert "were not reviewed for this paper" in limited.abstract
-    assert limited.conclusions[0].startswith("PROVISIONAL —")
-    assert original_conclusions[0] in limited.conclusions[0]
-    assert "omitted material was not reviewed" in limited.conclusions[0]
-    assert "IMPORTANT EVIDENCE COVERAGE LIMITATION" in limited.limitations[0]
-    assert "IMPORTANT EVIDENCE COVERAGE LIMITATION" in limited.validation_warnings[0]
+    # Coverage is disclosed without rewriting unrelated claims or the abstract.
+    assert limited.claims[0].status == substantive.claims[0].status
+    assert limited.abstract == original_abstract
+    assert limited.conclusions == original_conclusions
+    assert any("Evidence indexing omitted" in warning for warning in limited.validation_warnings)
     limited_math_tex = papers._tex(
         limited, [], "d" * 64, math_style=True, material_omissions=material
     )
-    assert "C1 -- Unresolved" in limited_math_tex
-    assert "Important evidence coverage limitation" in limited_math_tex
+    assert "Evidence coverage limitation" in limited_math_tex
     assert "were not reviewed for this paper" in limited_math_tex
     assert original_abstract in limited_math_tex
     assert original_conclusions[0] in limited_math_tex
