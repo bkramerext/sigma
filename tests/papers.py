@@ -686,16 +686,16 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
 def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
     """Readable PDF prose without losing math or overflowing the evidence appendix."""
     source = " ".join(
-        f"This is substantive statement {number}. It advances the argument."
-        for number in range(32)
+        f"This is substantive statement {number}. It advances the argument." for number in range(32)
     )
     paragraphs = papers._publication_paragraphs(source)
     assert len(paragraphs) >= 2
     assert " ".join(paragraphs) == source
 
     math = papers._latex_prose(r"Use $\sum_{j=1}^k j^2$ and $\omega^3=1$.")
-    assert r"\[\sum_{j=1}^k j^2\]" in math
+    assert r"$\sum_{j=1}^k j^2$" in math
     assert r"$\omega^3=1$" in math
+    assert r"\[\sum_{j=1}^k j^2\]" in papers._latex_prose(r"$\sum_{j=1}^k j^2$")
 
     paper = draft()
     sections = list(paper.sections)
@@ -847,7 +847,8 @@ def test_api_disconnect_preserves_running_paper_until_explicit_cancel(path: Path
             await queue.put({"type": "http.disconnect"})
             await asyncio.wait_for(serving, timeout=2)
             assert not cancelled.is_set(), "Browser disconnect must not cancel the provider"
-            assert papers.progress_status(str(path))["status"] == "active"
+            active_progress = papers.progress_status(str(path))
+            assert active_progress is not None and active_progress["status"] == "active"
             # A separate authenticated request, not the SSE connection, cancels.
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app), base_url="http://testserver"
@@ -866,7 +867,8 @@ def test_api_disconnect_preserves_running_paper_until_explicit_cancel(path: Path
             await asyncio.sleep(0)
         assert papers.list_papers(str(path)) == []
         assert not papers._gate.locked()
-        assert papers.progress_status(str(path))["status"] == "cancelled"
+        cancelled_progress = papers.progress_status(str(path))
+        assert cancelled_progress is not None and cancelled_progress["status"] == "cancelled"
 
     asyncio.run(check())
 
@@ -1354,6 +1356,7 @@ def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog(
                 ],
             }
         )
+
         async def section_only(input_value, _binding, _config, *, schema_name, **_kwargs):
             assert schema_name == "sigma_long_paper_section"
             return papers.LongSectionDraft(
@@ -2264,9 +2267,7 @@ def test_paper_failure_reason_survives_reopen() -> None:
         path = Path(directory) / "paper-failure.sigma"
         view = initialize_project(path, "Saved failure", "Why did the planning stage fail?")
         package, fingerprint = papers._snapshot(str(path))
-        work = papers._new_work(
-            fingerprint, view.project.id, "b" * 64, "fixture-model", "high"
-        )
+        work = papers._new_work(fingerprint, view.project.id, "b" * 64, "fixture-model", "high")
         work["frozen_package"] = package
         work["progress"] = {
             "run_id": "a" * 32,
@@ -2286,7 +2287,9 @@ def test_paper_failure_reason_survives_reopen() -> None:
         assert recovered["status"] == "failed"
         assert recovered["stage"] == "planning"
         assert recovered["failure_reason"] == reason
-        assert papers._load_work(str(path))["progress"]["failure_reason"] == reason
+        saved_work = papers._load_work(str(path))
+        assert saved_work is not None
+        assert saved_work["progress"]["failure_reason"] == reason
 
 
 def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> None:
@@ -2295,6 +2298,7 @@ def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> N
     state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
     state.update(
         {
+            "planning_fallback_pending": True,
             "evidence_strategy": "structured_v1",
             "evidence_indexed": True,
             "evidence_notes": [
@@ -2311,7 +2315,8 @@ def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> N
             ],
             "provider_calls": 1,
             "provider_calls_total": 1,
-            "progress": {"stage": "planning", "status": "failed"},
+            # A new run overwrites the stage before reaching long-form planning.
+            "progress": {"stage": "snapshot", "status": "running"},
         }
     )
     dispatched: list[str] = []
@@ -2336,6 +2341,7 @@ def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> N
         assert len(generated.sections) >= 2
         assert calls == 1 + len(generated.sections)
         assert state["plan"] is not None
+        assert "planning_fallback_pending" not in state
         assert any("planning stage did not" in x for x in generated.validation_warnings)
 
     asyncio.run(check())
