@@ -757,6 +757,7 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
                 "id": "paused-session",
                 "status": "paused",
                 "elapsed_seconds": 10,
+                "updated_at": "2026-10-29T01:00:00+00:00",
                 "outcome": {"summary": "Saved outcome"},
                 "artifacts": [{"id": "finding-1", "claim": "Saved claim"}],
             }
@@ -772,6 +773,7 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
             if source["id"] == "artifact:paused-session:finding-1"
         )["data"]["claim"]
         export["research_sessions"][0]["elapsed_seconds"] = 45
+        export["research_sessions"][0]["updated_at"] = "2026-10-29T03:00:00+00:00"
         second, second_hash = papers._snapshot("unused")
         export["research_sessions"][0]["artifacts"][0]["claim"] = "Changed saved claim"
         _third, third_hash = papers._snapshot("unused")
@@ -780,6 +782,7 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
     assert third_hash != second_hash
     session_source = next(source for source in second["sources"] if source["kind"] == "session")
     assert "elapsed_seconds" not in session_source["data"]
+    assert "updated_at" not in session_source["data"]
     assert original["research_sessions"][0]["artifacts"][0]["claim"] == "Saved claim"
     assert first_claim == "Saved claim"
 
