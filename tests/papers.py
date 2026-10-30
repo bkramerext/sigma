@@ -3554,11 +3554,12 @@ def test_summary_only_research_uses_zero_paid_evidence_extraction_calls() -> Non
 
 
 def test_long_paper_planning_timeout_is_stage_specific() -> None:
-    """All paper inference stages receive at least five minutes."""
-    assert papers.CALL_SECONDS == 300
-    assert papers._long_paper_call_timeout("sigma_long_paper_plan") == 300
-    assert papers._long_paper_call_timeout("sigma_long_paper_section") == papers.CALL_SECONDS
-    assert papers._long_paper_call_timeout("sigma_paper_evidence_batch") == papers.CALL_SECONDS
+    """Every paper inference stage allows a full hour for high-thinking models."""
+    assert papers.CALL_SECONDS == 3600
+    assert papers.PLANNING_CALL_SECONDS == 3600
+    assert papers._long_paper_call_timeout("sigma_long_paper_plan") == 3600
+    assert papers._long_paper_call_timeout("sigma_long_paper_section") == 3600
+    assert papers._long_paper_call_timeout("sigma_paper_evidence_batch") == 3600
 
     observed: list[float | int | httpx.Timeout] = []
 
@@ -3589,7 +3590,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
     with patch("sigma.papers.httpx.AsyncClient", side_effect=client_factory):
         asyncio.run(check())
-    assert observed == [300, papers.CALL_SECONDS]
+    assert observed == [3600, 3600]
 
 
 def main() -> None:
