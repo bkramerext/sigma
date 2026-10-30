@@ -64,9 +64,7 @@ export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
 ./sigma start --navigate --signin
 ```
 
-Use the **Google account whose verified email matches** the configured address. On a fresh local authentication database, its first successful sign-in binds the administrator identity to both the email address and Google's stable account subject. Later sign-ins must match that binding. This is **not** a first-visitor-wins administrator assignment.
-
-The initial bootstrap administrator remains recognized if `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` later changes; the newly configured contact can also receive administrator access after its verified identity signs in and is bound. Changing the contact does not revoke the original administrator. If the contact changes again, only the original bootstrap identity remains implicitly active; earlier later contacts retain their stored subject binding but no longer receive admin from the current setting. The retired `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` variable is unsupported and must be removed. Other users need appropriate membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth` separately from project files. Keep OAuth secrets out of version control; use a separate browser profile to test multiple identities.
+Sign in with the Google account matching `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to establish the local administrator. Other users require membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth`; keep OAuth secrets out of version control. Use a separate browser profile when testing multiple accounts.
 
 This is a **local authentication test**, not a hosted deployment. For hosted configuration and administrator operations, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). For a provider-free UI simulation of membership, allowances, and errors, see [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md). Mock identities are not real Google accounts and mock research is not AI inference.
 
