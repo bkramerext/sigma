@@ -1408,9 +1408,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
-  const [includeClaimDetails, setIncludeClaimDetails] = useState(true);
-  const [includeValidationNotes, setIncludeValidationNotes] = useState(false);
-  const [includeResearchExcerpts, setIncludeResearchExcerpts] = useState(false);
+  const [includeClaimDetails, setIncludeClaimDetails] = useState(() => window.localStorage.getItem('sigma.paper.claims:' + projectId) !== 'false');
+  const [includeValidationNotes, setIncludeValidationNotes] = useState(() => window.localStorage.getItem('sigma.paper.validation:' + projectId) === 'true');
+  const [includeResearchExcerpts, setIncludeResearchExcerpts] = useState(() => window.localStorage.getItem('sigma.paper.excerpts:' + projectId) === 'true');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
@@ -1685,9 +1685,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
       <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
       <p className="settings-hint">Paper generation may take five minutes or longer. Keep this dialog open to follow its progress.</p>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => setIncludeClaimDetails(event.target.checked)}/>Include claim details</label>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => setIncludeValidationNotes(event.target.checked)}/>Include validation notes</label>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => setIncludeResearchExcerpts(event.target.checked)}/>Include research excerpts</label>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include validation notes</label>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
           ? 'The last writing attempt did not save a draft. Start over to generate again.'
