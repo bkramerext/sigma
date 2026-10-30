@@ -1362,6 +1362,19 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   useEffect(() => {
     if (!busy && paperProgress?.status !== 'active') return;
+    const reopen = () => {
+      if (document.visibilityState !== 'hidden' && dialog.current && !dialog.current.open)
+        dialog.current.showModal();
+    };
+    window.addEventListener('pageshow', reopen);
+    document.addEventListener('visibilitychange', reopen);
+    return () => {
+      window.removeEventListener('pageshow', reopen);
+      document.removeEventListener('visibilitychange', reopen);
+    };
+  }, [busy, paperProgress?.status]);
+  useEffect(() => {
+    if (!busy && paperProgress?.status !== 'active') return;
     const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [busy, paperProgress?.status]);
@@ -1420,7 +1433,14 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       try {
         const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' });
         const body = await response.json();
-        if (!stopped && response.ok) setPaperProgress(body.progress ?? null);
+        if (!stopped && response.ok) {
+          const next = (body.progress ?? null) as PaperProgress | null;
+          setPaperProgress(next);
+          if (next?.status !== 'active') {
+            if (next?.status === 'complete') setSuccess('Paper saved in Saved versions.');
+            void refresh(selected?.paper_id);
+          }
+        }
       } catch { /* Keep the last saved operation visible until connectivity returns. */ }
     };
     const timer = window.setInterval(() => void poll(), 1000);
@@ -3541,6 +3561,27 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => {
+    if (!view || guest) return;
+    let disposed = false;
+    const recover = () => {
+      if (document.visibilityState === 'hidden') return;
+      void fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+          if (!disposed && data?.progress?.status === 'active') setPaperOpen(true);
+        })
+        .catch(() => { /* Offline: retry on next visibility event. */ });
+    };
+    recover();
+    window.addEventListener('pageshow', recover);
+    document.addEventListener('visibilitychange', recover);
+    return () => {
+      disposed = true;
+      window.removeEventListener('pageshow', recover);
+      document.removeEventListener('visibilitychange', recover);
+    };
+  }, [path, guest, view?.project.id]);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
