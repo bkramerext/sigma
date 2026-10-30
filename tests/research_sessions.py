@@ -8201,6 +8201,35 @@ def test_cost_limit_outcome_preserves_partial_cycle_reason() -> None:
     assert "conservative cost reserve" in outcome["caveats"][-1]
 
 
+def test_unknown_provider_attempt_keeps_held_session_cost() -> None:
+    record = {
+        "model": MODEL,
+        "cost_status": "unavailable",
+        "estimated_cost_usd": None,
+        "estimated_cost_reserved_usd": 0.24,
+        "steps": [
+            {
+                "status": "completed",
+                "token_usage": {
+                    "input_tokens": 10_000,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 4_000,
+                },
+            },
+            {"status": "failed", "attempt_status": "unknown"},
+        ],
+    }
+    step = {"cost_reserve": 0.24}
+
+    research_sessions._retain_unknown_cost_reservation(record, step)
+
+    assert record["cost_status"] == "available"
+    assert record["estimated_cost_usd"] == research_sessions._estimate_cost(
+        MODEL, record["steps"][0]["token_usage"]
+    )
+    assert record["estimated_cost_reserved_usd"] == 0.24
+
+
 def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     record = {
         "mode": "chatgpt",
@@ -8275,6 +8304,7 @@ def main():
     test_project_cost_denial_reports_affordable_first_call()
     test_outcome_includes_derived_execution_provenance()
     test_cost_limit_outcome_preserves_partial_cycle_reason()
+    test_unknown_provider_attempt_keeps_held_session_cost()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
