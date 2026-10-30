@@ -1,3 +1,19 @@
+## Paper-generation request timeout (2026-10-30)
+
+The one-shot academic-paper provider timeout is now 300 seconds, matching the
+existing staged long-paper timeout. A real SIGMA one-shot attempt against a
+compatible saved Maximum Regions project exceeded the former 120-second limit
+and published no paper; the explicit retry remains pending. Focused paper tests,
+Ruff, and formatting checks passed after the timeout change. No PDF was generated
+by this attempt.
+
+The UI's saved-paper metadata identifies Maximum Regions v2 in the local
+`sigma_green` workspace (project `01af8ffa-60c3-4eea-bc15-36dca347ddfa`) as the
+source of two existing saved papers. Their PDF contents were not opened or used.
+The coordinator's assigned Maximum Regions project copy is present in
+`sigma_blue`, but this checkout rejects its noncanonical change text, so it was
+not modified or migrated.
+
 ## Local sponsor renewal in Administrator Settings (2026-10-29)
 
 Administrator Settings now exposes a local-only **Renew sponsor ChatGPT
@@ -3711,7 +3727,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
-      <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
+      <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 300-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
       <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
       {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
         {checkpoint.resume_available

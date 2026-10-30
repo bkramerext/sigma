@@ -207,6 +207,8 @@ def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
 
 
 def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
+    assert papers.CALL_SECONDS == 300
+    assert papers.LONG_PAPER_STAGE_SECONDS == 300
     requests: list[dict] = []
     client_timeouts: list[float] = []
 

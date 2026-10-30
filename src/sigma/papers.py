@@ -45,7 +45,7 @@ MAX_CHATGPT_STREAM_BYTES = 4_000_000
 MAX_PAPER_BYTES = 100_000_000
 LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
-CALL_SECONDS = 120
+CALL_SECONDS = 300
 LONG_PAPER_STAGE_SECONDS = 300
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
