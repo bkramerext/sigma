@@ -1,4 +1,4 @@
-"""Fixture rehearsal for T129 candidate-build failure before activation."""
+"""Fixture rehearsal for T129 candidate-build failure and checkout recovery."""
 
 from __future__ import annotations
 
@@ -35,8 +35,10 @@ def main() -> None:
         marker = state / "fixture.sqlite"
         marker.write_bytes(b"persistent-fixture")
         calls: list[list[str]] = []
+        current_sha = old_sha
 
         def runner(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            nonlocal current_sha
             calls.append(argv)
             if argv[:1] == ["install"]:
                 Path(argv[-1]).write_bytes(Path(argv[-2]).read_bytes())
@@ -51,8 +53,11 @@ def main() -> None:
                 if argv[3] == "status":
                     return subprocess.CompletedProcess(argv, 0, "", "")
                 if argv[3] == "rev-parse":
-                    return subprocess.CompletedProcess(argv, 0, old_sha, "")
+                    return subprocess.CompletedProcess(argv, 0, current_sha, "")
                 if argv[3] in {"fetch", "cat-file"}:
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                if argv[3] == "checkout":
+                    current_sha = argv[-1]
                     return subprocess.CompletedProcess(argv, 0, "", "")
             raise AssertionError(f"unexpected release command: {argv}")
 
@@ -66,8 +71,14 @@ def main() -> None:
 
         assert deploy_env.read_bytes() == original_env
         assert marker.read_bytes() == b"persistent-fixture"
+        assert current_sha == old_sha
         assert not any(command[:2] == ["systemctl", "stop"] for command in calls)
-        assert not any(command[:4] == ["git", "-C", str(checkout), "checkout"] for command in calls)
+        checkouts = [
+            command[-1]
+            for command in calls
+            if command[:4] == ["git", "-C", str(checkout), "checkout"]
+        ]
+        assert checkouts == [candidate_sha, old_sha]
         assert (
             sum(
                 command[:2] == ["python3", str(checkout / "deploy/release_image.py")]

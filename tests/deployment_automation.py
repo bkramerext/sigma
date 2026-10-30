@@ -158,8 +158,7 @@ def main() -> None:
         checkout_index = next(
             index
             for index, argv in enumerate(calls)
-            if argv[:5] == ["git", "-C", str(repo), "checkout", "--detach"]
-            and argv[5] == NEW
+            if argv[:5] == ["git", "-C", str(repo), "checkout", "--detach"] and argv[5] == NEW
         )
         build_index = next(
             index

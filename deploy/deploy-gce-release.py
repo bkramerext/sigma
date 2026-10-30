@@ -242,6 +242,7 @@ class Deployment:
             # A preflight or build failure occurs before the release pin or
             # service changes. Restore the candidate checkout and leave the
             # running release entirely untouched.
+            service_recovery_needed = service_stopped or candidate_started
             if not (
                 service_stopped
                 or candidate_started
@@ -265,7 +266,7 @@ class Deployment:
                     _call(self.runner, ["systemctl", "start", "sigma.service"])
                 elif candidate_started:
                     _call(self.runner, ["systemctl", "restart", "sigma.service"])
-                if not initial:
+                if not initial and service_recovery_needed:
                     self.verify_health(previous)
             except (DeployFailure, OSError) as recovery_error:
                 raise DeployFailure(
