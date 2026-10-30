@@ -227,6 +227,7 @@
 .ai-paper-body > p { margin: 0; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-body > p.settings-hint { font-size: 14px; line-height: 1.55; }
 .ai-paper-body .ai-paper-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-restart-notice button + button { margin-left: 14px; }
 .project-settings-dialog.ai-paper-dialog .settings-body button:not(.saved-paper-expand) {
   width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
