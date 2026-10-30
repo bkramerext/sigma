@@ -2918,6 +2918,67 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert after["provider_calls_attempted"] == 0
 
 
+def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None:
+    """Local validation errors must not erase a complete paid author response."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "validation-recovery.sigma"
+        view = initialize_project(path, "Paper recovery", "Review the saved objective.")
+        account = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": account["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        provider_calls = 0
+        validations = 0
+        real_validate = papers._validate
+
+        async def provider(context, _account, _config, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            return draft(source), config["model"]
+
+        def validate(paper, package):
+            nonlocal validations
+            validations += 1
+            if validations == 1:
+                raise ProjectError("Transient local claim metadata check failed")
+            return real_validate(paper, package)
+
+        async def run() -> None:
+            with (
+                patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=account)),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=provider),
+                patch.object(papers, "_validate", new=validate),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                try:
+                    await papers.generate(str(path), account["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "metadata check" in str(exc)
+                else:
+                    raise AssertionError("The first validation was deliberately interrupted")
+                saved_work = papers._load_work(str(path))
+                assert saved_work is not None
+                assert saved_work["provider_calls"] == 1
+                assert saved_work["one_shot_draft"] is not None
+                result = await papers.generate(
+                    str(path), account["identity"], view.project.id
+                )
+                assert provider_calls == 1
+                saved = papers.get_paper(str(path), result["paper_id"])
+                assert saved["pdf_available"] is True
+                assert saved["generation"]["provider_calls_attempted"] == 1
+                assert papers._load_work(str(path)) is None
+
+        asyncio.run(run())
+
+
 def test_one_shot_publishes_with_repaired_claim_links() -> None:
     """A usable completed author draft is a paper, not a paid repair dialogue."""
     with TemporaryDirectory() as directory:
@@ -3248,6 +3309,7 @@ def main() -> None:
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
     test_one_shot_publishes_with_repaired_claim_links()
+    test_one_shot_validation_failure_preserves_paid_draft_for_continue()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
