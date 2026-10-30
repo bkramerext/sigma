@@ -3062,6 +3062,57 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
         asyncio.run(run())
 
 
+def test_live_research_change_does_not_discard_completed_paper() -> None:
+    """A paper cites its frozen input even when unrelated saved research advances."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "research-advanced.sigma"
+        view = initialize_project(path, "Frozen paper", "Study saved evidence.")
+        identity = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": identity["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        original, original_hash = papers._snapshot(str(path))
+        advanced = copy.deepcopy(original)
+        advanced["sources"][0]["data"]["title"] = "Research advanced while authoring"
+        advanced_hash = papers.hashlib.sha256(papers._json(advanced)).hexdigest()
+        assert advanced_hash != original_hash
+        calls = 0
+        snapshots = 0
+
+        def changing_snapshot(_path):
+            nonlocal snapshots
+            snapshots += 1
+            return (original, original_hash) if snapshots == 1 else (advanced, advanced_hash)
+
+        async def provider(_context, *_args):
+            nonlocal calls
+            calls += 1
+            return draft(original["sources"][0]["id"]), config["model"]
+
+        with (
+            patch.object(papers, "_snapshot", side_effect=changing_snapshot),
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=identity)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=provider),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            completed = asyncio.run(
+                papers.generate(str(path), identity["identity"], view.project.id)
+            )
+
+        saved = papers.get_paper(str(path), completed["paper_id"])
+        assert calls == 1
+        assert saved["snapshot_sha256"] == original_hash
+        assert saved["snapshot"] == original
+        assert saved["generation"]["research_changed_during_generation"] is True
+        assert papers._load_work(str(path)) is None
+
+
 def test_one_shot_publishes_with_repaired_claim_links() -> None:
     """A usable completed author draft is a paper, not a paid repair dialogue."""
     with TemporaryDirectory() as directory:
@@ -3393,6 +3444,7 @@ def main() -> None:
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
     test_one_shot_publishes_with_repaired_claim_links()
+    test_live_research_change_does_not_discard_completed_paper()
     test_one_shot_validation_failure_preserves_paid_draft_for_continue()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
