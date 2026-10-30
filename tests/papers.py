@@ -658,11 +658,11 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         **opts,
     )
     for required in (
-        r"\\begin{abstract}",
-        r"\\section{Interpretation}",
-        r"\\section{Open obligations}",
-        r"\\section{Verification status and limitations}",
-        r"\\section{Conclusion}",
+        r"\begin{abstract}",
+        r"\section{Interpretation}",
+        r"\section{Open obligations}",
+        r"\section{Verification status and limitations}",
+        r"\section{Conclusion}",
         "This paper does not establish a formal proof.",
     ):
         assert required in concise and required in detailed, required
@@ -680,7 +680,7 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         assert diagnostic in detailed, diagnostic
     assert "Confirm the missing proof step." not in concise
     assert "Confirm the missing proof step." in detailed
-    assert r"\\section*{Authorship note}" in concise
+    assert r"\section*{Authorship note}" in concise
 
 
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
