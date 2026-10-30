@@ -3056,8 +3056,15 @@ Return the complete plan JSON matching the schema."""
     long_plan: LongPaperPlan | None = None
     if state.get("plan"):
         try:
-            long_plan = LongPaperPlan.model_validate(state["plan"])
+            long_plan = LongPaperPlan.model_validate(
+                _repair_paper_references(
+                    LongPaperPlan.model_validate(state["plan"]), indexed_refs
+                )
+            )
             _validate_long_plan_references(long_plan, indexed_refs)
+            if long_plan.model_dump() != state["plan"]:
+                state["plan"] = long_plan.model_dump()
+                save_state(state)
         except (ProjectError, ValidationError):
             # Older versions saved some invalid outlines *before* checking IDs.
             # An explicit Continue is allowed to retry just the plan, not discard
@@ -3083,16 +3090,10 @@ Return the complete plan JSON matching the schema."""
             max_input_bytes=220_000,
             legacy=not fast_path,
         )
-        long_plan = LongPaperPlan.model_validate(plan)
-        try:
-            _validate_long_plan_references(long_plan, indexed_refs)
-        except ProjectError as exc:
-            # A completed but semantically invalid plan consumed its accounted
-            # call. Never checkpoint it or automatically dispatch another.
-            raise ProjectError(
-                f"{exc}. The invalid outline was not saved. Choose Retry paper "
-                "planning to request a new outline; that call may use allowance."
-            ) from exc
+        long_plan = LongPaperPlan.model_validate(
+            _repair_paper_references(LongPaperPlan.model_validate(plan), indexed_refs)
+        )
+        _validate_long_plan_references(long_plan, indexed_refs)
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
         save_state(state)
         if progress:
@@ -3459,8 +3460,13 @@ async def _generate_impl(
                 _save_work(path, work)
                 await report("writing", None, None)
                 draft, model = await _provider(package, initial_auth, config, view.project.id, path)
-                # Cache only drafts that pass the evidence-integrity checks, so
-                # a compiler retry cannot reuse an invalid result.
+                draft = PaperDraft.model_validate(
+                    _repair_paper_references(
+                        draft, {item["id"] for item in package["sources"]}
+                    )
+                )
+                # Cache a repaired and validated draft so compiler recovery
+                # never needs another paid model request.
                 await report("validation", None, None)
                 _validate(draft, package)
                 one_shot_validation_started = True
@@ -3498,6 +3504,9 @@ async def _generate_impl(
         )
         if material_omissions:
             draft = _apply_omission_limits(draft, material_omissions)
+        draft = PaperDraft.model_validate(
+            _repair_paper_references(draft, {item["id"] for item in package["sources"]})
+        )
         validation_warnings = _validate(draft, package)
         obligation_reconciliation = _reconcile_obligations(draft, package)
         await report("validation", None, None, "milestone")
