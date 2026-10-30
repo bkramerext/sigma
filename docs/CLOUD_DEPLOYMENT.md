@@ -23,8 +23,8 @@ proposal into the production project.
 | State disk | `sigma-state`, 30 GB `pd-balanced`, `us-west1-b` | Mounted at `/srv/sigma-state`; UUID-backed mount survived reboot. Never format this existing disk. |
 | Public address and DNS | `136.66.128.82`; `sigma-research.duckdns.org` | DNS, public HTTPS and API probe passed. Public TCP 80/443 terminate at host Caddy; SSH is IAP-only. |
 | Runtime identity | `sigma-runtime` service account | Attached and used. Its full effective IAM grants have not been independently audited. |
-| Deployed release | `2761c0e12190807bafabe58445d6beac479140c4` (v0.1.4 source SHA) | Status reports host checkout, configured release and backend/frontend image labels match; all three containers healthy. PR #321 merge commit `6fa626bdfc1f07cb873103dfed2323864d4fb280` is not the deployed source SHA. |
-| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Snapshot creation observed. A restore drill of this exact snapshot was not done. The daily backup timer and `/etc/sigma/backup.env` are absent. An earlier snapshot clone passed the offline restore verifier; see Status and Runbook. |
+| Deployed release | `6fa626bdfc1f07cb873103dfed2323864d4fb280` (v0.1.4) | Read-only GCE inspection on 2026-10-29 confirmed configured release and backend/frontend image labels match; all three containers healthy. This differs from the previously recorded `2761c0e12190807bafabe58445d6beac479140c4`; reconcile release-record/history provenance before cutover. |
+| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Read-only GCE inspection on 2026-10-29 confirmed READY and `sigma-state` source. A restore drill of this exact snapshot was not done. The daily backup timer and `/etc/sigma/backup.env` are absent. An earlier snapshot clone passed the offline restore verifier; see Status and Runbook. |
 | Billing and current spend | Unknown | Prior console screenshots and estimates are historical observations, not current billing evidence. Budget alerts do not cap charges. OpenAI billing is separate from GCP. |
 
 The production endpoint reported hosted auth ready with `mock_auth=false`;
