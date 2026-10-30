@@ -1333,6 +1333,10 @@ function paperTimingLabel(progress: PaperProgress, now: number): string {
   return paperElapsed(seconds);
 }
 
+function paperRecoveryKey(projectId: string): string {
+  return `sigma.paperGenerationOpen:${projectId}`;
+}
+
 function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -1389,6 +1393,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
+      const generationRunning = savedProgress?.progress?.status === 'active';
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
@@ -1408,11 +1413,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         );
         setContinuationAvailable(resumable);
         setResumeDetails(resumable ? preflight : null);
-        if (preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
+        if (!generationRunning && preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
           setCheckpointMismatch(preflight);
         else setCheckpointMismatch(null);
         setRestartableCheckpoint(
-          preflightResponse.ok && preflight.checkpoint_exists &&
+          !generationRunning && preflightResponse.ok && preflight.checkpoint_exists &&
           preflight.checkpoint_can_restart ? preflight : null
         );
       }
@@ -1437,8 +1442,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           const next = (body.progress ?? null) as PaperProgress | null;
           setPaperProgress(next);
           if (next?.status !== 'active') {
-            if (next?.status === 'complete') setSuccess('Paper saved in Saved versions.');
-            void refresh(selected?.paper_id);
+            // A completed paper clears its checkpoint, so progress may now be
+            // null. Reload saved versions rather than displaying stale status.
+            void refresh();
           }
         }
       } catch { /* Keep the last saved operation visible until connectivity returns. */ }
@@ -1537,6 +1543,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
         : 'Generating paper…');
       requestDispatched = true;
+      window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_research_details: includeResearchDetails }) });
       if (!response.ok) {
@@ -3569,7 +3576,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       void fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' })
         .then(response => response.ok ? response.json() : null)
         .then(data => {
-          if (!disposed && data?.progress?.status === 'active') setPaperOpen(true);
+          if (!disposed && (
+            data?.progress?.status === 'active' ||
+            window.localStorage.getItem(paperRecoveryKey(view.project.id)) === '1'
+          )) setPaperOpen(true);
         })
         .catch(() => { /* Offline: retry on next visibility event. */ });
     };
@@ -3928,6 +3938,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
+        window.localStorage.removeItem(paperRecoveryKey(project.id));
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />
