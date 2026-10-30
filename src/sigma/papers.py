@@ -90,6 +90,9 @@ PLANNING_CALL_SECONDS = 300
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
 _active_progress: dict[str, dict[str, Any]] = {}
+# Hold strong references to running authoring tasks independently of SSE clients.
+# Losing a browser connection must never cancel an already dispatched AI call.
+_generation_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 _CITATION_LIKE = re.compile(
     r"\[[0-9]{1,3}\]|\b(?:doi\s*:|arxiv\s*:|https?://)|\([A-Z][A-Za-z-]+(?:\s+et\s+al\.)?,?\s+20[0-9]{2}[a-z]?\)"
 )
@@ -3831,7 +3834,11 @@ async def generate(
     expected_snapshot_sha256: str | None = None,
     include_research_details: bool = False,
 ) -> dict[str, Any]:
-    """Run one generation task so activity cleanup is independent of its caller."""
+    """Run independently of a browser stream, with explicit cancellation only."""
+    key = str(project_path(path).resolve())
+    current = _generation_tasks.get(key)
+    if current is not None and not current.done():
+        raise ProjectError("A paper generation is already active for this project")
     task = asyncio.create_task(
         _generate_impl(
             path,
@@ -3843,6 +3850,7 @@ async def generate(
             include_research_details,
         )
     )
+    _generation_tasks[key] = task
     try:
         return await task
     except asyncio.CancelledError:
@@ -3853,6 +3861,20 @@ async def generate(
     except Exception:
         finish_progress(path, "failed")
         raise
+    finally:
+        if _generation_tasks.get(key) is task:
+            _generation_tasks.pop(key, None)
+
+
+async def cancel_generation(path: str) -> bool:
+    """Explicitly cancel this project's active generation, not a disconnected viewer."""
+    key = str(project_path(path).resolve())
+    task = _generation_tasks.get(key)
+    if task is None or task.done():
+        return False
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    return True
 
 
 def preflight(
