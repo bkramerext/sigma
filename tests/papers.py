@@ -3135,7 +3135,7 @@ def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
             fingerprint,
             view.project.id,
             papers.hashlib.sha256(
-                (identity["mode"] + "\\0" + identity["identity"]).encode()
+                (identity["mode"] + "\0" + identity["identity"]).encode()
             ).hexdigest(),
             config["model"],
             config["reasoning_effort"],
