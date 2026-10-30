@@ -56,7 +56,7 @@ with sync_playwright() as playwright:
     project_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     assert project_path
     before = page.request.get(
-        UI + "/api/projects/inspect?path=" + quote(project_path, safe="")
+        API + "/api/projects/inspect?path=" + quote(project_path, safe="")
     ).json()
     old_total = len(before["project"]["strategies"])
     action = understanding.get_by_role("button", name=f"Infer strategy #{old_total + 1}")
@@ -127,7 +127,7 @@ with sync_playwright() as playwright:
     ).to_be_visible()
     expect(page.locator(".strategy-row").filter(has_text=INFERRED["title"])).to_have_count(0)
     after = page.request.get(
-        UI + "/api/projects/inspect?path=" + quote(project_path, safe="")
+        API + "/api/projects/inspect?path=" + quote(project_path, safe="")
     ).json()
     assert any(
         item["title"] == INFERRED["title"] and item["removed_at"]

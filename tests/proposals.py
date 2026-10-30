@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import threading
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi.testclient import TestClient
 
-from sigma import chatgpt_auth, openai_connection, proposals, research_sessions
+from sigma import chatgpt_auth, openai_connection, projects, proposals, research_sessions
 from sigma.api import app
 from sigma.projects import (
     ProjectError,
@@ -127,6 +128,7 @@ async def check(path):
         "summary": "Test whether a compactness argument controls the unresolved boundary case.",
         "approach": "Formalize a compactness hypothesis from the unresolved boundary findings and test it on the extremal parameter family. Treat any successful computation as evidence, not proof.",
     }
+    expected_inference_session_count = 2
 
     async def handler(request):
         if request.method == "GET":
@@ -145,7 +147,10 @@ async def check(path):
         assert payload["max_output_tokens"] == 8000
         if "Infer exactly one useful" in payload["instructions"]:
             context = json.loads(payload["input"])
-            assert context["current_understanding"]["session_count"] == 2
+            assert (
+                context["current_understanding"]["session_count"]
+                == expected_inference_session_count
+            )
             assert len(context["existing_strategies_including_disabled"]) >= 1
             calls.append(payload)
             inference_calls.append(payload)
@@ -739,7 +744,108 @@ async def check(path):
             assert commit_race.json()["strategy"]["title"] == inference_output["title"]
             assert writer_finished.wait(3)
             assert len(inference_calls) == before_commit_race + 1
+
+            # A terminal-session deletion must take the same project lock as
+            # the inference commit. Hold the delete lock while the real API
+            # request reaches candidate persistence, then let deletion win.
+            deletion_session_id = "00000000-0000-4000-8000-000000000002"
+            deletion_record = research_sessions._read(str(path), deletion_session_id)
+            deletion_record["updated_at"] = "2026-01-02T00:00:00+00:00"
+            research_sessions._save(str(path), deletion_record)
+            deletion_locked = threading.Event()
+            release_deletion = threading.Event()
+            provider_finished = threading.Event()
+            inference_waiting_for_lock = threading.Event()
+            deletion_finished = threading.Event()
+            deletion_result = []
+            deletion_error = []
+            real_project_write_lock = projects.project_write_lock
+
+            @contextmanager
+            def observed_project_write_lock(value):
+                if threading.current_thread().name == "session-delete-fixture":
+                    with real_project_write_lock(value) as locked_path:
+                        deletion_locked.set()
+                        if not release_deletion.wait(8):
+                            raise AssertionError("test did not release the session-delete lock")
+                        yield locked_path
+                else:
+                    if provider_finished.is_set():
+                        inference_waiting_for_lock.set()
+                    with real_project_write_lock(value) as locked_path:
+                        yield locked_path
+
+            def delete_terminal_session():
+                try:
+                    deletion_result.append(
+                        research_sessions._remove_terminal_session(
+                            str(path), deletion_session_id, deletion_record["updated_at"]
+                        )
+                    )
+                except (ProjectError, OSError, AssertionError) as exc:
+                    deletion_error.append(exc)
+                finally:
+                    deletion_finished.set()
+
+            async def wait_for_session_delete():
+                threading.Thread(
+                    target=delete_terminal_session,
+                    name="session-delete-fixture",
+                    daemon=True,
+                ).start()
+                assert deletion_locked.wait(5), "session deletion never acquired project write lock"
+                provider_finished.set()
+
+            inference_output.update(
+                title="Boundary deletion race direction",
+                summary="Test the effect of deleting unresolved boundary evidence concurrently.",
+                approach="Compare the boundary conclusion with an independently derived compactness estimate, then check the estimate on small cases without treating computation as proof.",
+            )
+            deletion_race_id = "00000000-0000-4000-8000-000000000349"
+            deletion_request_body = inference_request(deletion_race_id)
+            before_deletion_race = len(inference_calls)
+            inference_hook = wait_for_session_delete
+            with (
+                patch(
+                    "sigma.projects.project_write_lock",
+                    side_effect=observed_project_write_lock,
+                ),
+                patch(
+                    "sigma.proposals.project_write_lock",
+                    side_effect=observed_project_write_lock,
+                ),
+                concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor,
+            ):
+                deletion_race = executor.submit(
+                    api.post,
+                    "/api/projects/strategy-inference",
+                    json=deletion_request_body,
+                )
+                assert inference_waiting_for_lock.wait(5), (
+                    "inference did not block behind session deletion's write lock"
+                )
+                release_deletion.set()
+                deletion_response = deletion_race.result(timeout=8)
+            inference_hook = None
+            assert deletion_finished.wait(3), "session deletion deadlocked"
+            assert not deletion_error, deletion_error
+            assert deletion_result and deletion_result[0]["removed"]
+            assert deletion_session_id not in {
+                row["id"] for row in research_sessions._all(str(path))
+            }
+            expected_inference_session_count = 1
+            assert deletion_response.status_code >= 400, deletion_response.text
+            assert not any(
+                row.provenance and row.provenance.inference_request_id == deletion_race_id
+                for row in inspect_project(path).project.strategies
+            ), "stale inference strategy was saved after its source session was deleted"
+            assert len(inference_calls) == before_deletion_race + 1
+            # Restore the fixture for the independent Generate scenarios below.
+            research_sessions._save(str(path), deletion_record)
+            expected_inference_session_count = 2
+
             unchanged_after_remove = (path / "project.json").read_bytes()
+            inference_output.update(title="", summary="", approach="")
             no_novel = api.post(
                 "/api/projects/strategy-inference",
                 json={
@@ -754,7 +860,6 @@ async def check(path):
             )
             assert no_novel.status_code == 200 and no_novel.json()["strategy"] is None
             assert (path / "project.json").read_bytes() == unchanged_after_remove
-            inference_output.clear()
             inference_output["title"] = "Incomplete structured output"
             invalid = api.post(
                 "/api/projects/strategy-inference",
@@ -801,7 +906,7 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(inference_calls) == 13
+        assert len(inference_calls) == 14
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",

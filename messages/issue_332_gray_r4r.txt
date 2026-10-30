@@ -30,6 +30,21 @@ No live or paid provider call was made. No inference call was made outside deter
 
 The GitHub `verify` job for the original reviewed PR head `27968e00...` failed in `tests/research_sessions.py:4766` because the expected event was missing. I ran the same test on a clean detached worktree at the PR parent (`0253b2a3...`) with the local locked environment; it passed. The same test also passed on the PR worktree. The full `./sigma test` runs on this corrected branch passed `tests/research_sessions.py` twice. This supports classifying the CI result as an intermittent baseline/flaky failure rather than a deterministic regression, but does not prove the cause; only one clean-parent run and local PR runs were available. No unrelated research-session code was changed to mask it. The corrected branch's GitHub CI result remains to be observed after push.
 
+## Follow-up review: serialize session deletion
+
+The additional review found that `_remove_terminal_session` deleted the persisted evidence record under `_project_manager_lock` only. It now acquires `project_write_lock` inside that manager lock, preserving manager → project-write order. Both directory projects and single-file bundles share this path. `remove_session` funnels through it; the other session-file removals found are cleanup of an unpublished, partial sample copy, not deletion of an active project's Current Understanding evidence.
+
+A deterministic inference regression holds the deletion lock while the real inference endpoint reaches provider-result persistence. Inference blocks on the project-write lock; deletion removes the source session and releases both locks; inference then rechecks Current Understanding, rejects the stale context, and does not save a strategy. Timeout assertions verify that deletion and inference complete without deadlock. The fixture restores its session for later independent Generate checks.
+
+Additional verification:
+
+- `uv run --locked --no-sync python tests/project_bundle.py` — passed bundle round-trip and safety checks.
+- `uv run --locked --no-sync python tests/research_sessions.py` — passed persistent research-session scenarios, including the existing terminal deletion flow.
+- `uv run --locked --no-sync python tests/proposals.py` — passed the new deterministic delete-versus-inference commit regression and all existing inference cases.
+- Real Chrome `browser_checks/issue332_infer_strategy.py` — passed again with the real inference API and deterministic loopback provider; temporary API, provider, and Vite services were stopped by the cleanup trap.
+- `uv run --locked --no-sync pyright src/sigma/research_sessions.py tests/proposals.py` — passed, 0 diagnostics.
+- `./sigma test` — passed all steps on the final follow-up tree, including the research-session and inference regressions, Ruff, format, Pyright, frontend typecheck, and production build. The graph-present sandbox subcase remained skipped because the local image is unavailable; Vite emitted its existing >500 kB chunk advisory.
+
 ## Remaining unverified conditions
 
 - The local graph-present sandbox execution was skipped because the preconfigured image is unavailable.
