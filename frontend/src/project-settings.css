@@ -242,9 +242,11 @@
 .project-settings-dialog.ai-paper-dialog .saved-paper-expand h4 { text-decoration: underline; text-underline-offset: 3px; }
 .ai-paper-body select { width: 100%; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-long-form,
-.project-settings-dialog.ai-paper-dialog .ai-paper-open-tab { display: flex; align-items: center; gap: 8px; margin: 0; color: #dce7f0; font-size: 14px; line-height: 1.4; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-open-tab,
+.project-settings-dialog.ai-paper-dialog .ai-paper-details { display: flex; align-items: center; gap: 8px; margin: 0; color: #dce7f0; font-size: 14px; line-height: 1.4; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-long-form input,
-.project-settings-dialog.ai-paper-dialog .ai-paper-open-tab input { width: auto; margin: 0; accent-color: #d9a66c; }
+.project-settings-dialog.ai-paper-dialog .ai-paper-open-tab input,
+.project-settings-dialog.ai-paper-dialog .ai-paper-details input { width: auto; margin: 0; accent-color: #d9a66c; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-open-tab { color: #b9c4cf; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-status { margin: 0; font-size: 14px; line-height: 1.5; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-progress { display: grid; gap: 2px; padding: 8px 10px; border-left: 2px solid var(--accent, #72a7b8); background: rgba(255,255,255,.035); }
