@@ -432,3 +432,52 @@ Day 8 didn't end with the smooth first-user demonstration I had hoped for. Green
 But the day changed how I thought about readiness. The standard wasn't whether a feature existed or whether a test passed. It was whether the application behaved correctly when a person used it, whether failures could be understood, and whether the system could recover without losing work or miscounting money.
 
 The ambition to do serious research hadn't diminished. We had simply become more precise about what needed to be trustworthy before we asked SIGMA to attempt it.
+
+
+## Day 9 — October 29, 2026
+
+**Theme: Making the Research Publishable** — Turning accumulated investigations into papers without losing their meaning.
+
+By Day 9, SIGMA could do more than run research sessions. It could preserve their work, and we were getting close to a version I could put in someone else's hands. But one conspicuous gap remained: the system needed to turn a project's investigations into a coherent paper.
+
+That sounds like a formatting task. It isn't. A project may contain multiple sessions, several strategies, contradictory findings, incomplete attempts, and useful ideas that never became the final answer. The paper needs to understand that body of work rather than simply print the latest session or declare one session a winner.
+
+### A paper isn't a transcript
+
+We refined the paper-generation process around a principle I wanted to preserve: research sessions aren't a collection of “winning and losing sessions.” Even an unsuccessful investigation can contain an insight, a counterexample, or a limitation that matters to the final account.
+
+The system needed to synthesize evidence across the project, plan a narrative, write sections, and then typeset and compile the result. We also discussed whether a structured representation between research evidence and TeX would make the system less vulnerable to formatting problems. TeX is good at typesetting, but it shouldn't have to carry all the responsibility for organizing scientific claims.
+
+I wanted the output to read like a paper, not a system log. That meant reducing repetitive process commentary, keeping implementation minutiae out of the main argument, and making additional detail an explicit option. We introduced an extra-detail checkbox rather than assuming every generated paper should expose the machinery behind its production.
+
+### The cost of waiting without knowing
+
+The first paper runs made a different problem painfully visible: long stretches of **“Writing paper...”** with little indication of what was happening.
+
+We worked on finer-grained progress reporting, retries, and recovery so the UI could distinguish planning, writing, typesetting, and compilation. I also insisted that paper generation remain robust when a section was imperfect. A logical concern or an uncertain claim should be represented honestly in the paper; it shouldn't automatically abort the entire operation after several minutes of waiting.
+
+The five-minute timeout was especially frustrating. A large paper can legitimately take longer than that. We discussed raising the limit substantially and ensuring that an interrupted browser or closed laptop didn't throw away completed work. The goal was not to promise instant generation. It was to make a long-running operation comprehensible and recoverable.
+
+### Four very different tests
+
+We exercised the pipeline against four projects: **Maximum Regions Formed by Lines**, **Nonconsecutive Subset Sums Modulo 3**, **Xenopus Tadpoles**, and **Operation Narrow Passage**.
+
+The range was deliberate. The first two required mathematical exposition and careful notation. Tadpoles demanded a scientific narrative. Operation Narrow Passage was a military-planning investigation, not a math problem, and its paper needed a different style. A generic template that happened to work for one subject wasn't enough.
+
+We inspected both the PDFs and their underlying TeX. The iterations exposed missing or weak abstracts, repetition, typography and escaping problems, citation weaknesses, and evidence that wasn't always carried cleanly into the final narrative. Some runs looked promising; others needed another round. We kept iterating instead of mistaking successful PDF compilation for a successful paper.
+
+Blue's paper-quality work moved through successive rounds, with improvements to section planning, evidence handling, and fallbacks. By the end of the day, the work was converging, but it wasn't yet the moment to claim the papers were final. We were aiming for one more disciplined round rather than endless polishing.
+
+### Keeping changes reviewable
+
+The paper work happened alongside the rest of the software factory. We continued coordinating branches, reviewing PRs, and keeping deployment separate from active development. Gray's work on research-session strategy inference also received scrutiny: a session being deleted while inference was in flight exposed a locking race that needed correction before the work could be considered safe.
+
+Those are easy details to overlook when attention is on the visible result. But the credibility of a generated paper depends on the reliability of the machinery beneath it: which evidence was used, whether work survived interruption, and whether concurrent operations could corrupt the state being summarized.
+
+### Day 9 retrospective
+
+Day 9 changed the standard for paper generation. Producing a PDF was only the beginning. The output needed to make sense to a reader, respect the project's evidence, fit the subject matter, and avoid exposing every internal detail as if it were a research result.
+
+It also reinforced a broader lesson from the week: a feature that works under ideal conditions isn't finished if ordinary use makes it confusing or brittle. Progress reporting, timeouts, retries, and recovery aren't decorations around the research. They determine whether a person can trust the process enough to let it run.
+
+We ended the day closer to a publishable account of SIGMA's work, but still with an important final evaluation ahead. I wanted the next round to be decisive, and I wanted to judge the papers by what they communicated—not merely by whether they compiled.
