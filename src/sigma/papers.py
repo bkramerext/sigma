@@ -3719,7 +3719,7 @@ async def _generate_impl(
                     else provider_calls
                 ),
                 "progress_run_id": run_id,
-                 "generation_elapsed_seconds": int(
+                "generation_elapsed_seconds": int(
                     elapsed_before
                     + max(
                         0,
@@ -3901,16 +3901,14 @@ def preflight(
     """Estimate bounded long-paper calls without contacting an inference provider."""
     view = inspect_project(path)
     existing = _load_work(path)
-    package, fingerprint = _snapshot(path)
-    # Resuming always uses the original immutable evidence, not a fresh
-    # snapshot that may have changed while authoring was underway.
+    # A running or resumable paper uses the original saved evidence. Avoid
+    # refreshing live research at all when a frozen checkpoint is available.
     frozen = existing.get("frozen_package") if existing is not None else None
-    if (
-        isinstance(frozen, dict)
-        and existing.get("project_id") == view.project.id
-    ):
+    if isinstance(frozen, dict) and existing.get("project_id") == view.project.id:
         package = frozen
         fingerprint = existing["snapshot_sha256"]
+    else:
+        package, fingerprint = _snapshot(path)
     size = len(_json(package))
     long_form = _paper_long_form(package, force_long_form=force_long_form, existing=existing)
     fast_preflight = bool(
