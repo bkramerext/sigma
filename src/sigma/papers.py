@@ -330,6 +330,7 @@ _SAFE_MATH_COMMANDS = {
     "omega",
     "Omega",
     "Delta",
+    "delta",
     "epsilon",
     "varepsilon",
     "theta",
@@ -349,6 +350,10 @@ _SAFE_MATH_COMMANDS = {
     "kappa",
     "sum",
     "prod",
+    "int",
+    "iint",
+    "iiint",
+    "oint",
     "binom",
     "lim",
     "to",
@@ -414,14 +419,17 @@ _SUPERSCRIPT_SUFFIX = re.compile(
 
 
 def _safe_math(source: str) -> bool:
+    # Common TeX spacing commands are safe within math. Normalize only for
+    # token validation; preserve the original commands in rendered TeX.
+    validated = re.sub(r"\\[,;!: ]", " ", source)
     position = 0
-    for match in _MATH_TOKEN.finditer(source):
+    for match in _MATH_TOKEN.finditer(validated):
         if match.start() != position:
             return False
         if match.group(1) and match.group(1) not in _SAFE_MATH_COMMANDS:
             return False
         position = match.end()
-    return position == len(source) and bool(source.strip())
+    return position == len(validated) and bool(validated.strip())
 
 
 def _latex_prose(source: str) -> str:
