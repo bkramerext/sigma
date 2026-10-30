@@ -239,6 +239,8 @@
 }
 .project-settings-dialog.ai-paper-dialog .settings-body button.destructive-action { color: #e6a092; }
 .project-settings-dialog.ai-paper-dialog .settings-body button.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
+.project-settings-dialog.ai-paper-dialog .saved-paper-meta button.text-view-link.destructive-action { color: #e6a092; }
+.project-settings-dialog.ai-paper-dialog .saved-paper-meta button.text-view-link.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
 .project-settings-dialog.ai-paper-dialog .settings-body button:disabled { opacity: .5; cursor: default; }
 .project-settings-dialog.ai-paper-dialog .saved-paper-expand h4 { text-decoration: underline; text-underline-offset: 3px; }
 .ai-paper-body select { width: 100%; }
