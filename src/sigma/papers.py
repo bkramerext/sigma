@@ -1099,7 +1099,9 @@ def _evidence_based_long_plan(
     for heading, purpose, kinds in categories:
         relevant = [note for note in notes if note.kind in kinds]
         refs = list(
-            dict.fromkeys(ref for note in relevant for ref in note.evidence_refs if ref in source_ids)
+            dict.fromkeys(
+                ref for note in relevant for ref in note.evidence_refs if ref in source_ids
+            )
         )
         if refs:
             groups.append((heading, purpose, refs, relevant))
@@ -3768,7 +3770,11 @@ async def _generate_impl(
             raise ProjectError(config["message"])
         checkpoint = _load_work(path)
         frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
-        if isinstance(frozen, dict) and checkpoint is not None and checkpoint.get("project_id") == view.project.id:
+        if (
+            isinstance(frozen, dict)
+            and checkpoint is not None
+            and checkpoint.get("project_id") == view.project.id
+        ):
             package = frozen
             snapshot_hash = checkpoint["snapshot_sha256"]
         else:
@@ -4170,7 +4176,11 @@ def preflight(
     # A running or resumable paper uses the original saved evidence. Avoid
     # refreshing live research at all when a frozen checkpoint is available.
     frozen = existing.get("frozen_package") if existing is not None else None
-    if isinstance(frozen, dict) and existing is not None and existing.get("project_id") == view.project.id:
+    if (
+        isinstance(frozen, dict)
+        and existing is not None
+        and existing.get("project_id") == view.project.id
+    ):
         package = frozen
         fingerprint = existing["snapshot_sha256"]
     else:
