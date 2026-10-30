@@ -279,6 +279,12 @@ checkpoint details, or workflow bookkeeping in the article's prose. Retain conse
 approaches, contradictory evidence, unverified claims, and genuine open obligations in the relevant
 scientific discussion; never hide a material weakness for the sake of polish. Source-linked records
 and technical verification details are retained separately in the archived research metadata.
+The abstract is the reader's map: state the motivating question, the strongest
+supported finding or precisely bounded unresolved result, and why it matters. Aim for
+100–180 words, finish every sentence, and do not use the abstract for provenance
+accounting or process narration. The methods field must describe analysis actually
+performed on saved evidence, not imperatives addressed to the writer (such as "Use",
+"Evaluate", or "Test") or unperformed experiments presented as completed work.
 Be an exacting academic editor. Write one substantive idea per paragraph, typically two to five
 sentences. Prefer short, active sentences and precise definitions; avoid inflated language,
 throat-clearing, repetition, and re-explaining results introduced earlier. Do not duplicate
