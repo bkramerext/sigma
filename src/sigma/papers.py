@@ -396,6 +396,7 @@ _UNICODE_MATH = {
     "α": r"\alpha",
     "β": r"\beta",
     "γ": r"\gamma",
+    "κ": r"\kappa",
     "ω": r"\omega",
     "Ω": r"\Omega",
     "θ": r"\theta",
