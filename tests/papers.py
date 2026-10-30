@@ -766,7 +766,7 @@ def test_frozen_paper_checkpoint_survives_new_project_research() -> None:
             papers._save_frozen_source(str(path), original)
             binding = "chatgpt:fixture"
             mode = "chatgpt"
-            digest = papers.hashlib.sha256((mode + "\\0" + binding).encode()).hexdigest()
+            digest = papers.hashlib.sha256((mode + "\0" + binding).encode()).hexdigest()
             checkpoint = papers._new_work(
                 fingerprint, view.project.id, digest, "gpt-6.1-sol", "high",
                 kind="one_shot",
