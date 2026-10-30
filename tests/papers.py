@@ -2258,6 +2258,37 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
+def test_paper_failure_reason_survives_reopen() -> None:
+    """A disconnected browser can still see why the previous stage failed."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "paper-failure.sigma"
+        view = initialize_project(path, "Saved failure", "Why did the planning stage fail?")
+        package, fingerprint = papers._snapshot(str(path))
+        work = papers._new_work(
+            fingerprint, view.project.id, "b" * 64, "fixture-model", "high"
+        )
+        work["frozen_package"] = package
+        work["progress"] = {
+            "run_id": "a" * 32,
+            "status": "running",
+            "stage": "planning",
+            "current": None,
+            "total": None,
+            "started_at": "2026-10-29T01:00:00+00:00",
+            "updated_at": "2026-10-29T01:00:00+00:00",
+            "elapsed_seconds": 300,
+        }
+        papers._save_work(str(path), work)
+        reason = "A long-paper stage timed out. No paper was published; retry explicitly."
+        papers.finish_progress(str(path), "failed", reason)
+        recovered = papers.progress_status(str(path))
+        assert recovered is not None
+        assert recovered["status"] == "failed"
+        assert recovered["stage"] == "planning"
+        assert recovered["failure_reason"] == reason
+        assert papers._load_work(str(path))["progress"]["failure_reason"] == reason
+
+
 def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> None:
     """A previously failed Tadpoles-shaped plan can resume with only section calls."""
     package, _ = fast_package()
@@ -3603,6 +3634,7 @@ def main() -> None:
     test_military_style_guidance_reaches_all_authoring_paths()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
+    test_paper_failure_reason_survives_reopen()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
     test_fast_checkpoint_resume_replays_only_incomplete_section()
     test_fast_long_draft_cancellation_keeps_completed_sections()
