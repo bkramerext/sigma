@@ -1,9 +1,12 @@
-## Issue #337 — v0.1.5 release candidate preparation (2026-10-29)
+## Issue #337 — v0.1.5 Stage B readiness (2026-10-29)
 
 Release candidate work starts from merged `main` at the #330 merge SHA
-`5d1a4f51c4a2cd33b0854a19564d37bebac15b3d`. Python, uv, frontend and npm
-lockfile versions are aligned at `0.1.5`. This is a candidate only;
-production remains v0.1.4 and no v0.1.5 tag or deployment is authorized.
+`bc275cb214d1fbec0fd40334593d50d82263c07e` after PR #338 merged. The exact
+v0.1.5 release source SHA is
+`2026f1e5b167ec76289ba2335d369603e4f377ee`, an ancestor of that merge SHA.
+Python, frontend and lockfile versions are aligned at `0.1.5`. This is a
+candidate only; production remains v0.1.4 and no v0.1.5 tag or deployment is
+authorized.
 
 Read-only production inspection on 2026-10-29 found `sigma-gce-01` RUNNING in
 `sigma-research-prod`/`us-west1-b`; `sigma.service` active; `/srv/sigma-state`
@@ -14,10 +17,13 @@ mode `600`, and its `SIGMA_RELEASE` is
 `6fa626bdfc1f07cb873103dfed2323864d4fb280`. Backend and frontend containers
 are healthy and carry that same image/source SHA. The public endpoint verifier
 passed DNS, private-port, HTTP redirect, TLS/root, SPA deep-link and hosted API
-checks. This live SHA conflicts with the prior `2761c0e12190807bafabe58445d6beac479140c4`
-record in this document's earlier v0.1.4 entry; provenance must be reconciled
-before release cutover. No user identity, workspace, project, paper, or spend
-ledger contents were inspected.
+checks. The release records explain the earlier SHA: record
+`2761c0e12190807bafabe58445d6beac479140c4` was timestamped 06:09:49Z and the
+active record for `6fa626bdfc1f07cb873103dfed2323864d4fb280` followed at
+06:12:04Z. The host checkout, protected pin, runtime version, image tags and
+OCI labels all agree on `6fa626b…`; the earlier record is a superseded release
+record, not an active-state conflict. No user identity, workspace, project,
+paper, or spend ledger contents were inspected.
 
 The recovery snapshot `sigma-state-v014-20261029-0606` is currently `READY`,
 30 GB, and sourced from `sigma-state`. It predates v0.1.4, has not been
@@ -186,7 +192,11 @@ Read-only hosted checks on `https://sigma-research.duckdns.org` returned HTTP
 `mock_auth=false`), and HTTP 401 for unauthenticated project and research-session
 requests. GCE preflight passed all 23 checks. `sigma.service` was active and
 `/srv/sigma-state` was mounted from `/dev/sdb` as ext4 with `rw,nosuid,nodev,noexec`.
-The production pin observed was `2761c0e12190807bafabe58445d6beac479140c4`.
+This earlier v0.1.4 deployment entry recorded the then-reviewed release record
+`2761c0e12190807bafabe58445d6beac479140c4` as the production pin. Later
+read-only host inspection reconciled it: the active v0.1.4 pin is
+`6fa626bdfc1f07cb873103dfed2323864d4fb280`; see the current Issue #337 entry
+above. Schema review found additive tables/columns and no destructive table/column
 Schema review found additive tables/columns and no destructive table/column
 drops; session call reservations and unknown spend entries remain durable.
 
@@ -8183,6 +8193,71 @@ and follows a deterministic OAuth redirect fixture. `./sigma test`, frontend
 typecheck, `browser_checks/local_auth_real_backend.py`, and
 `browser_checks/guest_samples.py` passed with this update in the worktree. No
 live Google OAuth callback or paid provider call was made.
+
+## Issue #337 — v0.1.5 Stage B readiness update (2026-10-29)
+
+**Scope:** readiness review only. Production deployment, release tagging,
+production configuration changes, and snapshot/restore operations are not
+authorized and were not performed. No local SIGMA server was targeted.
+
+| Gate | Status | Evidence / remaining condition |
+| --- | --- | --- |
+| Exact merge SHA post-merge CI | **MET** | GitHub Actions check run [`verify` #41000271025](https://github.com/bkramerext/sigma/actions/runs/41000271025/job/123882806127) completed with `success` for exact SHA `bc275cb214d1fbec0fd40334593d50d82263c07e` at 2026-10-30 04:01:27Z. |
+| Exact v0.1.5 source SHA | **MET** | `2026f1e5b167ec76289ba2335d369603e4f377ee` is the version-bump/release source commit and an ancestor of the merge SHA. This full SHA is the candidate identity. |
+| Release tag absent | **MET** | No `v0.1.5` tag was created, as requested. |
+| Production active SHA reconciliation | **MET** | Read-only host checkout, protected pin, v0.1.4 version, backend/frontend image tags and OCI revision labels agree on `6fa626bdfc1f07cb873103dfed2323864d4fb280`. Release record `2761c0e…` at 06:09:49Z preceded the active `6fa626b…` record at 06:12:04Z; the older documentation retained an earlier release record as current. No application state contents were read. |
+| Existing production data compatibility review | **UNVERIFIED** | No destructive auth/workspace SQLite migration is in the candidate diff; project schemas 1–9 and paper checkpoint compatibility paths remain supported. Production project/artifact contents were not read or exercised. |
+| Schema 10 backward binary rollback | **UNMET** | v0.1.4 parser source accepts only schema 1–9. An isolated import of the exact v0.1.4 `projects.py` rejected `{"schema_version": 10}` with “expected 1 through 9”. v0.1.5 can write schema 10 with strategy provenance `inference_request_id`. No bridge has been implemented or tested; after a schema 10 write, v0.1.4 rollback is unsafe. Prefer a v0.1.5-compatible forward fix; otherwise stop writers and preserve the post-release disk, and treat any pre-release restore as an explicitly accepted data-loss incident. |
+| Fresh application-consistent snapshot | **UNMET** | Existing `sigma-state-v014-20261029-0606` is READY but pre-v0.1.4 and not restore-tested. No new snapshot, backup configuration, IAM grant or production change was made. See operator approval plan in [Runbook §5](OPERATION_RUNBOOK.md#5-daily-state-disk-backup). |
+| Isolated restore verification | **UNMET** | No fresh clone/drill performed. Requires reviewed IAM and metadata isolation, cost ceiling/billing/quota check, maintenance window for app downtime, no-ingress/no-service-account recovery host, read-only mount, approved aggregate thresholds, preserved evidence and separately authorized cleanup. |
+| Target-host exact-SHA Docker build/preflight | **UNVERIFIED** | No production preflight or image build was run. Required operator checks and full command are detailed below. |
+| Focused Chrome issue #328 | **MET** | `browser_checks/issue328_paper_progress.py` passed real Chrome against fresh isolated temporary project/auth/state roots on `127.0.0.1:5182` + deterministic fixture API `127.0.0.1:8012`: one-shot progress/cancel, explicit reset/retry, active long-form progress recovery in a fresh tab, detached completion and saved PDF. No production/local SIGMA server or paid provider was used. |
+| Focused Chrome issue #329 | **MET** | `browser_checks/issue329_fast_paper.py` passed real Chrome against a fresh isolated temporary project/auth/state store: plan and section progress, Escape does not cancel, pre-dispatch retry, section failure with Continue and usage warning, PDF completion, no-AI Start over/cancel/restart, AI-binding mismatch reset, and final responsive-layout check. Fixture API/provider responses were deterministic and local; no live/paid provider or local SIGMA server was used. |
+| Production cutover / release health | **UNMET** | No cutover authorization was given; restore and schema-rollback gates remain unmet. |
+
+The target-host release build must resolve exactly
+`2026f1e5b167ec76289ba2335d369603e4f377ee`, export that commit with
+`git archive`, and build `sigma-backend:<SHA>` and `sigma-frontend:<SHA>` for
+`linux/amd64` with `org.opencontainers.image.revision=<SHA>`. The builder must
+verify both image labels and immutable image IDs. Before deploy, require a clean
+host checkout whose HEAD equals the currently protected release pin, exact-SHA
+fetch availability, free Docker space and working daemon/network, host
+preflight PASS (`sudo /usr/local/libexec/sigma/gce_preflight.py --json`),
+mounted state-disk identity, rootless sandbox daemon health via
+`python -m sigma.cloud_runtime_check`, and confirmation that sandbox image
+inputs did not change. Deployment starts from systemd/Compose `--no-build` and
+records container IDs and image IDs. None of these target-host build/preflight
+actions was performed. After separate operator deployment authorization, the
+guarded invocation is:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py \
+  2026f1e5b167ec76289ba2335d369603e4f377ee --backup-verified --schema-compatible
+```
+
+The final flags are assertions enforced by the guarded helper, not proof that
+rollback is safe. Because v0.1.5 may write schema 10 and v0.1.4 rejects it, do
+not treat the v0.1.4 image as a valid rollback after schema 10 is present. The
+compatibility assertion must not be used to bypass this gate. No tag was
+created and the guarded deployment command was not run.
+
+The issue #328/#329 Chrome scripts now express the current paper progress
+states and failure modes: elapsed seconds rather than the removed “Elapsed”
+label, server-owned generation recovery after losing a browser connection,
+explicit reset before retrying a one-shot cancellation with an unknown
+provider attempt, current planning and emitted section progress rather than a
+stale plan-ready label, and retry/Continue controls according to whether
+failure occurred before dispatch or during section generation. All fixture calls are
+deterministic and local; no paid provider call is made.
+
+Verification completed in this isolated worktree: `./sigma test` passed all
+configured steps, including backend and release/deployment checks, Ruff check
+and formatting, Pyright (0 diagnostics), frontend typecheck and production
+build. The runner skipped only the optional graph-present sandbox case because
+the Python sandbox image is unavailable. Real Chrome passed both focused
+checks: #328 `browser_checks/issue328_paper_progress.py` and #329
+`browser_checks/issue329_fast_paper.py`, with separate temporary fixture data
+roots and local deterministic provider responses. No paid calls were made.
 ## Issue #301 live session log (2026-10-29)
 
 PR #324 review corrections are implemented on `green/issue-301-live-logging`,

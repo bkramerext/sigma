@@ -46,6 +46,25 @@ sandbox image is unavailable.
 
 ## Gaps and handoff
 
+## Post-merge #337 browser assertion correction (2026-10-29)
+
+The stale browser assertions were corrected for the current UI and flow. The
+script explicitly preflights each project as long-form and checks the visible
+planning and section progress, pre-dispatch retry, post-dispatch Continue and
+provider-usage warning, PDF completion, no-AI reset, and recovery/reset after
+an AI-binding change. It no longer clicks through a modal that automatically
+opens for a recoverable checkpoint. Real Chrome passed against a fresh isolated
+fixture server and temporary project/auth/state roots (Vite on
+`127.0.0.1:5182`, deterministic API on `127.0.0.1:8012`, fixture response
+delay 2 seconds). No live/paid provider or local SIGMA server was used. See
+[Status](../../STATUS.md#issue-337--v015-stage-b-readiness-update-2026-10-29).
+
+The follow-up `./sigma test` run on the separate #337 readiness worktree also
+passed all configured steps, including paper tests, release/deployment checks,
+Ruff, formatting, Pyright, frontend typecheck and production build. The
+optional graph-present sandbox scenario skipped because the local Python
+sandbox image is unavailable.
+
 No paid inference, external provider calls, or credentials were used. The
 Tadpoles timing target is verified only for deterministic local fixtures. The
 ONP checks establish that the pipeline retains source IDs, skeptic objections,
