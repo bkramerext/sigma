@@ -136,5 +136,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS T328 real Chrome: one-shot progress/cancel/retry, active long-form progress after reload, and detached completion with a saved PDF; provider calls were served by the local deterministic fixture."
+    "PASS T328 real Chrome: one-shot progress/cancel/retry, active long-form progress recovery in a fresh tab, and detached completion with a saved PDF; provider calls were served by the local deterministic fixture."
 )

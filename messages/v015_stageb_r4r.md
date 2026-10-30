@@ -16,7 +16,9 @@ merge SHA for the release source SHA.
 
 **Scope:** correction of stale #328/#329 Chrome assertions and Stage B
 readiness evidence/runbook. This is ready for independent review. It is not a
-production deployment request. Do not self-merge.
+production deployment request. This R4R preceded the user's later explicit
+authorization for self-review and merge of this readiness PR; production
+deployment remains unauthorized.
 
 ## Release-gate matrix
 
