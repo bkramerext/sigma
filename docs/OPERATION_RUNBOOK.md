@@ -290,12 +290,16 @@ restore the 14-point retention invariant.
 
 ### Fresh pre-release recovery point and restore verification (v0.1.5 readiness)
 
-No new snapshot or production setting change is authorized by this readiness
-review. The existing `sigma-state-v014-20261029-0606` is READY but has not been
+The existing `sigma-state-v014-20261029-0606` is READY but has not been
 restore-tested; it is not evidence of current v0.1.4 data recoverability. The
-daily backup timer and `/etc/sigma/backup.env` were absent at the read-only
-inspection. Before any cutover, an operator must review and authorize a fresh
-application-consistent point and an isolated restore drill:
+daily backup timer and `/etc/sigma/backup.env` were absent at inspection. After
+the operator authorized the v0.1.5 deployment process, a fresh
+application-consistent snapshot `sigma-state-v015-pre-20261030-0506` reached
+READY at 2026-10-29 22:06:32 PDT from `sigma-state`. The service was stopped,
+Compose writers were confirmed stopped, and the mounted state disk was synced
+before snapshot creation. SIGMA was restarted and the service plus backend,
+frontend, and edge containers were confirmed healthy/running. The isolated
+restore drill remains pending. Before that drill, review and record:
 
 1. Audit current project billing, quota, effective operator IAM, VM service
    account grants and metadata credential isolation. The backup script needs

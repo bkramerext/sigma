@@ -20,6 +20,15 @@ provider inference. Keep the operator's constraints: preserve identities,
 projects, research, papers, and spending records; do not access the operator's
 local SIGMA server; do not coordinate directly with other Codex workers.
 
+The operator also directed that issues exposed by release work be fixed within
+scope, and that work may be aborted when a failure becomes catastrophic or
+disproportionate. Fix a bounded defect found during preflight or deployment,
+verify the fix, and record the new exact SHA. If the next action risks data
+loss, identity/accounting corruption, credential exposure, unbounded cost, or
+requires an unreviewed destructive migration, stop writers when needed, preserve
+the current disk and evidence, do not bypass a gate, and report the blocker and
+smallest safe recovery path. Resume only after the owner reviews any new scope.
+
 ## Release controls
 
 1. Select one full lowercase 40-character release commit SHA. Run CI on that
@@ -69,7 +78,21 @@ Therefore:
 
 At the time of this record, production was observed on v0.1.4 at
 `6fa626bdfc1f07cb873103dfed2323864d4fb280`. The existing snapshot was stale
-and not restore-tested; the recurring backup timer was inactive. The v0.1.5
-cutover, fresh snapshot, isolated restore drill, and target-host image build
-must be recorded as complete only after their evidence exists. No `v0.1.5` tag
-is created by this authorization record.
+and not restore-tested; the recurring backup timer was inactive. After the
+operator authorized deployment, a fresh application-consistent snapshot
+`sigma-state-v015-pre-20261030-0506` reached `READY` at
+2026-10-29 22:06:32 PDT from source disk `sigma-state`. The service was stopped,
+Compose writers were confirmed stopped, and the mounted disk was synced before
+snapshot creation. SIGMA was restarted; systemd then reported no pending unit
+reload, and the service was active with backend/frontend healthy and edge
+running. The isolated restore drill and target-host image build remain
+incomplete.
+
+The v0.1.5 version-bump source commit is
+`2026f1e5b167ec76289ba2335d369603e4f377ee`. For deployment, select the exact
+post-release operational commit
+`aa23f4b393f4ef657471705f467f9beecbb0689a`, which contains the v0.1.5 source
+and rollback-preflight correction; its post-merge `verify` check succeeded
+[in CI run 41006080748](https://github.com/bkramerext/sigma/actions/runs/41006080748/job/123901170598).
+Build and label the target images from that full SHA. No `v0.1.5` tag has been
+created.
