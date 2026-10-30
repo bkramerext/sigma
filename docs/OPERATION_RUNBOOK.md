@@ -21,7 +21,7 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) 
 | Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | Attached to VM; public DNS and HTTPS routing verified 2026-10-26 |
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
 | Billing account / current spend | Unknown | October 25 console screenshot is historical; current association, available credit, alert delivery and spend not verified |
-| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Read-only GCE inspection on 2026-10-29 confirmed READY and `sigma-state` source. Exact snapshot not restore-tested. Daily backup timer and `/etc/sigma/backup.env` absent. |
+| Recovery | `sigma-state-v015-pre-20261030-0506` READY from `sigma-state`; isolated read-only restore verifier passed | Created 2026-10-29 22:06:32 PDT after stopping `sigma.service`, confirming Compose writers stopped, and syncing `/srv/sigma-state`. Service was restarted; backend/frontend healthy and edge running. A recovery clone/VM remain temporarily while the verifier correction is reviewed. The older `sigma-state-v014-20261029-0606` is stale and untested. Daily backup timer and `/etc/sigma/backup.env` remain absent. |
 | Production release | `6fa626bdfc1f07cb873103dfed2323864d4fb280` (v0.1.4) | Read-only GCE inspection on 2026-10-29 confirmed host checkout, protected `SIGMA_RELEASE`, Python version, backend/frontend tags and OCI revision labels match; all three containers healthy and service active. Release record `2761c0e12190807bafabe58445d6beac479140c4` at 06:09:49Z precedes active record `6fa626bdfc1f07cb873103dfed2323864d4fb280` at 06:12:04Z. The earlier record is historical, not an unresolved active-SHA discrepancy. Hosted acceptance remains partial. See [Status](STATUS.md). |
 
 **Change log**
@@ -299,7 +299,25 @@ READY at 2026-10-29 22:06:32 PDT from `sigma-state`. The service was stopped,
 Compose writers were confirmed stopped, and the mounted state disk was synced
 before snapshot creation. SIGMA was restarted and the service plus backend,
 frontend, and edge containers were confirmed healthy/running. The isolated
-restore drill remains pending. Before that drill, review and record:
+restore check passed on a clone attached READ_ONLY to a temporary recovery VM
+with no public IP or service account, mounted `ro,nosuid,nodev,noexec,norecovery`.
+The verifier passed SQLite integrity, three identities/mappings, 12 projects,
+30 research artifacts, paper-file checks (zero saved PDF/TeX pairs), and all
+accounting checks. It retained ten terminal historical job rows across two
+removed workspaces; no active jobs or spending-call rows referenced them. The
+projects were schemas 8 (11 records) and 9 (one record); none were missing or
+invalid. The verifier correction is in PR #343 and remains subject to exact-head
+CI/merge. Temporary VM and clone disk are pending cleanup; retain the snapshot.
+
+For the v0.1.5 drill, the operator account had project Owner and billing was
+enabled; the required zone quotas had capacity. No IAM grant was made to the
+runtime service account. The one-time snapshot used operator GCP credentials
+after stopping and syncing the source; the recurring timer remains disabled.
+No numeric cost ceiling or current billed amount was obtained. Temporary
+snapshot/clone/compute charges are possible, so remove only the recovery VM and
+clone disk after preserving verification evidence. Keep the recovery snapshot.
+
+For future recurring backups, review and record before enabling the timer:
 
 1. Audit current project billing, quota, effective operator IAM, VM service
    account grants and metadata credential isolation. The backup script needs
@@ -308,8 +326,9 @@ restore drill remains pending. Before that drill, review and record:
    approved least-privilege role to the operator executing the drill; do not
    broaden the runtime service account as a shortcut. The restore clone needs
    disk create/attach permissions and an isolated recovery host needs only the
-   access needed for the offline verifier. These permissions have not been
-   observed or approved as of this review.
+   access needed for the offline verifier. The v0.1.5 one-time drill used the
+   operator identity; the VM service account still lacks project-level snapshot
+   bindings. Do not grant it extra IAM just to avoid an operator-mediated run.
 2. Agree on a cost ceiling and confirm current billing/quota. Costs may include
    changed-block snapshot storage, a clone disk, temporary recovery compute,
    and access logging. Current spend and rates were not verified; no amount is
@@ -340,14 +359,18 @@ restore drill remains pending. Before that drill, review and record:
    Set minimum expected identity/workspace/project/artifact/paper and
    accounting thresholds from an operator-approved aggregate baseline. Require
    every verifier check to pass, preserve sanitized evidence and the snapshot,
-   and separately authorize cleanup of temporary resources. Never mount the
-   clone writable or attach it to the production VM. The verifier is read-only
-   and offline; it does not prove browser/API behavior or a production restore.
+   then remove only the temporary recovery VM and clone disk created by the
+   drill. Retain the recovery snapshot. Never mount the clone writable or
+   attach it to the production VM. The verifier is read-only and offline; it
+   does not prove browser/API behavior or a production restore.
 
 Restore requires operator review because clone disk/VM and snapshot storage
-incur charges and the source snapshot requires downtime. Do not start until
-IAM, billing, quotas, maintenance window, expected data thresholds and cleanup
-owner are recorded. None of these actions has been performed for v0.1.5.
+incur charges and the source snapshot requires downtime. For the authorized
+v0.1.5 drill, billing was enabled and quotas had capacity, but a dollar cost
+ceiling and current billed amount were not established. The one-time snapshot
+and read-only restore check have passed; temporary VM/disk cleanup remains.
+Review IAM, billing, quotas, maintenance window and expected data thresholds
+before enabling recurring backup configuration.
 
 The installed `sigma-backup.timer` runs at 10:17 UTC daily with `Persistent=true`
 (about 02:17 or 03:17 in Oregon, depending on daylight saving time).
