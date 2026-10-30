@@ -1,0 +1,77 @@
+\documentclass[11pt]{article}
+\title{The Maximum Number of Regions Cut Out by Straight Lines: A Sharp Incremental Bound}
+\date{}
+\author{SIGMA AI-assisted research synthesis}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,longtable}
+\usepackage{microtype}
+\usepackage{titlesec}
+\emergencystretch=2em
+\raggedbottom
+\linespread{1.07}
+\usepackage{xcolor}
+\definecolor{blue}{HTML}{24485E}
+\titleformat{\section}{\Large\bfseries\sffamily\color{blue}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\sffamily}{\thesubsection}{0.7em}{}
+\setlength{\parskip}{.6em}
+\setlength{\parindent}{0pt}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+For every nonnegative integer $n$, the maximum number of connected regions formed by $n$ full straight lines in the Euclidean plane is $M(n)=1+n(n+1)/2$. The proof first identifies every region as a convex intersection of open half-planes. This shows that a new line meeting the existing arrangement at $m$ distinct points creates exactly $m+1$ new regions, unless it coincides with an existing line. Consequently, the $k$th line creates at most $k$ new regions. The explicit family $y=ix+i^2$, for $i=1,\ldots,n$, attains every incremental bound and therefore attains the maximum. The empty arrangement and the values through $n=4$ are included.
+\end{abstract}
+\section{Introduction}
+Let $n$ be a nonnegative integer. An arrangement consists of $n$ full straight lines in the Euclidean plane, and a region is a connected component of the complement of their union. Parallel lines, concurrent lines, and repeated lines are permitted. Write $M(n)$ for the largest possible number of regions.
+
+Determining this maximum requires two separate arguments: a bound valid for every arrangement and a construction attaining that bound for every $n$. Small examples provide boundary checks, but they do not establish either requirement in general.
+
+\section{Evidence and scope}
+We insert the lines one at a time and count the change in the number of regions. The key geometric step is to relate the pieces of a newly inserted line to the old regions it splits; convexity makes this correspondence exact. We then verify algebraically that a specific family of lines realizes the largest possible number of distinct intersections at each insertion.
+
+\section{Main theorem}
+Theorem. For every nonnegative integer $n$, the maximum number of regions formed by $n$ full straight lines in the Euclidean plane is $M(n)=1+\frac{n(n+1)}{2}$. For positive $n$, the lines $L_i:y=ix+i^2$, with $i=1,\ldots,n$, attain this value. For $n=0$, the empty arrangement attains it.
+
+\section{Convexity of arrangement regions}
+Lemma. Every region of a finite line arrangement is open and convex. To prove this, choose an affine equation for each line. Its defining affine function has a constant strict sign on any connected component of the complement, because a continuous function cannot take both positive and negative values on a connected set without taking the value zero.
+
+Conversely, the points realizing a fixed choice of strict signs form an intersection of open half-planes. If nonempty, this intersection is open, convex, and connected. Every connected component lies in one such intersection, and that intersection cannot extend beyond the component because it is connected; thus these intersections are exactly the regions.
+
+\section{The exact increment from one new line}
+Lemma. Let $L$ be a new line that does not coincide with an existing line, and let $m$ be the number of distinct points where it meets the old lines. These points divide $L$ into exactly $m+1$ connected pieces. When $m=0$, the sole piece is the whole line; otherwise the pieces are open intervals and the two outer rays.
+
+Each piece lies in a single old region because it is connected and avoids every old line. Two different pieces cannot lie in the same old region: the segment joining points from those pieces contains an old-line intersection point, whereas convexity would require the entire segment to remain in the region. Thus the pieces meet exactly $m+1$ different old regions.
+
+Each region met by $L$ is split into exactly two regions. Indeed, a point of intersection lies in the open old region, so a small disk around it lies there and supplies points on both sides of $L$. The intersections of the old region with the two open half-planes bounded by $L$ are therefore nonempty and convex; they are precisely the two components remaining after $L$ is removed.
+
+Old regions not met by $L$ remain unchanged. Each of the $m+1$ regions that is met is replaced by two, so the total increase is exactly $m+1$. If the new line instead coincides with an existing line, the union of lines does not change and the increase is zero.
+
+\section{Universal upper bound}
+Insert an arbitrary arrangement in any order, and let $R_k$ denote the number of regions after the first $k$ lines. A noncoincident $k$th line meets each preceding line in at most one point, so it has at most $k-1$ distinct intersection points with the old arrangement. The increment lemma gives $R_k-R_{k-1}\leq k$; a coincident line also satisfies this inequality because its increment is zero.
+
+With no lines, the plane is one region, so $R_0=1$. Summing the insertion inequalities gives $R_n\leq 1+\sum_{k=1}^{n}k=1+\frac{n(n+1)}{2}$. Parallelism and multiple lines through one point cannot invalidate this bound: they reduce, rather than increase, the number of distinct intersection points available on a newly inserted line.
+
+\section{An arrangement attaining the bound}
+For each positive integer $i$, define $L_i:y=ix+i^2$. The slopes are distinct, so no two of these lines are parallel or coincident. For $i<k$, their intersection satisfies $ix+i^2=kx+k^2$, giving $x=-(i+k)$ and $y=-ik$.
+
+Fix $k$. As $i$ ranges from $1$ to $k-1$, the coordinates $-(i+k)$ are all distinct, so $L_k$ meets its predecessors at exactly $k-1$ distinct points. The increment lemma therefore shows that it adds exactly $k$ regions. This also covers $k=1$: the first line has no old intersection points and adds one region.
+
+Taking the first $n$ lines yields exactly $1+\sum_{k=1}^{n}k=1+\frac{n(n+1)}{2}$ regions. This equals the universal upper bound, proving both maximality and attainment for every positive $n$.
+
+\section{The empty arrangement and small values}
+For $n=0$, there are no lines to remove, and the whole plane is one connected region. The empty sum is zero, so the same formula gives $M(0)=1$.
+
+For $n=0,1,2,3,4$, the formula gives $1,2,4,7,11$, respectively. Geometrically, these are realized by the empty plane, one line, two intersecting lines, three pairwise-intersecting nonconcurrent lines, and a fourth line crossing its three predecessors at distinct points. The explicit family realizes these configurations through successive increases of $1,2,3,4$; these examples check the formula rather than replace its proof.
+
+\section{Verification status and limitations}
+\begin{itemize}
+\item The result is supported by the self-contained deductive argument presented above, not by an independently checked or formally verified proof. The supplied records disagree about completion status, but their detailed mathematical assessments identify no remaining proof gap or unresolved objection; this discrepancy is retained in the validation warnings under claim C9.
+\end{itemize}
+\section{Conclusion}
+The maximum is $M(n)=1+n(n+1)/2$ for every nonnegative integer $n$. The decisive geometric fact is that each piece of a newly inserted line crosses a different convex old region and increases the count by one. The family $y=ix+i^2$ realizes the largest possible number of such pieces at every insertion, so the universal bound is sharp, including the empty arrangement.
+
+\section*{Authorship note}
+AI-assisted synthesis from saved research; not independently peer reviewed.
+\end{document}

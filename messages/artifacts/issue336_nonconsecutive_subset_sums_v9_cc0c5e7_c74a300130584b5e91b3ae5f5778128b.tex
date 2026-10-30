@@ -1,0 +1,171 @@
+\documentclass[11pt]{article}
+\title{Nonconsecutive Subset Sums Modulo 3 v9}
+\date{}
+\author{SIGMA AI-assisted research synthesis}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,longtable}
+\usepackage{microtype}
+\usepackage{titlesec}
+\emergencystretch=2em
+\raggedbottom
+\linespread{1.07}
+\usepackage{xcolor}
+\definecolor{blue}{HTML}{24485E}
+\titleformat{\section}{\Large\bfseries\sffamily\color{blue}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\sffamily}{\thesubsection}{0.7em}{}
+\setlength{\parskip}{.6em}
+\setlength{\parindent}{0pt}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This paper examines the research question: A simple restriction—no adjacent choices—creates a rich counting problem. For each n, how many subsets of \{1,...,n\} have no consecutive elements and a sum divisible by 3? The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a\_n, giving sufficient initial values. Determine a\_12 exactly. Finally prove that a\_n/F\_\{n+2\} tends to 1/3, where F\_0=0 and F\_1=1 are the Fibonacci numbers. It synthesizes saved observations, methods, unsuccessful approaches, limitations, and open questions.
+
+Recorded claims are distinguished from independently verified findings, and no unperformed experiments or missing proof steps are presented as established results.
+\end{abstract}
+\section*{Evidence coverage limitation}
+The evidence index omitted 996 material saved research field fragment(s) across 6 source(s). These fragments were not reviewed for this paper. Interpretations that could depend on omitted material remain provisional; the complete frozen source snapshot and omission ledger are retained with the generation record.
+\section{Introduction}
+The investigation asks: A simple restriction—no adjacent choices—creates a rich counting problem. For each n, how many subsets of \{1,...,n\} have no consecutive elements and a sum divisible by 3? The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a\_n, giving sufficient initial values. Determine a\_12 exactly. Finally prove that a\_n/F\_\{n+2\} tends to 1/3, where F\_0=0 and F\_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+\section{Evidence and scope}
+This synthesis organizes the project's frozen research records and their saved evidence references. It does not claim new experiments.
+
+\section{Background and research context}
+For each nonnegative integer $n$, let $a_n$ denote the number of subsets \$S\textbackslash{}subseteq\textbackslash{}\{1,\textbackslash{}ldots,n\textbackslash{}\}\$ that contain no two consecutive integers and satisfy \$\textbackslash{}sum\_\{i\textbackslash{}in S\}i\textbackslash{}equiv0\textbackslash{}pmod3\$. The elements in the sum are the original, one-based indices, rather than their positions within the selected subset. The empty subset is included, so $a_0=1$. The question combines a restriction on which indices may be selected together with an arithmetic condition on their sum.
+
+Without the divisibility condition, the counting problem has a Fibonacci structure. Separating admissible subsets according to whether they contain $n$ leaves an unrestricted admissible subset on the first $n-1$ indices when $n$ is omitted, and on the first $n-2$ indices when $n$ is included. With initial counts of one and two, the total number is therefore $F_{n+2}$, where $F_0=0$, $F_1=1$, and $F_{m+2}=F_{m+1}+F_m$. This total provides the denominator for the proposed limiting proportion $a_n/F_{n+2}\to1/3$; that limit is a proof objective, not a consequence of the unweighted count alone.
+
+The exact objectives are to derive a constant-coefficient linear recurrence with integer coefficients for $a_n$, specify enough initial values to determine the sequence, and determine $a_{12}$. The asymptotic objective is separate: the contribution of the divisibility condition must be compared rigorously with the full Fibonacci count. Agreement with a recurrence over finitely many indices, or numerical ratios close to $1/3$, cannot establish either assertion for arbitrary $n$. The available arguments leave the general recurrence and the limiting proportion unproved.
+
+A finite-state formulation retains precisely the information needed to enforce both restrictions. After processing an index, the state records the selected sum modulo $3$ and whether that index was selected. Omitting the next index clears the selection indicator without changing the residue; including it is allowed only when the preceding index was omitted and adds its value to the residue. There are six states, and the transition depends on the processed index only modulo $3$, motivating a transfer-matrix analysis in blocks of three. Such an analysis must retain the order of the transition matrices and account explicitly for the initial boundary.
+
+A complementary formulation records the entire sum distribution in the polynomial $P_n(q)=\sum_S q^{\sum_{i\in S}i}$, where the sum ranges over subsets with no consecutive elements. The same inclusion–omission split at the final index gives $P_n(q)=P_{n-1}(q)+q^nP_{n-2}(q)$ for \$n\textbackslash{}ge2\$, with $P_0(q)=1$ and $P_1(q)=1+q$. For a primitive cube root of unity $\omega$, the roots-of-unity filter gives $a_n=(P_n(1)+P_n(\omega)+P_n(\omega^2))/3$. This separates the Fibonacci total from the two nontrivial weighted contributions whose growth must be controlled to prove the limiting proportion.
+
+The need for a structural derivation is illustrated by the failed candidate $a_{n+3}=a_{n+2}+a_n$. Although it matches the first two transitions, it fails at $n=2$: $a_5=5$, whereas $a_4+a_2=3+1=4$. This counterexample rejects that particular rule without deciding which recurrence the sequence does satisfy. It motivates deriving an identity from the residue transitions or weighted polynomials rather than extrapolating a short initial pattern.
+
+Gap removal supplies another combinatorial perspective. For a nonconsecutive subset $i_1<\cdots<i_k$, the substitution $y_j=i_j-(j-1)$ produces an ordinary $k$-subset of \$\textbackslash{}\{1,\textbackslash{}ldots,n-k+1\textbackslash{}\}\$, with inverse $i_j=y_j+(j-1)$ and sum shift $\sum_j i_j=\sum_j y_j+k(k-1)/2$. This bijection supports a Gaussian-binomial representation, provided its subset-weight normalization is stated correctly. Its role is to offer an alternative exact encoding; obtaining a global recurrence and proving the asymptotic density still require additional arguments.
+
+\section{Recorded findings and observations}
+The recorded findings separate a refuted short recurrence, a more substantial candidate recurrence, and an alternative combinatorial representation. The exact computations report $(a_0,a_1,\ldots,a_{12})=(1,1,1,2,3,5,8,12,19,31,49,79,128)$, with one-based positions in subset sums and the empty subset included. In particular, the recorded value is $a_{12}=128$, obtained both from residue-state counting and from polynomial coefficient extraction. These outputs provide finite computational evidence, but the supplied record does not contain an independently verified complete proof of the requested recurrence and limiting ratio.
+
+The first proposed rule, $a_{n+3}=a_{n+2}+a_n$, is decisively contradicted by the recorded enumeration. Although it agrees with the transitions at $n=0$ and $n=1$, at $n=2$ it would require $a_5=a_4+a_2$, whereas the computed values give \$5\textbackslash{}ne 3+1\$. This is a counterexample to that rule, not to the counting problem or to the possibility of a different constant-coefficient recurrence. Its substantive lesson is that agreement at the first few indices does not identify the transition law.
+
+The residue-state method retains the information needed to enforce both restrictions simultaneously. Its six states are pairs $(r,b)$, where \$r\textbackslash{}in\textbackslash{}\{0,1,2\textbackslash{}\}\$ is the selected sum modulo $3$ and \$b\textbackslash{}in\textbackslash{}\{0,1\textbackslash{}\}\$ indicates whether the most recently processed position was selected. On processing position $i$, omission sends either previous-selection state to $(r,0)$; inclusion is permitted only from $(r,0)$ and sends it to \$((r+i)\textbackslash{}bmod 3,1)\$. The computation starts with a single empty configuration in state $(0,0)$ and obtains $a_n$ by summing the two states with residue $0$ after position $n$.
+
+The corresponding transfer matrices depend periodically on the position, with $T_{i+3}=T_i$, making a three-position block the proposed basis for an algebraic recurrence. The later exact dynamic program computed counts through $n=60$ and tested the candidate relation $a_{n+12}-5a_{n+9}+2a_{n+6}+5a_{n+3}+a_n=0$ at every index \$0\textbackslash{}le n\textbackslash{}le48\$; all recorded residuals were zero. The outstanding algebraic issue is the ordered block product: the matrices do not generally commute, so periodicity alone does not justify replacing every phase by an unspecified common product. A global derivation must establish the relevant polynomial identity for each starting phase and account for the initial boundary.
+
+The weighted-polynomial representation supplies a second route to the same candidate. Writing $P_n(q)$ for the generating polynomial in which an admissible subset contributes $q$ raised to its selected sum, the recorded transition is $P_n(q)=P_{n-1}(q)+q^nP_{n-2}(q)$ for \$n\textbackslash{}ge2\$, with $P_0(q)=1$ and $P_1(q)=1+q$. The two terms distinguish omission of position $n$ from inclusion of that position, in which case position $n-1$ must be omitted. At $q=1$, the polynomial gives the unweighted count $P_n(1)=F_{n+2}$.
+
+For a primitive cube root of unity $\omega$, the recorded residue extraction averages the three evaluations:
+$a_n=\frac{P_n(1)+P_n(\omega)+P_n(\omega^2)}{3}$. The two nontrivial evaluations are complex conjugates, while the evaluation at $1$ is the Fibonacci component. The proposed block argument assigns the characteristic polynomial $x^2-x-1$ to each nontrivial evaluation and $x^2-4x-1$ to the Fibonacci component when advancing by three positions. Their product is the stated source of the candidate order-$12$ relation, but the saved argument leaves the phase-ordered matrix calculation, including the asserted trace $1$ and determinant $-1$ for the nontrivial blocks, as a proof obligation.
+
+It also explicitly requires a separate check at $n=0$, rather than extending a weighted transition stated only for \$n\textbackslash{}ge2\$ without justification.
+
+The gap-removal construction gives a different encoding that does not begin by fitting a recurrence. For a nonconsecutive subset with positions $i_1<\cdots<i_k$, the substitution $y_j=i_j-(j-1)$ produces an ordinary $k$-subset satisfying \$1\textbackslash{}le y\_1\textless{}\textbackslash{}cdots\textless{}y\_k\textbackslash{}le n-k+1\$. Its inverse, $i_j=y_j+(j-1)$, restores the required gaps, and the selected sums satisfy $\sum_{j=1}^k i_j=\sum_{j=1}^k y_j+k(k-1)/2$. Thus the recorded bijection preserves the counting information while expressing the adjacency restriction as a change in the available interval and a fixed weight shift.
+
+A correction to the Gaussian-binomial normalization is essential to interpreting this construction. Under the stated partition-normalized convention, \$\textbackslash{}genfrac\{[\}\{]\}\{0pt\}\{\}\{m\}\{k\}\_q\$ enumerates ordinary $k$-subsets of \$\textbackslash{}\{1,\textbackslash{}ldots,m\textbackslash{}\}\$ with the baseline sum $k(k+1)/2$ removed. Restoring that baseline contributes $q^{k(k+1)/2}$, whereas gap removal contributes $q^{k(k-1)/2}$; together these give $q^{k^2}$. The earlier explanation incorrectly assigned the former contribution the exponent $k(k-1)/2$, but the correction preserves the displayed representation
+\$P\_n(q)=\textbackslash{}sum\_\{k=0\}\textasciicircum{}\{\textbackslash{}lfloor(n+1)/2\textbackslash{}rfloor\}q\textasciicircum{}\{k\textasciicircum{}2\}\textbackslash{}genfrac\{[\}\{]\}\{0pt\}\{\}\{n-k+1\}\{k\}\_q\$,
+with the $k=0$ term interpreted as $1$.
+
+Exact integer-polynomial comparisons recorded agreement between this representation and the weighted transition for \$0\textbackslash{}le n\textbackslash{}le18\$. Extracting coefficients whose exponents are divisible by $3$ reproduces the reported initial counts and $a_{12}=128$. The notes recognize the gap-removal map as an exact bijection, but also retain an obligation to write the all-index generating identity fully under the corrected convention. More importantly for the requested result, they do not supply the additional root-of-unity or residue-class argument needed to turn that representation into a general constant-coefficient recurrence.
+
+The limiting ratio remains a separate unresolved conclusion in the record. The reported values of $a_n/F_{n+2}$ at $n=12,24,36$, rounded to six decimal places, are $0.339523$, $0.333462$, and $0.333336$, respectively. In the root-of-unity decomposition, the missing step is a rigorous bound showing that the nontrivial contributions are negligible relative to $F_{n+2}$; the recorded target is $P_n(\omega)+P_n(\omega^2)=o(F_{n+2})$. Such a bound would connect the decomposition to $a_n/F_{n+2}\to1/3$, but neither the observed ratios nor the vanishing finite recurrence residuals establish it.
+
+The findings therefore support the exact reported finite count and identify specific algebraic and asymptotic obligations without resolving the full project question.
+
+\section{Research methods and proposed approaches}
+The initial method records six states, indexed by the sum residue modulo $3$ and a bit indicating whether the preceding integer was selected. The indexing is one-based, and the initial state represents the empty subset, with residue $0$ and the selection bit unset. When processing the next integer, omission preserves the residue and clears the bit; selection is permitted only when the bit is unset, adds the integer to the residue, and sets the bit. This formulation retains both the information needed to enforce nonadjacency and the information needed to count sums divisible by $3$.
+
+Independent small-case enumeration was used to test an early pattern rather than to justify a recurrence. The enumeration considered bit masks, rejected those containing adjacent selected positions, and included the empty subset. The tentative relation $a_{n+3}=a_{n+2}+a_n$ holds for the first two tested transitions but fails at $n=2$, where $a_5=5$ while $a_4+a_2=3+1=4$. This counterexample decisively rejects that relation, but it does not reject the six-state method or establish a replacement recurrence.
+
+A subsequent exact dynamic program implemented the six-state transitions through $n=60$. It tested the candidate relation $a_{n+12}-5a_{n+9}+2a_{n+6}+5a_{n+3}+a_n=0$ for every starting index from $n=0$ through $n=48$, obtaining zero residuals throughout that range. The recorded computations also returned $a_{12}=128$. These are bounded exact computational results: they support the candidate relation without establishing its validity for arbitrary indices.
+
+The proposed algebraic route introduces the weighted polynomial $P_n(q)$, in which each admissible subset contributes a monomial whose exponent is its element sum. Separating subsets according to whether they contain the final integer gives the weighted recurrence $P_n(q)=P_{n-1}(q)+q^nP_{n-2}(q)$ for $n\geq2$, with the initial polynomials handled separately. The root-of-unity approach then extracts residue $0$ by averaging $P_n(1)$, $P_n(\omega)$, and $P_n(\omega^2)$, where $\omega$ is a primitive cube root of unity. In this decomposition, $P_n(1)=F_{n+2}$ is the unweighted component, while the two nontrivial evaluations are complex conjugates.
+
+The proposed transfer argument groups the weighted recurrence into blocks of three steps. Its intended reduction associates the polynomial $x^2-x-1$ with each nontrivial root-of-unity component and $x^2-4x-1$ with the Fibonacci component under three-step advancement; combining these polynomials is the proposed source of the candidate recurrence. The consequential missing step is a symbolic calculation of the phase-ordered matrix products for each residue class, including verification of the proposed trace $1$ and determinant $-1$ for the nontrivial blocks.
+
+Because the transfer matrices need not commute, their chronological order cannot be suppressed, and the $n=0$ boundary requires separate treatment rather than an unsupported extension of the weighted recurrence.
+
+A second encoding uses gap removal rather than state transitions. For a nonconsecutive subset with positions $i_1<\cdots<i_k$, the substitution $y_j=i_j-(j-1)$ produces an ordinary $k$-subset of \$\textbackslash{}\{1,\textbackslash{}ldots,n-k+1\textbackslash{}\}\$. The inverse substitution $i_j=y_j+(j-1)$ restores the required gaps, so the positional correspondence is reversible. Its weight relation is $\sum_{j=1}^k i_j=\sum_{j=1}^k y_j+k(k-1)/2$, which identifies the contribution introduced by removing the gaps.
+
+The Gaussian-binomial convention is essential when translating this correspondence into a generating expression. Under the standard partition-normalized convention, \$\textbackslash{}begin\{bmatrix\}m\textbackslash{}\textbackslash{}k\textbackslash{}end\{bmatrix\}\_q\$ enumerates ordinary subsets with the baseline sum $k(k+1)/2$ removed. Thus the ordinary-subset contribution restores a factor $q^{k(k+1)/2}$, which combines with the gap-removal factor $q^{k(k-1)/2}$ to give $q^{k^2}$. This corrects the earlier explanation, which assigned the wrong baseline factor, while retaining the proposed representation \$P\_n(q)=\textbackslash{}sum\_\{k=0\}\textasciicircum{}\{\textbackslash{}lfloor(n+1)/2\textbackslash{}rfloor\}q\textasciicircum{}\{k\textasciicircum{}2\}\textbackslash{}begin\{bmatrix\}n-k+1\textbackslash{}\textbackslash{}k\textbackslash{}end\{bmatrix\}\_q\$, with the empty-subset term equal to $1$.
+
+Exact integer-polynomial comparisons between the Gaussian-binomial expression and the weighted recurrence were performed through $n=18$, before specializing $q$. These comparisons provide a different finite encoding of the counts, but the recorded work still identifies a fully stated generating-function derivation and a justified root-of-unity or residue-class reduction as obligations for the global argument. A correctly formulated $q$-Lucas argument was suggested as one possible continuation, not recorded as completed.
+
+Separately, the proposed limit $a_n/F_{n+2}\to1/3$ requires a bound showing that the two nontrivial root-of-unity contributions are $o(F_{n+2})$; neither finite recurrence agreement nor observed ratios supplies that bound, and no complete recurrence or asymptotic proof is recorded.
+
+\section{Unsuccessful approaches and competing evidence}
+The unsuccessful arguments have different evidentiary status: one proposed recurrence is contradicted by a small exact count, whereas the longer recurrence and the generating-function representation have finite corroboration but incomplete general proofs. These distinctions matter because rejecting a particular formula does not reject the counting problem or the method that suggested it. The available reports are not independently verified, and agreement among their conclusions should therefore not be treated as an additional proof.
+
+The clearest negative result concerns the tentative rule $a_{n+3}=a_{n+2}+a_n$. Enumeration with one-based indices, including the empty subset and excluding adjacent selections, gives $(a_0,\ldots,a_8)=(1,1,1,2,3,5,8,12,19)$. Although the rule holds for $n=0$ and $n=1$, it fails at $n=2$: $a_5=5$, while $a_4+a_2=3+1=4$. Thus the initial agreement cannot justify this recurrence; the counterexample refutes the rule without establishing a replacement.
+
+The competing candidate is the order-twelve relation $a_{n+12}-5a_{n+9}+2a_{n+6}+5a_{n+3}+a_n=0$. Exact dynamic programming computes counts through $n=60$ and reports zero residuals for every tested starting index $0\leq n\leq48$; the same finite calculation gives $a_{12}=128$. Its state records the sum residue modulo $3$ and whether the preceding integer was selected, so that omission resets the selection flag and inclusion is allowed only when that flag is unset. This supplies a concrete finite check of both restrictions, but the vanishing residuals do not establish the candidate relation for arbitrary $n$.
+
+The missing transfer-matrix argument is substantive rather than merely notational. The transition matrices are periodic, but they do not commute in general, so a valid block argument must specify the ordered three-step product for each phase and prove the asserted polynomial identity. In the roots-of-unity formulation, the proposed derivation relies on a block trace of $1$ and determinant of $-1$, followed by combination with the ordinary Fibonacci component; these identities remain proof obligations in the supplied account.
+
+Moreover, the weighted recurrence $P_n(q)=P_{n-1}(q)+q^nP_{n-2}(q)$ is stated for $n\geq2$, so an argument intended to cover the initial block must handle its boundary separately rather than implicitly extending the recurrence beyond its stated domain.
+
+A different defect appears in the explanation of the Gaussian-binomial representation. The reversible gap-removal substitution $y_j=i_j-(j-1)$ contributes the sum offset $k(k-1)/2$, but under the stated partition-normalized convention the generating polynomial for ordinary subsets contributes the distinct offset $k(k+1)/2$. The earlier explanation incorrectly used $k(k-1)/2$ for this second contribution. Correcting it gives the total exponent $k(k-1)/2+k(k+1)/2=k^2$, so the proposed formula $P_n(q)=\sum_k q^{k^2}\binom{n-k+1}{k}_q$ survives the correction.
+
+Exact integer-polynomial comparisons agree through $n=18$; nevertheless, the corrected normalization and the finite comparisons must be distinguished from a complete general generating-function derivation and its subsequent use to prove the recurrence.
+
+The asymptotic conclusion has a separate unresolved requirement. In the roots-of-unity decomposition, the contributions at a primitive cube root $\omega$ and its conjugate must be bounded relative to the unweighted count $F_{n+2}$; specifically, their combined contribution must be shown to be $o(F_{n+2})$. The recorded ratios are consistent with convergence toward $1/3$, but no analytic estimate establishing that negligibility is supplied. Even a proved constant-coefficient recurrence would still require control of the relevant characteristic roots and coefficients before it could establish $a_n/F_{n+2}\to1/3$.
+
+Finally, the interrupted investigation contributes no complete additional mathematical argument. Its lack of a completed result is an evidence limitation, not a counterexample to periodic transfer matrices, roots-of-unity evaluation, or gap removal. The supported conclusion is therefore narrower than a failure of these approaches: the short recurrence is refuted, the exponent explanation requires correction, and the longer recurrence and limiting density remain unproved in the supplied record.
+
+\section{Evidence limitations and uncertainties}
+The principal limitation is the gap between reported agreement and a complete mathematical argument. The supplied record contains finite exact computations, proposed structural derivations, and unresolved objections, but its reported conclusions have not been independently verified. Agreement among these reports therefore provides corroboration rather than independent verification; in particular, the recorded arguments do not establish the requested general recurrence or asymptotic limit.
+
+The evidence distinguishes a rejected conjecture from an unproved candidate. The tentative rule $a_{n+3}=a_{n+2}+a_n$ is contradicted by the recorded enumeration at $n=2$, where $a_5=5$ but $a_4+a_2=3+1=4$. This counterexample rejects that rule, not the counting problem or the transfer-matrix approach. By contrast, the later candidate of order $12$ remains consistent with the reported finite tests, so its status is unresolved rather than refuted.
+
+The strongest reported recurrence check uses an exact-integer dynamic program that tracks the sum residue modulo $3$ and whether the preceding integer was selected. Counts were computed through $n=60$, and the candidate recurrence had zero residual for every tested starting index from $n=0$ through $n=48$. The reported value $a_{12}=128$ also agrees with finite polynomial coefficient extraction. These computations support the finite value and the candidate relation over the tested range, but they do not supply the missing implication from the state transitions to a recurrence valid for arbitrary $n$.
+
+That implication requires an explicit symbolic treatment of the periodic transitions. The unresolved obligations include specifying the order of multiplication in each three-step phase product and proving the polynomial identity used to derive the scalar recurrence; periodicity alone does not justify rearranging matrices that need not commute. Boundary indices also matter: the weighted recurrence is stated for $n\geq 2$, so the initial cases, including the empty-subset contribution at $n=0$, must be handled separately. A complete recurrence statement consequently needs both a justified range of validity and sufficient initial values.
+
+The Gaussian-binomial representation has a narrower explanatory uncertainty. Under the stated partition-normalized convention, the subset generating sum contributes the baseline factor $q^{k(k+1)/2}$, while gap removal contributes $q^{k(k-1)/2}$; together these give $q^{k^2}$. The record corrects an earlier explanation that used the wrong baseline factor without withdrawing the displayed formula. Although one assessment describes the bijection and formula as correct, later assessments still identify a fully stated symbolic derivation under the precise indexing convention as unfinished; agreement of exact polynomials through $n=18$ does not itself resolve that obligation.
+
+The limiting density remains a separate proof obligation even if the recurrence is established. The root-of-unity approach requires control of the two nontrivial cube-root contributions relative to the Fibonacci count, specifically a proof that their combined contribution is $o(F_{n+2})$. Neither the observed finite ratios nor vanishing recurrence residuals provide that estimate, and a recurrence alone would still require analysis of the relevant characteristic roots and coefficients. Thus the supplied evidence supports partial progress, but not a completed proof that $a_n/F_{n+2}\to 1/3$.
+
+\section{Open questions and next steps}
+The first priority is to replace the rejected short recurrence with a general transition identity. The tentative rule $a_{n+3}=a_{n+2}+a_n$ agrees with the first two transitions but fails at $n=2$, where exact enumeration gives $a_5=5$ while $a_4+a_2=4$. Thus, checking beyond the initial transitions has already supplied a decisive negative result for that rule; the remaining question is what algebraic relation the counting process actually supports. Finite agreement with a replacement relation can corroborate a derivation, but cannot establish its validity for arbitrary indices.
+
+The most direct next step is a symbolic derivation from the periodic transfer matrices. The six-state formulation retains both the sum residue modulo $3$ and whether the preceding integer was selected, so it provides a way to preserve the information lost by a premature scalar recurrence. A complete argument should display the ordered three-step product for each residue class of the index and establish the polynomial identity needed to obtain the candidate order-$12$ recurrence. Because the phase matrices do not generally commute, periodicity alone does not justify rearranging their products or transferring an identity from one phase to another.
+
+Boundary indices require a separate part of that derivation. The weighted recurrence is stated for $n\geq 2$, and therefore cannot by itself justify a block calculation that implicitly uses an earlier transition. The cases $n=0$ and $n=1$ should be handled explicitly, retaining the empty subset at $n=0$, and the resulting scalar recurrence should be accompanied by sufficient initial values and an exact starting index. These checks are necessary to connect a recurrence for later residue-class blocks to a recurrence for the full counting sequence.
+
+The limiting density remains a distinct proof obligation. For the sum-weighted polynomial $P_n(q)$ and a primitive cube root of unity $\omega$, the roots-of-unity approach calls for a rigorous bound showing that the contributions $P_n(\omega)$ and $P_n(\omega^2)$ are negligible relative to $F_{n+2}$. The proposed route is to determine the eigenvalues of the ordered three-step products and use them to control these nontrivial modes in every index class. Only after this growth comparison is proved can the decomposition establish $a_n/F_{n+2}\to 1/3$; a recurrence or a collection of numerical ratios is not a substitute for that estimate.
+
+The gap-removal representation offers an alternative route, provided its normalization is made explicit. Under the standard Gaussian-binomial convention, the subset-sum baseline is $k(k+1)/2$, while the position shift contributes $k(k-1)/2$; their combined exponent is $k^2$. A self-contained treatment should state the reversible position map and justify the generating identity for all admissible indices before applying a correctly stated $q$-Lucas or residue-class argument. This alternative should be judged by whether it closes the same global recurrence and growth obligations, rather than merely extending the range of coefficient agreement.
+
+\section{Verification status and limitations}
+\begin{itemize}
+\item The saved record may contain unverified interpretations and unresolved evidence conflicts; these require independent assessment.
+\end{itemize}
+\section{Open obligations}
+\begin{itemize}
+\item investigator\_output/open\_obligations/0: Check the proposed relation beyond the first two transitions.
+\item investigator\_output/open\_obligations/0: Show the three-step matrix product for each residue class, including the n=0 boundary.
+\item investigator\_output/open\_obligations/0: Use a correctly stated q-Lucas or residue-class argument to obtain a general recurrence from the identity.
+\item investigator\_output/open\_obligations/0: Derive the order-12 recurrence from exact phase-ordered transfer-matrix products for every n.
+\item investigator\_output/open\_obligations/0: Derive the required constant-coefficient recurrence globally from a justified root-of-unity or transfer-matrix identity.
+\item investigator\_output/open\_obligations/1: Derive a general transition identity before claiming any recurrence.
+\item investigator\_output/open\_obligations/1: Prove the omega terms grow strictly slower than F\_(n+2), rather than relying on finite ratios.
+\item investigator\_output/open\_obligations/1: Supply a rigorous asymptotic estimate for the nontrivial cube-root terms.
+\item investigator\_output/open\_obligations/1: Verify all initial/boundary indices algebraically rather than only by DP.
+\item investigator\_output/open\_obligations/1: Prove a\_n/F\_(n+2) tends to 1/3 with a bound on the nontrivial modes.
+\item objections/0: The proposed three-step recurrence has the explicit n=2 counterexample a\_5=5 != a\_4+a\_2=4.
+\item objections/0: A finite range cannot establish the recurrence for all n.
+\item objective\_review/proof\_obligations/0: Derive a general linear recurrence with integer coefficients.
+\item investigator\_output/open\_obligations/2: Prove the nontrivial root-of-unity terms are negligible compared with F\_(n+2).
+\item objections/0: The standard q-binomial identity should be stated with its precise subset-indexing convention; the previous artifact's explanatory factor was incorrect.
+\item objective\_review/proof\_obligations/0: Derive a general recurrence from the periodic transition matrices.
+\end{itemize}
+\section{Conclusion}
+Conclusions are limited to the findings and uncertainties documented in the cited saved research, as examined in the sections above.
+
+\section*{Authorship note}
+AI-assisted synthesis from saved research; not independently peer reviewed.
+\end{document}

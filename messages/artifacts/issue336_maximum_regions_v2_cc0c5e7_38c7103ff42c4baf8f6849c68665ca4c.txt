@@ -1,0 +1,74 @@
+The Sharp Region Bound for Straight-Line Arrangements
+
+Abstract
+For every nonnegative integer $n$, the maximum number of regions formed by $n$ full straight lines in the Euclidean plane is $M(n)=1+n(n+1)/2$, where regions are connected components of the complement of the lines. The proof separates a universal upper bound from an explicit attaining construction. Convexity of the existing regions shows that a noncoincident added line meeting the preceding lines at $m$ distinct points creates exactly $m+1$ new regions. Thus the $k$th line adds at most $k$ regions. The family $y=ix+i^2$, for $i=1,\ldots,n$, attains every incremental bound because its intersections with earlier lines are distinct along each newly added line. The empty arrangement and the values through $n=4$ are included. The argument is deductive; independent or formal verification is not claimed.
+
+Problem framing
+Let $n$ be a nonnegative integer, and consider an arrangement of $n$ full straight lines in the Euclidean plane. A region is a connected component of the plane after the union of the lines has been removed. Write $M(n)$ for the largest possible number of regions. The upper-bound argument permits parallel lines, several lines through one point, and repeated lines.
+Determining $M(n)$ requires two separate arguments: no arrangement may exceed the proposed value, and an admissible arrangement must attain it for every $n$. Small examples can check the result but cannot establish either assertion for all $n$. The empty arrangement must also be included, since it leaves the whole plane as one region.
+
+Methods and evidence
+We insert the lines one at a time and count the increase in the number of regions. The key step identifies the regions crossed by a new line with the connected pieces remaining on that line after its old-line intersections are removed. After proving the resulting upper bound for arbitrary arrangements, we verify an explicit family that reaches the bound at every insertion. The argument uses geometry and exact algebra, not computational experiments or extrapolation from small cases.
+
+1. Main result
+Theorem. For every nonnegative integer $n$, the maximum number of regions formed by $n$ full straight lines in the Euclidean plane is
+$M(n)=1+\frac{n(n+1)}{2}$.
+For positive $n$, the lines $L_i:y=ix+i^2$, with $i=1,\ldots,n$, attain this value. For $n=0$, the attaining arrangement is empty.
+The proof has two independent extremal parts. First, every insertion increases the region count by at most its position in the insertion order. Second, the stated family reaches each of those bounds, so the upper bound is an actual maximum rather than merely a ceiling.
+
+2. Convexity of arrangement regions
+Lemma. Every region of a finite line arrangement is open and convex. To prove this, choose an affine equation for each line, with the line as its zero set. On a connected component of the complement, each equation has a constant strict sign: continuity prevents a connected set avoiding the zero set from containing both positive and negative values.
+Fixing all these signs specifies an intersection of open half-planes. Such an intersection is open and convex and, when nonempty, connected. Every connected component lies in one such intersection, while the intersection itself lies in a single connected component. Hence the nonempty sign intersections are exactly the regions.
+
+3. The exact increment caused by one line
+Lemma. Suppose a new line $L$ does not coincide with an existing line and meets the existing lines at exactly $m$ distinct points. Removing those points from $L$ leaves $m+1$ connected pieces. These are open intervals and rays when $m>0$; when $m=0$, the only piece is the whole line. Each piece lies in one old region because all old affine equations retain constant nonzero signs along it.
+Different pieces must lie in different old regions. Otherwise, choose a point in each of two pieces belonging to the same region. Convexity would place the segment joining them inside that region, but the segment contains one of the removed old-line intersection points. That point lies on an old line and therefore cannot belong to an old region.
+Each old region met by $L$ splits into exactly two regions. An intersection point of $L$ with that open region has a small disk around it contained in the region, so there are points on both sides of $L$. Intersecting the region with the two open half-planes bounded by $L$ gives two nonempty convex sets; the two sides cannot belong to one connected component avoiding $L$. Thus each crossed region contributes exactly one additional region.
+Regions not met by $L$ remain unchanged. There are exactly $m+1$ crossed regions, so the total increase is $m+1$. If instead $L$ coincides with an old line, the union of the lines does not change and the increase is zero.
+
+4. Universal upper bound
+Insert an arbitrary arrangement in any order. If the $k$th line does not coincide with an earlier line, each of the preceding $k-1$ lines meets it in at most one point. Thus the number of distinct intersection points on the new line is at most $k-1$, and the increment lemma bounds the number of new regions by $k$. A coincident insertion contributes zero and satisfies the same bound.
+Parallel lines and multiple intersections cannot increase this estimate. A parallel old line contributes no intersection point, while several old lines meeting the new line at the same point contribute only one distinct point. Consequently, no general-position hypothesis is needed for the upper bound.
+Before any insertion, the plane has one region. Summing the successive upper bounds gives
+$M(n)\leq 1+\sum_{k=1}^{n}k=1+\frac{n(n+1)}{2}$.
+The summation counts only possible increases, so this inequality applies to every arrangement, not just to a chosen construction.
+
+5. An explicit arrangement attaining the bound
+For each positive integer $i$, define $L_i$ by $y=ix+i^2$. The slopes are distinct, so no two of these lines are parallel or coincident. We insert them in increasing order of their indices.
+For $i<k$, the intersection of $L_i$ and $L_k$ satisfies $ix+i^2=kx+k^2$. Since $i\neq k$, solving gives
+$x=-(i+k),\qquad y=-ik$.
+With $k$ fixed, distinct preceding indices $i$ yield distinct abscissas $-(i+k)$. Therefore $L_k$ meets the preceding $k-1$ lines at exactly $k-1$ distinct points.
+The increment lemma now gives exactly $k$ new regions at step $k$. This also covers $k=1$: there are no old intersection points, and the first line creates one additional region. Taking the first $n$ lines therefore produces exactly
+$1+\sum_{k=1}^{n}k=1+\frac{n(n+1)}{2}$
+regions. This matches the universal upper bound and proves the theorem for positive $n$.
+
+6. Empty arrangement and small-value checks
+For $n=0$, no lines are removed and the whole plane is one connected region. The sum in the counting formula is empty, so its value is zero and the formula gives $M(0)=1$. This establishes the boundary case without requiring a first insertion.
+For $n=0,1,2,3,4$, the formula gives $1,2,4,7,11$ regions, respectively. Geometrically, the positive cases are realized by one dividing line, two intersecting lines, three pairwise-intersecting nonconcurrent lines, and a fourth line crossing the first three at distinct points. The explicit construction supplies these configurations through its successive increases of $1,2,3,4$. These calculations check the general result rather than replace its proof.
+
+Claim register
+C1 · established: The problem concerns nonnegative integers $n$ and full straight lines in the Euclidean plane; regions are connected components of the complement of their union. Parallel, concurrent, and repeated lines are allowed in the upper-bound argument.
+These are the domain and definitions stated in the saved argument. They specify the objects being counted rather than impose general-position assumptions.
+C2 · established: A sharp extremal result is obtained by proving a universal incremental upper bound and separately constructing an arrangement that attains every incremental bound; small cases serve only as checks.
+The saved method separates the upper-bound and existence requirements and supplies deductive arguments for both. Its small-value calculations are not used to infer the general formula.
+C3 · established: Every region of a finite line arrangement is open and convex: it is a nonempty intersection of open half-planes determined by a fixed collection of strict signs of affine line equations.
+Reasoning step 1 identifies connected components with nonempty strict-sign cells. Each affine equation has constant sign on a connected component avoiding its zero line; conversely, each nonempty sign cell is convex and connected.
+C4 · established: A new line not coinciding with an old line creates exactly $m+1$ new regions when it meets the old lines at $m$ distinct points. A coincident line creates no new regions.
+Reasoning step 2 shows that the $m+1$ connected pieces of the new line lie in different old regions by convexity. Each crossed region contains points on both sides of the new line and splits into exactly two nonempty convex components. Uncrossed regions remain unchanged.
+C5 · established: Every arrangement of $n$ lines has at most $1+\sum_{k=1}^{n}k=1+n(n+1)/2$ regions.
+Reasoning step 3 bounds the number of distinct old-line intersections on a noncoincident $k$th line by $k-1$. The increment lemma therefore gives at most $k$ new regions. Summing from the initial single region proves the bound, including arrangements with degeneracies.
+C6 · established: The lines $L_i:y=ix+i^2$, for $i=1,\ldots,n$, attain the incremental bound at every insertion: $L_k$ creates exactly $k$ new regions.
+Reasoning step 4 calculates $L_i\cap L_k=(-(i+k),-ik)$ for $i<k$. Distinct slopes exclude parallel or coincident pairs, and the intersection abscissas are distinct as $i$ varies with $k$ fixed. The increment lemma then gives exactly $k$ new regions.
+C7 · established: For every nonnegative integer $n$, the maximum is $M(n)=1+n(n+1)/2$. For positive $n$ the explicit family attains it, and for $n=0$ the empty arrangement attains $M(0)=1$.
+Reasoning step 5 combines the universal upper bound with the construction's equal region count. The empty sum is zero, and removing no lines leaves the plane connected. Here established denotes support by the displayed deductive argument, not independent certification.
+C8 · established: The small values are $M(0)=1$, $M(1)=2$, $M(2)=4$, $M(3)=7$, and $M(4)=11$.
+Reasoning step 6 evaluates the formula and checks the corresponding geometric configurations. The explicit construction realizes successive increases of $1$, $2$, $3$, and $4$.
+C9 · limitation: The supplied evidence contains a self-contained deductive argument but no independent or formal verification; its summary verification labels are inconsistent with its detailed completeness assessments.
+The detailed argument supplies all six steps, and the substantive review records no remaining obligations or objections while describing the proof as convincing but unverified. Other summary fields label the result partial or incomplete and state that no solution is claimed. No specific missing mathematical step accompanies those labels, and agreement between model reports is not independent verification.
+
+Limitations
+The result concerns full straight lines in the Euclidean plane and regions defined by their complement; no extension to segments, curves, or other ambient spaces is asserted.
+The proof is presented as a self-contained deductive argument, not as an independently or formally verified result. The supplied summaries disagree about completeness, although the detailed argument and substantive review identify no remaining mathematical gap; this evidentiary limitation is recorded in claim C9.
+
+Conclusions
+The universal upper bound and explicit attaining arrangement establish $M(n)=1+n(n+1)/2$ for every nonnegative integer $n$. The central geometric fact is that convexity makes the connected pieces of a newly inserted line correspond to distinct old regions, each split into exactly two. The family $y=ix+i^2$ turns this counting bound into an equality at every step, while the empty arrangement supplies the initial value.
