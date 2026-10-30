@@ -1131,9 +1131,11 @@ def _evidence_based_long_plan(
                 PaperClaim(
                     id=claim_id,
                     statement=statement[:1600],
-                    status="limitation"
-                    if matching is not None and matching.kind == "limitation"
-                    else "unresolved",
+                    status=(
+                        "limitation"
+                        if matching is not None and matching.kind == "limitation"
+                        else "unresolved"
+                    ),
                     evidence_refs=list(
                         dict.fromkeys(
                             ref for ref in (matching.evidence_refs if matching else chunk)
@@ -1561,32 +1563,20 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Long-paper checkpoint evidence strategy is invalid")
     progress_state = value.get("progress")
     if progress_state is not None:
+        required_progress_keys = {
+            "run_id",
+            "status",
+            "stage",
+            "current",
+            "total",
+            "started_at",
+            "updated_at",
+            "elapsed_seconds",
+        }
         if (
             not isinstance(progress_state, dict)
-            or (
-                set(progress_state)
-                - {
-                    "run_id",
-                    "status",
-                    "stage",
-                    "current",
-                    "total",
-                    "started_at",
-                    "updated_at",
-                    "elapsed_seconds",
-                }
-                not in (set(), {"failure_reason"})
-            )
-            or not {
-                "run_id",
-                "status",
-                "stage",
-                "current",
-                "total",
-                "started_at",
-                "updated_at",
-                "elapsed_seconds",
-            }.issubset(progress_state)
+            or not required_progress_keys.issubset(progress_state)
+            or set(progress_state) - required_progress_keys not in (set(), {"failure_reason"})
             or (
                 "failure_reason" in progress_state
                 and (
