@@ -4145,8 +4145,10 @@ def main() -> None:
         assert record["tex_source"].startswith(r"\documentclass")
         assert r"\end{document}" in record["tex_source"]
         assert papers.paper_tex(str(path), first["paper_id"]) == record["tex_source"]
-        assert record["tex_source"].count(r"\section*{About this paper}") == 1
-        assert "AI-generated research synthesis" in record["tex_source"]
+        # Default publication mode omits opt-in research-system frontmatter.
+        assert r"\section*{About this paper}" not in record["tex_source"]
+        assert "AI-generated research synthesis" not in record["tex_source"]
+        assert "SIGMA AI-assisted research synthesis" in record["tex_source"]
         assert record["generation"]["call_limit"] == 1
         assert papers.get_pdf(str(path), first["paper_id"]).startswith(b"%PDF-")
         saved_text = papers.paper_text(str(path), first["paper_id"])
