@@ -592,7 +592,11 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
                         retry_events.append(event)
 
                     return await papers.generate(
-                        str(path), credential["identity"], view.project.id, progress=collect
+                        str(path),
+                        credential["identity"],
+                        view.project.id,
+                        progress=collect,
+                        include_research_details=True,
                     )
 
                 result = asyncio.run(resume())
@@ -602,6 +606,8 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert compile_calls == 2
         assert saved["generation"]["provider_calls_attempted"] == 1
         assert saved["generation"]["provider_calls_lifetime_total"] == 1
+        assert saved["generation"]["include_research_details"] is True
+        assert r"\\section*{About this paper}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
         assert [event["stage"] for event in first_events if event["state"] == "active"] == [
@@ -612,6 +618,69 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         ]
         assert retry_events[-1]["stage"] == "complete" and retry_events[-1]["state"] == "complete"
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
+
+
+def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> None:
+    """Extra diagnostics are opt-in; scientific caveats remain in both papers."""
+    paper = draft()
+    snapshot = "c" * 64
+    obligation = [
+        {
+            "status": "Not listed by author; not presumed resolved",
+            "source_refs": ["session:one"],
+            "text": "Confirm the missing proof step.",
+        }
+    ]
+    records = [
+        {
+            "source_ref": "session:one",
+            "field": "skeptic_objections",
+            "content": "This objection remains unresolved.",
+        }
+    ]
+    opts = {
+        "math_style": True,
+        "obligation_reconciliation": obligation,
+        "integrity_records": records,
+    }
+    concise = papers._tex(
+        paper,
+        ["A validator recorded an unsupported citation."],
+        snapshot,
+        include_research_details=False,
+        **opts,
+    )
+    detailed = papers._tex(
+        paper,
+        ["A validator recorded an unsupported citation."],
+        snapshot,
+        include_research_details=True,
+        **opts,
+    )
+    for required in (
+        r"\\begin{abstract}",
+        r"\\section{Interpretation}",
+        r"\\section{Open obligations}",
+        r"\\section{Verification status and limitations}",
+        r"\\section{Conclusion}",
+        "This paper does not establish a formal proof.",
+    ):
+        assert required in concise and required in detailed, required
+    for diagnostic in (
+        "Claim status and evidence",
+        "Claims discussed:",
+        "Frozen obligation reconciliation",
+        "Structured reasoning and review records",
+        "Validation warnings",
+        "Snapshot SHA-256",
+        "Research style:",
+        "About this paper",
+    ):
+        assert diagnostic not in concise, diagnostic
+        assert diagnostic in detailed, diagnostic
+    assert "Confirm the missing proof step." not in concise
+    assert "Confirm the missing proof step." in detailed
+    assert r"\\section*{Authorship note}" in concise
 
 
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
@@ -2939,6 +3008,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 
 
 def main() -> None:
+    test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
     test_summary_only_research_uses_zero_paid_evidence_extraction_calls()
     test_one_shot_provider_failure_requires_explicit_reset_without_rebilling()
     test_structured_index_retains_session_narrative_and_original_question()
