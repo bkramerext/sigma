@@ -1204,6 +1204,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "schema_version",
         "kind",
         "snapshot_sha256",
+        "frozen_package",
         "project_id",
         "binding_fingerprint",
         "model",
@@ -1243,6 +1244,17 @@ def _load_work(path: str) -> dict[str, Any] | None:
     if type(value.get("explicit_restart_pending", False)) is not bool:
         raise ProjectError("Long-paper checkpoint restart state is invalid")
     value["schema_version"] = 2
+    if value.get("frozen_package") is not None:
+        frozen = value["frozen_package"]
+        if (
+            not isinstance(frozen, dict)
+            or frozen.get("schema") != "sigma-paper-evidence-v2"
+            or frozen.get("project_id") != value.get("project_id")
+            or not isinstance(frozen.get("sources"), list)
+            or len(_json(frozen)) > MAX_CONTEXT_BYTES
+            or hashlib.sha256(_json(frozen)).hexdigest() != value.get("snapshot_sha256")
+        ):
+            raise ProjectError("Frozen paper evidence checkpoint is invalid")
     if value["kind"] not in {"long_form", "one_shot"}:
         raise ProjectError("Paper checkpoint kind is invalid")
     if any(
@@ -3507,16 +3519,20 @@ async def _generate_impl(
         config = await configuration(view=view, context=initial_auth)
         if not config["available"]:
             raise ProjectError(config["message"])
-        package, snapshot_hash = _snapshot(path)
-        if expected_snapshot_sha256 and expected_snapshot_sha256 != snapshot_hash:
-            raise PaperSnapshotConflict(
-                "Research changed after paper preflight. Review the updated snapshot and start again."
-            )
+        checkpoint = _load_work(path)
+        frozen = checkpoint.get("frozen_package") if checkpoint is not None else None
+        if isinstance(frozen, dict) and checkpoint.get("project_id") == view.project.id:
+            package = frozen
+            snapshot_hash = checkpoint["snapshot_sha256"]
+        else:
+            package, snapshot_hash = _snapshot(path)
+        # The preflight hash is advisory only. The authoritative snapshot is
+        # frozen here, before provider dispatch; live session bookkeeping and
+        # later research edits must not terminate paper generation.
         await report("snapshot", None, None, "milestone")
         binding_fingerprint = hashlib.sha256(
             (initial_auth["mode"] + "\0" + initial_auth["identity"]).encode()
         ).hexdigest()
-        checkpoint = _load_work(path)
         if checkpoint is not None:
             previous_progress = checkpoint.get("progress")
             if previous_progress is not None:
@@ -3589,6 +3605,7 @@ async def _generate_impl(
                         config["reasoning_effort"],
                         kind="one_shot",
                     )
+                work["frozen_package"] = package
                 work["progress"] = {
                     "run_id": run_id,
                     "status": "running",
@@ -3634,6 +3651,10 @@ async def _generate_impl(
                     config["model"],
                     config["reasoning_effort"],
                 )
+                work["frozen_package"] = package
+                _save_work(path, work)
+            elif "frozen_package" not in work:
+                work["frozen_package"] = package
                 _save_work(path, work)
             draft, provider_calls, evidence_batch_count = await _generate_long_draft(
                 package,
@@ -3661,23 +3682,9 @@ async def _generate_impl(
         validation_warnings = _validate(draft, package)
         obligation_reconciliation = _reconcile_obligations(draft, package)
         await report("validation", None, None, "milestone")
-        final_auth = await auth_context()
-        latest = inspect_project(path)
-        if (
-            final_auth["identity"] != initial_auth["identity"]
-            or final_auth["mode"] != initial_auth["mode"]
-        ):
-            raise ProjectError(
-                "AI account or billing mode changed during generation; draft discarded"
-            )
-        # The provider authored against the frozen package captured at the
-        # beginning of this run. New research is not a reason to discard a paid
-        # draft: archive it with the original snapshot and clearly record that
-        # the live project advanced. A future paper can use the newer evidence.
-        if latest.project.id != view.project.id:
-            raise ProjectError("Project identity changed during paper generation")
-        _latest_package, latest_hash = _snapshot(path)
-        research_changed_during_generation = latest_hash != snapshot_hash
+        # The accepted model, account and frozen evidence belong to this
+        # generation. Rechecking changing live inputs here could discard
+        # expensive completed work. A later run may use newer research.
         identifier = uuid4().hex
         timestamp = _now()
         warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
@@ -3712,8 +3719,7 @@ async def _generate_impl(
                     else provider_calls
                 ),
                 "progress_run_id": run_id,
-                "research_changed_during_generation": research_changed_during_generation,
-                "generation_elapsed_seconds": int(
+                 "generation_elapsed_seconds": int(
                     elapsed_before
                     + max(
                         0,
@@ -3893,10 +3899,19 @@ def preflight(
     reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """Estimate bounded long-paper calls without contacting an inference provider."""
-    package, fingerprint = _snapshot(path)
-    size = len(_json(package))
     view = inspect_project(path)
     existing = _load_work(path)
+    package, fingerprint = _snapshot(path)
+    # Resuming always uses the original immutable evidence, not a fresh
+    # snapshot that may have changed while authoring was underway.
+    frozen = existing.get("frozen_package") if existing is not None else None
+    if (
+        isinstance(frozen, dict)
+        and existing.get("project_id") == view.project.id
+    ):
+        package = frozen
+        fingerprint = existing["snapshot_sha256"]
+    size = len(_json(package))
     long_form = _paper_long_form(package, force_long_form=force_long_form, existing=existing)
     fast_preflight = bool(
         long_form
