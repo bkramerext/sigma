@@ -1,29 +1,44 @@
-# RED R4R — v0.1.5 About build SHA
+# RED R4R — v0.1.5 About build SHA correction
 
-**Issue:** #337 follow-up: production About showed build `unknown`.
-**Branch:** `red/v015-about-build-sha`, based on current `main` at
-`db560f3ab0014d7b455ad7a114a65e3d2bf37fd2`.
-**Cause:** release images are built from a Git archive, which has no `.git`;
-the frontend Docker build did not receive the requested source SHA. Vite's
-fallback therefore rendered `unknown`.
+Production About previously displayed `Version 0.1.5 · Build unknown`.
 
-**Correction:** `deploy/release_image.py` passes the full release SHA to the
-frontend Docker build as `SIGMA_BUILD_COMMIT`. The frontend Dockerfile exposes
-that value to Vite; Vite embeds the seven-character prefix. Added a regression
-assertion and made the release runbook require checking the generated bundle.
+## Cause and correction
 
-**Verification:** `python3 tests/release_image.py` passed (3 tests). A frontend
-production build with `SIGMA_BUILD_COMMIT=aa23f4b393f4ef657471705f467f9beecbb0689a`
-passed and emitted `aa23f4b` into the JavaScript bundle. `git diff --check`
-passed. Full `./sigma test`, exact-head CI, merged release build, and production
-verification remain pending.
+Release images are built from a Git archive without `.git`, so Vite could not
+discover the source SHA. PR [#344](https://github.com/bkramerext/sigma/pull/344)
+passes the full requested SHA as `SIGMA_BUILD_COMMIT` to the frontend Docker
+build; Vite displays its seven-character prefix. Review also found the active
+host helper would call its old builder before selecting candidate code. PR
+[#345](https://github.com/bkramerext/sigma/pull/345) checks out and validates
+candidate tooling before image construction, and restores the prior checkout
+on a candidate build/preflight failure without stopping the service or
+changing the release pin.
 
-No paid provider calls or production changes occurred during this correction.
-No local SIGMA server was contacted. Existing authorization for self-review,
-self-merge, and the bounded v0.1.5 quick-patch deployment applies; do not tag
-v0.1.5 without separate authorization.
+Both PRs were reviewed and merged under the operator's standing
+self-review/self-merge authorization. #344 head
+`0750cbefbdb4dc6d0db3cea8ed104f109d6856fd` passed CI run 41009812640. #345
+final head `2765872e9c8b85f362d5bc6656ed42126db9187b` passed CI run 41010839265.
+Focused local checks passed: release-image tests (3), deployment-package
+checks, GCE deployment automation, T173 failed-build recovery rehearsal, Ruff
+format, and `git diff --check`. A local production frontend build with the
+release SHA confirmed the seven-character value was embedded. The local full
+`./sigma test` was stopped after the operator requested a spot fix; exact-head
+CI completed the repository verification successfully.
 
-Before cutover, found that the host helper originally ran its installed
-builder before checking out the requested release. PR #345 corrects the order
-so candidate build logic is used; the active service and release pin remain
-unchanged until the image build succeeds.
+## Production result
+
+Under the operator's quick-patch deployment authorization, the guarded helper
+deployed exact merged SHA
+`83c89f20e19ea87c4a3b4934942d0a78c2019973` to `sigma-gce-01` on 2026-10-30.
+The helper ran from the selected commit so candidate build tooling was used.
+Host checkout and `SIGMA_RELEASE` match this SHA. Release-image verification
+passed; backend, frontend, and edge containers are healthy; systemd is active
+with no pending reload; and `/srv/sigma-state` remains mounted. The public SPA
+root and JavaScript bundle return HTTP 200, and the bundle contains `83c89f2`.
+Unauthenticated `/api/health` returns HTTP 401 as expected.
+
+Recovery evidence: the existing pre-v0.1.5 snapshot remains READY and was not
+replaced. No new snapshot or restore drill was done for this frontend build
+metadata correction. Backend application code and state schema were unchanged.
+No paid provider calls, local SIGMA server requests, or new infrastructure
+changes occurred. No `v0.1.5` tag was created.

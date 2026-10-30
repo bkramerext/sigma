@@ -1,22 +1,26 @@
 ## Production About build SHA correction (2026-10-30)
 
-Cutover review found that the host helper invokes the currently installed
-image builder before selecting the candidate checkout. PR #345 changes the
-helper to validate candidate tooling before building, while leaving the
-service and protected release pin unchanged until the candidate build passes.
+Production About showed `unknown` because the frontend image is built from a
+Git archive without `.git`, and its Docker build received no source SHA. PR
+[#344](https://github.com/bkramerext/sigma/pull/344) passes the full requested
+SHA as `SIGMA_BUILD_COMMIT`; Vite embeds its seven-character prefix. PR
+[#345](https://github.com/bkramerext/sigma/pull/345) makes the guarded host
+helper select candidate tooling before building, so it uses the candidate's
+release builder. Both PRs were reviewed and merged under the operator's
+standing authorization. Exact-head CI passed on #344 head
+`0750cbefbdb4dc6d0db3cea8ed104f109d6856fd` (run 41009812640) and #345 final
+head `2765872e9c8b85f362d5bc6656ed42126db9187b` (run 41010839265).
 
-Production About displayed version `0.1.5` but build `unknown`. Root cause:
-release images are built from an exact Git archive (which has no `.git`), and
-the frontend Docker build did not receive the source commit. The correction
-passes the full requested SHA to the frontend Docker build as
-`SIGMA_BUILD_COMMIT`; Vite embeds its expected seven-character prefix. The
-deployment runbook now requires checking that prefix in the built bundle.
-
-On branch `red/v015-about-build-sha`, focused release-image tests passed (3).
-A production frontend build with `SIGMA_BUILD_COMMIT=aa23f4b393f4ef657471705f467f9beecbb0689a`
-completed, and the bundle contained `aa23f4b`; `git diff --check` passed. The
-production quick-patch deployment is pending merge and exact-SHA build. No
-production changes or provider calls were made in this correction step. See
+The spot fix was deployed to `sigma-gce-01` on 2026-10-30 at exact SHA
+`83c89f20e19ea87c4a3b4934942d0a78c2019973`. Host checkout and protected
+`SIGMA_RELEASE` match; `sigma.service` is active with no pending unit reload,
+all three containers are healthy, the release-image verifier passed, and the
+state disk remains mounted. The public root and frontend bundle return HTTP
+200; the deployed JavaScript contains expected build prefix `83c89f2`. The
+unauthenticated health API returns HTTP 401 as expected. The existing READY
+pre-v0.1.5 snapshot remains retained; this spot fix created no snapshot and
+made no state/schema changes. No paid provider calls or local SIGMA server
+requests occurred. The `v0.1.5` tag remains absent. See
 [`messages/v015_about_build_sha_r4r.md`](../messages/v015_about_build_sha_r4r.md).
 
 ## Issue #337 — v0.1.5 Stage B readiness (2026-10-29)
