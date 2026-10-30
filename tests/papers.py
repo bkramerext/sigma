@@ -3950,20 +3950,14 @@ def main() -> None:
     original_abstract = substantive.abstract
     original_conclusions = list(substantive.conclusions)
     limited = papers._apply_omission_limits(substantive, material)
-    assert limited.claims[0].status == "unresolved"
-    assert limited.abstract.startswith("IMPORTANT EVIDENCE COVERAGE LIMITATION:")
-    assert original_abstract in limited.abstract
-    assert "Provisional synthesis from covered evidence only" in limited.abstract
-    assert "were not reviewed for this paper" in limited.abstract
-    assert limited.conclusions[0].startswith("PROVISIONAL —")
-    assert original_conclusions[0] in limited.conclusions[0]
-    assert "omitted material was not reviewed" in limited.conclusions[0]
-    assert "IMPORTANT EVIDENCE COVERAGE LIMITATION" in limited.limitations[0]
-    assert "IMPORTANT EVIDENCE COVERAGE LIMITATION" in limited.validation_warnings[0]
+    # Coverage is disclosed without rewriting unrelated claims or the abstract.
+    assert limited.claims[0].status == substantive.claims[0].status
+    assert limited.abstract == original_abstract
+    assert limited.conclusions == original_conclusions
+    assert any("Evidence indexing omitted" in warning for warning in limited.validation_warnings)
     limited_math_tex = papers._tex(
         limited, [], "d" * 64, math_style=True, material_omissions=material
     )
-    assert "C1 -- Unresolved" in limited_math_tex
     assert "Evidence coverage limitation" in limited_math_tex
     assert "were not reviewed for this paper" in limited_math_tex
     assert original_abstract in limited_math_tex
