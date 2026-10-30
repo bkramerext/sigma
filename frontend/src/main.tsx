@@ -1446,6 +1446,25 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
+  async function cancelGeneration() {
+    if (!binding || (!busy && paperProgress?.status !== 'active')) return;
+    try {
+      const response = await fetch('/api/projects/papers/cancel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
+      if (result.cancelled) {
+        request.current?.abort();
+        setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+      } else {
+        setSuccess('No active paper generation was found. Checking saved versions.');
+      }
+      await refresh(selected?.paper_id);
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+
   async function restartCheckpoint() {
     const restartSource = checkpointMismatch ?? restartableCheckpoint;
     if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
@@ -1542,20 +1561,22 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setSuccess('Paper saved in Saved versions.');
     } catch (cause) {
       if (controller.signal.aborted) {
-        const message = requestDispatched
-          ? 'Generation cancelled. Provider completion or usage may be unknown. Check Saved versions and your provider usage before trying again.'
-          : 'Generation cancelled before a provider request was started.';
-        setError(message);
+        // An abort may also mean the dialog was unmounted. The server task
+        // survives losing the stream; only the explicit Cancel action stops it.
+        setError('Paper stream disconnected. Check current progress and saved versions.');
       }
       else reportRequestFailure(errorMessage(cause));
       await refresh(selected?.paper_id);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
-        setError(requestDispatched && providerCallsAttempted === 0
-          ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
-          : requestDispatched
-            ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
-          : message);
+        const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
+        setError(disconnected && requestDispatched
+          ? 'Connection interrupted. Paper generation may still be running; its progress and saved checkpoints remain on the server. Check the current status before trying again.'
+          : requestDispatched && providerCallsAttempted === 0
+            ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
+            : requestDispatched
+              ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
+              : message);
       }
     } finally { finishProvider(); request.current = null; setBusy(false); }
   }
@@ -1565,7 +1586,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
     onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
     onCancel={event => { event.preventDefault(); if (!generating) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={generating} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
@@ -1579,10 +1600,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           : 'Research or AI settings changed. Start over to generate again.'} Saved research and papers remain.</p>
         <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>{checkpointMismatch.incomplete_one_shot ? 'Start over' : 'Clear outdated paper work'}</button>
       </div>}
-      <div className="ai-paper-controls">{!busy && <>
+      <div className="ai-paper-controls">{!generating && <>
         <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>
         {continuationAvailable && restartableCheckpoint && !checkpointMismatch && <button type="button" className="text-view-link" disabled={loading || !binding} onClick={() => setResetConfirm(true)}>Start over</button>}
-      </>}{busy && <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button>}</div>
+      </>}{generating && <button type="button" className="text-view-link" disabled={!binding || loading} onClick={() => void cancelGeneration()}>Cancel</button>}</div>
       {resetConfirm && !busy && restartableCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Confirm starting paper over">
         <p>Discard unfinished paper work?</p>
         <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
