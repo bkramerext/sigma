@@ -1558,8 +1558,21 @@ def _load_work(path: str) -> dict[str, Any] | None:
     if progress_state is not None:
         if (
             not isinstance(progress_state, dict)
-            or set(progress_state)
-            != {
+            or (
+                set(progress_state)
+                - {
+                    "run_id",
+                    "status",
+                    "stage",
+                    "current",
+                    "total",
+                    "started_at",
+                    "updated_at",
+                    "elapsed_seconds",
+                }
+                not in (set(), {"failure_reason"})
+            )
+            or not {
                 "run_id",
                 "status",
                 "stage",
@@ -1568,7 +1581,14 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 "started_at",
                 "updated_at",
                 "elapsed_seconds",
-            }
+            }.issubset(progress_state)
+            or (
+                "failure_reason" in progress_state
+                and (
+                    not isinstance(progress_state["failure_reason"], str)
+                    or len(progress_state["failure_reason"]) > 500
+                )
+            )
             or not isinstance(progress_state.get("run_id"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", progress_state["run_id"])
             or progress_state.get("status") not in {"running", "failed", "cancelled", "complete"}
@@ -1659,10 +1679,17 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
+        **(
+            {"failure_reason": state["failure_reason"]}
+            if status == "failed" and state.get("failure_reason")
+            else {}
+        ),
     }
 
 
-def finish_progress(path: str, status: Literal["failed", "cancelled"]) -> None:
+def finish_progress(
+    path: str, status: Literal["failed", "cancelled"], reason: str | None = None
+) -> None:
     """Freeze the latest checkpointed progress when generation exits abnormally."""
     key = str(project_path(path).resolve())
     active = _active_progress.get(key)
@@ -1684,6 +1711,8 @@ def finish_progress(path: str, status: Literal["failed", "cancelled"]) -> None:
         "elapsed_seconds": elapsed,
         "updated_at": now,
     }
+    if reason and status == "failed":
+        frozen["failure_reason"] = reason[:500]
     if work is not None:
         work["progress"] = frozen
         _save_work(path, work)
@@ -4081,8 +4110,11 @@ async def generate(
         await asyncio.gather(task, return_exceptions=True)
         finish_progress(path, "cancelled")
         raise
-    except Exception:
-        finish_progress(path, "failed")
+    except Exception as exc:
+        # The SSE error can disappear on page reload; retain only the same
+        # user-safe ProjectError text in checkpointed progress.
+        reason = str(exc) if isinstance(exc, ProjectError) else "Unexpected paper-generation error; review server logs."
+        finish_progress(path, "failed", reason)
         raise
     finally:
         if _generation_tasks.get(key) is task:
