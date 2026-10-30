@@ -17,6 +17,12 @@ normal SIGMA renewal; token-free local diagnostics recorded sponsor OAuth
 suite includes Ruff, formatting, Pyright, frontend typecheck and production
 build. No provider inference or paper generation occurred.
 
+The local auth database had a stale persisted bootstrap binding that took
+precedence over the current `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. After creating
+a mode-0600 SQLite backup outside the repository, the stale binding was
+removed. Reloading SIGMA established the configured contact as the single
+bootstrap administrator. No project or research data was changed.
+
 ## Backend access log build SHA (2026-10-28)
 
 Uvicorn access entries place the seven-character SHA immediately after the
