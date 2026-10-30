@@ -4909,10 +4909,10 @@ function CloudAuthGate() {
   </CloudIdentityContext.Provider>;
 }
 
-function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowanceLoading, invitationPending = false, onDismiss }: {
+function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowanceLoading, onDismiss }: {
   audience: 'guest' | 'nonmember' | 'returning' | 'invited' | 'sponsored';
   allowance: number | null; allowanceUsed: number; allowanceLoading: boolean;
-  invitationPending?: boolean; onDismiss: () => Promise<void>;
+  onDismiss: () => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
