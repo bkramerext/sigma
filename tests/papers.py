@@ -2752,62 +2752,56 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
 
 
 def test_invalid_planning_claim_reference_is_recoverable() -> None:
-    """A paid invalid outline must not poison Continue or silently lose evidence."""
+    """Repair an inconsistent paid outline without repeating the plan call."""
     package, valid_plan = fast_package()
     invalid_section = valid_plan.sections[0].model_copy(update={"claim_ids": ["C999"]})
     invalid_plan = valid_plan.model_copy(
-        update={"sections": [invalid_section, *valid_plan.sections[1:]]}
+        update={
+            "abstract_claim_ids": ["C999", *valid_plan.abstract_claim_ids],
+            "sections": [invalid_section, *valid_plan.sections[1:]],
+        }
     )
     state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
     planning_calls = 0
-    failing = True
     saves: list[dict[str, Any]] = []
 
     async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
         nonlocal planning_calls
         if schema_name == "sigma_long_paper_plan":
             planning_calls += 1
-            return (invalid_plan if failing else valid_plan), "fixture-model"
+            return invalid_plan, "fixture-model"
         assert schema_name == "sigma_long_paper_section"
         return papers.LongSectionDraft(
             paragraphs=[f"Saved section {input_value['section_number']}."]
         ), "fixture-model"
 
-    async def attempt():
+    async def attempt(target: dict[str, Any]) -> tuple[papers.PaperDraft, int, int]:
         with patch.object(papers, "_provider_structured", new=provider):
             return await papers._generate_long_draft(
                 package,
                 {"identity": "fixture", "mode": "api_key", "token": "fixture"},
                 {"model": "fixture-model", "reasoning_effort": "high"},
-                state,
+                target,
                 lambda value: saves.append(copy.deepcopy(value)),
                 structured_fast_path=True,
             )
 
-    try:
-        asyncio.run(attempt())
-    except ProjectError as exc:
-        assert "unknown claim" in str(exc)
-        assert "invalid outline was not saved" in str(exc)
-    else:
-        raise AssertionError("Unknown planning claim should be rejected before publishing")
+    generated, calls, batches = asyncio.run(attempt(state))
     assert planning_calls == 1
-    assert "plan" not in state
-    assert state["evidence_indexed"] is True
-    assert state["provider_calls"] == 1
-    assert state["provider_calls_total"] == 1
-    assert all(not item.get("plan") for item in saves)
-
-    failing = False
-    generated, calls, batches = asyncio.run(attempt())
-    assert planning_calls == 2
-    assert len(generated.sections) == len(valid_plan.sections)
+    assert calls == 1 + len(valid_plan.sections)
     assert batches == 0
-    assert calls == 2 + len(valid_plan.sections)
+    assert len(generated.sections) == len(valid_plan.sections)
+    assert "C999" not in generated.abstract_claim_ids
+    assert "C999" not in generated.sections[0].claim_ids
+    assert any("unknown or repeated claim links" in item.casefold() for item in generated.validation_warnings)
+    assert state["evidence_indexed"] is True
     assert state["provider_calls_total"] == calls
+    assert state["plan"]["abstract_claim_ids"] == valid_plan.abstract_claim_ids
+    assert state["plan"]["sections"][0]["claim_ids"] == []
+    assert any(item.get("plan") for item in saves)
 
-    # Older versions saved invalid outlines. An explicit Continue repairs
-    # the outline while retaining evidence and previous usage accounting.
+    # Older versions may already have saved an inconsistent outline.
+    # Repair it and reuse the one paid planning call.
     old = papers._new_work("c" * 64, "fast-fixture", "d" * 64, "fixture-model", "high")
     old.update(
         {
@@ -2819,23 +2813,14 @@ def test_invalid_planning_claim_reference_is_recoverable() -> None:
             "provider_calls_total": 1,
         }
     )
-
-    async def resume_old():
-        with patch.object(papers, "_provider_structured", new=provider):
-            return await papers._generate_long_draft(
-                package,
-                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
-                {"model": "fixture-model", "reasoning_effort": "high"},
-                old,
-                lambda _value: None,
-                structured_fast_path=True,
-            )
-
-    _, old_calls, old_batches = asyncio.run(resume_old())
+    _, old_calls, old_batches = asyncio.run(attempt(old))
+    assert planning_calls == 1
     assert old_batches == 0
-    assert old_calls == 2 + len(valid_plan.sections)
+    assert old_calls == 1 + len(valid_plan.sections)
     assert old["provider_calls_total"] == old_calls
-    assert old["plan"]["sections"][0]["claim_ids"] == valid_plan.sections[0].claim_ids
+    assert old["plan"]["abstract_claim_ids"] == valid_plan.abstract_claim_ids
+    assert old["plan"]["sections"][0]["claim_ids"] == []
+
 
 
 def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
@@ -2930,6 +2915,42 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert after["long_form"] is False
             assert after["maximum_provider_calls"] == 1
             assert after["provider_calls_attempted"] == 0
+
+
+def test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims() -> None:
+    original = draft()
+    corrupt = original.model_copy(
+        update={
+            "abstract_claim_ids": ["C999", "C1", "C1"],
+            "claims": [
+                original.claims[0].model_copy(
+                    update={
+                        "evidence_refs": ["project:pid", "invalid:source", "project:pid"],
+                        "status": "established",
+                    }
+                )
+            ],
+            "sections": [
+                original.sections[0].model_copy(update={"claim_ids": ["C999"]}),
+                original.sections[1],
+            ],
+        }
+    )
+    repaired = papers.PaperDraft.model_validate(
+        papers._repair_paper_references(corrupt, {"project:pid"})
+    )
+    assert repaired.abstract == original.abstract
+    assert repaired.sections[0].paragraphs == original.sections[0].paragraphs
+    assert repaired.claims[0].status == "unresolved"
+    assert repaired.claims[0].evidence_refs == ["project:pid"]
+    assert repaired.abstract_claim_ids == ["C1"]
+    assert repaired.sections[0].claim_ids == []
+    assert any("not established" in limitation for limitation in repaired.limitations)
+    assert any("unsupported links were removed" in x for x in repaired.validation_warnings)
+    assert papers._validate(
+        repaired,
+        {"sources": [{"id": "project:pid", "data": {"problem": "Saved objective"}}]},
+    )
 
 
 def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -> None:
@@ -3173,6 +3194,7 @@ def main() -> None:
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
     test_invalid_planning_claim_reference_is_recoverable()
+    test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
