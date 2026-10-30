@@ -354,6 +354,44 @@ def _json(value: Any) -> bytes:
         raise ProjectError("Could not serialize the research snapshot") from exc
 
 
+def _safe_schema_validation_summary(model: type[BaseModel], exc: ValidationError) -> str:
+    """Summarize provider-output validation without exposing rejected values."""
+    field_names: set[str] = set()
+
+    def collect(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            field_names.update(properties)
+            for child in properties.values():
+                collect(child)
+        items = node.get("items")
+        if isinstance(items, dict):
+            collect(items)
+        definitions = node.get("$defs")
+        if isinstance(definitions, dict):
+            for child in definitions.values():
+                collect(child)
+
+    collect(model.model_json_schema())
+    problems = []
+    for error in exc.errors(include_input=False, include_context=False, include_url=False)[:6]:
+        location = []
+        for part in error.get("loc", ()):
+            if isinstance(part, int):
+                location.append("[]")
+            elif isinstance(part, str) and part in field_names:
+                location.append(part)
+            else:
+                location.append("<unknown>")
+        kind = error.get("type", "invalid")
+        if not isinstance(kind, str) or not re.fullmatch(r"[a-z0-9_]{1,48}", kind):
+            kind = "invalid"
+        problems.append(f"{'.'.join(location) or '<root>'}:{kind}")
+    return ", ".join(problems) or "no safe validation details"
+
+
 def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     from sigma.api import export_project_view
 
@@ -1644,7 +1682,15 @@ async def _provider_structured(
         texts = [part["text"] for part in contents if part.get("type") == "output_text"]
         if len(texts) != 1:
             raise ProjectError("Provider returned no single structured long-paper stage")
-        return response_model.model_validate_json(texts[0]), config["model"]
+        try:
+            parsed = response_model.model_validate_json(texts[0])
+        except ValidationError as exc:
+            summary = _safe_schema_validation_summary(response_model, exc)
+            raise ProjectError(
+                "Provider response failed local schema validation "
+                f"({summary}). No paper was published."
+            ) from None
+        return parsed, config["model"]
     except ProjectError:
         raise
     except (TimeoutError, httpx.TimeoutException) as exc:
@@ -1655,7 +1701,7 @@ async def _provider_structured(
         raise ProjectError(
             "Could not reach the AI provider for a long-paper stage. No paper was published."
         ) from exc
-    except (ValueError, KeyError, TypeError, ValidationError) as exc:
+    except (ValueError, KeyError, TypeError) as exc:
         raise ProjectError(
             "Provider returned malformed long-paper stage content. No paper was published."
         ) from exc

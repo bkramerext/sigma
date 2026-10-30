@@ -10,6 +10,7 @@ from typing import cast
 from unittest.mock import patch
 
 import httpx
+from pydantic import ValidationError
 
 from sigma import papers
 from sigma.api import app
@@ -111,6 +112,27 @@ def test_unclassified_evidence_fields_are_conservatively_omitted() -> None:
     assert len(result.omitted_fields) == 1
     assert result.omitted_fields[0].field_ref == unclassified
     assert "conservatively omitted" in result.omitted_fields[0].reason
+
+
+def test_provider_validation_diagnostic_omits_rejected_values() -> None:
+    try:
+        papers.EvidenceBatchResult.model_validate(
+            {
+                "notes": [],
+                "conflicts_or_gaps": [],
+                "covered_field_refs": [],
+                "omitted_fields": [],
+                "private_unrecognized_field": "private-response-value",
+            }
+        )
+    except ValidationError as exc:
+        summary = papers._safe_schema_validation_summary(papers.EvidenceBatchResult, exc)
+    else:
+        raise AssertionError("Unexpected response fields must fail local validation")
+    assert "extra_forbidden" in summary
+    assert "<unknown>" in summary
+    assert "private-response-value" not in summary
+    assert "private_unrecognized_field" not in summary
 
 
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
@@ -1020,6 +1042,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
 def main() -> None:
     test_strict_paper_response_schemas_require_every_property()
     test_unclassified_evidence_fields_are_conservatively_omitted()
+    test_provider_validation_diagnostic_omits_rejected_values()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
