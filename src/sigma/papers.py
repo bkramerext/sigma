@@ -1041,6 +1041,197 @@ def _long_plan_input(
     }
 
 
+def _evidence_based_long_plan(
+    project_data: Mapping[str, Any],
+    notes: list[EvidenceNote],
+    source_ids: set[str],
+) -> LongPaperPlan:
+    """Build a conservative, source-linked outline if paid planning fails.
+
+    This does not pretend to prove or experimentally verify any result. It
+    preserves the indexed evidence for independent section-writing calls and
+    avoids repeating an ambiguous provider planning request.
+    """
+    title = str(project_data.get("title") or "Research findings and open questions").strip()
+    if len(title) < 8:
+        title = "Research synthesis: " + title
+    title = title[:180]
+    question = str(project_data.get("problem") or title).strip()[:850]
+    if not question:
+        question = title
+    categories: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+        (
+            "Background and research context",
+            "Explain the original research question, background, and scope without assuming a result.",
+            ("context",),
+        ),
+        (
+            "Recorded findings and observations",
+            "Analyze the observations and findings actually recorded in the saved evidence.",
+            ("result",),
+        ),
+        (
+            "Research methods and proposed approaches",
+            "Describe recorded methods and distinguish proposals from work actually performed.",
+            ("method",),
+        ),
+        (
+            "Unsuccessful approaches and competing evidence",
+            "Examine negative results, contradictory findings, and unsuccessful approaches.",
+            ("negative",),
+        ),
+        (
+            "Evidence limitations and uncertainties",
+            "Assess recorded limitations and the strength of competing interpretations.",
+            ("limitation",),
+        ),
+        (
+            "Open questions and next steps",
+            "Identify unanswered questions and distinguish recommendations from established findings.",
+            ("question",),
+        ),
+    )
+    sections: list[LongSectionPlan] = []
+    claims: list[PaperClaim] = []
+    covered: set[str] = set()
+    for heading, purpose, kinds in categories:
+        relevant = [note for note in notes if note.kind in kinds]
+        refs = list(
+            dict.fromkeys(
+                ref
+                for note in relevant
+                for ref in note.evidence_refs
+                if ref in source_ids
+            )
+        )
+        if not refs:
+            continue
+        # Each section can request full notes and original excerpts for up to
+        # forty saved sources. Split large groups without losing provenance.
+        for offset in range(0, len(refs), 40):
+            if len(sections) >= FAST_MAX_SECTIONS:
+                break
+            chunk = refs[offset : offset + 40]
+            matching = next(
+                (note for note in relevant if set(note.evidence_refs) & set(chunk)),
+                None,
+            )
+            statement = (
+                matching.statement
+                if matching is not None
+                else "The saved research contains evidence requiring further analysis."
+            )
+            claim_id = f"C{len(claims) + 1}"
+            claims.append(
+                PaperClaim(
+                    id=claim_id,
+                    statement=statement[:1600],
+                    status="limitation"
+                    if matching is not None and matching.kind == "limitation"
+                    else "unresolved",
+                    evidence_refs=list(
+                        dict.fromkeys(
+                            ref for ref in (matching.evidence_refs if matching else chunk)
+                            if ref in source_ids
+                        )
+                    )[:20],
+                    reasoning=(
+                        "This is a recorded research item, not an independently "
+                        "verified conclusion; the cited saved evidence requires assessment."
+                    ),
+                )
+            )
+            sections.append(
+                LongSectionPlan(
+                    heading=heading if offset == 0 else f"{heading}: additional evidence",
+                    purpose=purpose,
+                    evidence_refs=chunk,
+                    claim_ids=[claim_id],
+                )
+            )
+            covered.update(chunk)
+        if len(sections) >= FAST_MAX_SECTIONS:
+            break
+
+    if not sections:
+        fallback_ref = min(source_ids) if source_ids else None
+        if fallback_ref is None:
+            raise ProjectError("The frozen research snapshot has no evidence sources")
+        claims = [
+            PaperClaim(
+                id="C1",
+                statement="The available research does not establish a verified conclusion.",
+                status="unresolved",
+                evidence_refs=[fallback_ref],
+                reasoning="Only the frozen research record can support a substantive conclusion.",
+            )
+        ]
+        sections = [
+            LongSectionPlan(
+                heading="Research question and available evidence",
+                purpose="Present the question and identify the evidence that was actually saved.",
+                evidence_refs=[fallback_ref],
+                claim_ids=["C1"],
+            )
+        ]
+        covered.add(fallback_ref)
+    if len(sections) == 1:
+        first = sections[0]
+        sections.append(
+            LongSectionPlan(
+                heading="Limitations and open questions",
+                purpose="Distinguish supported findings from unresolved questions and limitations.",
+                evidence_refs=first.evidence_refs,
+                claim_ids=first.claim_ids,
+            )
+        )
+
+    questions = [note.statement for note in notes if note.kind == "question"]
+    warnings = [
+        "The AI planning stage did not yield a usable outline. A conservative, "
+        "source-linked outline was reconstructed from saved evidence without "
+        "repeating the planning request; review the resulting paper's structure."
+    ]
+    indexed_refs = {ref for note in notes for ref in note.evidence_refs}
+    if indexed_refs - covered:
+        warnings.append(
+            "The fallback outline selected representative indexed sources; "
+            "the complete frozen research snapshot remains available for review."
+        )
+    abstract = (
+        f"This paper examines the research question: {question[:450]}. "
+        "It synthesizes saved observations, methods, unsuccessful approaches, "
+        "limitations, and open questions. Recorded claims are distinguished "
+        "from independently verified findings, and no unperformed experiments "
+        "or missing proof steps are presented as established results."
+    )[:1600]
+    return LongPaperPlan(
+        title=title,
+        abstract=abstract,
+        abstract_claim_ids=[claim.id for claim in claims[:2]],
+        problem_framing=[f"The investigation asks: {question}"],
+        problem_framing_claim_ids=[claims[0].id],
+        methods=[
+            "This synthesis organizes the project's frozen research records "
+            "and their saved evidence references. It does not claim new experiments."
+        ],
+        methods_claim_ids=[],
+        claims=claims,
+        sections=sections,
+        limitations=[
+            "The saved record may contain unverified interpretations and "
+            "unresolved evidence conflicts; these require independent assessment."
+        ],
+        open_obligations=questions[:16],
+        conclusions=[
+            "Conclusions are limited to the findings and uncertainties documented "
+            "in the cited saved research, as examined in the sections above."
+        ],
+        conclusion_claim_ids=[claims[-1].id],
+        validation_warnings=warnings,
+    )
+
+
 def _paper_dir(path: str, create: bool = True) -> Path:
     target = project_path(path)
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
