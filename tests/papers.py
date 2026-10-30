@@ -2917,6 +2917,57 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
             assert after["provider_calls_attempted"] == 0
 
 
+def test_one_shot_publishes_with_repaired_claim_links() -> None:
+    """A usable completed author draft is a paper, not a paid repair dialogue."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "one-shot-repair.sigma"
+        view = initialize_project(path, "Paper recovery", "Study the saved research.")
+        account = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": account["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        calls = 0
+
+        async def provider(context, _account, _config, *_args):
+            nonlocal calls
+            calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            base = draft(source)
+            return base.model_copy(
+                update={
+                    "abstract_claim_ids": ["C987", "C1"],
+                    "claims": [
+                        base.claims[0].model_copy(
+                            update={"evidence_refs": ["invented:source"], "status": "established"}
+                        )
+                    ],
+                }
+            ), config["model"]
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=account)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=provider),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            result = asyncio.run(papers.generate(str(path), account["identity"], view.project.id))
+
+        assert calls == 1
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert saved["draft"]["abstract_claim_ids"] == ["C1"]
+        assert saved["draft"]["claims"][0]["status"] == "unresolved"
+        assert saved["draft"]["claims"][0]["evidence_refs"] == []
+        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert any("not established" in x for x in saved["draft"]["limitations"])
+        assert saved["pdf_available"] is True
+        assert papers._load_work(str(path)) is None
+
+
 def test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims() -> None:
     original = draft()
     corrupt = original.model_copy(
@@ -3195,6 +3246,7 @@ def main() -> None:
     test_easy_paper_avoids_unnecessary_long_form_calls()
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
+    test_one_shot_publishes_with_repaired_claim_links()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
