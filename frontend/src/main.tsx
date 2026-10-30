@@ -1352,7 +1352,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
-  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean } | null>(null);
+  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; source_updated_since_checkpoint?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
@@ -1636,6 +1636,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
         <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
       </div>}
+      {!busy && continuationAvailable && resumeDetails?.source_updated_since_checkpoint && <p className="settings-hint">New research was saved after this paper began. Continue with its original evidence snapshot to preserve completed work; generate a new paper afterward to include newer findings.</p>}
       {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningRetry
         ? 'Retry makes another AI request; Start over clears this attempt.'
         : resumeDetails?.draft_recovery_available
