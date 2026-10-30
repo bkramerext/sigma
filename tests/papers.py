@@ -799,7 +799,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 progress,
                 force_long_form,
                 expected_snapshot_sha256,
+                include_research_details,
             ):
+                assert include_research_details is False
                 await progress(
                     {
                         "type": "progress",
@@ -2823,7 +2825,6 @@ def test_invalid_planning_claim_reference_is_recoverable() -> None:
     assert old["plan"]["sections"][0]["claim_ids"] == []
 
 
-
 def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
     """An explicit reset switches eligible research to one call without AI."""
     with TemporaryDirectory() as temporary:
@@ -2967,9 +2968,7 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
                 assert saved_work is not None
                 assert saved_work["provider_calls"] == 1
                 assert saved_work["one_shot_draft"] is not None
-                result = await papers.generate(
-                    str(path), account["identity"], view.project.id
-                )
+                result = await papers.generate(str(path), account["identity"], view.project.id)
                 assert provider_calls == 1
                 saved = papers.get_paper(str(path), result["paper_id"])
                 assert saved["pdf_available"] is True
