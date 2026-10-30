@@ -251,14 +251,18 @@ the reasoning uses. Explain the logical bridge for each important step: why the 
 has the stated structure, why the bound applies, why equality can be attained (if claimed), and how
 the recurrence or sum yields the conclusion. Explain constructions concretely and verify their
 key property; include base cases, edge cases, or induction steps when they matter. Do not compress
-these steps into “it follows” or a formula-only summary. Use enough connected prose and separate
-sections to make the proof readable. Only include steps supported by the saved evidence; if a needed
-step is absent, identify the gap instead of supplying it as though it were recorded.
+these steps into “it follows” or a formula-only summary. Use precise, economical prose and separate sections to make the proof readable. Each paragraph
+should develop one idea, normally in two to five sentences. Never restate an already established
+definition, calculation, or caveat merely to increase length. Only include steps supported by the
+saved evidence; if a needed step is absent, identify the gap once in its appropriate place.
 
 A model's plausible argument and Investigator/Skeptic agreement are not formal verification. Never
 invent experiments, citations, proof steps, outside sources, consensus, or verification. Describe
-failed approaches when they matter. Use mathematical notation as ordinary Unicode or LaTeX math
-delimiters in prose; do not supply LaTeX commands or document markup. In validation_warnings,
+failed approaches when they matter. In mathematics, enclose ALL variables and expressions
+in explicit LaTeX math delimiters ($...$ inline and $...$ for important standalone equations);
+write $a_{n+3}$, not a_(n+3), and $\\omega^3=1$, not a bare omega glyph.
+Use ordinary prose outside the math delimiters; no TeX document commands or environments.
+In validation_warnings,
 report unsupported claims, contradictory evidence, and omitted proof obligations you notice; these
 are the author's self-review, not independent verification. List unresolved obligations separately.
 Include no bibliography unless the evidence package itself contains genuine cited sources. If
@@ -271,7 +275,14 @@ checkpoint details, or workflow bookkeeping in the article's prose. Retain conse
 approaches, contradictory evidence, unverified claims, and genuine open obligations in the relevant
 scientific discussion; never hide a material weakness for the sake of polish. Source-linked records
 and technical verification details are retained separately in the archived research metadata.
-Avoid repetitive disclaimers and process commentary. Return the requested structured draft."""
+Be an exacting academic editor. Write one substantive idea per paragraph, typically two to five
+sentences. Prefer short, active sentences and precise definitions; avoid inflated language,
+throat-clearing, repetition, and re-explaining results introduced earlier. Do not duplicate
+framing or methods content in each findings section. Separate important equations from prose
+with $...$ math delimiters; protect inline mathematical notation with $...$. State
+limitations once, in the relevant argument or limitations section, without repeatedly disclaiming
+the entire paper. Maintain full evidentiary fidelity without adding length for its own sake.
+Return the requested structured draft."""
 
 MATHEMATICS_INSTRUCTIONS = """The project type is mathematics. Use the organization and precision of a
 mathematics paper, rather than a generic project report: introduce notation and definitions; state
@@ -282,7 +293,9 @@ the agent transcript. For a claimed extremal formula, separately prove the upper
 an admissible construction attaining it, then derive the formula and check boundary cases. Use
 theorem/proof language only when the saved evidence supports each step. If the saved argument is
 incomplete or unverified, say so plainly while still explaining the supported proof candidate in
-full; identify the exact gap instead of flattening the discussion into a short summary."""
+clearly and economically; identify the precise gap once rather than repeating the same caveat
+at the end of every section. A mathematical paper is a sequence of definitions, results, and
+justifications, not a verbose narration of the research process."""
 
 _MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-\s])")
 _SAFE_MATH_COMMANDS = {
@@ -3031,7 +3044,10 @@ title, abstract, framing, methods, claim register, limitations, obligations, con
 substantive section outline. Assign each section exact evidence_refs from the index and claim_ids
 from your claim register. Do not treat the index as proof of exhaustive semantic review; preserve
 its contradictions and limitations. Use enough sections to cover the study and its evidence
-without repetition. Respect the project's investigation type. For mathematics, distinguish a validated
+without repetition. Plan the leanest coherent article: each section must make a distinct
+contribution, not merely reintroduce the previous section's definitions or summarize it again.
+Prefer informative, concise headings with no numeric prefixes; TeX adds section numbers.
+Respect the project's investigation type. For mathematics, distinguish a validated
 proof from an unverified proof candidate, preserve definitions, constructions, counterexamples
 and gaps, and do not invent bridging steps. For experimental research, distinguish observations,
 analyses, hypotheses and proposed experiments; never present an unrun experiment as a result.
@@ -3106,9 +3122,13 @@ supplied notes and the section's fixed claim IDs. Preserve uncertainty, contradi
 results, and study limitations. Do not invent data, analyses, experiments, citations, or claims.
 Explain substantive reasoning and methods rather than narrating internal AI agents, turn counts,
 source IDs, verification workflow or checkpoint mechanics. Avoid repeating generic process caveats;
-state consequential evidence limitations in the argument. Return enough paragraphs to explain the
-evidence and reasoning in full, not a short summary. Use plain prose and Unicode or inline LaTeX
-mathematics; do not emit TeX commands or document markup."""
+state consequential evidence limitations once where they matter. Develop the section's distinct
+argument without restating the introduction, other sections, or the same result. Write
+short, purposeful paragraphs, typically two to five sentences with one idea each; do not place
+a whole section into one paragraph. Favor economy and precision over rhetorical padding.
+Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical expression;
+write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
+or document markup."""
     section_instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
     original_records = _research_integrity_records(package) if fast_path else []
