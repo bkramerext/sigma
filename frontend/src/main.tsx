@@ -4120,6 +4120,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   const removeConfirmation = useRef<HTMLDivElement>(null);
   const removeConfirmButton = useRef<HTMLButtonElement>(null);
   const [message, setMessage] = useState('');
+  const [sponsorModeError, setSponsorModeError] = useState('');
   const [activeTab, setActiveTab] = useState<'access' | 'usage'>('access');
   useEffect(() => {
     setDrafts(Object.fromEntries(grants.map(grant => [`${grant.kind}:${grant.value}`, { role: grant.role, allowance: allowanceInput(grant.allowance_usd) }])));
@@ -4265,6 +4266,12 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       setMessage(`Added ${item.email} as an authorized member.`);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
   }
+  async function selectSponsoredMode() {
+    if (!cloud) return;
+    setSponsorModeError('');
+    try { await cloud.funding.selectConnection('sponsored'); }
+    catch (cause) { setSponsorModeError(cause instanceof Error ? cause.message : 'Sponsored mode could not be selected.'); }
+  }
   async function removeInvitation(item: CloudInvitationRequest) {
     try {
       await onUpdateInvitation(item, 'declined');
@@ -4304,6 +4311,13 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
         })()}>{ai.connecting ? 'Connecting…' : 'Renew sponsor ChatGPT connection'}</button>
         {ai.connecting && <p role="status">Complete sign-in in the ChatGPT window. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}</p>}
         {ai.error && <p role="alert">{ai.error}</p>}
+        {cloud.funding.sponsorshipEligible && (cloud.funding.selectedConnection === 'sponsored'
+          ? <p role="status">SIGMA-sponsored ChatGPT is selected for this admin account. This choice is saved across service restarts.</p>
+          : <>
+            <p>Select SIGMA-sponsored mode for this admin account to use the designated sponsor connection for research.</p>
+            <button type="button" className="admin-text-action" disabled={cloud.funding.selectingConnection} onClick={() => void selectSponsoredMode()}>{cloud.funding.selectingConnection ? 'Saving sponsored mode…' : 'Select sponsored mode'}</button>
+            {sponsorModeError && <p role="alert">{sponsorModeError}</p>}
+          </>)}
       </section>}
       <div className="admin-table-heading"><h3>Invitation/reload requests</h3></div>
       {visibleInvitationRequests.length ? <div className="admin-table-scroll admin-invitation-scroll"><table className="admin-grants-table admin-invitation-table"><colgroup><col style={{ width: '33.33%' }}/><col style={{ width: '33.33%' }}/><col style={{ width: '33.34%' }}/></colgroup><thead><tr><th scope="col">Verified Google account</th><th scope="col">Requested</th><th scope="col">Actions</th></tr></thead><tbody>{visibleInvitationRequests.map(item => {

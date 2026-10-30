@@ -14,6 +14,13 @@ status = {
     "authenticated": True,
     "user": {"email": BOOTSTRAP, "role": "admin"},
     "admin_contact_email": BOOTSTRAP,
+    "account": {
+        "identity": {"email": BOOTSTRAP, "verified": True},
+        "access": {"status": "active", "role": "admin"},
+        "workspace": {"available": True, "id": "admin-workspace"},
+        "model_access": {"mode": "personal", "connection": "disconnected"},
+        "sponsorship": {"eligible": True},
+    },
 }
 
 
@@ -61,6 +68,16 @@ def main() -> None:
                 )
 
             page.route("**/api/ai/sponsor-auth/begin", sponsor_begin)
+
+            def select_mode(route):
+                assert route.request.post_data_json == {"mode": "sponsored"}
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body='{"mode":"sponsored"}',
+                )
+
+            page.route("**/api/ai/mode", select_mode)
             page.goto(URL, wait_until="networkidle")
             page.get_by_role("link", name="Administrator settings").click()
             dialog = page.get_by_role("dialog", name="Administrator Settings")
@@ -79,7 +96,12 @@ def main() -> None:
             ).to_be_visible()
             assert any("/api/ai/sponsor-auth/begin" in url for url in ai_requests)
             assert not any("/api/ai/auth/begin" in url for url in ai_requests)
-            print("PASS local Admin Settings selects the dedicated sponsor auth route")
+            with page.expect_request("**/api/ai/mode") as mode_request:
+                dialog.get_by_role("button", name="Select sponsored mode").click()
+            assert mode_request.value.post_data_json == {"mode": "sponsored"}
+            print(
+                "PASS local Admin Settings separates sponsor renewal and explicit sponsored-mode selection"
+            )
         finally:
             browser.close()
 

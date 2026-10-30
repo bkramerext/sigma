@@ -5,17 +5,24 @@ connection** action for authenticated administrators. It invokes the existing
 `/api/ai/sponsor-auth/begin` flow, which resolves SIGMA's pinned sponsor account
 on the server; it does not pass a selected personal account ID. The panel
 explains that Google administrator identity and the designated ChatGPT sponsor
-are separate, and shows in-context sign-in progress and errors. This makes the
-documented admin renewal path available and avoids the `/api/ai/auth/begin`
-guard that rejects sponsor accounts on the personal route.
+are separate, and shows in-context sign-in progress and errors. Eligible admins
+also have a separate **Select sponsored mode** action, which stores an explicit
+funding choice without implicitly switching modes during renewal. This makes
+the documented admin renewal path available and avoids the
+`/api/ai/auth/begin` guard that rejects sponsor accounts on the personal route.
 
 Verification: `browser_checks/local_sponsor_renewal_admin.py` passed in real
 Chrome with mocked endpoints, proving the action calls only the sponsor auth
 route and renders a recoverable route error. The human completed the actual
 normal SIGMA renewal; token-free local diagnostics recorded sponsor OAuth
-`started` and `connected`. `npm run build` and `./sigma test` passed. The full
-suite includes Ruff, formatting, Pyright, frontend typecheck and production
-build. No provider inference or paper generation occurred.
+`started` and `connected`. After stopping the backend and frontend, closing the
+SIGMA tab, and restarting the app on the same private auth store, the sponsor
+session manager reported `connected` for the designated account without another
+interactive sign-in. The persistence check did not require inference. The
+focused Chrome check verifies the renewal and explicit mode-selection routes.
+`npm run build` and `./sigma test` passed. The full suite includes Ruff,
+formatting, Pyright, frontend typecheck and production build. No provider
+inference or paper generation occurred.
 
 The local auth database had a stale persisted bootstrap binding that took
 precedence over the current `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. After creating
