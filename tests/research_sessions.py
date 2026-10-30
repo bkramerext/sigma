@@ -6415,10 +6415,11 @@ async def test_configured_cost_cap_reports_second_call_refusal(path: Path):
 
     assert calls == ["research_investigator"]
     assert finished["calls_used"] == 1 and finished["call_limit"] == 6, finished
-    assert finished["status"] == "ended"
-    assert "round 1 of 3, after 1/6 agent turns" in finished["message"]
+    assert finished["status"] == "paused", finished
+    assert finished["current_action"] == "Paused · cost limit"
     assert "configured session cost limit" in finished["message"]
-    assert "No Skeptic agent turn was dispatched" in finished["message"]
+    assert "Completed research and cost reservations are preserved" in finished["message"]
+    assert finished["strategy_runs"][0]["funding_resume_allowed"] is True
     assert "conservative cost reserve" in finished["outcome"]["summary"]
 
 
