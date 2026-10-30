@@ -749,6 +749,55 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
     assert len(tex) < 50_000
 
 
+def test_frozen_paper_checkpoint_survives_new_project_research() -> None:
+    """A new project revision must not discard a paid authoring checkpoint."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "snapshot-survival.sigma"
+        view = initialize_project(path, "Frozen evidence", "Saved evidence must remain stable")
+        original_project = {
+            "id": view.project.id,
+            "title": "Frozen evidence",
+            "problem": "Original recorded research",
+            "investigation_type": "mathematical",
+        }
+        export = {"project": original_project, "research_sessions": [], "agentic_runs": []}
+        with patch("sigma.api.export_project_view", return_value=export):
+            original, fingerprint = papers._snapshot(str(path))
+            papers._save_frozen_source(str(path), original)
+            binding = "chatgpt:fixture"
+            mode = "chatgpt"
+            digest = papers.hashlib.sha256((mode + "\\0" + binding).encode()).hexdigest()
+            checkpoint = papers._new_work(
+                fingerprint, view.project.id, digest, "gpt-6.1-sol", "high",
+                kind="one_shot",
+            )
+            checkpoint["provider_calls"] = 1
+            checkpoint["provider_calls_total"] = 1
+            checkpoint["one_shot_draft"] = draft(f"project:{view.project.id}").model_dump()
+            papers._save_work(str(path), checkpoint)
+
+            # A new discovery should be part of the next paper, not retroactively
+            # invalidate the one that has already incurred provider costs.
+            updated = {
+                **export,
+                "project": {**original_project, "problem": "New findings arrived"},
+            }
+            with patch("sigma.api.export_project_view", return_value=updated):
+                preflight = papers.preflight(
+                    str(path), expected_project_id=view.project.id,
+                    expected_binding=binding, mode=mode,
+                    model="gpt-6.1-sol", reasoning_effort="high",
+                )
+                assert preflight["snapshot_sha256"] == fingerprint
+                assert preflight["resume_available"] is True
+                assert preflight["draft_recovery_available"] is True
+                assert preflight["source_updated_since_checkpoint"] is True
+                assert papers._load_frozen_source(str(path), checkpoint) == original
+            papers._clear_work(str(path))
+            assert papers._load_work(str(path)) is None
+            assert papers._load_frozen_source(str(path), checkpoint) is None
+
+
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
     export = {
         "project": {"id": "snapshot-project", "title": "Snapshot stability"},
@@ -3435,6 +3484,7 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
 def main() -> None:
     test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
     test_publication_paragraphs_math_and_bounded_optional_appendix()
+    test_frozen_paper_checkpoint_survives_new_project_research()
     test_summary_only_research_uses_zero_paid_evidence_extraction_calls()
     test_one_shot_provider_failure_requires_explicit_reset_without_rebilling()
     test_structured_index_retains_session_narrative_and_original_question()
