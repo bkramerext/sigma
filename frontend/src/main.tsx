@@ -1668,8 +1668,10 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       }
     } finally { finishProvider(); request.current = null; setBusy(false); }
   }
+  const planningFallback = continuationAvailable && Boolean(resumeDetails?.planning_fallback_available);
   const planningRetry = continuationAvailable && resumeDetails !== null &&
-    !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available;
+    !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
+    !planningFallback;
   const generating = busy || request.current !== null || paperProgress?.status === 'active';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
     onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
@@ -1697,9 +1699,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
         <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
       </div>}
-      {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningRetry
-        ? 'Retry makes another AI request; Start over clears this attempt.'
-        : resumeDetails?.draft_recovery_available
+      {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningFallback
+        ? 'Continue uses saved evidence to construct an outline without repeating the failed planning request. Section writing still uses AI and may consume allowance.'
+        : planningRetry
+          ? 'Retry makes another AI request; Start over clears this attempt.'
+          : resumeDetails?.draft_recovery_available
           ? 'Saved draft ready for PDF compilation.'
           : `Resuming with ${resumeDetails?.completed_sections ?? 0} saved section(s).`
       }</p>}
