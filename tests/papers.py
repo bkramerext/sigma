@@ -1943,6 +1943,61 @@ def test_fast_planner_preview_bounds_input_and_preserves_source_coverage() -> No
     assert notes[-1].statement.endswith("plausible. " * 5)
 
 
+def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
+    """Preview size cannot remove a source from the full section-writing index."""
+    package, plan = fast_package()
+    for number in range(6):
+        package["sources"].append(
+            {
+                "id": f"session:additional-{number}",
+                "kind": "session",
+                "data": {
+                    "summary": (
+                        f"Session {number} records an independent unresolved proof "
+                        "obligation with a conflicting interpretation."
+                    )
+                },
+            }
+        )
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    additional: list[str] = []
+    sections_seen: list[list[dict[str, Any]]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            additional.extend(input_value["additional_indexed_source_refs"])
+            assert input_value["outline_preview_skipped_notes"] > 0
+            assert additional
+            return plan, "fixture-model"
+        sections_seen.append(input_value["evidence_notes"])
+        return papers.LongSectionDraft(
+            paragraphs=["The evidence remains uncertain and source-linked."]
+        ), "fixture-model"
+
+    async def check() -> None:
+        with (
+            patch.object(papers, "FAST_PLANNER_PREVIEW_BYTES", 650),
+            patch.object(papers, "_provider_structured", new=provider),
+        ):
+            output, calls, batches = await papers._generate_long_draft(
+                package,
+                {"mode": "api_key", "identity": "fixture", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+                structured_fast_path=True,
+            )
+        assert output.sections and calls == len(plan.sections) + 1 and batches == 0
+
+    asyncio.run(check())
+    assert state["evidence_strategy"] == "structured_v1"
+    indexed_refs = {
+        ref for note in state["evidence_notes"] for ref in note["evidence_refs"]
+    }
+    assert set(additional) <= indexed_refs
+    assert all(sections_seen)
+
+
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
         "biology": ("Introduction and biological context", "cross-species limitations"),
@@ -3135,6 +3190,7 @@ def main() -> None:
     test_structured_fast_index_preserves_math_review_and_bounds_omissions()
     test_bounded_index_keeps_constructive_proof_amid_many_objections()
     test_fast_planner_preview_bounds_input_and_preserves_source_coverage()
+    test_long_paper_can_retrieve_sources_outside_planner_preview()
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_military_style_guidance_reaches_all_authoring_paths()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
