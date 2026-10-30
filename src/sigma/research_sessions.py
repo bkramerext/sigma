@@ -4828,6 +4828,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         )
         record["status"] = "paused"
         record["stopped_at"] = clipped.get("finished_at") or record["updated_at"]
+        # The old terminal reason must not survive successful resumed research.
+        record.pop("terminal_reason", None)
         for branch in record.get("strategy_runs", []):
             if branch.get("current_action") == "Incomplete · output limit":
                 branch["status"] = "paused"
