@@ -8565,7 +8565,7 @@ def main():
         assert research_sessions.coordinate_decision(
             "continue", "recoverable_objection", "Next test", [], 3, 3, 6, 6
         ) == ("stop_budget_exhausted", "")
-    print("Persistent research session scenarios passed.")
+    print("Persistent research session scenarios passed.")  # CI retrigger
 
 
 if __name__ == "__main__":
