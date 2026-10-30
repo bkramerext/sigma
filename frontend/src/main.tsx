@@ -5011,7 +5011,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
           />}
           <button type="button" className="invitation-welcome-link" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : 'Explore as guest'}</button>
         </div>
-      : <button type="button" className="google-text-action invitation-welcome-dismiss" disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : audience === 'requested' ? 'Continue as guest' : "Let's get started"}</button>}
+      : <button type="button" className={audience === 'requested' ? 'invitation-welcome-link' : 'google-text-action invitation-welcome-dismiss'} disabled={busy} onClick={() => void dismiss()}>{busy ? 'Saving…' : audience === 'requested' ? 'Continue as guest' : "Let's get started"}</button>}
   </dialog>;
 }
 
