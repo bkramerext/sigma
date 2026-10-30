@@ -2340,6 +2340,21 @@ async def test_legacy_ended_clipped_response_can_resume(path: Path):
             )
         )
 
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    research_sessions.save_limits(str(path), limits)
+    async def parked_worker(_session_id, _path):
+        await asyncio.Event().wait()
+
+    # Stop an undispatched placeholder to create a deterministic legacy fixture.
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=parked_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await research_sessions.control_session(str(path), started["id"], "stop")
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
@@ -2350,14 +2365,6 @@ async def test_legacy_ended_clipped_response_can_resume(path: Path):
             ),
         ),
     ):
-        limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
-        research_sessions.save_limits(str(path), limits)
-        started = await research_sessions.start_session(
-            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
-        )
-        # Prevent the queued provider worker from running; emulate the stored
-        # production record from before this recovery fix.
-        await research_sessions.control_session(str(path), started["id"], "stop")
         old = research_sessions._read(str(path), started["id"])
         old["status"] = "ended"
         old["calls_used"] = 1
