@@ -80,7 +80,5 @@ Docker and the sandbox image are **not required** for the basic local UI. See [P
 - [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md) and [Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md) — hosted configuration and release procedure
 - [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md) — developer-only account and provider-state simulation
 - [Software Factory](docs/SOFTWARE_FACTORY.md) and [WOLF](WOLF.md) — human-directed development process
-- [Researcher-Centered SIGMA](docs/RESEARCHER_CENTERED_SIGMA.md) — product vision and research experience
-- [UI Guidelines](docs/UI_GUIDELINES.md) — interface design principles
 
 Run `./sigma --help` for commands or `./sigma test` for local checks.
