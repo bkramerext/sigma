@@ -3043,6 +3043,12 @@ async def _generate_long_draft(
     conflict_notes: list[dict[str, Any]] = list(state.get("conflict_notes", []))
     conflict_note_count = int(state.get("conflict_note_count", 0))
     calls = int(state.get("provider_calls", 0))
+    previous_progress = state.get("progress") or {}
+    previous_planning_failed = bool(
+        not state.get("plan")
+        and previous_progress.get("stage") == "planning"
+        and previous_progress.get("status") in {"failed", "cancelled", "running"}
+    )
 
     def before_provider_call(
         reserve: int = 0,
@@ -3422,19 +3428,33 @@ Return the complete plan JSON matching the schema."""
     if long_plan is None:
         if progress:
             await progress("planning", None, None, "active")
-        plan, _ = await call_with_safe_retry(
-            plan_input,
-            reserve=MAX_LONG_PAPER_SECTIONS,
-            instructions=plan_instructions,
-            schema_name="sigma_long_paper_plan",
-            response_model=FastLongPaperPlan if fast_path else LongPaperPlan,
-            max_input_bytes=220_000,
-            legacy=not fast_path,
-        )
-        long_plan = LongPaperPlan.model_validate(
-            _repair_paper_references(LongPaperPlan.model_validate(plan), indexed_refs)
-        )
-        _validate_long_plan_references(long_plan, indexed_refs)
+        if previous_planning_failed:
+            # A previous attempt reached planning and stopped without saving
+            # a plan. Its provider call may have consumed allowance; do not
+            # silently repeat it after a browser sleep, restart, or timeout.
+            long_plan = _evidence_based_long_plan(project_data, notes, source_ids)
+        else:
+            try:
+                plan, _ = await call_with_safe_retry(
+                    plan_input,
+                    reserve=MAX_LONG_PAPER_SECTIONS,
+                    instructions=plan_instructions,
+                    schema_name="sigma_long_paper_plan",
+                    response_model=FastLongPaperPlan if fast_path else LongPaperPlan,
+                    max_input_bytes=220_000,
+                    legacy=not fast_path,
+                )
+                long_plan = LongPaperPlan.model_validate(
+                    _repair_paper_references(LongPaperPlan.model_validate(plan), indexed_refs)
+                )
+                _validate_long_plan_references(long_plan, indexed_refs)
+            except (ProjectError, ValidationError):
+                # A timeout, malformed response, invalid reference, or planning
+                # bound must not discard indexed evidence or demand another
+                # potentially paid planning call. Section writing can proceed
+                # from a conservative outline built locally from that evidence.
+                # Cancellation still propagates without publishing.
+                long_plan = _evidence_based_long_plan(project_data, notes, source_ids)
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
         save_state(state)
         if progress:
