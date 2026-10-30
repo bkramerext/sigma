@@ -3425,7 +3425,14 @@ async def _generate_impl(
                     "the original research and provider-call history are preserved."
                 )
             if checkpoint is not None and checkpoint.get("one_shot_draft") is not None:
-                draft = PaperDraft.model_validate(checkpoint["one_shot_draft"])
+                # Revalidate and repair persisted provider output on Continue;
+                # older checkpoints may contain imperfect claim metadata.
+                draft = PaperDraft.model_validate(
+                    _repair_paper_references(
+                        PaperDraft.model_validate(checkpoint["one_shot_draft"]),
+                        {item["id"] for item in package["sources"]},
+                    )
+                )
                 model = config["model"]
                 work = checkpoint
                 provider_calls = int(work.get("provider_calls", 1))
@@ -3459,16 +3466,20 @@ async def _generate_impl(
                 _save_work(path, work)
                 await report("writing", None, None)
                 draft, model = await _provider(package, initial_auth, config, view.project.id, path)
+                # A complete structured author response is valuable paid work.
+                # Save it before any local reference repair, logical checks or
+                # TeX compilation so a recoverable defect cannot trigger
+                # another inference request.
+                work["one_shot_draft"] = draft.model_dump()
+                _save_work(path, work)
                 draft = PaperDraft.model_validate(
                     _repair_paper_references(draft, {item["id"] for item in package["sources"]})
                 )
-                # Cache a repaired and validated draft so compiler recovery
-                # never needs another paid model request.
+                work["one_shot_draft"] = draft.model_dump()
+                _save_work(path, work)
                 await report("validation", None, None)
                 _validate(draft, package)
                 one_shot_validation_started = True
-                work["one_shot_draft"] = draft.model_dump()
-                _save_work(path, work)
                 provider_calls = int(work["provider_calls"])
             evidence_batch_count = 0
         else:
