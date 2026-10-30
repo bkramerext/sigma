@@ -2268,6 +2268,129 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
     )
 
 
+async def test_clipped_investigator_automatically_recovers(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    research_sessions.save_limits(str(path), limits)
+    submitted = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        submitted.append(payload)
+        role = payload["text"]["format"]["name"]
+        if len(submitted) == 1:
+            assert role == "research_investigator"
+            return httpx.Response(200, json={
+                "status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+                "usage": {"input_tokens": 120, "output_tokens": 4000},
+                "output": [{"type": "message", "content": [
+                    {"type": "output_text", "text": '{"claim": "partial untrusted statement'}
+                ]}],
+            })
+        if len(submitted) == 2:
+            assert role == "research_investigator"
+            assert "retry_after_clipped_response" in json.loads(payload["input"])
+            assert "compact" in payload["instructions"]
+            return httpx.Response(200, json=provider_response(investigation(1)))
+        assert role == "research_skeptic"
+        return httpx.Response(200, json=provider_response(skeptic(1, "stop")))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+    assert len(submitted) == 3
+    assert finished["calls_used"] == 3
+    assert [step["status"] for step in finished["steps"]] == [
+        "incomplete", "completed", "completed"
+    ]
+    assert [step["role"] for step in finished["steps"]] == [
+        "investigator", "investigator", "skeptic"
+    ]
+    assert finished["steps"][0]["token_usage"]["output_tokens"] == 4000
+    assert finished["steps"][0]["partial_output"].startswith('{"claim": "partial')
+    assert len(finished["artifacts"]) == 1
+    assert finished["artifacts"][0]["investigator_output"]["claim"].startswith("Claim 1")
+    assert "partial untrusted statement" not in json.dumps(finished["artifacts"])
+    assert finished["estimated_cost_usd"] > 0
+
+
+async def test_legacy_ended_clipped_response_can_resume(path: Path):
+    view, strategy, credential, config = await setup(path)
+    started_calls = []
+
+    async def handler(request):
+        started_calls.append(json.loads(request.content))
+        role = started_calls[-1]["text"]["format"]["name"]
+        return httpx.Response(
+            200, json=provider_response(
+                investigation(1) if role == "research_investigator"
+                else skeptic(1, "stop")
+            )
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+        research_sessions.save_limits(str(path), limits)
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        # Prevent the queued provider worker from running; emulate the stored
+        # production record from before this recovery fix.
+        await research_sessions.control_session(str(path), started["id"], "stop")
+        old = research_sessions._read(str(path), started["id"])
+        old["status"] = "ended"
+        old["calls_used"] = 1
+        old["terminal_reason"] = "Provider response clipped at max_output_tokens."
+        old["message"] = (
+            "The provider response was clipped at the output-token limit. "
+            "Partial output and usage were preserved; the run is incomplete and was not retried."
+        )
+        old["steps"] = [{
+            "id": str(uuid4()), "role": "investigator", "cycle": 1,
+            "strategy_id": strategy.id, "status": "incomplete",
+            "incomplete_reason": "max_output_tokens", "partial_output": "partial",
+            "token_usage": {"input_tokens": 120, "output_tokens": 500},
+            "finished_at": old["updated_at"],
+        }]
+        old["strategy_runs"][0].update({
+            "status": "ended", "current_action": "Incomplete · output limit",
+            "calls_used": 1, "cycle": 1,
+        })
+        # Keep cost accounting stable; avoid fabricating billed calls.
+        research_sessions._save(str(path), old)
+        assert research_sessions.get_session(str(path), started["id"])[
+            "recoverable_clipped_response"
+        ]
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        finished = await wait_for(path, started["id"])
+    assert len(started_calls) >= 2
+    assert finished["calls_used"] >= 3
+    assert finished["steps"][0]["status"] == "incomplete"
+    assert len(finished["artifacts"]) >= 1
+
+
 async def test_pause_counts_interrupted_call(path: Path):
     view, strategy, credential, config = await setup(path)
     started_call = asyncio.Event()
@@ -2448,11 +2571,14 @@ async def test_malformed_output_and_restart(path: Path):
             clipped_credential["identity"],
         )
         incomplete = await wait_for(clipped_path, started["id"])
-    assert incomplete["status"] == "ended" and incomplete["artifacts"] == []
-    assert incomplete["steps"][0]["status"] == "incomplete"
-    assert incomplete["steps"][0]["partial_output"] == "partial JSON fragment"
-    assert incomplete["steps"][0]["token_usage"]["output_tokens"] == 700
-    assert incomplete["calls_used"] == 1 and "incomplete" in incomplete["message"].lower()
+    assert incomplete["status"] == "paused" and incomplete["artifacts"] == []
+    assert [step["status"] for step in incomplete["steps"]] == ["incomplete", "incomplete"]
+    assert all(step["partial_output"] == "partial JSON fragment" for step in incomplete["steps"])
+    assert all(step["token_usage"]["output_tokens"] == 700 for step in incomplete["steps"])
+    assert incomplete["calls_used"] == 2
+    assert incomplete["next_step_guidance"] and "Resume" in incomplete["next_step_guidance"]
+    assert incomplete["strategy_runs"][0]["status"] == "paused"
+    assert not any(step.get("role") == "skeptic" for step in incomplete["steps"])
 
     retained_path = path.parent / "assessment-error.sigma"
     retained_view, retained_strategy, retained_credential, retained_config = await setup(
@@ -8351,6 +8477,8 @@ def main():
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
+        asyncio.run(test_clipped_investigator_automatically_recovers(root / "clipped-auto-recovery.sigma"))
+        asyncio.run(test_legacy_ended_clipped_response_can_resume(root / "clipped-legacy-resume.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
         asyncio.run(
             test_portfolio_stops_after_chatgpt_usage_limit(root / "chatgpt-http-limit.sigma")
