@@ -2033,7 +2033,8 @@ def test_fast_planner_preview_bounds_input_and_preserves_source_coverage() -> No
     assert {ref for item in preview for ref in item["evidence_refs"]} == set(sources)
     assert {item["kind"] for item in preview} == {"result", "negative"}
     assert len(notes) == 450
-    assert notes[-1].statement.endswith("plausible. " * 5)
+    # EvidenceNote normalizes trailing whitespace without dropping content.
+    assert notes[-1].statement.endswith(("plausible. " * 5).strip())
 
 
 def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
