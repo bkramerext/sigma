@@ -3668,11 +3668,14 @@ async def _generate_impl(
             raise ProjectError(
                 "AI account or billing mode changed during generation; draft discarded"
             )
+        # The provider authored against the frozen package captured at the
+        # beginning of this run. New research is not a reason to discard a paid
+        # draft: archive it with the original snapshot and clearly record that
+        # the live project advanced. A future paper can use the newer evidence.
+        if latest.project.id != view.project.id:
+            raise ProjectError("Project identity changed during paper generation")
         _latest_package, latest_hash = _snapshot(path)
-        if latest.project.id != view.project.id or latest_hash != snapshot_hash:
-            raise ProjectError(
-                "Research changed while the paper was being authored; draft discarded. Review current evidence and regenerate"
-            )
+        research_changed_during_generation = latest_hash != snapshot_hash
         identifier = uuid4().hex
         timestamp = _now()
         warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
@@ -3707,6 +3710,7 @@ async def _generate_impl(
                     else provider_calls
                 ),
                 "progress_run_id": run_id,
+                "research_changed_during_generation": research_changed_during_generation,
                 "generation_elapsed_seconds": int(
                     elapsed_before
                     + max(
