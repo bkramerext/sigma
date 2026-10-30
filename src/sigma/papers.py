@@ -2531,6 +2531,102 @@ async def _provider_structured(
                 pass
 
 
+def _repair_paper_references(
+    paper: PaperDraft | LongPaperPlan, known_evidence: set[str]
+) -> PaperDraft | LongPaperPlan:
+    """Repair model-authored bookkeeping without another paid inference call.
+
+    Unknown claim links never establish evidence. Unverifiable claim sources
+    are removed, and affected established claims become unresolved. Keep the
+    author's substantive text and doubts; record repairs as diagnostics.
+    """
+    diagnostics: list[str] = []
+    claims: list[PaperClaim] = []
+    original_ids = {claim.id for claim in paper.claims}
+    used_ids: set[str] = set()
+    next_id = 1
+    for claim in paper.claims:
+        identity = claim.id
+        if identity in used_ids:
+            while f"C{next_id}" in original_ids or f"C{next_id}" in used_ids:
+                next_id += 1
+            identity = f"C{next_id}"
+            diagnostics.append(f"Duplicate claim {claim.id} was assigned a unique identifier.")
+        used_ids.add(identity)
+        sources = list(dict.fromkeys(ref for ref in claim.evidence_refs if ref in known_evidence))
+        changed = len(sources) != len(claim.evidence_refs)
+        status = claim.status
+        if (changed or not sources) and status == "established":
+            status = "unresolved"
+        if changed:
+            diagnostics.append(
+                f"Claim {identity} cited evidence not in the saved research index; unsupported links were removed."
+            )
+        claims.append(
+            claim.model_copy(
+                update={"id": identity, "evidence_refs": sources, "status": status}
+            )
+        )
+
+    claim_ids = {claim.id for claim in claims}
+
+    def links(values: list[str], label: str) -> list[str]:
+        accepted = list(dict.fromkeys(value for value in values if value in claim_ids))
+        if len(accepted) != len(values):
+            diagnostics.append(f"Unknown or repeated claim links were removed from {label}.")
+        return accepted
+
+    sections: list[PaperSection | LongSectionPlan] = []
+    claim_sources = {claim.id: claim.evidence_refs for claim in claims}
+    for section in paper.sections:
+        section_claims = links(section.claim_ids, f"section {section.heading}")
+        if isinstance(section, LongSectionPlan):
+            refs = list(dict.fromkeys(ref for ref in section.evidence_refs if ref in known_evidence))
+            if not refs:
+                refs = list(
+                    dict.fromkeys(
+                        ref
+                        for claim_id in section_claims
+                        for ref in claim_sources[claim_id]
+                    )
+                )[:40]
+            if not refs and known_evidence:
+                # Context evidence for writing, never a proof citation.
+                refs = [min(known_evidence)]
+            if len(refs) != len(section.evidence_refs) or not section_claims:
+                diagnostics.append(
+                    f"Section {section.heading} had missing or invalid evidence/claim links."
+                )
+            sections.append(
+                section.model_copy(update={"evidence_refs": refs, "claim_ids": section_claims})
+            )
+        else:
+            sections.append(section.model_copy(update={"claim_ids": section_claims}))
+
+    updated = {
+        "claims": claims,
+        "sections": sections,
+        "abstract_claim_ids": links(paper.abstract_claim_ids, "abstract"),
+        "problem_framing_claim_ids": links(paper.problem_framing_claim_ids, "problem framing"),
+        "methods_claim_ids": links(paper.methods_claim_ids, "methods"),
+        "conclusion_claim_ids": links(paper.conclusion_claim_ids, "conclusions"),
+    }
+    if diagnostics:
+        updated["validation_warnings"] = list(
+            dict.fromkeys([*paper.validation_warnings, *diagnostics])
+        )[:12]
+        if any(
+            claim.status == "unresolved" and original.status == "established"
+            for claim, original in zip(claims, paper.claims, strict=True)
+        ):
+            limitation = (
+                "At least one claim lacks verifiable saved evidence and is not established."
+            )
+            if limitation not in paper.limitations and len(paper.limitations) < 12:
+                updated["limitations"] = [*paper.limitations, limitation]
+    return paper.model_copy(update=updated)
+
+
 def _validate_long_plan_references(plan: LongPaperPlan, indexed_refs: set[str]) -> None:
     """Reject inconsistent provider-authored references before checkpointing them."""
     if len(plan.sections) > MAX_LONG_PAPER_SECTIONS:
