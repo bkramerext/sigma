@@ -2324,14 +2324,10 @@ def _apply_omission_limits(draft: PaperDraft, omissions: list[dict[str, Any]]) -
     draft.validation_warnings = list(
         dict.fromkeys([disclosure, *draft.validation_warnings])
     )[:12]
-    for claim in draft.claims:
-        if claim.status == "established":
-            claim.status = "unresolved"
-            claim.reasoning = (
-                "Material evidence was omitted from the extracted index; this claim cannot be "
-                "treated as established until the complete frozen evidence is reviewed. "
-                + claim.reasoning
-            )[:2400]
+    # Omissions must be disclosed, but do not indiscriminately rewrite every
+    # established claim to unresolved: an unrelated omitted field does not
+    # invalidate a fully supported deduction. Missing/invalid source links
+    # are evaluated per claim by _repair_paper_references.
     return draft
 
 
