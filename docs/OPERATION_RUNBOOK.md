@@ -4,6 +4,9 @@
 
 The detailed configuration and exact provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This runbook is the short operational entry point. Record the deployed commit, tested command, outcome, operator, date and any deviation after performing each operation. No secrets, access tokens or user data in logs, PRs or chat.
 
+The v0.1.5 authorization record and exact-SHA release controls are in
+[DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md).
+
 ## Deployment inventory and operator evidence (T127)
 
 This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) are the maintained records. The deployment coordinator records actual IDs, resource creation, verification results, dates, and deviations as the operator supplies evidence. **The operator should not need to maintain a separate checklist or remember identifiers.** Proposed resource names must not be presented as live resources.
