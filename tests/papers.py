@@ -3928,11 +3928,12 @@ def main() -> None:
         material_omissions=[
             {"field": "data/negative_findings", "source_ref": "session:xenopus-negative"}
         ],
+        include_research_excerpts=True,
     )
     assert r"\section{Structured reasoning and review records}" in integrity_tex
-    assert r"\section*{Important evidence coverage limitation}" in integrity_tex
+    assert r"\section*{Evidence coverage limitation}" in integrity_tex
     opening_heading = papers._paper_style("default")[0]
-    assert integrity_tex.index("Important evidence coverage limitation") < integrity_tex.index(
+    assert integrity_tex.index("Evidence coverage limitation") < integrity_tex.index(
         r"\section{" + opening_heading + "}"
     )
     material = papers._material_evidence_omissions(
@@ -3963,7 +3964,7 @@ def main() -> None:
         limited, [], "d" * 64, math_style=True, material_omissions=material
     )
     assert "C1 -- Unresolved" in limited_math_tex
-    assert "Important evidence coverage limitation" in limited_math_tex
+    assert "Evidence coverage limitation" in limited_math_tex
     assert "were not reviewed for this paper" in limited_math_tex
     assert original_abstract in limited_math_tex
     assert original_conclusions[0] in limited_math_tex
