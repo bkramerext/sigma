@@ -62,6 +62,7 @@ with sync_playwright() as playwright:
         page.goto(UI_ORIGIN + "/project?path=" + quote(path, safe=""))
         page.get_by_role("button", name="LaTeX research paper", exact=True).click()
         dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+        expect(dialog).to_contain_text("Keep this dialog open to follow its progress.")
         expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_enabled(
             timeout=20_000
         )
