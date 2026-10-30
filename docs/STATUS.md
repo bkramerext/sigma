@@ -1,5 +1,10 @@
 ## Production About build SHA correction (2026-10-30)
 
+Cutover review found that the host helper invokes the currently installed
+image builder before selecting the candidate checkout. PR #345 changes the
+helper to validate candidate tooling before building, while leaving the
+service and protected release pin unchanged until the candidate build passes.
+
 Production About displayed version `0.1.5` but build `unknown`. Root cause:
 release images are built from an exact Git archive (which has no `.git`), and
 the frontend Docker build did not receive the source commit. The correction

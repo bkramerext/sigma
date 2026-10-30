@@ -22,3 +22,8 @@ No paid provider calls or production changes occurred during this correction.
 No local SIGMA server was contacted. Existing authorization for self-review,
 self-merge, and the bounded v0.1.5 quick-patch deployment applies; do not tag
 v0.1.5 without separate authorization.
+
+Before cutover, found that the host helper originally ran its installed
+builder before checking out the requested release. PR #345 corrects the order
+so candidate build logic is used; the active service and release pin remain
+unchanged until the image build succeeds.
