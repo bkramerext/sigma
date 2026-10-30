@@ -86,6 +86,21 @@ with sync_playwright() as playwright:
     expect(progress_card).to_be_visible(timeout=60_000)
     expect(progress_card.get_by_role("link", name="Download PDF")).to_be_visible()
 
+    # A browser reload must not terminate an in-flight provider request.
+    wake_path = create_long_project("T329 recover after browser reload")
+    dialog = open_paper(wake_path)
+    dialog.get_by_role("button", name="Generate", exact=True).click()
+    expect(dialog.locator(".ai-paper-progress")).to_contain_text(
+        "Planning the paper", timeout=30_000
+    )
+    page.reload()
+    dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(dialog).to_be_visible(timeout=30_000)
+    expect(dialog.locator(".saved-paper-card").first).to_be_visible(timeout=60_000)
+    expect(
+        dialog.locator(".saved-paper-card").first.get_by_role("link", name="Download PDF")
+    ).to_be_visible()
+
     # A connection failure before dispatch must produce a truthful retry
     # status, then continue to completion without a billing fallback.
     retry_path = create_long_project("T329 safe connection retry")
@@ -144,9 +159,9 @@ with sync_playwright() as playwright:
     expect(dialog.locator(".saved-paper-card")).to_have_count(0)
     expect(dialog).to_contain_text("No generation has started")
 
-    # A changed source snapshot invalidates Continue. The dialog must identify
-    # the mismatch and offer a deliberate Start over, without auto-dispatching.
-    incompatible_path = create_long_project("T329 incompatible restart")
+    # Research added after a paid attempt must not invalidate the original
+    # frozen checkpoint or force a destructive reset.
+    incompatible_path = create_long_project("T329 frozen evidence continuation")
     configure_failure("sigma_long_paper_plan", "provider_error")
     page.set_viewport_size({"width": 1440, "height": 960})
     dialog = open_paper(incompatible_path)
@@ -177,27 +192,22 @@ with sync_playwright() as playwright:
     )
     assert changed["status"] == 200, changed
     page.reload()
-    page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-    expect(dialog.locator(".ai-paper-restart-notice")).to_contain_text(
-        "research or AI settings changed", timeout=20_000
+    expect(dialog).to_be_visible(timeout=20_000)
+    expect(dialog).to_contain_text(
+        "New research was saved after this paper began", timeout=20_000
     )
-    expect(
-        dialog.get_by_role("button", name="Clear outdated paper work", exact=True)
-    ).to_be_enabled()
-    expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
-    dialog.get_by_role("button", name="Clear outdated paper work", exact=True).click()
-    expect(dialog.locator(".ai-paper-status:not(.ai-paper-progress)")).to_contain_text(
-        "Unfinished paper work cleared. No generation has started", timeout=20_000
-    )
-    expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_enabled()
+    expect(dialog.get_by_role("button", name="Retry paper planning", exact=True)).to_be_enabled()
+    expect(dialog.locator(".ai-paper-restart-notice")).to_have_count(0)
+    dialog.get_by_role("button", name="Retry paper planning", exact=True).click()
+    expect(dialog.locator(".saved-paper-card").first).to_be_visible(timeout=60_000)
     assert not errors, errors
 
-    page.screenshot(path="/tmp/sigma-329-incompatible-restart.png", full_page=True)
+    page.screenshot(path="/tmp/sigma-329-frozen-research-resume.png", full_page=True)
     context.close()
     browser.close()
 
 print(
     "PASS T329 Chrome with deterministic provider fixtures: retry, granular long-form progress, "
-    "small-screen failure/Continue, incompatible snapshot restart and local PDF completion."
+    "small-screen failure/Continue, browser reload, frozen research resume and PDF completion."
 )
