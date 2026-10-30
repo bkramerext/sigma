@@ -1920,7 +1920,7 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
         "biology": ("Introduction and biological context", "cross-species limitations"),
         "mathematical": ("Introduction", "bridges between logical steps"),
-        "military": ("Question and operational context", "alternative interpretations"),
+        "military": ("Question and operational context", "alternative courses of action"),
     }
     for research_type, (heading, guidance) in expected.items():
         tex = papers._tex(draft(), [], "f" * 64, investigation_type=research_type)
@@ -1929,6 +1929,76 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
     assert r"\section{Introduction}" in math_tex
     assert r"\section*{Claim status and evidence}" in math_tex
+
+
+def test_military_style_guidance_reaches_all_authoring_paths() -> None:
+    """Genre must guide model writing, not merely TeX section labels."""
+    package, plan = fast_package()
+    package["sources"][0]["data"]["investigation_type"] = "military"
+    package["sources"][0]["data"]["problem"] = "Assess alternative planning assumptions."
+    instructions_seen: dict[str, list[str]] = {}
+
+    async def fake_stage(_input, _binding, _config, *, instructions, schema_name, **_kwargs):
+        instructions_seen.setdefault(schema_name, []).append(instructions)
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=["The recorded scenario and alternatives remain uncertain."]
+        ), "fixture-model"
+
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+    async def long_form() -> None:
+        with patch.object(papers, "_provider_structured", new=fake_stage):
+            result, _calls, batches = await papers._generate_long_draft(
+                package,
+                {"mode": "api_key", "identity": "fixture", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+                structured_fast_path=True,
+            )
+        assert result.sections and batches == 0
+
+    asyncio.run(long_form())
+    assert "sigma_long_paper_plan" in instructions_seen
+    assert "sigma_long_paper_section" in instructions_seen
+    for instructions in instructions_seen.values():
+        for text in instructions:
+            assert "military operational assessment" in text
+            assert "alternative courses of action" in text
+            assert "The project type is mathematics" not in text
+
+    requests: list[dict[str, Any]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(400, json={"error": {"code": "invalid_json_schema"}})
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    ):
+        try:
+            asyncio.run(
+                papers._provider(
+                    package,
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                )
+            )
+        except ProjectError as exc:
+            assert "HTTP 400" in str(exc)
+        else:
+            raise AssertionError("Mock provider should reject schema")
+
+    assert len(requests) == 1
+    instructions = requests[0]["instructions"]
+    assert "military operational assessment" in instructions
+    assert "alternative courses of action" in instructions
+    assert "The project type is mathematics" not in instructions
 
 
 def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None:
@@ -3038,6 +3108,7 @@ def main() -> None:
     test_structured_fast_index_preserves_math_review_and_bounds_omissions()
     test_bounded_index_keeps_constructive_proof_amid_many_objections()
     test_research_type_specific_tex_sections_and_authoring_guidance()
+    test_military_style_guidance_reaches_all_authoring_paths()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
     test_fast_checkpoint_resume_replays_only_incomplete_section()
