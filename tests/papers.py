@@ -2258,6 +2258,59 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
     assert uncertain_state["plan"]
 
 
+def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> None:
+    """A previously failed Tadpoles-shaped plan can resume with only section calls."""
+    package, _ = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    state.update(
+        {
+            "evidence_strategy": "structured_v1",
+            "evidence_indexed": True,
+            "evidence_notes": [
+                papers.EvidenceNote(
+                    statement="The saved research contains a recorded observation.",
+                    kind="result",
+                    evidence_refs=["session:onp-fixture"],
+                ).model_dump(),
+                papers.EvidenceNote(
+                    statement="An important experimental limitation remains unresolved.",
+                    kind="limitation",
+                    evidence_refs=["session:onp-fixture"],
+                ).model_dump(),
+            ],
+            "provider_calls": 1,
+            "provider_calls_total": 1,
+            "progress": {"stage": "planning", "status": "failed"},
+        }
+    )
+    dispatched: list[str] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        dispatched.append(schema_name)
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved evidence supports the section {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            generated, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "chatgpt", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert len(generated.sections) >= 2
+        assert calls == 1 + len(generated.sections)
+        assert state["plan"] is not None
+        assert any("planning stage did not" in x for x in generated.validation_warnings)
+
+    asyncio.run(check())
+    assert dispatched and set(dispatched) == {"sigma_long_paper_section"}
+
+
 def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
     package, plan = fast_package(section_count=6)
     state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
@@ -3549,6 +3602,7 @@ def main() -> None:
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_military_style_guidance_reaches_all_authoring_paths()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
+    test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
     test_fast_checkpoint_resume_replays_only_incomplete_section()
     test_fast_long_draft_cancellation_keeps_completed_sections()
