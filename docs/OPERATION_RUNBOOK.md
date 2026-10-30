@@ -18,8 +18,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) 
 | Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | Attached to VM; public DNS and HTTPS routing verified 2026-10-26 |
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
 | Billing account / current spend | Unknown | October 25 console screenshot is historical; current association, available credit, alert delivery and spend not verified |
-| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Snapshot observed; exact snapshot not restore-tested. Daily backup timer and `/etc/sigma/backup.env` absent. |
-| Production release | `2761c0e12190807bafabe58445d6beac479140c4` (v0.1.4 source SHA) | Host checkout, configured release and backend/frontend labels match; all containers healthy and public probe passed 2026-10-29. PR #321 merge SHA differs; hosted acceptance remains partial. See [Status](STATUS.md). |
+| Recovery | One-off READY snapshot `sigma-state-v014-20261029-0606` before v0.1.4 | Read-only GCE inspection on 2026-10-29 confirmed READY and `sigma-state` source. Exact snapshot not restore-tested. Daily backup timer and `/etc/sigma/backup.env` absent. |
+| Production release | `6fa626bdfc1f07cb873103dfed2323864d4fb280` (v0.1.4) | Read-only GCE inspection on 2026-10-29 confirmed configured release and backend/frontend image labels match; all three containers healthy, service active and public endpoint probe passed. This differs from the previously recorded `2761c0e12190807bafabe58445d6beac479140c4`; reconcile release-record/history provenance before cutover. Hosted acceptance remains partial. See [Status](STATUS.md). |
 
 **Change log**
 

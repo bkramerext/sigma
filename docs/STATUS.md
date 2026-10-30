@@ -1,3 +1,72 @@
+## Issue #337 — v0.1.5 release candidate preparation (2026-10-29)
+
+Release candidate work starts from merged `main` at the #330 merge SHA
+`5d1a4f51c4a2cd33b0854a19564d37bebac15b3d`. Python, uv, frontend and npm
+lockfile versions are aligned at `0.1.5`. This is a candidate only;
+production remains v0.1.4 and no v0.1.5 tag or deployment is authorized.
+
+Read-only production inspection on 2026-10-29 found `sigma-gce-01` RUNNING in
+`sigma-research-prod`/`us-west1-b`; `sigma.service` active; `/srv/sigma-state`
+mounted from `/dev/sdb` with UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`, ext4 and `rw,nosuid,nodev,noexec`; and
+the mount root `root:root` mode `700`. `/etc/sigma/deploy.env` is `root:root`
+mode `600`, and its `SIGMA_RELEASE` is
+`6fa626bdfc1f07cb873103dfed2323864d4fb280`. Backend and frontend containers
+are healthy and carry that same image/source SHA. The public endpoint verifier
+passed DNS, private-port, HTTP redirect, TLS/root, SPA deep-link and hosted API
+checks. This live SHA conflicts with the prior `2761c0e12190807bafabe58445d6beac479140c4`
+record in this document's earlier v0.1.4 entry; provenance must be reconciled
+before release cutover. No user identity, workspace, project, paper, or spend
+ledger contents were inspected.
+
+The recovery snapshot `sigma-state-v014-20261029-0606` is currently `READY`,
+30 GB, and sourced from `sigma-state`. It predates v0.1.4, has not been
+restore-tested, and does not establish the latest recoverable point. The daily
+backup timer and success marker are absent. Therefore recovery readiness is
+**UNMET** for a cutover: obtain an operator-approved consistent snapshot after
+checking current backup/IAM/cost posture, and verify a restore on an isolated
+clone before deployment. No snapshot or host state was changed in this check.
+
+Compatibility review: **MET** — source inspection finds no destructive
+production-state migration in #330, and no SQLite auth/workspace schema change
+between live SHA `6fa626b…` and the candidate baseline. Existing project schema
+versions 1–9 remain accepted by the candidate's project reader; paper checkpoint
+code preserves legacy checkpoint paths/layouts. **UNVERIFIED** — no production
+workspace contents were read, so saved projects, frozen research/paper
+checkpoints, artifact bundles and ledger references have not been exercised
+against the candidate. The candidate can write project schema 10 for new
+inference provenance; the deployed v0.1.4 reader supports only earlier schema
+versions. Consequently code rollback is not generally safe after such a write.
+Paper artifact compatibility with the older deployed binary also remains
+unverified. Guarded exact-SHA rollback commands are documented below, but the
+runbook's `--schema-compatible` assertion must not be supplied until these
+conditions are assessed; restore readiness and rollback readiness are not
+established by container health or a READY snapshot alone.
+
+Verification in the isolated `/tmp/sigma-red-v015` worktree: `./sigma test`
+passed in full after `npm --prefix frontend ci --no-audit --no-fund`; Ruff,
+format (310 files), Pyright (0 diagnostics), frontend typecheck, and production
+frontend build passed. The suite's optional graph-present Python sandbox case
+skipped because its local image is unavailable. `uv build` produced the 0.1.5
+wheel and source distribution. Release image source/label/automation tests
+passed, but actual Docker images were not built because the local Docker daemon
+is unavailable. No tests targeted the human's local SIGMA server and no paid
+provider calls were made.
+
+Real-Chrome checks used only a temporary fixture backend and Vite server in
+this worktree. `browser_checks/issue329_fast_paper.py` did not pass its old
+“Planning the paper” assertion: the current fast synthesis progressed directly
+to PDF compilation and saved the paper. `browser_checks/issue328_paper_progress.py`
+also failed an obsolete `Elapsed` text assertion (the current UI displays
+elapsed seconds); its deterministic PDF generation had completed. Treat these
+browser runs as **UNVERIFIED**, not acceptance; refresh the assertions before
+claiming browser acceptance. The servers were stopped afterward.
+
+The candidate exact SHA, PR and R4R evidence are recorded in
+[`messages/v015_red_release_r4r.md`](../messages/v015_red_release_r4r.md).
+Stage B remains unauthorized and unperformed. No provider calls or production
+mutations were made.
+
 ## Issue #329 — independent paper-generation testing (2026-10-29)
 
 Added a test-only pyramid on implementation HEAD
