@@ -8210,7 +8210,8 @@ authorized and were not performed. No local SIGMA server was targeted.
 | Schema 10 backward binary rollback | **UNMET** | v0.1.4 parser source accepts only schema 1–9. An isolated import of the exact v0.1.4 `projects.py` rejected `{"schema_version": 10}` with “expected 1 through 9”. v0.1.5 can write schema 10 with strategy provenance `inference_request_id`. No bridge has been implemented or tested; after a schema 10 write, v0.1.4 rollback is unsafe. Prefer a v0.1.5-compatible forward fix; otherwise stop writers and preserve the post-release disk, and treat any pre-release restore as an explicitly accepted data-loss incident. |
 | Fresh application-consistent snapshot | **UNMET** | Existing `sigma-state-v014-20261029-0606` is READY but pre-v0.1.4 and not restore-tested. No new snapshot, backup configuration, IAM grant or production change was made. See operator approval plan in [Runbook §5](OPERATION_RUNBOOK.md#5-daily-state-disk-backup). |
 | Isolated restore verification | **UNMET** | No fresh clone/drill performed. Requires reviewed IAM and metadata isolation, cost ceiling/billing/quota check, maintenance window for app downtime, no-ingress/no-service-account recovery host, read-only mount, approved aggregate thresholds, preserved evidence and separately authorized cleanup. |
-| Target-host exact-SHA Docker build/preflight | **UNVERIFIED** | No production preflight or image build was run. Required operator checks and full command are detailed below. |
+| Target-host production preflight | **MET** | Read-only host preflight returned 23/23 PASS using `sudo /usr/local/libexec/sigma/gce_preflight.py --json --repository /opt/sigma/current`; checks included mounted disk identity, protected configuration/secret file metadata, rootless daemon/images, Docker Compose, systemd and the release stack. Omitting `--repository` uses the copied script's `/usr/local/libexec` location and fails the Compose check. |
+| Candidate SHA target-host Docker build | **UNVERIFIED** | No candidate images were built on production. Requirements are documented below; actual target-host build remains unperformed. |
 | Focused Chrome issue #328 | **MET** | `browser_checks/issue328_paper_progress.py` passed real Chrome against fresh isolated temporary project/auth/state roots on `127.0.0.1:5182` + deterministic fixture API `127.0.0.1:8012`: one-shot progress/cancel, explicit reset/retry, active long-form progress recovery in a fresh tab, detached completion and saved PDF. No production/local SIGMA server or paid provider was used. |
 | Focused Chrome issue #329 | **MET** | `browser_checks/issue329_fast_paper.py` passed real Chrome against a fresh isolated temporary project/auth/state store: plan and section progress, Escape does not cancel, pre-dispatch retry, section failure with Continue and usage warning, PDF completion, no-AI Start over/cancel/restart, AI-binding mismatch reset, and final responsive-layout check. Fixture API/provider responses were deterministic and local; no live/paid provider or local SIGMA server was used. |
 | Production cutover / release health | **UNMET** | No cutover authorization was given; restore and schema-rollback gates remain unmet. |
@@ -8222,12 +8223,16 @@ The target-host release build must resolve exactly
 verify both image labels and immutable image IDs. Before deploy, require a clean
 host checkout whose HEAD equals the currently protected release pin, exact-SHA
 fetch availability, free Docker space and working daemon/network, host
-preflight PASS (`sudo /usr/local/libexec/sigma/gce_preflight.py --json`),
+preflight PASS with the explicit repository path:
+`sudo /usr/local/libexec/sigma/gce_preflight.py --json --repository /opt/sigma/current`,
 mounted state-disk identity, rootless sandbox daemon health via
 `python -m sigma.cloud_runtime_check`, and confirmation that sandbox image
-inputs did not change. Deployment starts from systemd/Compose `--no-build` and
-records container IDs and image IDs. None of these target-host build/preflight
-actions was performed. After separate operator deployment authorization, the
+inputs did not change. The preflight is read-only; the cloud runtime check
+starts a temporary sandbox execution and writes runtime evidence, so use it
+only as an approved exercise. Deployment starts from systemd/Compose
+`--no-build` and records container IDs and image IDs. The documented preflight
+passed against the active v0.1.4 checkout; no candidate images were built.
+After separate operator deployment authorization, the
 guarded invocation is:
 
 ```sh
@@ -8249,6 +8254,14 @@ provider attempt, current planning and emitted section progress rather than a
 stale plan-ready label, and retry/Continue controls according to whether
 failure occurred before dispatch or during section generation. All fixture calls are
 deterministic and local; no paid provider call is made.
+
+Follow-up read-only check on the live v0.1.4 host: the first preflight command
+without `--repository` had one generic Compose check failure because the
+installed checker is copied under `/usr/local/libexec`. Rerunning with
+`--repository /opt/sigma/current` passed all 23 checks. This verifies the
+existing v0.1.4 host contract only; no candidate Docker image was built, and
+no rootless runtime execution, snapshot, restore, configuration or IAM change
+was performed.
 
 Verification completed in this isolated worktree: `./sigma test` passed all
 configured steps, including backend and release/deployment checks, Ruff check
