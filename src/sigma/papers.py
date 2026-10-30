@@ -3559,7 +3559,22 @@ async def _generate_impl(
         config = await configuration(view=view, context=initial_auth)
         if not config["available"]:
             raise ProjectError(config["message"])
-        package, snapshot_hash = _snapshot(path)
+        live_package, live_hash = _snapshot(path)
+        checkpoint = _load_work(path)
+        # Once the first authoring attempt begins, the saved evidence is fixed.
+        # Research added while the browser sleeps must not invalidate paid
+        # checkpoints or cause a second request for the same paper.
+        frozen = (
+            _load_frozen_source(path, checkpoint)
+            if checkpoint is not None
+            and checkpoint.get("project_id") == view.project.id
+            and not _can_rebase_explicit_restart(checkpoint, view.project.id)
+            else None
+        )
+        package = frozen if frozen is not None else live_package
+        snapshot_hash = (
+            checkpoint["snapshot_sha256"] if frozen is not None else live_hash
+        )
         if expected_snapshot_sha256 and expected_snapshot_sha256 != snapshot_hash:
             raise PaperSnapshotConflict(
                 "Research changed after paper preflight. Review the updated snapshot and start again."
@@ -3568,7 +3583,6 @@ async def _generate_impl(
         binding_fingerprint = hashlib.sha256(
             (initial_auth["mode"] + "\0" + initial_auth["identity"]).encode()
         ).hexdigest()
-        checkpoint = _load_work(path)
         if checkpoint is not None:
             previous_progress = checkpoint.get("progress")
             if previous_progress is not None:
@@ -3604,6 +3618,10 @@ async def _generate_impl(
                 raise ProjectError(
                     "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
                 )
+        if checkpoint is None or frozen is None:
+            # Write once before provider dispatch. An older compatible
+            # checkpoint can acquire this durable copy on its first resume.
+            _save_frozen_source(path, package)
         one_shot_validation_started = False
         if not long_form:
             # A one-shot request can consume allowance even when its response
@@ -3945,10 +3963,24 @@ def preflight(
     reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     """Estimate bounded long-paper calls without contacting an inference provider."""
-    package, fingerprint = _snapshot(path)
-    size = len(_json(package))
+    live_package, live_fingerprint = _snapshot(path)
     view = inspect_project(path)
     existing = _load_work(path)
+    frozen = (
+        _load_frozen_source(path, existing)
+        if existing is not None
+        and existing.get("project_id") == view.project.id
+        and not _can_rebase_explicit_restart(existing, view.project.id)
+        else None
+    )
+    package = frozen if frozen is not None else live_package
+    fingerprint = (
+        existing["snapshot_sha256"] if frozen is not None else live_fingerprint
+    )
+    source_updated_since_checkpoint = bool(
+        frozen is not None and live_fingerprint != fingerprint
+    )
+    size = len(_json(package))
     long_form = _paper_long_form(package, force_long_form=force_long_form, existing=existing)
     fast_preflight = bool(
         long_form
@@ -4090,6 +4122,7 @@ def preflight(
         "max_evidence_batches": 0 if fast_preflight else MAX_EVIDENCE_BATCHES,
         "max_sections": MAX_LONG_PAPER_SECTIONS,
         "checkpoint_exists": work is not None,
+        "source_updated_since_checkpoint": source_updated_since_checkpoint,
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
         "draft_recovery_available": resume_available and one_shot_draft_available,
