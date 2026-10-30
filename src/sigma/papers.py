@@ -2529,7 +2529,7 @@ def _tex(
     for section in draft.sections:
         parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
         parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
-        if include_research_details and section.claim_ids:
+        if include_claim_details and section.claim_ids:
             parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
 
     def claim_register() -> None:
