@@ -607,7 +607,7 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert saved["generation"]["provider_calls_attempted"] == 1
         assert saved["generation"]["provider_calls_lifetime_total"] == 1
         assert saved["generation"]["include_research_details"] is True
-        assert r"\\section*{About this paper}" in saved["tex_source"]
+        assert r"\section*{About this paper}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
         assert [event["stage"] for event in first_events if event["state"] == "active"] == [
@@ -1995,9 +1995,7 @@ def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
 
     asyncio.run(check())
     assert state["evidence_strategy"] == "structured_v1"
-    indexed_refs = {
-        ref for note in state["evidence_notes"] for ref in note["evidence_refs"]
-    }
+    indexed_refs = {ref for note in state["evidence_notes"] for ref in note["evidence_refs"]}
     assert set(additional) <= indexed_refs
     assert all(sections_seen)
     assert any(additional[0] in note["evidence_refs"] for note in sections_seen[0])
@@ -2793,7 +2791,10 @@ def test_invalid_planning_claim_reference_is_recoverable() -> None:
     assert len(generated.sections) == len(valid_plan.sections)
     assert "C999" not in generated.abstract_claim_ids
     assert "C999" not in generated.sections[0].claim_ids
-    assert any("unknown or repeated claim links" in item.casefold() for item in generated.validation_warnings)
+    assert any(
+        "unknown or repeated claim links" in item.casefold()
+        for item in generated.validation_warnings
+    )
     assert state["evidence_indexed"] is True
     assert state["provider_calls_total"] == calls
     assert state["plan"]["abstract_claim_ids"] == valid_plan.abstract_claim_ids
