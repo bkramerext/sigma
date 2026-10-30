@@ -10,6 +10,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -21,6 +22,27 @@ TTL = 60
 RETRY_COOLDOWN = 3
 TIMEOUT = 8
 MAX_BYTES = 1000000
+
+
+def provider_endpoint(resource: str) -> str:
+    """Resolve the OpenAI endpoint; test overrides are loopback-only mock auth."""
+    base = os.environ.get("SIGMA_OPENAI_API_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        return f"https://api.openai.com/v1/{resource}"
+    parsed = urlsplit(base)
+    if (
+        os.environ.get("SIGMA_MOCK_AUTH") != "1"
+        or parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ProjectError(
+            "Provider endpoint overrides are allowed only for loopback mock-auth tests"
+        )
+    return f"{base}/v1/{resource}"
 
 
 class AuthContext(Mapping[str, Any]):
@@ -160,7 +182,7 @@ async def _check(key: str, mode: str = "api_key") -> _CatalogResult:
             httpx.AsyncClient(timeout=TIMEOUT, trust_env=False, follow_redirects=False) as client,
             client.stream(
                 "GET",
-                "https://api.openai.com/v1/models",
+                provider_endpoint("models"),
                 headers={"Authorization": "Bearer " + key},
             ) as response,
         ):

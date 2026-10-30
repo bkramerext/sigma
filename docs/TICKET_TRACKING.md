@@ -4,6 +4,7 @@
 
 | Issue | Owner | Status | Branch / handoff |
 |---|---|---|---|
+| #332 — Infer strategy from Current Understanding | Gray | **Ready for Review** · PR [#334](https://github.com/bkramerext/sigma/pull/334) · verification in [handoff](../messages/issue_332_gray_r4r.txt) | `gray/issue-332-infer-strategy` · [issue](https://github.com/bkramerext/sigma/issues/332) |
 | #328 — Paper Generation Progress | Blue | Implementation and deterministic/browser verification complete; awaiting human UI review. PR #323 integration remains a sequencing dependency. | `blue/issue-328-paper-progress` · [issue](https://github.com/bkramerext/sigma/issues/328) · [browser evidence](../docs/evaluations/issue_328/README.md) |
 | #301 — Live Session Log | Green | **Ready for Review** · human UI corrections verified at `6bc74dfc` · PR [#324](https://github.com/bkramerext/sigma/pull/324) · based on `26628d549dbe11aad0c9f612633c08964ae9eb90` | `green/issue-301-live-logging` · [issue](https://github.com/bkramerext/sigma/issues/301) · [handoff](../messages/issue_301_green_r4r.txt) |
 

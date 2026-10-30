@@ -89,6 +89,7 @@ class Provenance:
     provider: str
     model: str
     reasoning_effort: str | None = None
+    inference_request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,29 @@ def project_path(value: str | Path) -> Path:
         raise ProjectError(f"Invalid project path: {exc}") from exc
 
 
+@contextmanager
+def project_write_lock(value: str | Path):
+    """Serialize project, session-evidence, and inference-receipt updates."""
+    path = project_path(value)
+    lock_path = (
+        path.with_name(f".{path.name}.sigma-write.lock")
+        if path.suffix == ".json"
+        else path / ".write.lock"
+    )
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "rb") as lock:
+            if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+                raise ProjectError("Project write lock must be a regular file")
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                yield path
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+    except OSError as exc:
+        raise ProjectError(f"Cannot lock project state: {exc}") from exc
+
+
 def _timestamp(value: Any) -> datetime:
     if not isinstance(value, str):
         raise ProjectError("Timestamp must be a string")
@@ -263,9 +287,9 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 9)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 10)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -356,7 +380,9 @@ def _decode(raw: Any) -> Project:
                         not isinstance(provenance, dict)
                         or set(provenance)
                         != (
-                            {"provider", "model", "reasoning_effort"}
+                            {"provider", "model", "reasoning_effort", "inference_request_id"}
+                            if version >= 10
+                            else {"provider", "model", "reasoning_effort"}
                             if version >= 6
                             else {"provider", "model"}
                         )
@@ -369,6 +395,9 @@ def _decode(raw: Any) -> Project:
                         and provenance["reasoning_effort"] not in EFFORTS
                     ):
                         raise ProjectError("Invalid generation reasoning effort")
+                    request_id = provenance.get("inference_request_id")
+                    if request_id is not None and str(UUID(request_id)) != request_id:
+                        raise ProjectError("Invalid inference request provenance")
                     values["provenance"] = Provenance(**provenance)
             strategies.append(Strategy(**values))
     if not isinstance(raw["events"], list) or not raw["events"]:
@@ -581,6 +610,10 @@ def _document(project: Project) -> bytes:
         del raw["difficulty"]
     if project.schema_version < 9:
         del raw["show_advanced_outcome_details"]
+    if project.schema_version < 10:
+        for strategy in raw["strategies"]:
+            if strategy["provenance"] is not None:
+                strategy["provenance"].pop("inference_request_id", None)
     if project.schema_version < 7:
         for strategy in raw["strategies"]:
             del strategy["enabled"]
@@ -806,6 +839,9 @@ def create_strategy(
     provenance: Provenance | None = None,
     *,
     _continuation_writer: Callable[[Project, Strategy], None] | None = None,
+    _expected_strategy_snapshot: tuple[tuple[str, str, str, bool, str | None], ...] | None = None,
+    _commit_guard: Callable[[Project], bool | None] | None = None,
+    _after_commit: Callable[[ProjectView], None] | None = None,
 ) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
@@ -815,6 +851,17 @@ def create_strategy(
         raise ProjectError("Summary must be one line, at most 300 characters")
 
     def append(project: Project) -> Project:
+        if _commit_guard is not None and _commit_guard(project) is False:
+            return project
+        if _expected_strategy_snapshot is not None:
+            current = tuple(
+                (item.id, item.title, item.approach, item.enabled, item.removed_at)
+                for item in project.strategies
+            )
+            if current != _expected_strategy_snapshot:
+                raise ProjectError(
+                    "Strategy history changed during inference. Reopen the project and retry."
+                )
         timestamp = _next_timestamp(project)
         strategy = Strategy(
             str(uuid4()),
@@ -831,6 +878,7 @@ def create_strategy(
             project,
             schema_version=max(
                 project.schema_version,
+                10 if provenance and provenance.inference_request_id else 0,
                 6
                 if provenance and provenance.reasoning_effort
                 else 5
@@ -845,7 +893,7 @@ def create_strategy(
             ),
         )
 
-    return _update_project(value, append)
+    return _update_project(value, append, _after_commit=_after_commit)
 
 
 def set_strategy_enabled(value: str | Path, strategy_id: str, enabled: bool) -> ProjectView:
@@ -976,6 +1024,8 @@ def _update_project(
     value: str | Path,
     update: Callable[[Project], Project],
     text_edit: tuple[str, str] | None = None,
+    *,
+    _after_commit: Callable[[ProjectView], None] | None = None,
 ) -> ProjectView:
     view = inspect_project(value)
     path = Path(view.path)
@@ -984,22 +1034,25 @@ def _update_project(
             raise ProjectError("Text-view editing is not yet supported for single-file projects")
         from sigma.project_bundle import transform_file
 
-        def transform(previous: bytes) -> bytes:
-            project = _decode(json.loads(previous))
-            updated = update(project)
-            return _document(updated)
+        try:
+            with project_write_lock(path):
 
-        contents = transform_file(path, STATE, transform)
-        return ProjectView(str(path), _decode(json.loads(contents)))
+                def transform(previous: bytes) -> bytes:
+                    project = _decode(json.loads(previous))
+                    updated = update(project)
+                    return _document(updated)
+
+                contents = transform_file(path, STATE, transform)
+                result = ProjectView(str(path), _decode(json.loads(contents)))
+                if _after_commit is not None:
+                    _after_commit(result)
+                return result
+        except OSError as exc:
+            raise ProjectError(f"Cannot save strategy change: {exc}") from exc
     temporary: Path | None = None
     backup_temporary: Path | None = None
     try:
-        # Lock a stable inode, separate from the atomically replaced document.
-        fd = os.open(path / ".write.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "rb") as lock:
-            if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
-                raise ProjectError("Project write lock must be a regular file")
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with project_write_lock(path):
             before = (path / STATE).read_bytes()
             project = inspect_project(path).project
             updated = update(project)
@@ -1008,7 +1061,10 @@ def _update_project(
             if updated != project or text_edit is not None:
                 sync_source_changes(path, project, updated, text_edit)
             if updated == project:
-                return ProjectView(str(path), project)
+                result = ProjectView(str(path), project)
+                if _after_commit is not None:
+                    _after_commit(result)
+                return result
             contents = _document(updated)
             _decode(json.loads(contents))  # Validate the complete next document before publication.
             temporary = _stage(path, contents)
@@ -1023,7 +1079,10 @@ def _update_project(
             if (path / STATE).is_symlink() or (path / STATE).read_bytes() != before:
                 raise ProjectError("Project changed during save; reopen and retry")
             os.replace(temporary, path / STATE)
-            return ProjectView(str(path), updated)
+            result = ProjectView(str(path), updated)
+            if _after_commit is not None:
+                _after_commit(result)
+            return result
     except OSError as exc:
         raise ProjectError(f"Cannot save strategy change: {exc}") from exc
     finally:

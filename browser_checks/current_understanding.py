@@ -154,7 +154,6 @@ from sigma.api import app
             )
             page = browser.new_page(viewport={"width": 1440, "height": 1000}, accept_downloads=True)
             errors, inference = [], []
-            suggestion_requests = []
             active_project_id = ""
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on(
@@ -183,13 +182,6 @@ from sigma.api import app
                             "mode": "api_key",
                             "model": "fixture-model",
                             "reasoning_effort": "high",
-                        }
-                    )
-                elif route.request.url.endswith("/api/projects/strategy-suggestions"):
-                    suggestion_requests.append(route.request.post_data_json)
-                    route.fulfill(
-                        json={
-                            "markdown": "## Test a boundary case\n\nCompare the unresolved boundary with the saved findings.\n\n**Rationale:** Session evidence leaves this case open."
                         }
                     )
                 else:
@@ -265,11 +257,24 @@ from sigma.api import app
                 else:
                     expect(summary).to_contain_text("No reviewed finding is saved")
                     assert not state["findings"] and not state["obligations"]
-                expect(summary).not_to_contain_text("One copy-only Markdown")
+                project_data = json.loads((Path(path) / "project.json").read_text())
+                action = summary.get_by_role(
+                    "button",
+                    name=f"Infer strategy #{len(project_data['strategies']) + 1}",
+                    exact=True,
+                )
+                expect(action).to_be_visible()
+                assert action.evaluate("el => el.parentElement.matches('summary')")
+                assert (
+                    "Uses current findings and unresolved research questions"
+                    in action.get_attribute("data-tooltip")
+                )
+                assert action.get_attribute("title") is None
+                assert summary.locator(".strategy-suggestion-result").count() == 0
+                generate = page.get_by_role("button", name="Generate", exact=True)
+                assert "review or edit it before saving" in generate.get_attribute("data-tooltip")
+                assert generate.get_attribute("title") is None
                 if slug == "maximum-regions-archived":
-                    action = summary.get_by_role("button", name="Suggest a strategy", exact=True)
-                    expect(action).to_be_visible()
-                    assert action.evaluate("el => el.parentElement.matches('summary')")
                     action_layout = page.evaluate(
                         """() => {
                           const title = document.querySelector('.current-understanding > summary > span').getBoundingClientRect();
@@ -300,34 +305,6 @@ from sigma.api import app
                         }"""
                     )
                     assert content_inset >= 16, content_inset
-                    page.context.grant_permissions(
-                        ["clipboard-read", "clipboard-write"], origin=ui_url
-                    )
-                    before_strategy_count = len(
-                        json.loads((Path(path) / "project.json").read_text())["strategies"]
-                    )
-                    action.click()
-                    result = summary.locator(".strategy-suggestion-result")
-                    result.wait_for()
-                    expect(result.locator(":scope > summary")).to_have_text("Suggested strategy")
-                    expect(page.get_by_role("dialog")).to_have_count(0)
-                    result.locator(":scope > summary").click()
-                    expect(result).to_contain_text("Test a boundary case")
-                    result.get_by_role("button", name="Copy suggested strategy").click()
-                    assert (
-                        page.evaluate("navigator.clipboard.readText()")
-                        == "## Test a boundary case\n\nCompare the unresolved boundary with the saved findings.\n\n**Rationale:** Session evidence leaves this case open."
-                    )
-                    result.locator(":scope > summary").click()
-                    expect(result.locator(".outcome-markdown")).to_be_hidden()
-                    assert (
-                        len(json.loads((Path(path) / "project.json").read_text())["strategies"])
-                        == before_strategy_count
-                    )
-                    assert (
-                        len(suggestion_requests) == 1
-                        and suggestion_requests[0]["expected_project_id"] == active_project_id
-                    )
                 navigation = []
                 if not header_only:
                     for name in ("Inspect finding:", "Inspect earlier evidence:"):

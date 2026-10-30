@@ -994,7 +994,13 @@ def main() -> None:
                     assert concurrent_rejection.status_code == 400, concurrent_rejection.text
                     assert response_dispatches == dispatched_while_running
                     cancelled = client.post(
-                        "/api/projects/proposals/cancel", json={"request_id": cancel_id}
+                        "/api/projects/proposals/cancel",
+                        json={
+                            "request_id": cancel_id,
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
                     )
                     assert cancelled.status_code == 200, cancelled.text
                     cancellation_response = pending.result(timeout=10)

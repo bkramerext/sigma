@@ -780,16 +780,63 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   </div>;
 }
 
-function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSession }: { state: CurrentUnderstanding; path: string; projectId: string; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [hasSuggestedResult, setHasSuggestedResult] = useState(false);
+function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInferred, onEvidence, onSession }: { state: CurrentUnderstanding; path: string; projectId: string; nextOrdinal: number; onInferred: (view: ProjectView, strategyId: string) => void; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
   const [suggestionBusy, setSuggestionBusy] = useState(false);
   const [suggestionError, setSuggestionError] = useState('');
-  const [copied, setCopied] = useState(false);
-  useEffect(() => { setSuggestion(null); setHasSuggestedResult(false); setSuggestionError(''); }, [path]);
-  async function suggestStrategy() {
-    if (suggestionBusy) return;
-    setSuggestionBusy(true); setSuggestionError(''); setCopied(false); setSuggestion(null); setHasSuggestedResult(false);
+  const [suggestionStatus, setSuggestionStatus] = useState('');
+  const inferencePending = useRef(false);
+  const inferenceRequestId = useRef<string | null>(null);
+  const inferenceCancelled = useRef(false);
+  const inferenceCancelRequested = useRef(false);
+  const inferenceBinding = useRef<string | null>(null);
+  const inferenceResolved = useRef(false);
+  useEffect(() => { setSuggestionError(''); setSuggestionStatus(''); }, [path]);
+  function applyInferenceStatus(result: { status?: string; strategy?: Strategy | null; project?: ProjectView }) {
+    if (result.status === 'completed' && result.strategy && result.project) {
+      if (!inferenceResolved.current) onInferred(result.project, result.strategy.id);
+      inferenceResolved.current = true;
+      setSuggestionStatus(`Saved strategy: ${result.strategy.title}. You can review or remove it in Strategies.`);
+    } else if (result.status === 'no_strategy' || result.status === 'completed' && !result.strategy) {
+      inferenceResolved.current = true;
+      setSuggestionStatus('No additional strategy was identified from the current research.');
+    } else if (result.status === 'cancelled') {
+      inferenceResolved.current = true;
+      setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was saved.');
+    } else if (result.status === 'uncertain' || result.status === 'dispatched') {
+      setSuggestionStatus('Cancellation was requested, but the provider outcome is uncertain. This request will not be repeated; refresh Strategies to check for a saved result.');
+    } else if (result.status === 'provider_completed') {
+      setSuggestionStatus('The provider completed, but SIGMA cannot confirm that the strategy was saved. Refresh Strategies to inspect the current project; this request will not be repeated.');
+    } else if (result.status === 'failed') {
+      setSuggestionError('Inference did not complete. This request will not be repeated; start a new inference to try again.');
+    } else if (result.status === 'not_found') {
+      setSuggestionStatus('Inference was cancelled before the server accepted a provider request.');
+    }
+  }
+  async function refreshInferenceStatus(requestId: string) {
+    const binding = inferenceBinding.current;
+    if (!binding) {
+      setSuggestionStatus('Cancellation status is unavailable. Refresh Strategies to inspect the current project.');
+      return;
+    }
+    try {
+      const query = new URLSearchParams({ path, expected_project_id: projectId, expected_binding: binding, request_id: requestId });
+      const response = await fetch(`/api/projects/strategy-inference/status?${query}`, { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not check inference status.');
+      applyInferenceStatus(result);
+    } catch {
+      setSuggestionStatus('Cancellation status is unavailable. Refresh Strategies to inspect the current project; the request will not be repeated automatically.');
+    }
+  }
+  async function inferStrategy() {
+    if (inferencePending.current) return;
+    inferencePending.current = true;
+    inferenceCancelled.current = false;
+    inferenceCancelRequested.current = false;
+    inferenceResolved.current = false;
+    inferenceBinding.current = null;
+    inferenceRequestId.current = crypto.randomUUID();
+    setSuggestionBusy(true); setSuggestionError(''); setSuggestionStatus('');
     let finishProviderRequest = () => {};
     try {
       const configResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { cache: 'no-store' });
@@ -797,21 +844,43 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
       if (!configResponse.ok) throw new Error(config.error ?? 'Could not read AI settings.');
       if (config.project_id !== projectId) throw new Error('Project identity changed. Reopen it before suggesting a strategy.');
       if (!config.available) throw new Error(config.message ?? 'Connect the selected AI account before requesting a suggestion.');
-      finishProviderRequest = beginProviderRequest('strategy-suggestion');
-      const result = await post<{ markdown: string | null }>('strategy-suggestions', {
-        path, expected_binding: config.binding, expected_project_id: projectId,
+      inferenceBinding.current = config.binding;
+      if (inferenceCancelRequested.current) {
+        inferenceResolved.current = true;
+        setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was saved.');
+        return;
+      }
+      finishProviderRequest = beginProviderRequest('strategy-inference');
+      const result = await post<{ strategy: Strategy | null; project: ProjectView; inference_status?: string }>('strategy-inference', {
+        path, expected_binding: config.binding, expected_mode: config.mode, expected_project_id: projectId, request_id: inferenceRequestId.current,
       });
-      setSuggestion(result.markdown?.trim() || null);
-      setHasSuggestedResult(true);
+      applyInferenceStatus({ ...result, status: result.inference_status ?? (result.strategy ? 'completed' : 'no_strategy') });
     } catch (cause) {
+      if (inferenceCancelRequested.current) {
+        await refreshInferenceStatus(inferenceRequestId.current ?? '');
+        return;
+      }
       const message = errorMessage(cause);
       setSuggestionError(message); reportRequestFailure(message);
-    } finally { finishProviderRequest(); setSuggestionBusy(false); }
+    } finally { finishProviderRequest(); inferencePending.current = false; inferenceRequestId.current = null; setSuggestionBusy(false); }
   }
-  async function copySuggestion() {
-    if (!suggestion) return;
-    try { await navigator.clipboard.writeText(suggestion); setCopied(true); }
-    catch { setSuggestionError('Clipboard access failed. Select and copy the Markdown text.'); }
+  async function cancelInference() {
+    const requestId = inferenceRequestId.current;
+    if (!requestId || inferenceCancelRequested.current) return;
+    inferenceCancelRequested.current = true;
+    inferenceCancelled.current = true;
+    setSuggestionStatus('Cancellation requested. Checking whether a strategy was saved…');
+    try {
+      if (!inferenceBinding.current) return;
+      const result = await post<{ status: string; strategy?: Strategy | null; project?: ProjectView }>('proposals/cancel', {
+        request_id: requestId, path, expected_project_id: projectId, expected_binding: inferenceBinding.current,
+      });
+      applyInferenceStatus(result);
+    }
+    catch (cause) {
+      const message = errorMessage(cause); setSuggestionError(message); reportRequestFailure(message);
+      await refreshInferenceStatus(requestId);
+    }
   }
   const sourceButton = (source: EvidencePointer, context: string) => <button type="button" className="text-view-link" disabled={!source.available} aria-label={`${context}: Session ${source.session_number}, Artifact ${source.artifact_sequence || 'unnumbered'}`} onClick={() => onEvidence(source)}>Session #{source.session_number} · {source.artifact_sequence ? `Artifact ${source.artifact_sequence}` : 'Saved evidence'}</button>;
   const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (saved text continues)` : text;
@@ -824,7 +893,7 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
   const changeRow = (row: CurrentUnderstanding['changes'][number], index: number) => <li key={`${row.kind}-${row.source.session_id}-${row.source.artifact_id}-${index}`}><strong>{({ obligation_addressed: 'Resolution reported', obligation_superseded: 'Supersession reported', obligation_retracted: 'Retraction reported', local_refutation_reported: 'Local counterexample reported', later_finding_available: 'Later review saved', supersedes: 'Supersession reported', refutes: 'Refutation reported' } as Record<string, string>)[row.kind] || 'Saved assessment'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.caution}</p><p>{sourceButton(row.source, 'Inspect later evidence')}{row.earlier && <> · {sourceButton(row.earlier, 'Inspect earlier evidence')}</>}</p></li>;
   const questionRow = (row: CurrentQuestion) => <li key={row.id}><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.note}</p>{row.sources.length > 0 && <p>{sourceButton(row.sources.at(-1)!, 'Inspect obligation')}{row.narrative_resolution_sources.slice(-1).map(source => <span key={source.record_path}> · {sourceButton(source, 'Inspect narrative resolution')}</span>)}{row.dispositions.filter(item => item.valid).slice(-1).map(item => <span key={item.source.record_path}> · {sourceButton(item.source, 'Inspect disposition')}</span>)}</p>}</li>;
   return <details className="outcome-subsection current-understanding" open>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>Suggesting…</span> : <button type="button" className="text-view-link strategy-suggestion-trigger" onClick={event => { event.preventDefault(); event.stopPropagation(); void suggestStrategy(); }}>{hasSuggestedResult ? 'Suggest another strategy' : 'Suggest a strategy'}</button>}</summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
     <p className="hint current-understanding-scope">{state.scope_note}</p>
     <div className="current-understanding-columns">
       <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
@@ -836,19 +905,11 @@ function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSessio
       </section>
     </div>
     <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map(note => <li key={note}>{note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
-    <div className="strategy-suggestion-feedback">
-      {suggestionError && <p className="error" role="alert">{suggestionError}</p>}
-      {hasSuggestedResult && !suggestion && !suggestionError && <p role="status">No additional strategy is warranted by the available evidence.</p>}
-      {suggestion && <details className="strategy-suggestion-result">
-        <summary>Suggested strategy</summary>
-        <div className="strategy-suggestion-heading"><span>AI-authored Markdown · ephemeral suggestion</span><CopyToClipboardButton name="suggested strategy" copied={copied} onCopy={() => void copySuggestion()}/></div>
-        <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted suggestion…</p>}><RenderedMarkdown body={suggestion}/></Suspense></div>
-      </details>}
-    </div>
+    <div className="strategy-suggestion-feedback">{suggestionError && <p className="error" role="alert">{suggestionError}</p>}{suggestionStatus && <p role="status">{suggestionStatus}</p>}</div>
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void }) {
+function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession }: { path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void }) {
   const cloud = useCloudIdentity();
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
@@ -1110,7 +1171,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} onEvidence={revealEvidence} onSession={revealSession}/>}
+    {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
@@ -3332,7 +3393,7 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 }) {
   return <div className="strategy-heading-actions">
     {!hideNew && <button type="button" className="text-view-link" ref={buttonRef} title="Create a new strategy" disabled={disabled} onClick={onManual}>New</button>}
-    <button type="button" className="text-view-link" title="Generate a strategy with AI" disabled={disabled} onClick={onAI}>Generate</button>
+    <button type="button" className="text-view-link" data-tooltip="Uses AI exploration and critique to develop a strategy proposal. You review or edit it before saving. It also considers existing research." disabled={disabled} onClick={onAI}>Generate</button>
   </div>;
 }
 
@@ -3926,7 +3987,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
       const current = settingsOf(view);
       if (current.show_advanced_outcome_details) return;
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
