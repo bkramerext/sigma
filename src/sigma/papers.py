@@ -2553,15 +2553,18 @@ def _repair_paper_references(
             identity = f"C{next_id}"
             diagnostics.append(f"Duplicate claim {claim.id} was assigned a unique identifier.")
         used_ids.add(identity)
+        unknown_sources = any(ref not in known_evidence for ref in claim.evidence_refs)
         sources = list(dict.fromkeys(ref for ref in claim.evidence_refs if ref in known_evidence))
         changed = len(sources) != len(claim.evidence_refs)
         status = claim.status
-        if (changed or not sources) and status == "established":
+        if (unknown_sources or not sources) and status == "established":
             status = "unresolved"
-        if changed:
+        if unknown_sources:
             diagnostics.append(
                 f"Claim {identity} cited evidence not in the saved research index; unsupported links were removed."
             )
+        elif changed:
+            diagnostics.append(f"Repeated source links were removed from claim {identity}.")
         elif not sources and claim.status == "established":
             diagnostics.append(f"Claim {identity} had no saved evidence and was marked unresolved.")
         claims.append(
