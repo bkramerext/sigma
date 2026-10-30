@@ -570,6 +570,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 progress=progress,
                 force_long_form=body.long_form,
                 expected_snapshot_sha256=body.expected_snapshot_sha256,
+                include_research_details=body.include_research_details,
             )
         )
         try:
