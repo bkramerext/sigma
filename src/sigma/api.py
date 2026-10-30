@@ -449,6 +449,9 @@ class PaperGenerateRequest(OpenRequest):
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     long_form: bool = False
     include_research_details: bool = False
+    include_claim_details: bool = False
+    include_validation_notes: bool = False
+    include_research_excerpts: bool = False
 
 
 class PaperCancelRequest(OpenRequest):
@@ -591,6 +594,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             force_long_form=body.long_form,
             expected_snapshot_sha256=body.expected_snapshot_sha256,
             include_research_details=body.include_research_details,
+            include_claim_details=body.include_claim_details,
+            include_validation_notes=body.include_validation_notes,
+            include_research_excerpts=body.include_research_excerpts,
         )
     )
 

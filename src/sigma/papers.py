@@ -279,6 +279,12 @@ checkpoint details, or workflow bookkeeping in the article's prose. Retain conse
 approaches, contradictory evidence, unverified claims, and genuine open obligations in the relevant
 scientific discussion; never hide a material weakness for the sake of polish. Source-linked records
 and technical verification details are retained separately in the archived research metadata.
+The abstract is the reader's map: state the motivating question, the strongest
+supported finding or precisely bounded unresolved result, and why it matters. Aim for
+100–180 words, finish every sentence, and do not use the abstract for provenance
+accounting or process narration. The methods field must describe analysis actually
+performed on saved evidence, not imperatives addressed to the writer (such as "Use",
+"Evaluate", or "Test") or unperformed experiments presented as completed work.
 Be an exacting academic editor. Write one substantive idea per paragraph, typically two to five
 sentences. Prefer short, active sentences and precise definitions; avoid inflated language,
 throat-clearing, repetition, and re-explaining results introduced earlier. Do not duplicate
@@ -330,6 +336,7 @@ _SAFE_MATH_COMMANDS = {
     "omega",
     "Omega",
     "Delta",
+    "delta",
     "epsilon",
     "varepsilon",
     "theta",
@@ -349,6 +356,10 @@ _SAFE_MATH_COMMANDS = {
     "kappa",
     "sum",
     "prod",
+    "int",
+    "iint",
+    "iiint",
+    "oint",
     "binom",
     "lim",
     "to",
@@ -380,6 +391,52 @@ _SAFE_MATH_COMMANDS = {
     "colon",
     "mid",
     "setminus",
+    "ne",
+    "le",
+    "ge",
+    "pmod",
+    "bmod",
+    "mod",
+    "varnothing",
+    "lceil",
+    "rceil",
+    "lfloor",
+    "rfloor",
+    "qquad",
+    "quad",
+    "genfrac",
+    "dbinom",
+    "tbinom",
+    "mathsf",
+    "mathit",
+    "mathscr",
+    "overbrace",
+    "underbrace",
+    "widehat",
+    "widetilde",
+    "hat",
+    "bar",
+    "vec",
+    "gcd",
+    "det",
+    "dots",
+    "dotsb",
+    "vdots",
+    "ddots",
+    "langle",
+    "rangle",
+    "lvert",
+    "rvert",
+    "lVert",
+    "rVert",
+    "otimes",
+    "oplus",
+    "land",
+    "lor",
+    "neg",
+    "propto",
+    "sim",
+    "perp",
     "partial",
     "nabla",
 }
@@ -396,6 +453,7 @@ _UNICODE_MATH = {
     "α": r"\alpha",
     "β": r"\beta",
     "γ": r"\gamma",
+    "κ": r"\kappa",
     "ω": r"\omega",
     "Ω": r"\Omega",
     "θ": r"\theta",
@@ -413,14 +471,17 @@ _SUPERSCRIPT_SUFFIX = re.compile(
 
 
 def _safe_math(source: str) -> bool:
+    # Common TeX spacing commands are safe within math. Normalize only for
+    # token validation; preserve the original commands in rendered TeX.
+    validated = re.sub(r"\\[,;!: {}#%&]", " ", source)
     position = 0
-    for match in _MATH_TOKEN.finditer(source):
+    for match in _MATH_TOKEN.finditer(validated):
         if match.start() != position:
             return False
         if match.group(1) and match.group(1) not in _SAFE_MATH_COMMANDS:
             return False
         position = match.end()
-    return position == len(source) and bool(source.strip())
+    return position == len(validated) and bool(validated.strip())
 
 
 def _latex_prose(source: str) -> str:
@@ -1206,13 +1267,47 @@ def _evidence_based_long_plan(
             "The fallback outline selected representative indexed sources; "
             "the complete frozen research snapshot remains available for review."
         )
-    abstract = (
-        f"This paper examines the research question: {question[:450]}. "
-        "It synthesizes saved observations, methods, unsuccessful approaches, "
-        "limitations, and open questions. Recorded claims are distinguished "
-        "from independently verified findings, and no unperformed experiments "
-        "or missing proof steps are presented as established results."
-    )[:1600]
+
+    # A failed paid planning call must not turn the paper into a generic status
+    # report. Build a *specific but qualified* abstract from the saved index;
+    # never infer a proof, experiment, or resolution from a result-shaped note.
+    def complete_excerpt(kind: str) -> str | None:
+        for note in notes:
+            if note.kind != kind:
+                continue
+            sentence = " ".join(note.statement.split())
+            if 24 <= len(sentence) <= 260 and sentence.endswith((".", "!", "?")):
+                return sentence
+        return None
+
+    first_question = re.split(r"(?<=[.!?])\s+", question, maxsplit=1)[0]
+    if len(first_question) > 320 or not first_question.endswith((".", "!", "?")):
+        opening = f"This paper investigates {title.rstrip('.')}."
+    else:
+        opening = f"The investigation asks: {first_question}"
+    reported_result = complete_excerpt("result")
+    recorded_failure = complete_excerpt("negative")
+    abstract_parts = [opening]
+    if reported_result:
+        abstract_parts.append(
+            "The saved research reports a provisional finding, not independently "
+            f"verified here: {reported_result}"
+        )
+    else:
+        abstract_parts.append(
+            "The indexed saved evidence does not establish an independently "
+            "verified resolution of the question."
+        )
+    if recorded_failure:
+        abstract_parts.append(
+            "A consequential recorded limitation or unsuccessful approach is: " + recorded_failure
+        )
+    abstract_parts.append(
+        "The analysis distinguishes recorded arguments from demonstrated "
+        "results, identifies remaining gaps, and does not claim experiments "
+        "or proof steps absent from the frozen record."
+    )
+    abstract = " ".join(abstract_parts)
     return LongPaperPlan(
         title=title,
         abstract=abstract,
@@ -2211,36 +2306,26 @@ def _material_evidence_omissions(omissions: list[dict[str, Any]]) -> list[dict[s
 
 
 def _apply_omission_limits(draft: PaperDraft, omissions: list[dict[str, Any]]) -> PaperDraft:
+    """Keep coverage uncertainty auditable without corrupting the scholarly narrative.
+
+    The PDF renderer prints a single, prominent coverage disclosure. Its exact
+    counts and the affected source IDs remain in saved generation metadata.
+    Never prepend accounting prose to (or truncate) the author's abstract, and
+    never repeat the same disclaimer in every conclusion paragraph.
+    """
     if not omissions:
         return draft
     disclosure = (
-        f"IMPORTANT EVIDENCE COVERAGE LIMITATION: {len(omissions)} saved research field "
-        "fragment(s) were omitted during indexing and were not reviewed for this paper. "
-        "The synthesis below is provisional and reflects covered evidence only; no conclusion "
-        "is drawn from omitted material or its absence. Consult the complete frozen evidence "
-        "snapshot and omission ledger before relying on these findings."
+        f"Evidence indexing omitted {len(omissions)} material saved research field "
+        "fragment(s). Those fragments were not reviewed for this paper; the "
+        "interpretation is provisional where the omitted evidence may matter. "
+        "Consult the frozen source snapshot and omission ledger for full details."
     )
-    abstract_prefix = disclosure + "\n\nProvisional synthesis from covered evidence only: "
-    abstract_room = max(0, 1600 - len(abstract_prefix))
-    abstract_body = draft.abstract
-    if len(abstract_body) > abstract_room:
-        abstract_body = abstract_body[:abstract_room].rsplit(" ", 1)[0].rstrip() + "…"
-    draft.abstract = abstract_prefix + abstract_body
-    draft.limitations = [disclosure, *draft.limitations[:11]]
-    draft.validation_warnings = [disclosure, *draft.validation_warnings[:11]]
-    draft.conclusions = [
-        "PROVISIONAL — based only on covered evidence; omitted material was not reviewed: "
-        + conclusion
-        for conclusion in draft.conclusions
-    ]
-    for claim in draft.claims:
-        if claim.status == "established":
-            claim.status = "unresolved"
-            claim.reasoning = (
-                "Material evidence was omitted from the extracted index; this claim cannot be "
-                "treated as established until the complete frozen evidence is reviewed. "
-                + claim.reasoning
-            )[:2400]
+    draft.validation_warnings = list(dict.fromkeys([disclosure, *draft.validation_warnings]))[:12]
+    # Omissions must be disclosed, but do not indiscriminately rewrite every
+    # established claim to unresolved: an unrelated omitted field does not
+    # invalidate a fully supported deduction. Missing/invalid source links
+    # are evaluated per claim by _repair_paper_references.
     return draft
 
 
@@ -2390,7 +2475,13 @@ def _tex(
     material_omissions: list[dict[str, Any]] | None = None,
     integrity_excerpts: bool = False,
     include_research_details: bool = True,
+    include_claim_details: bool = False,
+    include_validation_notes: bool = False,
+    include_research_excerpts: bool = False,
 ) -> str:
+    include_claim_details = include_claim_details or include_research_details
+    include_validation_notes = include_validation_notes or include_research_details
+    include_research_excerpts = include_research_excerpts or include_research_details
     esc = _latex
     prose = _latex_prose
 
@@ -2422,7 +2513,7 @@ def _tex(
         r"\begin{document}",
         r"\maketitle",
     ]
-    if include_research_details:
+    if include_validation_notes:
         parts.append(
             r"\begin{center}\small\textit{AI-generated research synthesis \textperiodcentered{} SIGMA}\end{center}"
         )
@@ -2435,7 +2526,7 @@ def _tex(
         article_paragraph(draft.abstract),
         r"\end{abstract}",
     ]
-    if include_research_details:
+    if include_validation_notes:
         parts += [
             r"\section*{About this paper}",
             prose(
@@ -2450,43 +2541,35 @@ def _tex(
             prose("Research style: " + style_note),
         ]
     if material_omissions:
-        affected_sources = sorted(
+        affected_source_count = len(
             {item.get("source_ref", "unknown") for item in material_omissions}
         )
         parts += [
-            r"\section*{Important evidence coverage limitation}",
+            r"\section*{Evidence coverage limitation}",
             prose(
                 f"The evidence index omitted {len(material_omissions)} material saved research "
-                f"field fragment(s) across {len(affected_sources)} source(s), and those fields "
-                "were not reviewed for this paper. The synthesis is provisional and describes "
-                "covered evidence only; no conclusion is drawn from omitted material or its "
-                "absence. Claims that depend on omitted evidence are not established. Review "
-                "the complete frozen snapshot and its omission ledger before relying on the "
-                "interpretation. Affected source records: "
-                + ", ".join(affected_sources[:80])
-                + (
-                    "; additional sources are listed in generation metadata."
-                    if len(affected_sources) > 80
-                    else "."
-                )
+                f"field fragment(s) across {affected_source_count} source(s). These fragments "
+                "were not reviewed for this paper. Interpretations that could depend on "
+                "omitted material remain provisional; the complete frozen source snapshot "
+                "and omission ledger are retained with the generation record."
             ),
         ]
-    if include_research_details and draft.abstract_claim_ids:
+    if include_claim_details and draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
     parts.append(r"\section{" + esc(opening_heading) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.problem_framing]
-    if include_research_details and draft.problem_framing_claim_ids:
+    if include_claim_details and draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
     parts.append(r"\section{" + esc(methods_heading) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.methods]
-    if include_research_details and draft.methods_claim_ids:
+    if include_claim_details and draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
     for section in draft.sections:
         parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
         parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
-        if include_research_details and section.claim_ids:
+        if include_claim_details and section.claim_ids:
             parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
 
     def claim_register() -> None:
@@ -2506,7 +2589,7 @@ def _tex(
             if claim.evidence_refs:
                 parts.append(r"\textit{Evidence: }" + esc(", ".join(claim.evidence_refs)))
 
-    if include_research_details and not math_style:
+    if include_claim_details and not math_style:
         claim_register()
     parts.append(
         r"\section{Verification status and limitations}" if math_style else r"\section{Limitations}"
@@ -2523,7 +2606,7 @@ def _tex(
             + [r"\item " + prose(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
-    if include_research_details and obligation_reconciliation:
+    if include_validation_notes and obligation_reconciliation:
         parts.append(r"\section{Frozen obligation reconciliation}")
         parts.append(
             prose(
@@ -2557,11 +2640,11 @@ def _tex(
             )
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [article_paragraph(item) + "\n" for item in draft.conclusions]
-    if include_research_details and draft.conclusion_claim_ids:
+    if include_claim_details and draft.conclusion_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
-    if math_style and include_research_details:
+    if math_style and include_claim_details:
         claim_register()
-    if include_research_details and integrity_records:
+    if include_research_excerpts and integrity_records:
         parts += [
             r"\appendix",
             (
@@ -2618,7 +2701,7 @@ def _tex(
                     "are retained in the archived source snapshot."
                 )
             )
-    if include_research_details:
+    if include_validation_notes:
         parts += [
             r"\section*{Evidence and authorship note}",
             esc("Snapshot SHA-256: " + snapshot_hash),
@@ -3510,6 +3593,14 @@ state consequential evidence limitations once where they matter. Develop the sec
 argument without restating the introduction, other sections, or the same result. Write
 short, purposeful paragraphs, typically two to five sentences with one idea each; do not place
 a whole section into one paragraph. Favor economy and precision over rhetorical padding.
+Use the supplied paper-wide thesis and section-role map as editorial constraints.
+Advance this section's specific claim or analysis; do not re-explain background,
+methods, objections, or caveats assigned to other sections. Open with a substantive
+topic sentence explaining what this section contributes to the central argument.
+Close by stating what the evidence changes about that argument, without a generic
+summary or repeated provisional-status disclaimer. The paper-wide abstract and
+other section purposes provide structure, NOT additional factual evidence; support
+all claims only with this section's supplied research notes and original excerpts.
 Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical expression;
 write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
 or document markup."""
@@ -3542,6 +3633,19 @@ or document markup."""
             ],
             "section_number": section_number,
             "section_plan": section.model_dump(),
+            # Each section is authored independently (and may run concurrently).
+            # Share the whole paper's argument arc so separate calls do not each
+            # reintroduce the thesis, methods and the same limitations.
+            # This editorial map is not evidence and cannot authorize new claims.
+            "paper_wide_thesis": long_plan.abstract,
+            "paper_section_roles": [
+                {
+                    "number": index,
+                    "heading": planned.heading,
+                    "purpose": planned.purpose,
+                }
+                for index, planned in enumerate(long_plan.sections, start=1)
+            ],
             "evidence_notes": relevant,
         }
         if fast_path:
@@ -3697,6 +3801,9 @@ async def _generate_impl(
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
     include_research_details: bool = False,
+    include_claim_details: bool = False,
+    include_validation_notes: bool = False,
+    include_research_excerpts: bool = False,
 ) -> dict[str, Any]:
     if _gate.locked():
         raise ProjectError("A paper generation is already active; wait or cancel it")
@@ -3993,6 +4100,9 @@ async def _generate_impl(
                 ),
                 "long_form": long_form,
                 "include_research_details": include_research_details,
+                "include_claim_details": include_claim_details,
+                "include_validation_notes": include_validation_notes,
+                "include_research_excerpts": include_research_excerpts,
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
                 "snapshot_size_bytes": len(_json(package)),
@@ -4063,6 +4173,9 @@ async def _generate_impl(
                 material_omissions=material_omissions,
                 integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
                 include_research_details=include_research_details,
+                include_claim_details=include_claim_details,
+                include_validation_notes=include_validation_notes,
+                include_research_excerpts=include_research_excerpts,
             )
             await report("compile", None, None)
             pdf = await asyncio.to_thread(
@@ -4110,6 +4223,9 @@ async def generate(
     force_long_form: bool = False,
     expected_snapshot_sha256: str | None = None,
     include_research_details: bool = False,
+    include_claim_details: bool = False,
+    include_validation_notes: bool = False,
+    include_research_excerpts: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())
@@ -4125,6 +4241,9 @@ async def generate(
             force_long_form,
             expected_snapshot_sha256,
             include_research_details,
+            include_claim_details,
+            include_validation_notes,
+            include_research_excerpts,
         )
     )
     _generation_tasks[key] = task

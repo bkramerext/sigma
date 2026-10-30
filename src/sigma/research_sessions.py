@@ -3353,11 +3353,44 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 branch["current_action"] = "Interrupted after backend restart"
                 branch["reason"] = record["message"]
         record["current_action"] = "Paused after backend restart"
-        if (record.get("mode") == "api_key" or record.get("cloud_sponsored") is True) and any(
-            step.get("failure_kind") == "interrupted" for step in record.get("steps", [])
-        ):
-            record["cost_status"] = "unavailable"
-            record["estimated_cost_usd"] = None
+        interrupted_steps = [
+            step
+            for step in record.get("steps", [])
+            if step.get("failure_kind") == "interrupted"
+            and step.get("interruption_reason") == "backend_restart"
+        ]
+        if (
+            record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+        ) and interrupted_steps:
+            # An interrupted dispatch has unknown actual usage, but a saved
+            # pre-dispatch reservation is a conservative cost ceiling. Charge
+            # that entire reservation against the session budget rather than
+            # turning a recoverable sponsored session into an unresumable one.
+            # Never replay the interrupted request.
+            reservations = [step.get("cost_reserve") for step in interrupted_steps]
+            if (
+                record.get("cost_status") == "available"
+                and isinstance(record.get("estimated_cost_usd"), (int, float))
+                and all(type(value) in (int, float) and value >= 0 for value in reservations)
+            ):
+                reserved = sum(reservations)
+                record["estimated_cost_usd"] = round(
+                    float(record["estimated_cost_usd"]) + reserved, 9
+                )
+                record["estimated_cost_reserved_usd"] = max(
+                    0.0, float(record.get("estimated_cost_reserved_usd", 0.0)) - reserved
+                )
+                record["interrupted_cost_upper_bound_usd"] = round(
+                    float(record.get("interrupted_cost_upper_bound_usd", 0.0)) + reserved, 9
+                )
+                _event(
+                    record,
+                    "interrupted.cost_reserved",
+                    "Unknown interrupted-call usage was conservatively charged at its saved reservation ceiling; actual provider billing remains unknown.",
+                )
+            else:
+                record["cost_status"] = "unavailable"
+                record["estimated_cost_usd"] = None
         _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
         if cloud_research.billing_enabled():
@@ -4842,6 +4875,45 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             if len(others) >= current_limits["max_concurrent_sessions"]:
                 raise ProjectError(
                     "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Project Settings → Limits."
+                )
+            if record.get("cloud_sponsored") is True and record.get("cost_status") != "available":
+                # Older recovered sessions discarded their accumulated estimate
+                # when a dispatched call was interrupted. Reconstruct a
+                # conservative ceiling from persisted pre-dispatch reservations,
+                # including completed calls, rather than assuming zero usage.
+                dispatched = [
+                    step
+                    for step in record.get("steps", [])
+                    if step.get("attempt_status") != "not_dispatched"
+                ]
+                ceilings = [step.get("cost_reserve") for step in dispatched]
+                if (
+                    not dispatched
+                    or record.get("model") not in TOKEN_PRICES_PER_MILLION
+                    or not all(
+                        type(value) in (int, float) and math.isfinite(value) and value >= 0
+                        for value in ceilings
+                    )
+                ):
+                    raise ProjectError(
+                        "Cannot safely resume sponsored research: saved billing reservations are incomplete. Review provider usage before continuing."
+                    )
+                conservative_cost = round(sum(ceilings), 9)
+                record["estimated_cost_usd"] = conservative_cost
+                record["estimated_cost_reserved_usd"] = 0.0
+                record["cost_status"] = "available"
+                record["interrupted_cost_upper_bound_usd"] = round(
+                    sum(
+                        float(step["cost_reserve"])
+                        for step in dispatched
+                        if step.get("failure_kind") == "interrupted"
+                    ),
+                    9,
+                )
+                _event(
+                    record,
+                    "interrupted.cost_recovered",
+                    "Saved call reservations conservatively cover uncertain provider billing; interrupted calls will not be replayed.",
                 )
             record["status"] = "queued"
             for branch in record.get("strategy_runs", []):
