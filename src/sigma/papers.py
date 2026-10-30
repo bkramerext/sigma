@@ -83,10 +83,11 @@ PaperStageCallback = Callable[
     [PaperProgressStage, int | None, int | None, Literal["active", "milestone", "complete"]],
     Awaitable[None],
 ]
-# Five minutes is the minimum inference-call allowance, not a target duration.
+# High-thinking paper inference can legitimately take much longer than five minutes.
+# Give each provider request up to one hour; this is a ceiling, not a target.
 # It does not authorize repeating an ambiguous paid provider request.
-CALL_SECONDS = 300
-PLANNING_CALL_SECONDS = 300
+CALL_SECONDS = 60 * 60
+PLANNING_CALL_SECONDS = 60 * 60
 MAX_PAPERS = 50
 _gate = asyncio.Lock()
 _active_progress: dict[str, dict[str, Any]] = {}
