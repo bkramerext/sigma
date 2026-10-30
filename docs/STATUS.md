@@ -14,6 +14,22 @@ The coordinator's assigned Maximum Regions project copy is present in
 `sigma_blue`, but this checkout rejects its noncanonical change text, so it was
 not modified or migrated.
 
+## Responses stream completion handling (2026-10-30)
+
+Three real sponsored long-paper attempts on Maximum Regions v2, Xenopus v9, and
+the compatible ONP v3 copy failed locally with the same
+`plan_stream:event_after_terminal` parser error after receiving the provider's
+`response.completed` event. SIGMA now treats a validated completed response as
+authoritative and stops parsing the remaining stream tail. The exact trailing
+event payload was not captured; no provider content was logged. A focused
+regression covers trailing SSE data after the completed response. The Responses
+API reference defines `response.completed` as the event emitted when the model
+response is complete: https://developers.openai.com/api/reference/resources/responses/streaming-events
+
+Focused `tests/papers.py`, Ruff, formatting, and diff checks passed. After
+publishing this fix, continue the saved checkpoints where their project,
+snapshot, sponsor binding, model, and effort still match.
+
 ## Local sponsor renewal in Administrator Settings (2026-10-29)
 
 Administrator Settings now exposes a local-only **Renew sponsor ChatGPT

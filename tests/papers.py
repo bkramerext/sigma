@@ -1077,6 +1077,14 @@ def main() -> None:
         )
     )
     assert parsed_stream["status"] == "completed"
+    trailing = (
+        b'data: {"type":"response.created","sequence_number":0,"response":{"id":"r"}}\n\n'
+        b'data: {"type":"response.completed","sequence_number":1,"response":{"id":"r","status":"completed","output":[]}}\n\n'
+        b'data: {"type":"response.output_text.delta","sequence_number":2,"delta":"ignored after completion"}\n\n'
+    )
+    terminal_stream = asyncio.run(completed(cast(httpx.Response, StreamResponse(trailing))))
+    assert terminal_stream["status"] == "completed"
+    assert terminal_stream["output"] == []
     try:
         asyncio.run(
             completed(

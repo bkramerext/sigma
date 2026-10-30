@@ -262,7 +262,7 @@ async def completed(
                     raise ValueError("plan_stream:done_before_terminal")
                 continue
             event_count += 1
-            if event_count > MAX_EVENTS or terminal is not None:
+            if event_count > MAX_EVENTS:
                 raise ValueError("plan_stream:event_after_terminal")
             event = json.loads(data)
             kind = event.get("type")
@@ -322,13 +322,21 @@ async def completed(
                         "ChatGPT declined or did not complete this proposal; no strategy was saved."
                     )
                 terminal = raw
+                # response.completed contains the authoritative complete result.
+                # Do not parse provider-specific trailing stream data as another
+                # response event; the HTTP context closes the remaining stream.
+                buffer = ""
+                break
             elif kind == "response.output_text.delta":
                 if not isinstance(event.get("delta"), str):
                     raise ValueError("plan_stream:delta_not_str")
                 deltas += event["delta"]
             elif kind.startswith("response.refusal."):
                 refused = True
-    buffer += decoder.decode(b"", final=True)
+        if terminal is not None:
+            break
+    if terminal is None:
+        buffer += decoder.decode(b"", final=True)
     if buffer.strip() or terminal is None:
         raise ProjectError(
             "ChatGPT stream ended without a valid response.completed. No strategy was saved."
