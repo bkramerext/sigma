@@ -4962,9 +4962,13 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
             error={error}
             onError={setError}
             onRecorded={() => {
+              // The request is complete: close the welcome before refreshing
+              // invitation status, rather than replacing it with another welcome.
               setInvitationRequested(true);
               window.dispatchEvent(new Event('sigma-invitation-recorded'));
-              window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
+              void dismiss().then(() => {
+                window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
+              });
             }}
             buttonLabel="Request invitation"
             buttonClassName="invitation-welcome-link"
