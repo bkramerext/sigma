@@ -15,12 +15,65 @@ os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
 
-from sigma import proposals, samples
+from sigma import papers, proposals, samples
 from sigma.api import app
 
 # The fixture's project workspace is temporary and private, while sample
 # projects are immutable repository source data that the UI must still list.
 samples.SAMPLES = Path(__file__).resolve().parents[1] / "samples"
+
+# Mutable controls are exposed only by this isolated deterministic fixture.
+# They let browser acceptance exercise recovery states without contacting a
+# provider endpoint or spending an account allowance.
+_paper_failures: dict[str, dict[str, int]] = {}
+_real_provider_structured = papers._provider_structured
+
+
+@app.post("/api/__fixture/paper-failure")
+def set_paper_failure(body: dict[str, object]):
+    schema_name = body.get("schema_name")
+    mode = body.get("mode")
+    count = body.get("count")
+    if (
+        not isinstance(schema_name, str)
+        or schema_name not in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+        or mode not in {"pre_dispatch", "provider_error"}
+        or type(count) is not int
+        or not 0 <= count <= 3
+    ):
+        return {"error": "Invalid deterministic paper-fixture control"}, 400
+    _paper_failures[schema_name] = {"mode": str(mode), "count": count}
+    return {"configured": True}
+
+
+async def fixture_provider_structured(input_value, *args, schema_name: str, **kwargs):
+    control = _paper_failures.get(schema_name)
+    if control and control["count"]:
+        control["count"] -= 1
+        if control["mode"] == "pre_dispatch":
+            raise papers.PaperConnectionFailure(
+                "Deterministic fixture connection failure before provider dispatch"
+            )
+        raise papers.ProjectError("Deterministic fixture provider returned HTTP 500")
+    return await _real_provider_structured(input_value, *args, schema_name=schema_name, **kwargs)
+
+
+papers._provider_structured = fixture_provider_structured
+
+# Optional test-only origin normalization lets real-browser acceptance use a
+# separate Vite port while preserving the local API's production origin guard.
+fixture_origin = os.environ.get("SIGMA_PAPER_PROGRESS_FIXTURE_ORIGIN", "").strip()
+if fixture_origin:
+
+    @app.middleware("http")
+    async def normalize_fixture_origin(request, call_next):
+        headers = [
+            (key, b"http://127.0.0.1:5173" if key == b"origin" else value)
+            for key, value in request.scope["headers"]
+        ]
+        request.scope["headers"] = headers
+        return await call_next(request)
+
 
 __all__ = ["app"]
 real_client = httpx.AsyncClient
@@ -43,6 +96,15 @@ async def handler(request):
     body = json.loads(request.content)
     context = json.loads(body["input"])
     schema_name = body["text"]["format"]["name"]
+    progress_delay = float(os.environ.get("SIGMA_PAPER_PROGRESS_FIXTURE_DELAY", "0"))
+    if progress_delay > 0 and schema_name in {
+        "sigma_paper_evidence_batch",
+        "sigma_paper_evidence_reduction",
+        "sigma_long_paper_plan",
+        "sigma_long_paper_section",
+        "sigma_research_paper",
+    }:
+        await asyncio.sleep(min(progress_delay, 5))
     if schema_name in {
         "sigma_paper_evidence_batch",
         "sigma_paper_evidence_reduction",
@@ -74,7 +136,7 @@ async def handler(request):
                 "omitted_fields": [],
             }
         elif schema_name == "sigma_long_paper_plan":
-            reference = context["indexed_source_ids"][0]
+            reference = context["evidence_index"][0]["evidence_refs"][0]
             output = {
                 "title": "A Long-Form Experimental Research Synthesis",
                 "abstract": "This paper organizes the saved experimental question, its evidence base, and the limitations recorded in the frozen research snapshot. The manuscript distinguishes observations from hypotheses and proposed future tests.",

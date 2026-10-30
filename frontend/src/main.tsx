@@ -1359,8 +1359,44 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
-type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
+type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'compile' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+
+function paperProgressOperation(progress: PaperProgress): string {
+  const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
+  const milestone = progress.activity_state === 'milestone';
+  switch (progress.stage) {
+    case 'snapshot': return 'Preparing research evidence';
+    case 'writing': return 'Writing the paper';
+    case 'evidence': return `${milestone ? 'Evidence extracted' : 'Extracting evidence'}${count}`;
+    case 'consolidation': return 'Consolidating findings';
+    case 'planning': return milestone ? 'Paper plan ready' : 'Planning the paper';
+    case 'sections': return `${milestone ? 'Section written' : 'Writing sections'}${count}`;
+    case 'validation': return milestone ? 'Paper validated' : 'Validating the paper';
+    case 'compile': return 'Compiling PDF';
+    case 'retry': return `Retrying provider connection${count}`;
+    case 'complete': return 'Complete';
+  }
+}
+
+function paperElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return minutes ? `${minutes}m ${remaining}s` : `${remaining}s`;
+}
+
+function paperTimingLabel(progress: PaperProgress, now: number): string {
+  const started = Date.parse(progress.started_at);
+  const seconds = Number.isFinite(started)
+    ? Math.max(0, Math.floor((now - started) / 1000))
+    : Math.max(0, progress.elapsed_seconds);
+  return paperElapsed(seconds);
+}
+
+function paperRecoveryKey(projectId: string): string {
+  return `sigma.paperGenerationOpen:${projectId}`;
+}
 
 function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
   const ai = useAI();
@@ -1372,27 +1408,57 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
+  const [includeResearchDetails, setIncludeResearchDetails] = useState(false);
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
+  const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [continuationAvailable, setContinuationAvailable] = useState(false);
+  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
+  const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
+  const [lastPaperSignalAt, setLastPaperSignalAt] = useState<number | null>(null);
+  const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
+  useEffect(() => {
+    if (!busy && paperProgress?.status !== 'active') return;
+    const reopen = () => {
+      if (document.visibilityState !== 'hidden' && dialog.current && !dialog.current.open)
+        dialog.current.showModal();
+    };
+    window.addEventListener('pageshow', reopen);
+    document.addEventListener('visibilitychange', reopen);
+    return () => {
+      window.removeEventListener('pageshow', reopen);
+      document.removeEventListener('visibilitychange', reopen);
+    };
+  }, [busy, paperProgress?.status]);
+  useEffect(() => {
+    if (!busy && paperProgress?.status !== 'active') return;
+    const timer = window.setInterval(() => setPaperClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy, paperProgress?.status]);
   async function refresh(keepId?: string) {
     setLoading(true);
     try {
       const query = new URLSearchParams({ path });
-      const [listResponse, configResponse] = await Promise.all([
+      const [listResponse, configResponse, progressResponse] = await Promise.all([
         fetch(`/api/projects/papers?${query}`, { cache: 'no-store' }),
         fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store' }),
+        fetch(`/api/projects/papers/progress?${query}`, { cache: 'no-store' }),
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
+      const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
+      const generationRunning = savedProgress?.progress?.status === 'active';
+      setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
@@ -1401,9 +1467,20 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         });
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
         const preflight = await preflightResponse.json();
-        if (preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
+        const resumable = Boolean(
+          preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available &&
+          (preflight.completed_batches > 0 || preflight.evidence_indexed || preflight.outline_complete ||
+           preflight.completed_sections > 0 || preflight.provider_calls_attempted > 0)
+        );
+        setContinuationAvailable(resumable);
+        setResumeDetails(resumable ? preflight : null);
+        if (!generationRunning && preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
           setCheckpointMismatch(preflight);
         else setCheckpointMismatch(null);
+        setRestartableCheckpoint(
+          !generationRunning && preflightResponse.ok && preflight.checkpoint_exists &&
+          preflight.checkpoint_can_restart ? preflight : null
+        );
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
@@ -1415,6 +1492,27 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setLoading(false); }
   }
+  useEffect(() => {
+    if (paperProgress?.status !== 'active') return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+        const body = await response.json();
+        if (!stopped && response.ok) {
+          const next = (body.progress ?? null) as PaperProgress | null;
+          setPaperProgress(next);
+          if (next?.status !== 'active') {
+            // A completed paper clears its checkpoint, so progress may now be
+            // null. Reload saved versions rather than displaying stale status.
+            void refresh();
+          }
+        }
+      } catch { /* Keep the last saved operation visible until connectivity returns. */ }
+    };
+    const timer = window.setInterval(() => void poll(), 1000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [path, paperProgress?.status]);
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
@@ -1435,21 +1533,48 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
+  async function cancelGeneration() {
+    if (!binding || (!busy && paperProgress?.status !== 'active')) return;
+    try {
+      const response = await fetch('/api/projects/papers/cancel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
+      if (result.cancelled) {
+        request.current?.abort();
+        setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+      } else {
+        setSuccess('No active paper generation was found. Checking saved versions.');
+      }
+      await refresh(selected?.paper_id);
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+
   async function restartCheckpoint() {
-    if (busy || !checkpointMismatch?.checkpoint_can_restart || !binding) return;
+    const restartSource = checkpointMismatch ?? restartableCheckpoint;
+    if (busy || !restartSource?.checkpoint_can_restart || !binding) return;
     setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
     try {
       const response = await fetch('/api/projects/papers/restart', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           path, expected_project_id: projectId, expected_binding: binding,
-          expected_snapshot_sha256: checkpointMismatch.snapshot_sha256, confirm_restart: true,
+          expected_snapshot_sha256: restartSource.snapshot_sha256, confirm_restart: true,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
       setCheckpointMismatch(null);
-      setSuccess('Unfinished paper work cleared. No generation has started. Your saved versions are unchanged; choose Generate paper when you’re ready to start over.');
+      setRestartableCheckpoint(null);
+      setResetConfirm(false);
+      setContinuationAvailable(false);
+      setResumeDetails(null);
+      setPaperProgress(null);
+      setSuccess(result.evidence_updated_since_preflight
+        ? 'Unfinished paper work cleared using the latest research evidence. No generation has started. Saved versions remain unchanged; choose Generate to start.'
+        : 'Unfinished paper work cleared. No generation has started. Saved versions remain unchanged; choose Generate to start.');
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -1458,6 +1583,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setPhase('Preparing research evidence…'); setError(''); setSuccess('');
+    setLastPaperSignalAt(null); setPaperClock(Date.now());
     let finishProvider = () => {};
     let requestDispatched = false;
     let providerCallsAttempted: number | undefined;
@@ -1478,8 +1604,9 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
         : 'Generating paper…');
       requestDispatched = true;
+      window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_research_details: includeResearchDetails }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -1505,11 +1632,14 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           }
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
-            setPhase(event.stage === 'compile' ? 'Compiling PDF…'
-              : event.stage === 'snapshot' ? (preflight.draft_recovery_available
-                ? 'Reusing the validated draft from the previous attempt…'
-                : 'Preparing research evidence…')
-              : 'Writing paper…');
+            setLastPaperSignalAt(Date.now());
+            const nextProgress = { ...event, status: event.state === 'complete' ? 'complete' : 'active', activity_state: event.state } as PaperProgress;
+            setPaperProgress(nextProgress);
+            setPhase(paperProgressOperation(nextProgress));
+          }
+          if (event.type === 'heartbeat') {
+            setLastPaperSignalAt(Date.now());
+            if (event.progress) setPaperProgress(event.progress as PaperProgress);
           }
         }
         if (done) break;
@@ -1519,36 +1649,66 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       setSuccess('Paper saved in Saved versions.');
     } catch (cause) {
       if (controller.signal.aborted) {
-        const message = requestDispatched
-          ? 'Generation was interrupted. Provider completion or usage may be unknown. Check Saved versions and your provider usage before trying again.'
-          : 'Generation was interrupted before a provider request was started.';
-        setError(message);
+        // An abort may also mean the dialog was unmounted. The server task
+        // survives losing the stream; only the explicit Cancel action stops it.
+        setError('Paper stream disconnected. Check current progress and saved versions.');
       }
       else reportRequestFailure(errorMessage(cause));
       await refresh(selected?.paper_id);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
-        setError(requestDispatched && providerCallsAttempted === 0
-          ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
-          : requestDispatched
-            ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
-          : message);
+        const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
+        setError(disconnected && requestDispatched
+          ? 'Connection interrupted. Paper generation may still be running; its progress and saved checkpoints remain on the server. Check the current status before trying again.'
+          : requestDispatched && providerCallsAttempted === 0
+            ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
+            : requestDispatched
+              ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
+              : message);
       }
     } finally { finishProvider(); request.current = null; setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+  const planningFallback = continuationAvailable && Boolean(resumeDetails?.planning_fallback_available);
+  const planningRetry = continuationAvailable && resumeDetails !== null &&
+    !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
+    !planningFallback;
+  const generating = busy || request.current !== null || paperProgress?.status === 'active';
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading"
+    onKeyDownCapture={event => { if (event.key === 'Escape' && generating) { event.preventDefault(); event.stopPropagation(); } }}
+    onCancel={event => { event.preventDefault(); if (!generating) onCancel(); }}>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={generating} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
-      <p className="settings-hint">The paper is AI-generated and has not been independently verified. Generation uses your selected provider and may consume allowance or incur charges. It does not start a research session.</p>
-      <p className="settings-hint ai-paper-model">Selected model: <strong>{model || 'Loading…'}</strong></p>
-      {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
-        <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
-        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
+      <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
+      <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
+      <p className="settings-hint">Paper generation may take five minutes or longer. Keep this dialog open to follow its progress.</p>
+      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchDetails} disabled={generating} onChange={event => setIncludeResearchDetails(event.target.checked)}/>Include claim details, validation notes, and research excerpts</label>
+      {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
+        <p>{checkpointMismatch.incomplete_one_shot
+          ? 'The last writing attempt did not save a draft. Start over to generate again.'
+          : 'Research or AI settings changed. Start over to generate again.'} Saved research and papers remain.</p>
+        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>{checkpointMismatch.incomplete_one_shot ? 'Start over' : 'Clear outdated paper work'}</button>
       </div>}
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating paper…' : papers.length ? 'Generate new version' : 'Generate paper'}</button></div>
-      {busy && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      <div className="ai-paper-controls">{!generating && <>
+        <button type="button" className="text-view-link" disabled={loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{planningRetry ? 'Retry paper planning' : continuationAvailable ? 'Continue paper' : 'Generate'}</button>
+        {continuationAvailable && restartableCheckpoint && !checkpointMismatch && <button type="button" className="text-view-link" disabled={loading || !binding} onClick={() => setResetConfirm(true)}>Start over</button>}
+      </>}{generating && <button type="button" className="text-view-link" disabled={!binding || loading} onClick={() => void cancelGeneration()}>Cancel</button>}</div>
+      {resetConfirm && !generating && restartableCheckpoint && !checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Confirm starting paper over">
+        <p>Discard unfinished paper work?</p>
+        <button type="button" className="text-view-link" onClick={() => void restartCheckpoint()}>Confirm</button>
+        <button type="button" className="text-view-link" onClick={() => setResetConfirm(false)}>Cancel</button>
+      </div>}
+      {!busy && continuationAvailable && !checkpointMismatch && <p className="settings-hint">{planningFallback
+        ? 'Continue uses saved evidence to construct an outline without repeating the failed planning request. Section writing still uses AI and may consume allowance.'
+        : planningRetry
+          ? 'Retry makes another AI request; Start over clears this attempt.'
+          : resumeDetails?.draft_recovery_available
+          ? 'Saved draft ready for PDF compilation.'
+          : `Resuming with ${resumeDetails?.completed_sections ?? 0} saved section(s).`
+      }</p>}
+      {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)}{paperProgress.status === 'active' ? ` · ${paperTimingLabel(paperProgress, paperClock)}` : ''}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Waiting for the AI response.' : 'Awaiting an update from SIGMA.'}</span>}{paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="settings-hint">{paperProgress.failure_reason}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningFallback ? 'Continue from saved evidence without repeating the failed planning request.' : planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
@@ -1570,7 +1730,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
         <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
         <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
-        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} calls this run · ${selected.generation.provider_calls_prior_runs} prior-run calls · ${selected.generation.provider_calls_lifetime_total} lifetime calls` : ''}</p>
+         <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{typeof selected.generation.generation_elapsed_seconds === 'number' && Number.isFinite(selected.generation.generation_elapsed_seconds) ? ` · Total elapsed: ${Math.floor(selected.generation.generation_elapsed_seconds / 60)}m ${String(Math.floor(selected.generation.generation_elapsed_seconds % 60)).padStart(2, '0')}s` : ''}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} calls this run · ${selected.generation.provider_calls_prior_runs} prior-run calls · ${selected.generation.provider_calls_lifetime_total} lifetime calls` : ''}</p>
         {!!selected.generation.omitted_evidence?.length && <details><summary>Evidence fields omitted from the generated index ({selected.generation.evidence_fields_omitted})</summary>{selected.generation.omitted_evidence.map(item => <p className="ai-paper-warning" key={item.field_ref}><code>{item.source_ref}{item.field}</code>: {item.reason}</p>)}</details>}
         {!!selected.generation.reduction_source_refs_omitted?.length && <details><summary>Sources omitted during index reduction ({selected.generation.reduction_source_refs_omitted.length})</summary>{selected.generation.reduction_source_refs_omitted.map(source => <p className="ai-paper-warning" key={source}><code>{source}</code></p>)}<p className="settings-hint">The complete original source records remain in the archived snapshot.</p></details>}
         {!!selected.generation.evidence_conflicts?.length && <details><summary>Potential conflicts and gaps identified by the evidence index ({selected.generation.evidence_conflict_note_count})</summary>{selected.generation.evidence_conflicts.map((conflict, index) => <p className="ai-paper-warning" key={`conflict-${index}`}>{conflict.statement} <strong>Sources:</strong> {conflict.evidence_refs.map(source => <code key={source}>{source} </code>)}</p>)}</details>}
@@ -3473,6 +3633,30 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => {
+    if (!view || guest) return;
+    let disposed = false;
+    const recover = () => {
+      if (document.visibilityState === 'hidden') return;
+      void fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store' })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+          if (!disposed && (
+            data?.progress?.status === 'active' ||
+            window.localStorage.getItem(paperRecoveryKey(view.project.id)) === '1'
+          )) setPaperOpen(true);
+        })
+        .catch(() => { /* Offline: retry on next visibility event. */ });
+    };
+    recover();
+    window.addEventListener('pageshow', recover);
+    document.addEventListener('visibilitychange', recover);
+    return () => {
+      disposed = true;
+      window.removeEventListener('pageshow', recover);
+      document.removeEventListener('visibilitychange', recover);
+    };
+  }, [path, guest, view?.project.id]);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -3819,6 +4003,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
+        window.localStorage.removeItem(paperRecoveryKey(project.id));
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />

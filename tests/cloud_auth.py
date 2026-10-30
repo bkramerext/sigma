@@ -1974,6 +1974,7 @@ class CloudAuthTests(TestCase):
                 "research-executions",
                 "papers",
                 "papers/preflight",
+                "papers/progress",
                 "proposals/config",
                 "text",
                 "recent",
@@ -2064,6 +2065,7 @@ class CloudAuthTests(TestCase):
                 "research-executions",
                 "papers",
                 "papers/preflight",
+                "papers/progress",
             ):
                 response = guest.get(f"/api/projects/{route}", params={"path": member_path})
                 self.assertEqual(response.status_code, 404, (route, response.text))

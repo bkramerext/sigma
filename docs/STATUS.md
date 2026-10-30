@@ -1,3 +1,49 @@
+## Issue #329 — independent paper-generation testing (2026-10-29)
+
+Added a test-only pyramid on implementation HEAD
+`6fbd6ae914f352dd20a1525b0255342991847181`, covering evidence/provenance and
+math review fidelity, bounded indexing/omissions, retries and unknown provider
+consumption, concurrent section checkpoints, resume/cancel, stale and legacy
+work, compiler failures, responsive browser recovery, and deterministic
+Tadpoles-shaped five-session PDF generation. The mock PDF run took 0.37 s;
+this does not verify the live <5-minute target. The real-Chrome fixture check
+passed granular progress, retry, mobile failure/Continue, incompatible-snapshot
+restart, and PDF completion. No live provider calls were made. ONP mathematical
+quality on the actual project remains unverified.
+
+Focused paper tests, changed-file Ruff/format checks, and Pyright passed.
+After the target branch advanced, its hosted API fixture regression passed;
+`./sigma test` now has one failure: `ruff format --check` reports
+`src/sigma/papers.py` would be reformatted. This implementation-side finding
+is outside this test-only branch. Ruff check, Pyright, and frontend typecheck
+passed; build was skipped after the formatting failure. The optional
+graph-present sandbox case skipped because its image is unavailable. See
+[`docs/evaluations/issue_329/TEST_REPORT.md`](evaluations/issue_329/TEST_REPORT.md)
+for commands, results, and handoff details.
+
+## Issue #328 — live paper-generation progress (2026-10-29)
+
+Paper generation now persists and streams actual pipeline stages, real evidence
+batch/section counts where known, elapsed time, and active/failed/cancelled/
+interrupted/complete state. Refreshing or reconnecting reads the saved
+checkpoint; retry resumes from saved work. The dialog includes a Cancel
+control styled consistently with other underlined actions. The read-only progress endpoint is scoped by the existing
+guest workspace rules.
+
+Verification on `blue/issue-328-paper-progress`, based on current main
+`0253b2a3dcdb0542e365c00e480156c05f3132af`: focused `tests/papers.py`, all 72
+`tests/cloud_auth.py` cases, Ruff, formatting, Pyright, frontend typecheck, and
+`./sigma test` passed. Real Chrome acceptance against a local deterministic
+provider fixture passed one-shot progress, cancellation/retry, actual long-form
+evidence batching, reload recovery, PDF completion, and saved-version links.
+No paid provider calls were made. Screenshots are in
+`docs/evaluations/issue_328/`. Human UI review is pending; PR #323 integration
+is still a sequencing dependency, so #328 is not opened as a PR yet. A
+deterministic large-index reproduction also exposed planner overflow from
+duplicating each indexed evidence reference in the outline input; that redundant
+list is removed. Bound failures now report the stage and measured/allowed byte
+counts.
+
 ## Issue #332 — Current Understanding strategy inference (2026-10-29)
 
 Current Understanding now offers **Infer strategy #n**. The ordinal comes from

@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
+import shutil
+from contextlib import nullcontext
+from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
+from time import perf_counter
+from typing import Any, cast
 from unittest.mock import patch
 
 import httpx
@@ -55,6 +60,150 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
             "validation_warnings": ["No external references were supplied."],
         }
     )
+
+
+def fast_package(section_count: int = 2) -> tuple[dict[str, Any], papers.FastLongPaperPlan]:
+    project_ref = "project:fast-fixture"
+    session_ref = "session:onp-fixture"
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "fast-fixture",
+        "sources": [
+            {
+                "id": project_ref,
+                "kind": "project",
+                "data": {
+                    "title": "A saved mathematical investigation",
+                    "problem": "Assess the recorded candidate proof and its assumptions.",
+                    "investigation_type": "mathematical",
+                    "difficulty": "hard",
+                },
+            },
+            {
+                "id": session_ref,
+                "kind": "session",
+                "data": {
+                    "reasoning_steps": [
+                        "For n=0 the empty arrangement has one region. At step k, the new line has at most k-1 distinct crossings, hence at most k pieces.",
+                        "The family L_j:y=jx+j^2 has pairwise distinct intersections along L_k, giving k pieces at every insertion.",
+                    ],
+                    "skeptic_objections": [
+                        "The source argues that separated pieces lie in different old cells; this bridge still needs a formal check."
+                    ],
+                    "negative_findings": [
+                        "No independent proof checker was run.",
+                        "No effect.",
+                    ],
+                    "contradictory_findings": [
+                        "The investigator calls the argument complete, while the skeptic records an unresolved convexity obligation."
+                    ],
+                    "proof_obligations": [
+                        "Prove every arrangement cell is convex and every crossed cell splits into two cells."
+                    ],
+                    "results": {"computed_base_case_n0": 1},
+                },
+            },
+        ],
+    }
+    plan = papers.FastLongPaperPlan(
+        title="A Saved Candidate Argument and Its Verification Gaps",
+        abstract=(
+            "This paper reconstructs a mathematical candidate from saved evidence, "
+            "including its base case, per-step bound, proposed construction, and "
+            "unresolved verification obligations. It does not claim formal proof."
+        ),
+        abstract_claim_ids=["C1"],
+        problem_framing=[
+            "The project asks for an evidence-bound assessment of the saved argument."
+        ],
+        problem_framing_claim_ids=["C1"],
+        methods=["We inspect the preserved mathematical reasoning and skeptical records."],
+        methods_claim_ids=["C1"],
+        claims=[
+            papers.PaperClaim(
+                id="C1",
+                statement="The frozen record contains an unverified candidate argument.",
+                status="unresolved",
+                evidence_refs=[project_ref, session_ref],
+                reasoning="The cited project and session records identify the claim and its open checks.",
+            )
+        ],
+        sections=[
+            papers.LongSectionPlan(
+                heading=f"Evidence stage {index}",
+                purpose="Explain the source-linked argument and the supporting or limiting evidence.",
+                evidence_refs=[project_ref, session_ref],
+                claim_ids=["C1"],
+            )
+            for index in range(1, section_count + 1)
+        ],
+        limitations=["The saved argument has not been independently verified."],
+        open_obligations=[
+            "Prove every arrangement cell is convex and every crossed cell splits into two cells."
+        ],
+        conclusions=["The evidence supports an unverified candidate, not a certified theorem."],
+        conclusion_claim_ids=["C1"],
+        validation_warnings=["No independent proof checker was run."],
+    )
+    return package, plan
+
+
+def test_structured_evidence_short_tail_does_not_crash() -> None:
+    """Two fragments with a short tail must merge without IndexError.
+
+    Tadpoles exposed an augmented assignment that popped the last fragment
+    before indexing [-2]; this case is deterministic and provider-free.
+    """
+    field = "reasoning_steps"
+    fragment_width = papers.FAST_NOTE_TEXT_LENGTH - min(len(field), 55) - 3
+    research = "x" * (fragment_width + 5)
+    package = {
+        "sources": [
+            {
+                "id": "session:tadpoles-fixture",
+                "kind": "session",
+                "data": {field: research},
+            }
+        ]
+    }
+    notes, omitted = papers._structured_evidence_index(package)
+    assert len(notes) == 1
+    assert notes[0].evidence_refs == ["session:tadpoles-fixture"]
+    assert research in notes[0].statement
+    assert omitted == []
+
+
+def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
+    """An unexpected crash must not terminate HTTP 200 without an SSE error."""
+
+    async def check() -> None:
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "paper-error.sigma"
+            view = initialize_project(path, "Paper error test", "Verify SSE error recovery")
+
+            async def crash(*_args, **_kwargs):
+                raise IndexError("secret saved research must not be exposed")
+
+            with patch.object(papers, "generate", new=crash):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://testserver",
+                ) as client:
+                    response = await client.post(
+                        "/api/projects/papers",
+                        json={
+                            "path": str(path),
+                            "expected_project_id": view.project.id,
+                            "expected_binding": "chatgpt:fixture",
+                            "expected_snapshot_sha256": "a" * 64,
+                        },
+                    )
+            assert response.status_code == 200
+            assert '"type": "error"' in response.text
+            assert "unexpected paper-generation error" in response.text
+            assert "secret saved research" not in response.text
+
+    asyncio.run(check())
 
 
 def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
@@ -128,6 +277,31 @@ def test_api_provider_failure_classification_is_safe_and_actionable() -> None:
             raise AssertionError("Non-success provider responses must fail without retry")
 
 
+def test_chatgpt_schema_rejection_is_actionable_and_redacted() -> None:
+    try:
+        failure(
+            400,
+            {
+                "error": {
+                    "code": "invalid_json_schema",
+                    "param": "text.format.schema",
+                    "message": "SECRET research and access token must not leak",
+                }
+            },
+            "chatgpt",
+        )
+    except ProjectError as exc:
+        message = str(exc)
+        assert "structured-output schema" in message
+        assert "invalid_json_schema" in message
+        assert "HTTP 400" in message
+        assert "account remains connected" in message
+        assert "SECRET" not in message
+        assert "access token" not in message
+    else:
+        raise AssertionError("Strict-schema rejection must be reported")
+
+
 def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
     requests: list[dict] = []
 
@@ -166,6 +340,14 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
                     schema_name="fixture_long_paper_stage",
                     response_model=papers.PaperDraft,
                 ),
+                papers._provider_structured(
+                    {"fixture": "input"},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                    instructions="fixture instructions",
+                    schema_name="sigma_paper_evidence_batch",
+                    response_model=papers.EvidenceBatchResult,
+                ),
             ]
             for call in calls:
                 try:
@@ -179,7 +361,7 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
 
         asyncio.run(exercise())
 
-    assert len(requests) == 2  # one attempt per path; no retry/fallback
+    assert len(requests) == 3  # one attempt per path/stage; no retry/fallback
     for request in requests:
         assert request["model"] == "gpt-6.1-sol"
         assert request["reasoning"] == {"effort": "high"}
@@ -188,6 +370,115 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         assert request["text"]["format"]["type"] == "json_schema"
         assert request["text"]["format"]["strict"] is True
         assert request["text"]["format"]["schema"]
+        schema = request["text"]["format"]["schema"]
+        assert set(schema["required"]) == set(schema["properties"])
+    assert set(requests[-1]["text"]["format"]["schema"]["required"]) == {
+        "notes",
+        "conflicts_or_gaps",
+        "covered_field_refs",
+        "omitted_fields",
+    }
+
+
+def test_strict_paper_schemas_require_all_properties() -> None:
+    # Pydantic's default_factory fields are optional in its validation schema;
+    # Responses strict JSON rejects them unless they are marked required.
+    raw = papers.EvidenceBatchResult.model_json_schema()
+    assert "covered_field_refs" not in raw["required"]
+    assert "omitted_fields" not in raw["required"]
+
+    for model in (
+        papers.PaperDraft,
+        papers.EvidenceBatchResult,
+        papers.LongPaperPlan,
+        papers.LongSectionDraft,
+    ):
+        schema = papers._paper_response_schema(model)
+
+        def validate(node: Any) -> None:
+            if isinstance(node, dict):
+                assert "default" not in node
+                if node.get("type") == "object" and "properties" in node:
+                    assert set(node["required"]) == set(node["properties"])
+                    assert node["additionalProperties"] is False
+                for value in node.values():
+                    validate(value)
+            elif isinstance(node, list):
+                for item in node:
+                    validate(item)
+
+        validate(schema)
+
+    normalized = papers._paper_response_schema(papers.EvidenceBatchResult)
+    assert set(normalized["required"]) == set(normalized["properties"])
+    # Do not change the application's Pydantic parsing/default semantics.
+    parsed = papers.EvidenceBatchResult(notes=[], conflicts_or_gaps=[])
+    assert parsed.covered_field_refs == [] and parsed.omitted_fields == []
+
+
+def test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage() -> None:
+    """Trailing usage bookkeeping must not invalidate a paid completed stage."""
+    stage_text = json.dumps(
+        {
+            "notes": [],
+            "conflicts_or_gaps": [],
+            "covered_field_refs": [],
+            "omitted_fields": [],
+        }
+    )
+    stage_response = {
+        "id": "resp-evidence-fixture",
+        "status": "completed",
+        "model": "gpt-6.1-sol",
+        "output": [],
+    }
+    events = [
+        {
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {"id": stage_response["id"]},
+        },
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": stage_text},
+        {"type": "response.completed", "sequence_number": 2, "response": stage_response},
+        {
+            "type": "response.usage",
+            "sequence_number": 3,
+            "usage": {"input_tokens": 32, "output_tokens": 17},
+        },
+    ]
+    sent: list[dict[str, Any]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=(stream + "data: [DONE]\n\n").encode(),
+        )
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    ):
+        result, model = asyncio.run(
+            papers._provider_structured(
+                {"fields": []},
+                {"mode": "chatgpt", "token": "fixture"},
+                {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                instructions="Extract a bounded evidence index.",
+                schema_name="sigma_paper_evidence_batch",
+                response_model=papers.EvidenceBatchResult,
+            )
+        )
+
+    assert model == "gpt-6.1-sol"
+    assert isinstance(result, papers.EvidenceBatchResult)
+    assert result.notes == [] and result.covered_field_refs == []
+    assert len(sent) == 1
+    assert sent[0]["stream"] is True and "max_output_tokens" not in sent[0]
+    assert sent[0]["text"]["format"]["strict"] is True
 
 
 def test_long_tex_compiler_source_bound_is_configurable() -> None:
@@ -214,10 +505,17 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         }
         provider_calls = 0
         compile_calls = 0
+        provider_started = asyncio.Event()
+        allow_provider = asyncio.Event()
+        first_events: list[papers.PaperProgressEvent] = []
+        retry_events: list[papers.PaperProgressEvent] = []
 
         async def fake_provider(context, *_args):
             nonlocal provider_calls
             provider_calls += 1
+            if provider_calls == 1:
+                provider_started.set()
+                await allow_provider.wait()
             project_source = next(
                 source["id"] for source in context["sources"] if source["kind"] == "project"
             )
@@ -238,12 +536,38 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
             patch.object(papers, "_provider", new=fake_provider),
             patch.object(papers, "_compile_pdf", new=fail_compile_once),
         ):
-            try:
-                asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
-            except ProjectError as exc:
-                assert "fixture compiler unavailable" in str(exc)
-            else:
-                raise AssertionError("The injected compile failure must be surfaced")
+
+            async def first_attempt() -> None:
+                async def collect(event: papers.PaperProgressEvent) -> None:
+                    first_events.append(event)
+
+                task = asyncio.create_task(
+                    papers.generate(
+                        str(path), credential["identity"], view.project.id, progress=collect
+                    )
+                )
+                await asyncio.wait_for(provider_started.wait(), timeout=2)
+                live = papers.progress_status(str(path))
+                assert live is not None and live["status"] == "active", live
+                assert live["stage"] == "writing", live
+                checkpoint = papers._load_work(str(path))
+                assert checkpoint is not None
+                assert checkpoint["progress"]["stage"] == "writing"
+                await asyncio.sleep(1.05)
+                live = papers.progress_status(str(path))
+                assert live is not None and live["elapsed_seconds"] >= 1, live
+                allow_provider.set()
+                try:
+                    await task
+                except ProjectError as exc:
+                    assert "fixture compiler unavailable" in str(exc)
+                else:
+                    raise AssertionError("The injected compile failure must be surfaced")
+
+            asyncio.run(first_attempt())
+            failed_progress = papers.progress_status(str(path))
+            assert failed_progress is not None and failed_progress["status"] == "failed"
+            assert failed_progress["stage"] == "compile"
 
             checkpoint = papers._load_work(str(path))
             assert checkpoint is not None and checkpoint["kind"] == "one_shot"
@@ -262,17 +586,167 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
             with patch.object(
                 papers, "_provider", side_effect=AssertionError("cached draft must be reused")
             ):
-                result = asyncio.run(
-                    papers.generate(str(path), credential["identity"], view.project.id)
-                )
+
+                async def resume() -> dict:
+                    async def collect(event: papers.PaperProgressEvent) -> None:
+                        retry_events.append(event)
+
+                    return await papers.generate(
+                        str(path),
+                        credential["identity"],
+                        view.project.id,
+                        progress=collect,
+                        include_research_details=True,
+                    )
+
+                result = asyncio.run(resume())
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
         assert compile_calls == 2
         assert saved["generation"]["provider_calls_attempted"] == 1
         assert saved["generation"]["provider_calls_lifetime_total"] == 1
+        assert saved["generation"]["include_research_details"] is True
+        assert r"\section*{About this paper}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
+        assert [event["stage"] for event in first_events if event["state"] == "active"] == [
+            "snapshot",
+            "writing",
+            "validation",
+            "compile",
+        ]
+        assert retry_events[-1]["stage"] == "complete" and retry_events[-1]["state"] == "complete"
+        assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
+
+
+def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> None:
+    """Extra diagnostics are opt-in; scientific caveats remain in both papers."""
+    paper = draft()
+    snapshot = "c" * 64
+    obligation = [
+        {
+            "status": "Not listed by author; not presumed resolved",
+            "source_refs": ["session:one"],
+            "text": "Confirm the missing proof step.",
+        }
+    ]
+    records = [
+        {
+            "source_ref": "session:one",
+            "field": "skeptic_objections",
+            "content": "This objection remains unresolved.",
+        }
+    ]
+    opts = {
+        "math_style": True,
+        "obligation_reconciliation": obligation,
+        "integrity_records": records,
+    }
+    concise = papers._tex(
+        paper,
+        ["A validator recorded an unsupported citation."],
+        snapshot,
+        include_research_details=False,
+        **opts,
+    )
+    detailed = papers._tex(
+        paper,
+        ["A validator recorded an unsupported citation."],
+        snapshot,
+        include_research_details=True,
+        **opts,
+    )
+    for required in (
+        r"\begin{abstract}",
+        r"\section{Interpretation}",
+        r"\section{Open obligations}",
+        r"\section{Verification status and limitations}",
+        r"\section{Conclusion}",
+        "This paper does not establish a formal proof.",
+    ):
+        assert required in concise and required in detailed, required
+    for diagnostic in (
+        "Claim status and evidence",
+        "Claims discussed:",
+        "Frozen obligation reconciliation",
+        "Structured reasoning and review records",
+        "Validation warnings",
+        "Snapshot SHA-256",
+        "Research style:",
+        "About this paper",
+    ):
+        assert diagnostic not in concise, diagnostic
+        assert diagnostic in detailed, diagnostic
+    assert "Confirm the missing proof step." not in concise
+    assert "Confirm the missing proof step." in detailed
+    assert r"\section*{Authorship note}" in concise
+
+
+def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
+    """Readable PDF prose without losing math or overflowing the evidence appendix."""
+    source = " ".join(
+        f"This is substantive statement {number}. It advances the argument." for number in range(32)
+    )
+    paragraphs = papers._publication_paragraphs(source)
+    assert len(paragraphs) >= 2
+    assert " ".join(paragraphs) == source
+
+    math = papers._latex_prose(r"Use $\sum_{j=1}^k j^2$ and $\omega^3=1$.")
+    assert r"$\sum_{j=1}^k j^2$" in math
+    assert r"$\omega^3=1$" in math
+    assert r"\[\sum_{j=1}^k j^2\]" in papers._latex_prose(r"$$\sum_{j=1}^k j^2$$")
+
+    paper = draft()
+    sections = list(paper.sections)
+    sections[0] = sections[0].model_copy(
+        update={
+            "heading": "3. Counting argument",
+            "paragraphs": [
+                "The construction satisfies the prescribed boundary condition.",
+                "The next step requires a separate supporting argument.",
+                source,
+            ],
+        }
+    )
+    paper = paper.model_copy(update={"sections": sections})
+    integrity = [
+        {
+            "source_ref": f"session:{index}",
+            "field": "proof_obligations",
+            "content": {"excerpt": "An unresolved argument remains. " * 120},
+        }
+        for index in range(28)
+    ]
+    obligations = [
+        {
+            "text": f"Check the distinct boundary case {index}.",
+            "source_refs": [f"session:{index}"],
+            "status": "Not listed by author; not presumed resolved",
+        }
+        for index in range(28)
+    ]
+    tex = papers._tex(
+        paper,
+        [],
+        "f" * 64,
+        math_style=True,
+        include_research_details=True,
+        integrity_records=integrity,
+        integrity_excerpts=True,
+        obligation_reconciliation=obligations,
+    )
+    assert r"\section{Counting argument}" in tex
+    assert r"\section{3. Counting argument}" not in tex
+    assert (
+        "The construction satisfies the prescribed boundary condition.\n\n"
+        "The next step requires a separate supporting argument."
+    ) in tex
+    assert tex.count(r"\subsection{Research excerpt ") == 16
+    assert "further research records" in tex
+    assert "further distinct obligations" in tex
+    assert r"\begin{longtable}" not in tex
+    assert len(tex) < 50_000
 
 
 def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None:
@@ -283,6 +757,7 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
                 "id": "paused-session",
                 "status": "paused",
                 "elapsed_seconds": 10,
+                "updated_at": "2026-10-29T01:00:00+00:00",
                 "outcome": {"summary": "Saved outcome"},
                 "artifacts": [{"id": "finding-1", "claim": "Saved claim"}],
             }
@@ -298,6 +773,7 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
             if source["id"] == "artifact:paused-session:finding-1"
         )["data"]["claim"]
         export["research_sessions"][0]["elapsed_seconds"] = 45
+        export["research_sessions"][0]["updated_at"] = "2026-10-29T03:00:00+00:00"
         second, second_hash = papers._snapshot("unused")
         export["research_sessions"][0]["artifacts"][0]["claim"] = "Changed saved claim"
         _third, third_hash = papers._snapshot("unused")
@@ -306,11 +782,12 @@ def test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence() -> None
     assert third_hash != second_hash
     session_source = next(source for source in second["sources"] if source["kind"] == "session")
     assert "elapsed_seconds" not in session_source["data"]
+    assert "updated_at" not in session_source["data"]
     assert original["research_sessions"][0]["artifacts"][0]["claim"] == "Saved claim"
     assert first_claim == "Saved claim"
 
 
-def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
+def test_api_disconnect_preserves_running_paper_until_explicit_cancel(path: Path) -> None:
     async def check() -> None:
         started = asyncio.Event()
         cancelled = asyncio.Event()
@@ -369,9 +846,29 @@ def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
             await asyncio.wait_for(started.wait(), timeout=2)
             await queue.put({"type": "http.disconnect"})
             await asyncio.wait_for(serving, timeout=2)
+            assert not cancelled.is_set(), "Browser disconnect must not cancel the provider"
+            active_progress = papers.progress_status(str(path))
+            assert active_progress is not None and active_progress["status"] == "active"
+            # A separate authenticated request, not the SSE connection, cancels.
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+            ) as client:
+                response = await client.post(
+                    "/api/projects/papers/cancel",
+                    json={
+                        "path": str(path),
+                        "expected_project_id": body["expected_project_id"],
+                        "expected_binding": credential["identity"],
+                    },
+                )
+            assert response.status_code == 200
+            assert response.json()["cancelled"] is True
+            await asyncio.wait_for(cancelled.wait(), timeout=2)
+            await asyncio.sleep(0)
         assert papers.list_papers(str(path)) == []
-        assert cancelled.is_set()
         assert not papers._gate.locked()
+        cancelled_progress = papers.progress_status(str(path))
+        assert cancelled_progress is not None and cancelled_progress["status"] == "cancelled"
 
     asyncio.run(check())
 
@@ -391,13 +888,37 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 progress,
                 force_long_form,
                 expected_snapshot_sha256,
+                include_research_details,
             ):
-                await progress("evidence", 1, 2)
+                assert include_research_details is False
+                await progress(
+                    {
+                        "type": "progress",
+                        "state": "milestone",
+                        "stage": "evidence",
+                        "current": 1,
+                        "total": 2,
+                        "started_at": "2026-01-01T00:00:00+00:00",
+                        "elapsed_seconds": 1,
+                    }
+                )
+                await asyncio.sleep(1.1)
                 assert force_long_form is False
                 assert len(expected_snapshot_sha256) == 64
                 return {"paper_id": "fixture-paper"}
 
-            with patch.object(papers, "generate", new=fake_generate):
+            heartbeat = {
+                "status": "active",
+                "stage": "evidence",
+                "current": 1,
+                "total": 2,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "elapsed_seconds": 2,
+            }
+            with (
+                patch.object(papers, "generate", new=fake_generate),
+                patch.object(papers, "progress_status", return_value=heartbeat),
+            ):
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=app), base_url="http://testserver"
                 ) as client:
@@ -413,6 +934,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/event-stream")
             assert '"stage":"evidence"' in response.text
+            assert '"current":1' in response.text and '"total":2' in response.text
+            assert '"type":"heartbeat"' in response.text
+            assert '"elapsed_seconds":2' in response.text
             assert '"type": "complete"' in response.text or '"type":"complete"' in response.text
 
             async def stale_preflight(*_args, **_kwargs):
@@ -440,6 +964,424 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
     asyncio.run(check())
 
 
+def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
+    async def check() -> None:
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "interrupted.sigma"
+            view = initialize_project(path, "Interrupted paper", "Recover saved paper progress")
+            state = papers._new_work("a" * 64, view.project.id, "b" * 64, "gpt-fixture", "high")
+            state["progress"] = {
+                "run_id": "c" * 32,
+                "status": "running",
+                "stage": "sections",
+                "current": 2,
+                "total": 4,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:45+00:00",
+                "elapsed_seconds": 45,
+            }
+            papers._save_work(str(path), state)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+            ) as client:
+                response = await client.get(
+                    "/api/projects/papers/progress", params={"path": str(path)}
+                )
+            assert response.status_code == 200, response.text
+            assert response.json()["progress"] == {
+                "status": "interrupted",
+                "stage": "sections",
+                "current": 2,
+                "total": 4,
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "elapsed_seconds": 45,
+            }
+
+    asyncio.run(check())
+
+
+def test_restart_uses_current_evidence_and_is_idempotent() -> None:
+    """A stale dialog preflight must never trap a confirmed reset."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "stale-restart.sigma"
+        view = initialize_project(path, "Stale restart", "Preserve saved research")
+        current_snapshot_sha256 = papers._snapshot(str(path))[1]
+        old_snapshot_sha256 = "a" * 64
+        stale_dialog_sha256 = "b" * 64
+        assert current_snapshot_sha256 not in {old_snapshot_sha256, stale_dialog_sha256}
+
+        credential = {"mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"}
+        config = {"available": True, "model": "gpt-fixture", "reasoning_effort": "high"}
+        old_history = [
+            {
+                "provider_calls_attempted": 2,
+                "snapshot_sha256": "c" * 64,
+                "model": "previous-model",
+                "reset_at": "2026-10-29T00:00:00+00:00",
+            }
+        ]
+        checkpoint = papers._new_work(
+            old_snapshot_sha256,
+            view.project.id,
+            "d" * 64,
+            "previous-model",
+            "low",
+            provider_calls_total=3,
+            prior_runs=old_history,
+        )
+        checkpoint["provider_calls"] = 1
+        checkpoint["next_batch"] = 1
+        papers._save_work(str(path), checkpoint)
+
+        async def fake_auth():
+            return credential
+
+        async def fake_configuration(**_kwargs):
+            return config
+
+        async def check() -> None:
+            with (
+                patch.object(papers, "auth_context", new=fake_auth),
+                patch.object(papers, "configuration", new=fake_configuration),
+                patch.object(papers, "_provider", side_effect=AssertionError("no inference")),
+                patch.object(
+                    papers,
+                    "_provider_structured",
+                    side_effect=AssertionError("no inference"),
+                ),
+            ):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://testserver",
+                ) as client:
+                    body = {
+                        "path": str(path),
+                        "expected_project_id": view.project.id,
+                        "expected_binding": credential["identity"],
+                        "expected_snapshot_sha256": stale_dialog_sha256,
+                        "confirm_restart": True,
+                        "long_form": True,
+                    }
+                    wrong_project = await client.post(
+                        "/api/projects/papers/restart",
+                        json={**body, "expected_project_id": "wrong-project"},
+                    )
+                    assert wrong_project.status_code != 200
+                    unchanged = papers._load_work(str(path))
+                    assert unchanged is not None
+                    assert unchanged["provider_calls"] == 1
+
+                    response = await client.post("/api/projects/papers/restart", json=body)
+                    assert response.status_code == 200, response.text
+                    result = response.json()
+                    assert result["snapshot_sha256"] == current_snapshot_sha256
+                    assert result["evidence_updated_since_preflight"] is True
+                    assert result["provider_calls_previous_runs"] == 3
+                    assert result["provider_calls_attempted"] == 0
+
+                    reset = papers._load_work(str(path))
+                    assert reset is not None
+                    assert reset["snapshot_sha256"] == current_snapshot_sha256
+                    assert reset["explicit_restart_pending"] is True
+                    assert reset["provider_calls"] == 0
+                    assert reset["provider_calls_total"] == 3
+                    assert len(reset["prior_runs"]) == 2
+
+                    repeated = await client.post("/api/projects/papers/restart", json=body)
+                    assert repeated.status_code == 200, repeated.text
+                    assert repeated.json()["provider_calls_previous_runs"] == 3
+                    reset_again = papers._load_work(str(path))
+                    assert reset_again is not None
+                    assert len(reset_again["prior_runs"]) == 2
+                    assert reset_again["provider_calls_total"] == 3
+                    assert reset_again["snapshot_sha256"] == current_snapshot_sha256
+                    assert papers.progress_status(str(path)) is None
+
+                    preflight = papers.preflight(
+                        str(path),
+                        force_long_form=True,
+                        expected_project_id=view.project.id,
+                        expected_binding=credential["identity"],
+                        mode=credential["mode"],
+                        model=config["model"],
+                        reasoning_effort=config["reasoning_effort"],
+                    )
+                    assert preflight["resume_available"] is True
+                    assert preflight["provider_calls_attempted"] == 0
+
+        asyncio.run(check())
+
+
+def test_explicit_restart_checkpoint_migrates_and_rebinds_safely() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "restart.sigma"
+        view = initialize_project(path, "Restarted paper", "A saved evidence question")
+        current_snapshot = papers._snapshot(str(path))[1]
+        prior_runs = [
+            {
+                "provider_calls_attempted": 5,
+                "snapshot_sha256": "a" * 64,
+                "model": "old-model",
+                "reset_at": "2026-10-29T00:00:00+00:00",
+            }
+        ]
+        checkpoint = papers._new_work(
+            "b" * 64,
+            view.project.id,
+            "c" * 64,
+            "old-model",
+            "low",
+            provider_calls_total=5,
+            prior_runs=prior_runs,
+        )
+        checkpoint["explicit_restart_pending"] = True
+        papers._save_work(str(path), checkpoint)
+        loaded = papers._load_work(str(path))
+        assert loaded is not None and loaded["explicit_restart_pending"] is True
+
+        credential = {"identity": "fixture-credential", "mode": "api_key", "token": "unused"}
+        config = {
+            "available": True,
+            "model": "gpt-fixture",
+            "reasoning_effort": "high",
+        }
+        preview = papers.preflight(
+            str(path),
+            force_long_form=True,
+            expected_project_id=view.project.id,
+            expected_binding=credential["identity"],
+            mode=credential["mode"],
+            model=config["model"],
+            reasoning_effort=config["reasoning_effort"],
+        )
+        assert preview["resume_available"] is True
+        assert preview["provider_calls_attempted"] == 0
+        assert preview["provider_calls_previous_runs"] == 5
+
+        rebound: dict[str, Any] = {}
+
+        async def fake_long_draft(_package, _binding, _config, state, _save_state, *args, **kwargs):
+            rebound.update(state)
+            return draft(f"project:{view.project.id}"), 0, 0
+
+        async def current_credential():
+            return credential
+
+        async def current_configuration(*_args, **_kwargs):
+            return config
+
+        with (
+            patch.object(papers, "auth_context", new=current_credential),
+            patch.object(papers, "configuration", new=current_configuration),
+            patch.object(papers, "_generate_long_draft", new=fake_long_draft),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            result = asyncio.run(
+                papers.generate(
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
+                    force_long_form=True,
+                    expected_snapshot_sha256=current_snapshot,
+                )
+            )
+
+        assert result["title"] == "An evidence-bound exploratory note"
+        assert rebound["snapshot_sha256"] == current_snapshot
+        assert rebound["model"] == config["model"]
+        assert rebound["reasoning_effort"] == config["reasoning_effort"]
+        assert rebound["provider_calls"] == 0
+        assert rebound["provider_calls_total"] == 5
+        assert rebound["prior_runs"] == prior_runs
+        assert not rebound.get("explicit_restart_pending")
+        assert papers._load_work(str(path)) is None
+
+
+def test_evidence_envelope_budget_resumes_without_repacking() -> None:
+    """A batch accepted during packing must be accepted before dispatch too.
+
+    The batch_id field adds a few bytes beyond the 48 KB fields budget.
+    Repacking would shift indices after a previously paid checkpoint, so
+    preserve the original field groups and next_batch cursor.
+    """
+    source_ref = "project:fixture"
+    fields = [
+        {
+            "field_ref": f"{i + 1:064x}",
+            "source_ref": source_ref,
+            "field": f"/data/value{i}",
+            "value": "x" * 9_500 if i < 4 else "",
+        }
+        for i in range(5)
+    ]
+    batch = {"batch_id": "E2", "fields": fields}
+    extra = 48_007 - len(papers._json(batch))
+    assert 0 < extra < 12_000
+    fields[-1]["value"] = "x" * extra
+    assert len(papers._json(batch)) == 48_007
+    assert len(papers._json({"fields": fields})) <= papers.MAX_PROVIDER_INPUT_BYTES
+    limit = papers._evidence_input_limit(batch)
+    assert limit > papers.MAX_PROVIDER_INPUT_BYTES
+    assert 48_007 <= limit
+    assert len(papers._provider_input_text(batch, "sigma_paper_evidence_batch", limit)) == 48_007
+
+    first_batch = {
+        "batch_id": "E1",
+        "fields": [
+            {
+                "field_ref": "0" * 64,
+                "source_ref": source_ref,
+                "field": "/data/prior",
+                "value": "already indexed",
+            }
+        ],
+    }
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "fixture",
+        "sources": [{"id": source_ref, "kind": "project", "data": {"title": "Fixture"}}],
+    }
+    state = papers._new_work("a" * 64, "fixture", "b" * 64, "fixture-model", "high")
+    state["next_batch"] = 1
+    state["provider_calls"] = 1
+    state["provider_calls_total"] = 1
+    seen: list[str] = []
+
+    async def fake_provider(
+        input_value, _binding, _config, *, schema_name, max_input_bytes, **_kwargs
+    ):
+        seen.append(schema_name)
+        if schema_name == "sigma_paper_evidence_batch":
+            assert input_value is batch  # E1 is not replayed.
+            assert max_input_bytes == limit
+            return papers.EvidenceBatchResult(
+                notes=[],
+                conflicts_or_gaps=[],
+                covered_field_refs=[field["field_ref"] for field in fields],
+                omitted_fields=[],
+            ), "fixture-model"
+        raise ProjectError("fixture stop before paper planning")
+
+    async def check() -> None:
+        with (
+            patch.object(papers, "_evidence_batches", return_value=[first_batch, batch]),
+            patch.object(papers, "_provider_structured", new=fake_provider),
+        ):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "token": "fixture", "mode": "chatgpt"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _state: None,
+                )
+            except ProjectError as exc:
+                assert "fixture stop before paper planning" in str(exc)
+            else:
+                raise AssertionError("Fixture must stop after completing E2")
+
+    asyncio.run(check())
+    assert seen[:2] == ["sigma_paper_evidence_batch", "sigma_long_paper_plan"]
+    assert seen[2] == "sigma_long_paper_section"
+    assert state["next_batch"] == 2
+    assert state["provider_calls"] == 4  # E1 + E2 + failed plan + first section.
+    assert state["plan"]  # Planning failure preserved a local source-linked outline.
+
+
+def test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog() -> None:
+    notes = [
+        papers.EvidenceNote(
+            statement=f"Saved evidence note {group:03d}",
+            kind="result",
+            evidence_refs=[f"{group * 12 + offset:064x}" for offset in range(12)],
+        ).model_dump()
+        for group in range(180)
+    ]
+    refs = sorted({reference for note in notes for reference in note["evidence_refs"]})
+    plan_input = papers._long_plan_input(
+        {"title": "Fixture", "investigation_type": "experimental", "difficulty": "hard"},
+        notes,
+        len(refs),
+        len(notes),
+    )
+    # This bounded evidence index is valid by itself. The old plan shape copied
+    # every 64-byte reference into a second list, pushing the input beyond 220 KB.
+    assert len(papers._json(notes)) < papers.MAX_PLANNER_INDEX_BYTES
+    legacy_input = {**plan_input, "indexed_source_ids": refs}
+    assert len(papers._json(legacy_input)) > 220_000
+    assert len(papers._json(plan_input)) <= 220_000
+    assert "indexed_source_ids" not in plan_input
+    assert {
+        reference for note in plan_input["evidence_index"] for reference in note["evidence_refs"]
+    } == set(refs)
+
+    async def over_limit() -> None:
+        with patch.object(
+            papers.httpx,
+            "AsyncClient",
+            side_effect=AssertionError("oversized input must fail before dispatch"),
+        ):
+            try:
+                await papers._provider_structured(
+                    "input exceeds bound",
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "fixture", "reasoning_effort": "high"},
+                    instructions="fixture",
+                    schema_name="sigma_long_paper_plan",
+                    response_model=papers.LongPaperPlan,
+                    max_input_bytes=4,
+                )
+            except ProjectError as exc:
+                assert "Paper planning input is 21 bytes" in str(exc), str(exc)
+                assert "4-byte bound" in str(exc)
+            else:
+                raise AssertionError("Oversized paper planning input must be rejected")
+
+    async def rejects_before_counting_a_provider_call() -> None:
+        project_id = "fixture-project"
+        source_id = f"project:{project_id}"
+        package = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": project_id,
+            "sources": [{"id": source_id, "kind": "project", "data": {"title": "Fixture"}}],
+        }
+        state = papers._new_work("a" * 64, project_id, "b" * 64, "fixture", "high")
+        state.update(
+            {
+                "evidence_indexed": True,
+                "evidence_notes": [
+                    papers.EvidenceNote(
+                        statement="A saved evidence note.", kind="result", evidence_refs=[source_id]
+                    ).model_dump()
+                ],
+            }
+        )
+
+        async def section_only(input_value, _binding, _config, *, schema_name, **_kwargs):
+            assert schema_name == "sigma_long_paper_section"
+            return papers.LongSectionDraft(
+                paragraphs=["The saved evidence requires additional verification."]
+            ), "fixture"
+
+        with (
+            patch.object(papers, "_long_plan_input", return_value={"padding": "x" * 220_000}),
+            patch.object(papers, "_provider_structured", new=section_only),
+        ):
+            generated, calls, _ = await papers._generate_long_draft(
+                package,
+                {"mode": "api_key", "identity": "fixture", "token": "unused"},
+                {"model": "fixture", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+            )
+        assert generated.sections
+        assert state["plan"]  # Oversized planning input falls back locally.
+        assert calls == len(generated.sections)  # No planning provider call was sent.
+
+    asyncio.run(over_limit())
+    asyncio.run(rejects_before_counting_a_provider_call())
+
+
 def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
     async def check() -> None:
         project_id = "fixture-project"
@@ -464,6 +1406,7 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
         config = {"model": "gpt-fixture"}
         reductions = 0
         cancel_second_reduction = True
+        stage_events: list[tuple[str, int | None, int | None, str]] = []
         batch_count = len(papers._evidence_batches(package))
         assert batch_count == 1
 
@@ -564,6 +1507,9 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
 
         saved = []
 
+        async def record_progress(stage, current, total, state) -> None:
+            stage_events.append((stage, current, total, state))
+
         async def run():
             return await papers._generate_long_draft(
                 package,
@@ -571,6 +1517,7 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
                 config,
                 state,
                 lambda current: saved.append(json.loads(papers._json(current))),
+                record_progress,
             )
 
         with (
@@ -609,6 +1556,13 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
         )
         assert len(draft_result.sections) == 2
         assert saved
+        evidence = [item for item in stage_events if item[0] == "evidence"]
+        assert evidence == [("evidence", 1, 1, "active"), ("evidence", 1, 1, "milestone")]
+        sections = [item for item in stage_events if item[0] == "sections"]
+        assert [item[1:3] for item in sections if item[3] == "active"] == [(1, 2), (2, 2)]
+        assert any(item[0] == "planning" and item[3] == "active" for item in stage_events)
+        assert any(item[0] == "consolidation" and item[3] == "active" for item in stage_events)
+        assert all(item[0] != "index" for item in stage_events)
 
     asyncio.run(check())
 
@@ -951,17 +1905,1756 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert len(saved["draft"]["sections"]) == 2
 
 
+def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> None:
+    package, _plan = fast_package()
+    notes, _ = papers._structured_evidence_index(package)
+    note_text = "\n".join(note.statement for note in notes)
+    note_kinds = {note.kind for note in notes}
+    source_ids = {source["id"] for source in package["sources"]}
+    assert all(note.evidence_refs and set(note.evidence_refs) <= source_ids for note in notes)
+    for expected in (
+        "empty arrangement has one region",
+        "No independent proof checker was run.",
+        "negative_findings/1: No effect.",
+        "unresolved convexity obligation",
+        "Prove every arrangement cell is convex",
+        "computed_base_case_n0: 1",
+    ):
+        assert expected in note_text, expected
+    assert {"negative", "question", "result"} <= note_kinds
+    assert all(
+        note.evidence_refs == ["session:onp-fixture"]
+        for note in notes
+        if "session:onp-fixture" in note.evidence_refs
+    )
+
+    original = papers._research_integrity_records(package)
+    excerpts = papers._section_original_excerpts(
+        original,
+        {"session:onp-fixture"},
+        "proof argument skeptic objection contradiction failure obligation results",
+        60_000,
+    )
+    excerpt_text = "\n".join(item["content_excerpt"] for item in excerpts)
+    for expected in (
+        "For n=0 the empty arrangement has one region",
+        "The source argues that separated pieces lie in different old cells",
+        "No independent proof checker was run.",
+        "investigator calls the argument complete",
+        "Prove every arrangement cell is convex",
+    ):
+        assert expected in excerpt_text, expected
+    unresolved = papers._reconcile_obligations(
+        draft().model_copy(update={"open_obligations": []}), package
+    )
+    assert any(
+        item["text"]
+        == "Prove every arrangement cell is convex and every crossed cell splits into two cells."
+        and item["status"] == "Not listed by author; not presumed resolved"
+        for item in unresolved
+    )
+    rendered = papers._tex(
+        draft(),
+        [],
+        "a" * 64,
+        math_style=True,
+        integrity_records=[
+            {
+                "source_ref": item["source_ref"],
+                "field": item["field"],
+                "content": {"excerpt": item["content_excerpt"], "truncated": item["truncated"]},
+            }
+            for item in excerpts
+        ],
+        integrity_excerpts=True,
+        obligation_reconciliation=unresolved,
+    )
+    assert r"\section{Frozen obligation reconciliation}" in rendered
+    assert r"\section{Selected source-linked research excerpts}" in rendered
+    assert "not presumed resolved" in rendered
+
+    large_package, _ = fast_package()
+    large_package["sources"][0]["data"] = {}
+    large_package["sources"][1]["data"]["findings"] = [
+        f"Finding {index}: " + ("This saved result is a limited observation. " * 8)
+        for index in range(1_200)
+    ]
+    bounded, omitted = papers._structured_evidence_index(large_package)
+    assert 0 < len(omitted) < 1_200
+    assert len({item["field_ref"] for item in omitted}) == len(omitted)
+    assert all(item["source_ref"] == "session:onp-fixture" for item in omitted)
+    assert all(len(item["field_ref"]) == 64 and item["reason"] for item in omitted)
+    assert len(papers._json([item.model_dump() for item in bounded])) <= papers.FAST_INDEX_MAX_BYTES
+    assert any("No independent proof checker was run." in item.statement for item in bounded)
+
+
+def test_bounded_index_keeps_constructive_proof_amid_many_objections() -> None:
+    """Large skeptical transcripts must not crowd proof evidence out of the paper."""
+    package, _ = fast_package()
+    package["sources"][1]["data"] = {
+        "objections": [
+            f"Objection {number}: " + "An unresolved counterexample requires review. " * 8
+            for number in range(900)
+        ],
+        "proof": (
+            "Construct a line arrangement with each new line meeting all earlier "
+            "lines at distinct points; it contributes the maximum number of regions."
+        ),
+    }
+    notes, omitted = papers._structured_evidence_index(package)
+    assert omitted
+    assert len(papers._json([note.model_dump() for note in notes])) <= papers.FAST_INDEX_MAX_BYTES
+    assert any(note.kind == "question" for note in notes)
+    assert any("Construct a line arrangement" in note.statement for note in notes)
+    assert any("unresolved counterexample" in note.statement for note in notes)
+
+
+def test_fast_planner_preview_bounds_input_and_preserves_source_coverage() -> None:
+    """Large index previews stay bounded; section writers retain full research."""
+    sources = [f"session:research-{index}" for index in range(1, 6)]
+    notes = [
+        papers.EvidenceNote(
+            statement=(
+                f"Source {source}, observation {number}: "
+                + ("Evidence is incomplete; the alternative remains plausible. " * 5)
+            ),
+            kind=("negative" if number % 2 else "result"),
+            evidence_refs=[source],
+        )
+        for number in range(90)
+        for source in sources
+    ]
+    full_size = len(papers._json([note.model_dump() for note in notes]))
+    preview, skipped = papers._fast_planner_preview(notes)
+    assert full_size > papers.FAST_PLANNER_PREVIEW_BYTES
+    assert len(papers._json(preview)) <= papers.FAST_PLANNER_PREVIEW_BYTES
+    assert skipped > 0
+    assert skipped + len(preview) == len(notes)
+    assert {ref for item in preview for ref in item["evidence_refs"]} == set(sources)
+    assert {item["kind"] for item in preview} == {"result", "negative"}
+    assert len(notes) == 450
+    # The preview must not mutate the last indexed research statement.
+    assert notes[-1].statement == (
+        f"Source {sources[-1]}, observation 89: "
+        + ("Evidence is incomplete; the alternative remains plausible. " * 5)
+    )
+
+
+def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
+    """Preview size cannot remove a source from the full section-writing index."""
+    package, plan = fast_package()
+    for number in range(6):
+        package["sources"].append(
+            {
+                "id": f"session:additional-{number}",
+                "kind": "session",
+                "data": {
+                    "summary": (
+                        f"Session {number} records an independent unresolved proof "
+                        "obligation with a conflicting interpretation."
+                    )
+                },
+            }
+        )
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    additional: list[str] = []
+    sections_seen: list[list[dict[str, Any]]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        if schema_name == "sigma_long_paper_plan":
+            additional.extend(input_value["additional_indexed_source_refs"])
+            assert input_value["outline_preview_skipped_notes"] > 0
+            assert additional
+            targeted_sections = list(plan.sections)
+            targeted_sections[0] = targeted_sections[0].model_copy(
+                update={"evidence_refs": [additional[0]]}
+            )
+            return plan.model_copy(update={"sections": targeted_sections}), "fixture-model"
+        sections_seen.append(input_value["evidence_notes"])
+        return papers.LongSectionDraft(
+            paragraphs=["The evidence remains uncertain and source-linked."]
+        ), "fixture-model"
+
+    async def check() -> None:
+        with (
+            patch.object(papers, "FAST_PLANNER_PREVIEW_BYTES", 650),
+            patch.object(papers, "_provider_structured", new=provider),
+        ):
+            output, calls, batches = await papers._generate_long_draft(
+                package,
+                {"mode": "api_key", "identity": "fixture", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+                structured_fast_path=True,
+            )
+        assert output.sections and calls == len(plan.sections) + 1 and batches == 0
+
+    asyncio.run(check())
+    assert state["evidence_strategy"] == "structured_v1"
+    indexed_refs = {ref for note in state["evidence_notes"] for ref in note["evidence_refs"]}
+    assert set(additional) <= indexed_refs
+    assert all(sections_seen)
+    assert any(additional[0] in note["evidence_refs"] for note in sections_seen[0])
+
+
+def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
+    expected = {
+        "biology": ("Introduction and biological context", "cross-species limitations"),
+        "mathematical": ("Introduction", "bridges between logical steps"),
+        "military": ("Question and operational context", "alternative courses of action"),
+    }
+    for research_type, (heading, guidance) in expected.items():
+        tex = papers._tex(draft(), [], "f" * 64, investigation_type=research_type)
+        assert rf"\section{{{heading}}}" in tex
+        assert guidance in tex
+    math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
+    assert r"\section{Introduction}" in math_tex
+    assert r"\section*{Claim status and evidence}" in math_tex
+
+
+def test_military_style_guidance_reaches_all_authoring_paths() -> None:
+    """Genre must guide model writing, not merely TeX section labels."""
+    package, plan = fast_package()
+    package["sources"][0]["data"]["investigation_type"] = "military"
+    package["sources"][0]["data"]["problem"] = "Assess alternative planning assumptions."
+    instructions_seen: dict[str, list[str]] = {}
+
+    async def fake_stage(_input, _binding, _config, *, instructions, schema_name, **_kwargs):
+        instructions_seen.setdefault(schema_name, []).append(instructions)
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=["The recorded scenario and alternatives remain uncertain."]
+        ), "fixture-model"
+
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+    async def long_form() -> None:
+        with patch.object(papers, "_provider_structured", new=fake_stage):
+            result, _calls, batches = await papers._generate_long_draft(
+                package,
+                {"mode": "api_key", "identity": "fixture", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+                structured_fast_path=True,
+            )
+        assert result.sections and batches == 0
+
+    asyncio.run(long_form())
+    assert "sigma_long_paper_plan" in instructions_seen
+    assert "sigma_long_paper_section" in instructions_seen
+    for instructions in instructions_seen.values():
+        for text in instructions:
+            assert "military operational assessment" in text
+            assert "alternative courses of action" in text
+            assert "The project type is mathematics" not in text
+
+    requests: list[dict[str, Any]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(400, json={"error": {"code": "invalid_json_schema"}})
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    ):
+        try:
+            asyncio.run(
+                papers._provider(
+                    package,
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                )
+            )
+        except ProjectError as exc:
+            assert "HTTP 400" in str(exc)
+        else:
+            raise AssertionError("Mock provider should reject schema")
+
+    assert len(requests) == 1
+    instructions = requests[0]["instructions"]
+    assert "military operational assessment" in instructions
+    assert "alternative courses of action" in instructions
+    assert "The project type is mathematics" not in instructions
+
+
+def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None:
+    package, plan = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    attempts: list[str] = []
+    retry_progress: list[tuple[str, int | None, int | None, str]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        attempts.append(schema_name)
+        if schema_name == "sigma_long_paper_plan" and attempts.count(schema_name) == 1:
+            raise papers.PaperConnectionFailure("fixture connect failed before dispatch")
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved section {number} preserves the recorded limitation."]
+        ), "fixture-model"
+
+    async def progress(stage, current, total, activity):
+        retry_progress.append((stage, current, total, activity))
+
+    saved_states: list[dict[str, Any]] = []
+
+    async def check_retry() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            generated, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda value: saved_states.append(copy.deepcopy(value)),
+                progress,
+                structured_fast_path=True,
+            )
+        assert len(generated.sections) == 2
+        assert calls == 4  # failed connection + outline + two sections
+        assert batches == 0
+
+    asyncio.run(check_retry())
+    assert attempts.count("sigma_long_paper_plan") == 2
+    assert ("retry", 1, 3, "active") in retry_progress
+    assert state["provider_calls_total"] == 4
+    assert state["evidence_strategy"] == "structured_v1"
+    assert saved_states[-1]["plan"]["title"] == plan.title
+
+    uncertain_state = papers._new_work("c" * 64, "fast-fixture", "d" * 64, "fixture-model", "high")
+    uncertain_attempts = 0
+    section_attempts = 0
+
+    async def uncertain_provider(_input, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal uncertain_attempts, section_attempts
+        if schema_name == "sigma_long_paper_plan":
+            uncertain_attempts += 1
+            raise ProjectError("fixture post-dispatch timeout; consumption is unknown")
+        assert schema_name == "sigma_long_paper_section"
+        section_attempts += 1
+        return papers.LongSectionDraft(
+            paragraphs=["The saved research reports an unresolved argument."]
+        ), "fixture-model"
+
+    async def check_uncertain() -> None:
+        with patch.object(papers, "_provider_structured", new=uncertain_provider):
+            generated, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                uncertain_state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert len(generated.sections) >= 2
+        assert calls == 1 + len(generated.sections)
+        assert any("planning stage did not" in warning for warning in generated.validation_warnings)
+
+    asyncio.run(check_uncertain())
+    assert uncertain_attempts == 1
+    assert section_attempts >= 2
+    assert uncertain_state["provider_calls"] == 1 + section_attempts
+    assert uncertain_state["provider_calls_total"] == 1 + section_attempts
+    assert uncertain_state["evidence_indexed"] is True
+    assert uncertain_state["plan"]
+
+
+def test_paper_failure_reason_survives_reopen() -> None:
+    """A disconnected browser can still see why the previous stage failed."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "paper-failure.sigma"
+        view = initialize_project(path, "Saved failure", "Why did the planning stage fail?")
+        package, fingerprint = papers._snapshot(str(path))
+        work = papers._new_work(fingerprint, view.project.id, "b" * 64, "fixture-model", "high")
+        work["frozen_package"] = package
+        work["progress"] = {
+            "run_id": "a" * 32,
+            "status": "running",
+            "stage": "planning",
+            "current": None,
+            "total": None,
+            "started_at": "2026-10-29T01:00:00+00:00",
+            "updated_at": "2026-10-29T01:00:00+00:00",
+            "elapsed_seconds": 300,
+        }
+        papers._save_work(str(path), work)
+        reason = "A long-paper stage timed out. No paper was published; retry explicitly."
+        papers.finish_progress(str(path), "failed", reason)
+        recovered = papers.progress_status(str(path))
+        assert recovered is not None
+        assert recovered["status"] == "failed"
+        assert recovered["stage"] == "planning"
+        assert recovered["failure_reason"] == reason
+        saved_work = papers._load_work(str(path))
+        assert saved_work is not None
+        assert saved_work["progress"]["failure_reason"] == reason
+
+
+def test_failed_planning_checkpoint_continues_without_repeating_paid_plan() -> None:
+    """A previously failed Tadpoles-shaped plan can resume with only section calls."""
+    package, _ = fast_package()
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    state.update(
+        {
+            "planning_fallback_pending": True,
+            "evidence_strategy": "structured_v1",
+            "evidence_indexed": True,
+            "evidence_notes": [
+                papers.EvidenceNote(
+                    statement="The saved research contains a recorded observation.",
+                    kind="result",
+                    evidence_refs=["session:onp-fixture"],
+                ).model_dump(),
+                papers.EvidenceNote(
+                    statement="An important experimental limitation remains unresolved.",
+                    kind="limitation",
+                    evidence_refs=["session:onp-fixture"],
+                ).model_dump(),
+            ],
+            "provider_calls": 1,
+            "provider_calls_total": 1,
+            # A new run overwrites the stage before reaching long-form planning.
+            "progress": {"stage": "snapshot", "status": "running"},
+        }
+    )
+    dispatched: list[str] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        dispatched.append(schema_name)
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved evidence supports the section {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            generated, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "chatgpt", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert len(generated.sections) >= 2
+        assert calls == 1 + len(generated.sections)
+        assert state["plan"] is not None
+        assert "planning_fallback_pending" not in state
+        assert any("planning stage did not" in x for x in generated.validation_warnings)
+
+    asyncio.run(check())
+    assert dispatched and set(dispatched) == {"sigma_long_paper_section"}
+
+
+def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
+    package, plan = fast_package(section_count=6)
+    state = papers._new_work("e" * 64, "fast-fixture", "f" * 64, "fixture-model", "high")
+    active = 0
+    maximum_active = 0
+    attempt_counts: dict[str, int] = {}
+    saves: list[dict[str, Any]] = []
+    progress_events: list[tuple[str, int | None, int | None, str]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal active, maximum_active
+        attempt_counts[schema_name] = attempt_counts.get(schema_name, 0) + 1
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        active += 1
+        maximum_active = max(maximum_active, active)
+        try:
+            await asyncio.sleep((7 - number) * 0.015)
+            return papers.LongSectionDraft(
+                paragraphs=[f"Durable completion for section {number}."]
+            ), "fixture-model"
+        finally:
+            active -= 1
+
+    async def check() -> tuple[papers.PaperDraft, int]:
+        async def progress(stage, current, total, activity):
+            progress_events.append((stage, current, total, activity))
+
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda value: saves.append(copy.deepcopy(value)),
+                progress=progress,
+                structured_fast_path=True,
+            )
+        return result, calls
+
+    generated, calls = asyncio.run(check())
+    assert maximum_active == papers.FAST_SECTION_CONCURRENCY
+    assert calls == 7
+    assert attempt_counts == {"sigma_long_paper_plan": 1, "sigma_long_paper_section": 6}
+    assert [item.heading for item in generated.sections] == [item.heading for item in plan.sections]
+    assert [item.paragraphs[0] for item in generated.sections] == [
+        f"Durable completion for section {number}." for number in range(1, 7)
+    ]
+    assert ("evidence", 1, 1, "active") in progress_events
+    assert ("evidence", 1, 1, "milestone") in progress_events
+    assert ("planning", None, None, "active") in progress_events
+    assert ("planning", None, None, "milestone") in progress_events
+    section_milestones = [
+        item[1:3] for item in progress_events if item[0] == "sections" and item[3] == "milestone"
+    ]
+    assert section_milestones == [(number, 6) for number in range(1, 7)]
+    assert set(state["section_drafts"]) == {str(number) for number in range(1, 7)}
+    assert all(
+        set(snapshot.get("section_drafts", {})) <= set(state["section_drafts"])
+        for snapshot in saves
+    )
+    assert len(saves) >= 8
+    before = dict(attempt_counts)
+
+    async def forbidden(_input, *_args, **_kwargs):
+        raise AssertionError("Completed plan and sections must not be replayed")
+
+    async def check_resume() -> None:
+        with patch.object(papers, "_provider_structured", new=forbidden):
+            result, completed_calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert completed_calls == 7
+        assert len(result.sections) == 6
+
+    asyncio.run(check_resume())
+    assert attempt_counts == before
+
+
+def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
+    package, plan = fast_package(section_count=2)
+    state = papers._new_work("3" * 64, "fast-fixture", "4" * 64, "fixture-model", "high")
+    attempts: list[tuple[str, int | None]] = []
+
+    async def first_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        number = input_value.get("section_number")
+        attempts.append((schema_name, number))
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        if number == 1:
+            return papers.LongSectionDraft(
+                paragraphs=["This completed section is durable."]
+            ), "fixture-model"
+        await asyncio.sleep(0.05)
+        raise ProjectError("fixture section failure after another section was saved")
+
+    async def fail_one_section() -> None:
+        with patch.object(papers, "_provider_structured", new=first_provider):
+            try:
+                await papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _value: None,
+                    structured_fast_path=True,
+                )
+            except ProjectError as exc:
+                assert "another section was saved" in str(exc)
+            else:
+                raise AssertionError(
+                    "The injected section failure must preserve a partial checkpoint"
+                )
+
+    asyncio.run(fail_one_section())
+    assert set(state["section_drafts"]) == {"1"}
+    assert attempts.count(("sigma_long_paper_plan", None)) == 1
+    assert attempts.count(("sigma_long_paper_section", 1)) == 1
+    assert attempts.count(("sigma_long_paper_section", 2)) == 1
+
+    async def resume_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        number = input_value.get("section_number")
+        assert schema_name == "sigma_long_paper_section" and number == 2
+        attempts.append((schema_name, number))
+        return papers.LongSectionDraft(
+            paragraphs=["Only the incomplete section is retried."]
+        ), "fixture-model"
+
+    async def resume() -> None:
+        with patch.object(papers, "_provider_structured", new=resume_provider):
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert [section.paragraphs[0] for section in result.sections] == [
+            "This completed section is durable.",
+            "Only the incomplete section is retried.",
+        ]
+        assert calls == 4  # outline, completed section, uncertain failure, continuation
+        assert batches == 0
+
+    asyncio.run(resume())
+    assert attempts.count(("sigma_long_paper_plan", None)) == 1
+    assert attempts.count(("sigma_long_paper_section", 1)) == 1
+    assert attempts.count(("sigma_long_paper_section", 2)) == 2
+    assert set(state["section_drafts"]) == {"1", "2"}
+
+
+def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "single-flight.sigma"
+        view = initialize_project(path, "Single flight", "Preserve one generation at a time")
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        started = asyncio.Event()
+        release = asyncio.Event()
+        provider_calls = 0
+
+        async def blocked_provider(context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            started.set()
+            await release.wait()
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            return draft(source), "fixture-model"
+
+        async def credentials():
+            return credential
+
+        async def configuration(**_kwargs):
+            return config
+
+        async def check() -> None:
+            with (
+                patch.object(papers, "auth_context", new=credentials),
+                patch.object(papers, "configuration", new=configuration),
+                patch.object(papers, "_provider", new=blocked_provider),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                first = asyncio.create_task(
+                    papers.generate(str(path), credential["identity"], view.project.id)
+                )
+                await asyncio.wait_for(started.wait(), timeout=2)
+                try:
+                    await papers.generate(str(path), credential["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "already active" in str(exc)
+                else:
+                    raise AssertionError("A concurrent generation must be rejected")
+                release.set()
+                result = await first
+                assert result["title"] == "An evidence-bound exploratory note"
+
+        asyncio.run(check())
+        assert provider_calls == 1
+        assert len(papers.list_papers(str(path))) == 1
+        assert not papers._gate.locked()
+
+
+def test_fast_long_draft_cancellation_keeps_completed_sections() -> None:
+    package, plan = fast_package(section_count=5)
+    state = papers._new_work("1" * 64, "fast-fixture", "2" * 64, "fixture-model", "high")
+    first_section_saved = asyncio.Event()
+    blocked_section_started = asyncio.Event()
+    active = 0
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal active
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        number = input_value["section_number"]
+        active += 1
+        try:
+            if number == 1:
+                return papers.LongSectionDraft(
+                    paragraphs=["This section is checkpointed."]
+                ), "fixture-model"
+            blocked_section_started.set()
+            await asyncio.Event().wait()
+            raise AssertionError("blocked section should be cancelled")
+        finally:
+            active -= 1
+
+    def save(value: dict[str, Any]) -> None:
+        if "1" in value.get("section_drafts", {}):
+            first_section_saved.set()
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            task = asyncio.create_task(
+                papers._generate_long_draft(
+                    package,
+                    {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    save,
+                    structured_fast_path=True,
+                )
+            )
+            await asyncio.wait_for(first_section_saved.wait(), timeout=3)
+            await asyncio.wait_for(blocked_section_started.wait(), timeout=3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            else:
+                raise AssertionError("Cancellation must propagate from section writing")
+
+    asyncio.run(check())
+    assert active == 0
+    assert set(state["section_drafts"]) == {"1"}
+    assert state["provider_calls"] >= 2
+
+
+def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
+    sample_path = (
+        Path(__file__).resolve().parents[1] / "samples/xenopus-tail-regeneration/project.json"
+    )
+    sample = json.loads(sample_path.read_text(encoding="utf-8"))
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "tadpoles-five-session.sigma"
+        project_view = initialize_project(
+            path,
+            sample["title"],
+            sample["problem"],
+            "biology",
+            "gpt-6.1-sol",
+            "high",
+            "hard",
+        )
+        project_data = asdict(project_view.project)
+        project_data["strategies"] = []
+        sessions = [
+            {
+                "id": f"tadpole-session-{index}",
+                "status": "completed",
+                "outcome": {
+                    "summary": (
+                        "A saved exploratory finding compares stage-specific regeneration "
+                        "and records limitations; it is not an independent validation."
+                    ),
+                    "verification_status": "unverified",
+                    "open_obligations": [
+                        "Validate the candidate interaction on an independent biological cohort."
+                    ],
+                },
+                "findings": [
+                    f"Session {index} records a limited observation with no claimed causal mechanism."
+                ],
+                "negative_findings": [
+                    f"Session {index} did not establish an independent replicate."
+                ],
+                "contradictory_findings": [
+                    f"Session {index} contrasts the observed pattern with an alternative explanation."
+                ],
+                "reasoning_steps": [
+                    f"Session {index} separates the recorded observation from a proposed mechanism."
+                ],
+                "skeptic_objections": [
+                    f"Session {index} lacks independent specimens and a falsifying perturbation."
+                ],
+                "open_obligations": [
+                    "Validate the candidate interaction on an independent biological cohort."
+                ],
+                "artifacts": [
+                    {
+                        "id": f"artifact-{index}",
+                        "title": f"Saved session {index} evidence note",
+                        "content": "The complete source record remains archived for inspection.",
+                    }
+                ],
+            }
+            for index in range(1, 6)
+        ]
+        export = {
+            "project": project_data,
+            "research_sessions": sessions,
+            "agentic_runs": [],
+        }
+        credential = {"identity": "fixture:api-key", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        mock_calls: list[str] = []
+
+        async def simulated_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+            mock_calls.append(schema_name)
+            if schema_name == "sigma_long_paper_plan":
+                refs = sorted(
+                    {ref for item in input_value["evidence_index"] for ref in item["evidence_refs"]}
+                )
+                assert len(refs) > 1
+                session_refs = [ref for ref in refs if ref.startswith("session:")]
+                assert len(session_refs) == 5
+                obligation = (
+                    "Validate the candidate interaction on an independent biological cohort."
+                )
+                return papers.FastLongPaperPlan(
+                    title="Five-Session Xenopus Evidence Synthesis",
+                    abstract=(
+                        "This mock study assembles five saved Xenopus sessions and preserves "
+                        "their observations, negative results, contradictions, and limitations. "
+                        "It does not claim a validated biological mechanism."
+                    ),
+                    abstract_claim_ids=["C1"],
+                    problem_framing=[
+                        "The project asks for a discriminating regeneration mechanism."
+                    ],
+                    problem_framing_claim_ids=["C1"],
+                    methods=["We synthesize only saved source-linked session records."],
+                    methods_claim_ids=["C1"],
+                    claims=[
+                        papers.PaperClaim(
+                            id="C1",
+                            statement="The five sessions preserve exploratory, unresolved evidence.",
+                            status="unresolved",
+                            evidence_refs=session_refs,
+                            reasoning="Each cited session retains uncertainty and a common validation obligation.",
+                        )
+                    ],
+                    sections=[
+                        papers.LongSectionPlan(
+                            heading="Recorded observations and uncertainty",
+                            purpose="Describe the session evidence without presenting a mechanism as verified.",
+                            evidence_refs=session_refs,
+                            claim_ids=["C1"],
+                        ),
+                        papers.LongSectionPlan(
+                            heading="Negative evidence and next tests",
+                            purpose="Preserve skeptical objections, contradictions, and the next validation obligation.",
+                            evidence_refs=session_refs,
+                            claim_ids=["C1"],
+                        ),
+                    ],
+                    limitations=[
+                        "All five records are synthetic fixtures, not biological findings."
+                    ],
+                    open_obligations=[obligation],
+                    conclusions=[
+                        "This is an unresolved mock synthesis, not a validated mechanism."
+                    ],
+                    conclusion_claim_ids=["C1"],
+                    validation_warnings=["No live provider or biological evaluation was used."],
+                ), config["model"]
+            if schema_name == "sigma_long_paper_section":
+                return papers.LongSectionDraft(
+                    paragraphs=[
+                        "The archived records preserve negative observations, disagreement, and the Skeptic's independent-cohort objection. This deterministic text is a test fixture and makes no biological claim."
+                    ]
+                ), config["model"]
+            raise AssertionError(f"Unexpected provider stage: {schema_name}")
+
+        async def credential_context():
+            return credential
+
+        async def model_configuration(**_kwargs):
+            return config
+
+        # CI need not install a TeX toolchain to exercise checkpoint-to-saved-PDF
+        # plumbing. Machines with Tectonic still compile a real PDF; others use
+        # a clearly identified local test stub, not a claimed PDF quality check.
+        tectonic_available = shutil.which("tectonic") is not None
+        compiler_context = (
+            nullcontext()
+            if tectonic_available
+            else patch.object(
+                papers,
+                "_compile_pdf",
+                return_value=b"%PDF-1.4\\n" + b"% deterministic test fixture\\n" * 40,
+            )
+        )
+
+        with (
+            patch("sigma.api.export_project_view", return_value=export),
+            patch.object(papers, "auth_context", new=credential_context),
+            patch.object(papers, "configuration", new=model_configuration),
+            patch.object(papers, "_provider_structured", new=simulated_provider),
+            compiler_context,
+        ):
+            snapshot_hash = papers._snapshot(str(path))[1]
+            started = perf_counter()
+            result = asyncio.run(
+                papers.generate(
+                    str(path),
+                    credential["identity"],
+                    project_view.project.id,
+                    force_long_form=True,
+                    expected_snapshot_sha256=snapshot_hash,
+                )
+            )
+            elapsed_seconds = perf_counter() - started
+
+        record = papers.get_paper(str(path), result["paper_id"])
+        assert record["pdf_available"] is True
+        assert record["pdf_size_bytes"] > 500
+        assert record["generation"]["provider_calls_attempted"] == 3
+        assert record["generation"]["evidence_batch_count"] == 0
+        assert record["generation"]["evidence_fields_omitted"] == 0
+        assert (
+            len([source for source in record["snapshot"]["sources"] if source["kind"] == "session"])
+            == 5
+        )
+        assert all(
+            any(
+                source["id"] == f"artifact:tadpole-session-{index}:artifact-{index}"
+                for source in record["snapshot"]["sources"]
+            )
+            for index in range(1, 6)
+        )
+        assert any(
+            item["text"]
+            == "Validate the candidate interaction on an independent biological cohort."
+            and item["status"] == "Listed as open in paper"
+            for item in record["obligation_reconciliation"]
+        )
+        assert len(mock_calls) == 3
+        assert elapsed_seconds < 300
+        compiler_label = (
+            "real Tectonic compilation" if tectonic_available else "stub PDF (Tectonic unavailable)"
+        )
+        print(
+            f"PASS mocked five-session Tadpoles paper-to-PDF E2E in {elapsed_seconds:.2f}s "
+            f"({compiler_label}; deterministic provider; live <5-minute target remains unverified)."
+        )
+
+
+def test_maximum_regions_archived_one_session_stays_fast() -> None:
+    """Use the actual archived happy-path evidence layout as a mode-selection gate."""
+    archived = (
+        Path(__file__).resolve().parents[1]
+        / "docs/evaluations/increment_19/exports/maximum-regions-sigma-reexport.json"
+    )
+    export = json.loads(archived.read_text(encoding="utf-8"))
+    assert export["project"]["difficulty"] == "easy"
+    assert len(export["research_sessions"]) == 1
+    with patch("sigma.api.export_project_view", return_value=export):
+        package, _ = papers._snapshot("fixture")
+    assert len(package["sources"]) == 5  # project + strategy + session + two artifacts
+    assert len(papers._json(package)) <= papers.MAX_ONE_SHOT_CONTEXT_BYTES
+    assert papers._paper_long_form(package) is False
+
+    # The old size-only mode switch made one additional research note cause
+    # several sequential/parallel AI calls. Keep full original evidence while
+    # selecting a single call for this easy one-session investigation.
+    augmented = copy.deepcopy(export)
+    augmented["research_sessions"][0]["outcome"]["new_saved_finding"] = (
+        "Further consideration of the same proof and its open obligations. " * 130
+    )
+    with patch("sigma.api.export_project_view", return_value=augmented):
+        bigger, _ = papers._snapshot("fixture")
+    assert papers.MAX_ONE_SHOT_CONTEXT_BYTES < len(papers._json(bigger))
+    assert len(papers._json(bigger)) < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
+    assert len(bigger["sources"]) == len(package["sources"])
+    assert papers._paper_long_form(bigger) is False
+
+
+def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
+    """An easy one-session paper uses one full-evidence call past the 100 KB cliff."""
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "easy-fixture",
+        "sources": [
+            {
+                "id": "project:easy-fixture",
+                "kind": "project",
+                "data": {
+                    "id": "easy-fixture",
+                    "difficulty": "easy",
+                    "investigation_type": "mathematical",
+                },
+            },
+            {
+                "id": "session:one",
+                "kind": "session",
+                "data": {"outcome": {"argument": "A proof candidate. " * 6_500}},
+            },
+        ],
+    }
+    snapshot_bytes = len(papers._json(package))
+    assert (
+        papers.MAX_ONE_SHOT_CONTEXT_BYTES < snapshot_bytes < papers.MAX_EASY_ONE_SHOT_CONTEXT_BYTES
+    )
+    assert papers._paper_long_form(package) is False
+    assert papers._paper_long_form(package, force_long_form=True) is True
+
+    # A paid long-form checkpoint also survives when the snapshot is smaller
+    # than the historical 100 KB boundary (e.g. an explicitly long run).
+    small_package = copy.deepcopy(package)
+    small_package["sources"][1]["data"]["outcome"]["argument"] = "Short proof candidate."
+    assert papers._paper_long_form(small_package) is False
+    paid_small = papers._new_work(
+        papers.hashlib.sha256(papers._json(small_package)).hexdigest(),
+        "easy-fixture",
+        "b" * 64,
+        "fixture-model",
+        "high",
+    )
+    paid_small["provider_calls"] = 1
+    assert papers._paper_long_form(small_package, existing=paid_small) is True
+
+    # An earlier, compatible long-form attempt retains its checkpoint. The
+    # optimization must never abandon paid outline or section work.
+    existing = papers._new_work(
+        papers.hashlib.sha256(papers._json(package)).hexdigest(),
+        "easy-fixture",
+        "a" * 64,
+        "fixture-model",
+        "high",
+    )
+    existing["plan"] = {"already_paid": True}
+    assert papers._paper_long_form(package, existing=existing) is True
+    assert (
+        papers._paper_long_form(package, existing={**existing, "snapshot_sha256": "0" * 64})
+        is False
+    )
+
+    package["sources"].append(
+        {"id": "session:two", "kind": "session", "data": {"outcome": "An independent run."}}
+    )
+    assert papers._paper_long_form(package) is True
+    package["sources"].pop()
+    package["sources"][0]["data"]["difficulty"] = "hard"
+    assert papers._paper_long_form(package) is True
+    package["sources"][0]["data"]["difficulty"] = "easy"
+    package["sources"][1]["data"]["outcome"]["argument"] *= 2
+    assert papers._paper_long_form(package) is True
+
+
+def test_invalid_planning_claim_reference_is_recoverable() -> None:
+    """Repair an inconsistent paid outline without repeating the plan call."""
+    package, valid_plan = fast_package()
+    invalid_section = valid_plan.sections[0].model_copy(update={"claim_ids": ["C999"]})
+    invalid_plan = valid_plan.model_copy(
+        update={
+            "abstract_claim_ids": ["C999", *valid_plan.abstract_claim_ids],
+            "sections": [invalid_section, *valid_plan.sections[1:]],
+        }
+    )
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    planning_calls = 0
+    saves: list[dict[str, Any]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+        nonlocal planning_calls
+        if schema_name == "sigma_long_paper_plan":
+            planning_calls += 1
+            return invalid_plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=[f"Saved section {input_value['section_number']}."]
+        ), "fixture-model"
+
+    async def attempt(target: dict[str, Any]) -> tuple[papers.PaperDraft, int, int]:
+        with patch.object(papers, "_provider_structured", new=provider):
+            return await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                target,
+                lambda value: saves.append(copy.deepcopy(value)),
+                structured_fast_path=True,
+            )
+
+    generated, calls, batches = asyncio.run(attempt(state))
+    assert planning_calls == 1
+    assert calls == 1 + len(valid_plan.sections)
+    assert batches == 0
+    assert len(generated.sections) == len(valid_plan.sections)
+    assert "C999" not in generated.abstract_claim_ids
+    assert "C999" not in generated.sections[0].claim_ids
+    assert any(
+        "unknown or repeated claim links" in item.casefold()
+        for item in generated.validation_warnings
+    )
+    assert state["evidence_indexed"] is True
+    assert state["provider_calls_total"] == calls
+    assert state["plan"]["abstract_claim_ids"] == valid_plan.abstract_claim_ids
+    assert state["plan"]["sections"][0]["claim_ids"] == []
+    assert any(item.get("plan") for item in saves)
+
+    # Older versions may already have saved an inconsistent outline.
+    # Repair it and reuse the one paid planning call.
+    old = papers._new_work("c" * 64, "fast-fixture", "d" * 64, "fixture-model", "high")
+    old.update(
+        {
+            "plan": invalid_plan.model_dump(),
+            "evidence_indexed": True,
+            "evidence_strategy": "structured_v1",
+            "evidence_notes": state["evidence_notes"],
+            "provider_calls": 1,
+            "provider_calls_total": 1,
+        }
+    )
+    _, old_calls, old_batches = asyncio.run(attempt(old))
+    assert planning_calls == 1
+    assert old_batches == 0
+    assert old_calls == 1 + len(valid_plan.sections)
+    assert old["provider_calls_total"] == old_calls
+    assert old["plan"]["abstract_claim_ids"] == valid_plan.abstract_claim_ids
+    assert old["plan"]["sections"][0]["claim_ids"] == []
+
+
+def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
+    """An explicit reset switches eligible research to one call without AI."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "easy-restart.sigma"
+        view = initialize_project(path, "Easy paper", "How many regions can n lines form?")
+        package = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": view.project.id,
+            "sources": [
+                {
+                    "id": f"project:{view.project.id}",
+                    "kind": "project",
+                    "data": {"id": view.project.id, "difficulty": "easy"},
+                },
+                {
+                    "id": "session:one",
+                    "kind": "session",
+                    "data": {"outcome": "An existing mathematical argument. " * 3_500},
+                },
+            ],
+        }
+        encoded = papers._json(package)
+        assert papers.MAX_ONE_SHOT_CONTEXT_BYTES < len(encoded) < 200_000
+        snapshot_hash = papers.hashlib.sha256(encoded).hexdigest()
+        identity = "chatgpt:fixture"
+        credential = {"identity": identity, "mode": "chatgpt", "token": "fixture"}
+        config = {"available": True, "model": "gpt-fixture", "reasoning_effort": "high"}
+        binding = papers.hashlib.sha256(("chatgpt\0" + identity).encode()).hexdigest()
+        checkpoint = papers._new_work(
+            snapshot_hash, view.project.id, binding, "gpt-fixture", "high"
+        )
+        checkpoint["provider_calls"] = 2
+        checkpoint["provider_calls_total"] = 2
+        checkpoint["evidence_indexed"] = True
+        checkpoint["evidence_strategy"] = "structured_v1"
+        papers._save_work(str(path), checkpoint)
+
+        async def fake_auth():
+            return credential
+
+        async def fake_configuration(**_kwargs):
+            return config
+
+        with (
+            patch.object(papers, "_snapshot", return_value=(package, snapshot_hash)),
+            patch.object(papers, "auth_context", new=fake_auth),
+            patch.object(papers, "configuration", new=fake_configuration),
+            patch.object(papers, "_provider", side_effect=AssertionError("no AI on Start over")),
+            patch.object(
+                papers, "_provider_structured", side_effect=AssertionError("no AI on Start over")
+            ),
+        ):
+            before = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=identity,
+                mode="chatgpt",
+                model="gpt-fixture",
+                reasoning_effort="high",
+            )
+            assert before["resume_available"] is True
+            assert before["long_form"] is True
+            assert before["single_call_restart_available"] is True
+
+            reset = asyncio.run(
+                papers.restart_work(
+                    str(path),
+                    view.project.id,
+                    identity,
+                    snapshot_hash,
+                    confirmed=True,
+                    force_long_form=False,
+                )
+            )
+            assert reset["provider_calls_attempted"] == 0
+            saved = papers._load_work(str(path))
+            assert saved is not None
+            assert saved["kind"] == "one_shot"
+            assert saved["provider_calls_total"] == 2
+            assert len(saved["prior_runs"]) == 1
+            assert saved["prior_runs"][0]["provider_calls_attempted"] == 2
+            after = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=identity,
+                mode="chatgpt",
+                model="gpt-fixture",
+                reasoning_effort="high",
+            )
+            assert after["long_form"] is False
+            assert after["maximum_provider_calls"] == 1
+            assert after["provider_calls_attempted"] == 0
+
+
+def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None:
+    """Local validation errors must not erase a complete paid author response."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "validation-recovery.sigma"
+        view = initialize_project(path, "Paper recovery", "Review the saved objective.")
+        account = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": account["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        provider_calls = 0
+        validations = 0
+        real_validate = papers._validate
+
+        async def provider(context, _account, _config, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            return draft(source), config["model"]
+
+        def validate(paper, package):
+            nonlocal validations
+            validations += 1
+            if validations == 1:
+                raise ProjectError("Transient local claim metadata check failed")
+            return real_validate(paper, package)
+
+        async def run() -> None:
+            with (
+                patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=account)),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=provider),
+                patch.object(papers, "_validate", new=validate),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                try:
+                    await papers.generate(str(path), account["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "metadata check" in str(exc)
+                else:
+                    raise AssertionError("The first validation was deliberately interrupted")
+                saved_work = papers._load_work(str(path))
+                assert saved_work is not None
+                assert saved_work["provider_calls"] == 1
+                assert saved_work["one_shot_draft"] is not None
+                result = await papers.generate(str(path), account["identity"], view.project.id)
+                assert provider_calls == 1
+                saved = papers.get_paper(str(path), result["paper_id"])
+                assert saved["pdf_available"] is True
+                assert saved["generation"]["provider_calls_attempted"] == 1
+                assert papers._load_work(str(path)) is None
+
+        asyncio.run(run())
+
+
+def test_live_research_change_does_not_discard_completed_paper() -> None:
+    """A paper cites its frozen input even when unrelated saved research advances."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "research-advanced.sigma"
+        view = initialize_project(path, "Frozen paper", "Study saved evidence.")
+        identity = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": identity["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        original, original_hash = papers._snapshot(str(path))
+        advanced = copy.deepcopy(original)
+        advanced["sources"][0]["data"]["title"] = "Research advanced while authoring"
+        advanced_hash = papers.hashlib.sha256(papers._json(advanced)).hexdigest()
+        assert advanced_hash != original_hash
+        calls = 0
+        snapshots = 0
+
+        def changing_snapshot(_path):
+            nonlocal snapshots
+            snapshots += 1
+            if snapshots != 1:
+                raise AssertionError("Do not recheck changing live evidence after authoring")
+            return original, original_hash
+
+        async def provider(_context, *_args):
+            nonlocal calls
+            calls += 1
+            return draft(original["sources"][0]["id"]), config["model"]
+
+        with (
+            patch.object(papers, "_snapshot", side_effect=changing_snapshot),
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=identity)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=provider),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            completed = asyncio.run(
+                papers.generate(str(path), identity["identity"], view.project.id)
+            )
+
+        saved = papers.get_paper(str(path), completed["paper_id"])
+        assert calls == 1
+        assert saved["snapshot_sha256"] == original_hash
+        assert saved["snapshot"] == original
+        assert snapshots == 1
+        assert papers._load_work(str(path)) is None
+
+
+def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
+    """Resuming a paid draft must not read new research or require Start over."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "frozen-checkpoint.sigma"
+        view = initialize_project(path, "Frozen paper", "Saved evidence")
+        identity = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": identity["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        package, fingerprint = papers._snapshot(str(path))
+        work = papers._new_work(
+            fingerprint,
+            view.project.id,
+            papers.hashlib.sha256(
+                (identity["mode"] + "\0" + identity["identity"]).encode()
+            ).hexdigest(),
+            config["model"],
+            config["reasoning_effort"],
+            kind="one_shot",
+        )
+        work["frozen_package"] = package
+        work["provider_calls"] = 1
+        work["provider_calls_total"] = 1
+        work["one_shot_draft"] = draft(package["sources"][0]["id"]).model_dump()
+        papers._save_work(str(path), work)
+
+        with (
+            patch.object(papers, "_snapshot", side_effect=AssertionError("live evidence re-read")),
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=identity)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(
+                papers, "_provider", side_effect=AssertionError("paid draft must be reused")
+            ),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            preflight = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=identity["identity"],
+                mode=identity["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert preflight["resume_available"] is True
+            assert preflight["snapshot_sha256"] == fingerprint
+            completed = asyncio.run(
+                papers.generate(
+                    str(path),
+                    identity["identity"],
+                    view.project.id,
+                    expected_snapshot_sha256="0" * 64,
+                )
+            )
+        saved = papers.get_paper(str(path), completed["paper_id"])
+        assert saved["snapshot_sha256"] == fingerprint
+        assert saved["snapshot"] == package
+        assert saved["generation"]["provider_calls_attempted"] == 1
+
+
+def test_one_shot_publishes_with_repaired_claim_links() -> None:
+    """A usable completed author draft is a paper, not a paid repair dialogue."""
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "one-shot-repair.sigma"
+        view = initialize_project(path, "Paper recovery", "Study the saved research.")
+        account = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": account["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        calls = 0
+
+        async def provider(context, _account, _config, *_args):
+            nonlocal calls
+            calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            base = draft(source)
+            return base.model_copy(
+                update={
+                    "abstract_claim_ids": ["C987", "C1"],
+                    "claims": [
+                        base.claims[0].model_copy(
+                            update={"evidence_refs": ["invented:source"], "status": "established"}
+                        )
+                    ],
+                }
+            ), config["model"]
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=account)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=provider),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+        ):
+            result = asyncio.run(papers.generate(str(path), account["identity"], view.project.id))
+
+        assert calls == 1
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert saved["draft"]["abstract_claim_ids"] == ["C1"]
+        assert saved["draft"]["claims"][0]["status"] == "unresolved"
+        assert saved["draft"]["claims"][0]["evidence_refs"] == []
+        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert any("not established" in x for x in saved["draft"]["limitations"])
+        assert saved["pdf_available"] is True
+        assert papers._load_work(str(path)) is None
+
+
+def test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims() -> None:
+    original = draft()
+    corrupt = original.model_copy(
+        update={
+            "abstract_claim_ids": ["C999", "C1", "C1"],
+            "claims": [
+                original.claims[0].model_copy(
+                    update={
+                        "evidence_refs": ["project:pid", "invalid:source", "project:pid"],
+                        "status": "established",
+                    }
+                )
+            ],
+            "sections": [
+                original.sections[0].model_copy(update={"claim_ids": ["C999"]}),
+                original.sections[1],
+            ],
+        }
+    )
+    repaired = papers.PaperDraft.model_validate(
+        papers._repair_paper_references(corrupt, {"project:pid"})
+    )
+    assert repaired.abstract == original.abstract
+    assert repaired.sections[0].paragraphs == original.sections[0].paragraphs
+    assert repaired.claims[0].status == "unresolved"
+    assert repaired.claims[0].evidence_refs == ["project:pid"]
+    assert repaired.abstract_claim_ids == ["C1"]
+    assert repaired.sections[0].claim_ids == []
+    assert any("not established" in limitation for limitation in repaired.limitations)
+    assert any("unsupported links were removed" in x for x in repaired.validation_warnings)
+    assert papers._validate(
+        repaired,
+        {"sources": [{"id": "project:pid", "data": {"problem": "Saved objective"}}]},
+    )
+
+
+def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -> None:
+    """A lost one-call result may be billable; never replay it silently."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "one-shot-uncertain.sigma"
+        view = initialize_project(path, "One-call recovery", "Explain the recorded research.")
+        snapshot = papers._snapshot(str(path))[1]
+        account = {"mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": account["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        calls = 0
+        reject = True
+
+        async def provider(context, _account, settings, *_args):
+            nonlocal calls
+            calls += 1
+            if reject:
+                raise ProjectError("Fixture provider interrupted after request dispatch")
+            project_ref = next(
+                item["id"] for item in context["sources"] if item["kind"] == "project"
+            )
+            return draft(project_ref), settings["model"]
+
+        async def check() -> None:
+            nonlocal reject
+            with (
+                patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=account)),
+                patch.object(
+                    papers,
+                    "configuration",
+                    new=lambda **_kw: asyncio.sleep(0, result=config),
+                ),
+                patch.object(papers, "_provider", new=provider),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                try:
+                    await papers.generate(str(path), account["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "interrupted" in str(exc)
+                else:
+                    raise AssertionError("The first provider attempt should fail")
+                checkpoint = papers._load_work(str(path))
+                assert checkpoint is not None
+                assert checkpoint["kind"] == "one_shot"
+                assert checkpoint["provider_calls"] == 1
+                assert checkpoint["provider_calls_total"] == 1
+                assert checkpoint["one_shot_draft"] is None
+
+                preflight = papers.preflight(
+                    str(path),
+                    expected_project_id=view.project.id,
+                    expected_binding=account["identity"],
+                    mode=account["mode"],
+                    model=config["model"],
+                    reasoning_effort=config["reasoning_effort"],
+                )
+                assert preflight["resume_available"] is False
+                assert preflight["incomplete_one_shot"] is True
+                assert preflight["checkpoint_can_restart"] is True
+                try:
+                    await papers.generate(str(path), account["identity"], view.project.id)
+                except ProjectError as exc:
+                    assert "Start over explicitly" in str(exc)
+                else:
+                    raise AssertionError("An uncertain paid request must not replay")
+                assert calls == 1
+
+                reset = await papers.restart_work(
+                    str(path),
+                    view.project.id,
+                    account["identity"],
+                    snapshot,
+                    confirmed=True,
+                    force_long_form=False,
+                )
+                assert reset["provider_calls_attempted"] == 0
+                assert calls == 1  # Starting over makes no provider request.
+                reject = False
+                result = await papers.generate(str(path), account["identity"], view.project.id)
+                assert calls == 2
+                record = papers.get_paper(str(path), result["paper_id"])
+                assert record["generation"]["provider_calls_attempted"] == 1
+                assert record["generation"]["provider_calls_prior_runs"] == 1
+                assert record["generation"]["provider_calls_lifetime_total"] == 2
+                assert papers._load_work(str(path)) is None
+
+        asyncio.run(check())
+
+
+def test_structured_index_retains_session_narrative_and_original_question() -> None:
+    """Unusual saved summaries must not trigger serial AI field extraction."""
+    problem = "Find an upper bound and construction for line arrangements."
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "narrative-fixture",
+        "sources": [
+            {
+                "kind": "project",
+                "id": "project:narrative-fixture",
+                "data": {
+                    "title": "Line arrangements",
+                    "problem": problem,
+                    "difficulty": "hard",
+                    "investigation_type": "mathematical",
+                },
+            },
+            {
+                "kind": "session",
+                "id": "session:first",
+                "data": {
+                    "summary": (
+                        "A candidate proof derives a recurrence by counting line segments "
+                        "and leaves a convexity obligation open."
+                    )
+                },
+            },
+            {
+                "kind": "session",
+                "id": "session:second",
+                "data": {
+                    "summary": (
+                        "A skeptical follow-up identifies an unsupported crossing claim "
+                        "and does not establish a proof."
+                    )
+                },
+            },
+        ],
+    }
+    notes, omissions = papers._structured_evidence_index(package)
+    assert notes
+    assert not omissions
+    assert {ref for note in notes for ref in note.evidence_refs} == {
+        "project:narrative-fixture",
+        "session:first",
+        "session:second",
+    }
+    descriptions = " ".join(item.statement for item in notes)
+    assert "candidate proof" in descriptions
+    assert "unsupported crossing claim" in descriptions
+    plan = papers._long_plan_input(
+        package["sources"][0]["data"],
+        [note.model_dump() for note in notes],
+        len(package["sources"]),
+        0,
+    )
+    assert plan["project_question"] == problem
+
+
+def test_summary_only_research_uses_zero_paid_evidence_extraction_calls() -> None:
+    """An unconventional session field still uses deterministic indexing."""
+    package, plan = fast_package()
+    package["sources"][1]["data"] = {
+        "summary": (
+            "The investigator derives a candidate construction for the number "
+            "of regions, and the skeptic leaves the convexity proof obligation "
+            "unresolved."
+        )
+    }
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    stages: list[str] = []
+
+    async def provider(_input, _binding, _config, *, schema_name, **_kwargs):
+        stages.append(schema_name)
+        if schema_name == "sigma_long_paper_plan":
+            return plan, "fixture-model"
+        assert schema_name == "sigma_long_paper_section"
+        return papers.LongSectionDraft(
+            paragraphs=["The saved research supports this bounded interpretation."]
+        ), "fixture-model"
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            paper, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _value: None,
+                structured_fast_path=True,
+            )
+        assert paper.sections
+        assert batches == 0
+        assert calls == len(plan.sections) + 1
+        assert stages.count("sigma_long_paper_plan") == 1
+        assert stages.count("sigma_long_paper_section") == len(plan.sections)
+        assert state["evidence_strategy"] == "structured_v1"
+
+    asyncio.run(check())
+
+
+def test_long_paper_planning_timeout_is_stage_specific() -> None:
+    """Every paper inference stage allows a full hour for high-thinking models."""
+    assert papers.CALL_SECONDS == 3600
+    assert papers.PLANNING_CALL_SECONDS == 3600
+    assert papers._long_paper_call_timeout("sigma_long_paper_plan") == 3600
+    assert papers._long_paper_call_timeout("sigma_long_paper_section") == 3600
+    assert papers._long_paper_call_timeout("sigma_paper_evidence_batch") == 3600
+
+    observed: list[float | int | httpx.Timeout] = []
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": "invalid_json_schema"}})
+
+    actual_client = httpx.AsyncClient
+
+    def client_factory(**kwargs: Any) -> httpx.AsyncClient:
+        observed.append(kwargs["timeout"])
+        return actual_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    async def check() -> None:
+        for stage in ("sigma_long_paper_plan", "sigma_long_paper_section"):
+            try:
+                await papers._provider_structured(
+                    {"fixture": "timeout-check"},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "test-model", "reasoning_effort": "high"},
+                    instructions="fixture",
+                    schema_name=stage,
+                    response_model=papers.PaperDraft,
+                )
+            except ProjectError as exc:
+                assert "HTTP 400" in str(exc)
+            else:
+                raise AssertionError("Mock rejection should not complete paper authoring")
+
+    with patch("sigma.papers.httpx.AsyncClient", side_effect=client_factory):
+        asyncio.run(check())
+    assert observed == [3600, 3600]
+
+
 def main() -> None:
+    test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
+    test_publication_paragraphs_math_and_bounded_optional_appendix()
+    test_summary_only_research_uses_zero_paid_evidence_extraction_calls()
+    test_one_shot_provider_failure_requires_explicit_reset_without_rebilling()
+    test_structured_index_retains_session_narrative_and_original_question()
+    test_easy_paper_start_over_escapes_repeated_paid_planning()
+    test_maximum_regions_archived_one_session_stays_fast()
+    test_easy_paper_avoids_unnecessary_long_form_calls()
+    test_invalid_planning_claim_reference_is_recoverable()
+    test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
+    test_one_shot_publishes_with_repaired_claim_links()
+    test_live_research_change_does_not_discard_completed_paper()
+    test_frozen_evidence_checkpoint_survives_live_research_drift()
+    test_one_shot_validation_failure_preserves_paid_draft_for_continue()
+    test_long_paper_planning_timeout_is_stage_specific()
+    test_structured_evidence_short_tail_does_not_crash()
+    test_unexpected_paper_exception_yields_sanitized_sse_error()
     test_incomplete_chatgpt_paper_stream_is_rejected()
+    test_api_provider_failure_classification_is_safe_and_actionable()
+    test_chatgpt_schema_rejection_is_actionable_and_redacted()
+    test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once()
+    test_strict_paper_schemas_require_all_properties()
+    test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
+    test_paper_progress_endpoint_recovers_interrupted_checkpoint()
+    test_restart_uses_current_evidence_and_is_idempotent()
+    test_explicit_restart_checkpoint_migrates_and_rebinds_safely()
+    test_evidence_envelope_budget_resumes_without_repacking()
+    test_long_paper_outline_does_not_duplicate_large_evidence_reference_catalog()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()
+    test_structured_fast_index_preserves_math_review_and_bounds_omissions()
+    test_bounded_index_keeps_constructive_proof_amid_many_objections()
+    test_fast_planner_preview_bounds_input_and_preserves_source_coverage()
+    test_long_paper_can_retrieve_sources_outside_planner_preview()
+    test_research_type_specific_tex_sections_and_authoring_guidance()
+    test_military_style_guidance_reaches_all_authoring_paths()
+    test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
+    test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
+    test_paper_failure_reason_survives_reopen()
+    test_fast_long_draft_concurrency_ordered_checkpoints_and_resume()
+    test_fast_checkpoint_resume_replays_only_incomplete_section()
+    test_fast_long_draft_cancellation_keeps_completed_sections()
+    test_paper_generation_rejects_concurrent_duplicate_request()
+    test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
-        test_api_disconnect_cancels_paper_before_publication(cancelled_path)
+        test_api_disconnect_preserves_running_paper_until_explicit_cancel(cancelled_path)
 
     class StreamResponse:
         def __init__(self, content: bytes):
@@ -971,9 +3664,10 @@ def main() -> None:
         async def aiter_bytes(self):
             yield self.content
 
+    assert papers.MAX_CHATGPT_STREAM_BYTES == 16_000_000
     large_event = (
         b'data: {"type":"response.created","sequence_number":0,"response":{"id":"r"},"padding":"'
-        + b"x" * 1_100_000
+        + b"x" * 4_100_000
         + b'"}\n\n'
         + b'data: {"type":"response.completed","sequence_number":1,"response":{"id":"r","status":"completed","output":[]}}\n\n'
     )
@@ -1086,7 +3780,9 @@ def main() -> None:
         if item["source_ref"] == "session:session-1" and item["field"] == "outcome"
     )
     assert session_outcome["content"] == evidence_export["research_sessions"][0]["outcome"]
-    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=outcome_records)
+    # The frozen integrity records retain every source detail. The opt-in
+    # publication appendix is intentionally bounded and only selects excerpts.
+    outcome_json = json.dumps(outcome_records, ensure_ascii=False)
     for outcome_text in (
         "Conditional conclusion",
         "The result holds under assumption A.",
@@ -1095,7 +3791,11 @@ def main() -> None:
         "Check the base case.",
         "Verify the base case.",
     ):
-        assert outcome_text in outcome_tex
+        assert outcome_text in outcome_json
+    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=[session_outcome])
+    assert r"\section{Structured reasoning and review records}" in outcome_tex
+    assert "Conditional conclusion" in outcome_tex
+    assert "The argument remains unverified." in outcome_tex
 
     without_conclusion = json.loads(json.dumps(evidence_export))
     without_conclusion["research_sessions"][0]["outcome"].pop("conclusion")
@@ -1220,8 +3920,9 @@ def main() -> None:
     )
     assert r"\section{Structured reasoning and review records}" in integrity_tex
     assert r"\section*{Important evidence coverage limitation}" in integrity_tex
+    opening_heading = papers._paper_style("default")[0]
     assert integrity_tex.index("Important evidence coverage limitation") < integrity_tex.index(
-        r"\section{Problem framing}"
+        r"\section{" + opening_heading + "}"
     )
     material = papers._material_evidence_omissions(
         [
@@ -1358,7 +4059,7 @@ def main() -> None:
     assert r"AI-generated research synthesis \textperiodcentered{} SIGMA" in tex
     assert r"\section*{About this paper}" in tex
     about_start = tex.index(r"\section*{About this paper}")
-    assert about_start < tex.index(r"\section{Problem framing}")
+    assert about_start < tex.index(r"\section{" + papers._paper_style("default")[0] + "}")
     assert (
         "This paper was generated by SIGMA, an AI-assisted research system, from the project's recorded investigations, findings, and supporting evidence."
         in tex
@@ -1393,8 +4094,9 @@ def main() -> None:
     unicode_superscript = papers._latex_prose("The saved construction uses j².")
     assert "$j^{2}$" in unicode_superscript
     math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True)
-    assert r"\section{Introduction}" in math_tex
-    assert r"\section{Evidence and scope}" in math_tex
+    math_opening, math_methods, _, _ = papers._paper_style("mathematical")
+    assert r"\section{" + math_opening + "}" in math_tex
+    assert r"\section{" + math_methods + "}" in math_tex
     assert r"\section{Verification status and limitations}" in math_tex
     assert r"\section{Conclusion}" in math_tex
     assert math_tex.index(r"\section{Conclusion}") < math_tex.index(
@@ -1443,8 +4145,10 @@ def main() -> None:
         assert record["tex_source"].startswith(r"\documentclass")
         assert r"\end{document}" in record["tex_source"]
         assert papers.paper_tex(str(path), first["paper_id"]) == record["tex_source"]
-        assert record["tex_source"].count(r"\section*{About this paper}") == 1
-        assert "AI-generated research synthesis" in record["tex_source"]
+        # Default publication mode omits opt-in research-system frontmatter.
+        assert r"\section*{About this paper}" not in record["tex_source"]
+        assert "AI-generated research synthesis" not in record["tex_source"]
+        assert "SIGMA AI-assisted research synthesis" in record["tex_source"]
         assert record["generation"]["call_limit"] == 1
         assert papers.get_pdf(str(path), first["paper_id"]).startswith(b"%PDF-")
         saved_text = papers.paper_text(str(path), first["paper_id"])
@@ -1532,7 +4236,10 @@ def main() -> None:
         assert not any(
             item["kind"] == "session" for item in exploratory_record["snapshot"]["sources"]
         )
-    print("Paper snapshots, citation validation, version retention and bounded rendering passed.")
+    print(
+        "Paper snapshots, provenance/obligation fidelity, bounded fast indexing, retry, "
+        "concurrent checkpoints, resume, cancellation, TeX styles, and version retention passed."
+    )
 
 
 if __name__ == "__main__":
