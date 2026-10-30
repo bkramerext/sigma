@@ -681,6 +681,9 @@ def _evidence_input_limit(batch: Mapping[str, Any]) -> int:
 # round-tripping every metadata field through a provider. This is deliberately
 # a *bounded index*, not a claim that every archived byte was model-reviewed.
 FAST_INDEX_MAX_BYTES = 150_000
+# The planner needs a representative map of the research, not every indexed
+# fragment. Section writers still read the full index and original records.
+FAST_PLANNER_PREVIEW_BYTES = 80_000
 FAST_NOTE_TEXT_LENGTH = 410
 FAST_SECTION_CONCURRENCY = 4
 _FAST_RESEARCH_TERMS = (
@@ -906,6 +909,41 @@ def _structured_evidence_index(
         else:
             omitted.append(omission)
     return accepted, omitted
+
+
+def _fast_planner_preview(notes: list[EvidenceNote]) -> tuple[list[dict[str, Any]], int]:
+    """Select a bounded outline preview without shrinking the writing evidence.
+
+    First include one note from each indexed source when it fits, then fill
+    remaining capacity in the index's balanced positive/skeptical order.
+    Unselected notes remain available to section writers and in the frozen
+    snapshot. This is not a semantic omission or a claim of full review.
+    """
+    chosen: set[int] = set()
+    covered_sources: set[str] = set()
+    used = 2  # JSON array brackets
+    encoded = [note.model_dump() for note in notes]
+    sizes = [len(_json(note)) for note in encoded]
+
+    def take(index: int) -> bool:
+        nonlocal used
+        if index in chosen:
+            return True
+        increase = sizes[index] + (1 if chosen else 0)
+        if used + increase > FAST_PLANNER_PREVIEW_BYTES:
+            return False
+        chosen.add(index)
+        used += increase
+        covered_sources.update(notes[index].evidence_refs)
+        return True
+
+    for index, note in enumerate(notes):
+        if any(ref not in covered_sources for ref in note.evidence_refs):
+            take(index)
+    for index in range(len(notes)):
+        take(index)
+    selected = [encoded[index] for index in sorted(chosen)]
+    return selected, len(notes) - len(selected)
 
 
 def _long_plan_input(
@@ -2901,10 +2939,16 @@ analyses, hypotheses and proposed experiments; never present an unrun experiment
 Return the complete plan JSON matching the schema."""
     )
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
-    plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
     if fast_path:
-        plan_input["index_origin"] = "deterministic_selection_from_structured_research"
+        preview, excluded_from_planner = _fast_planner_preview(notes)
+        plan_input = _long_plan_input(
+            project_data, preview, len(source_ids), len(batches)
+        )
+        plan_input["index_origin"] = "bounded_outline_preview_from_structured_research"
+        plan_input["outline_preview_skipped_notes"] = excluded_from_planner
         plan_input["indexed_fragments_not_selected"] = len(state.get("omitted_evidence", []))
+    else:
+        plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
     long_plan: LongPaperPlan | None = None
     if state.get("plan"):
         try:
