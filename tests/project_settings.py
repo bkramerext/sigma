@@ -1,5 +1,6 @@
 """Atomic settings transactions, strict audit, identity and legacy safety."""
 
+import base64
 import json
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from sigma.projects import (
     change_stage,
     create_strategy,
     edit_strategy,
+    export_complete_project,
     initialize_project,
     inspect_project,
     project_settings,
@@ -43,6 +45,44 @@ def edit(path, values, prior):
 def main():
     with TemporaryDirectory() as directory:
         root = Path(directory)
+        # Build provenance belongs to the process that writes the project, not
+        # a later checkout HEAD. It is optional for every legacy schema.
+        first_commit, second_commit = 'a' * 40, 'b' * 40
+        stamped = root / 'stamped.sigma'
+        with patch('sigma.projects.build_commit', return_value=first_commit):
+            stamped_view = initialize_project(stamped, 'Stamped', 'Provenance regression')
+        assert stamped_view.project.backend_build_commit == first_commit
+        assert json.loads((stamped / 'project.json').read_text())['backend_build_commit'] == first_commit
+        prior_stamp = asdict(project_settings(stamped_view.project))
+        original_bytes = (stamped / 'project.json').read_bytes()
+        with patch('sigma.projects.build_commit', return_value=second_commit):
+            assert edit(stamped, prior_stamp, prior_stamp) == stamped_view
+        assert (stamped / 'project.json').read_bytes() == original_bytes
+        with patch('sigma.projects.build_commit', return_value=second_commit):
+            create_strategy(stamped, 'Stamped strategy', 'Check saved build identity')
+        assert inspect_project(stamped).project.backend_build_commit == second_commit
+        from sigma.project_bundle import import_bundle
+        portable = json.loads(export_complete_project(stamped))
+        assert portable['files']['project.json']['backend_build_commit'] == second_commit
+        imported = root / 'stamped-import.json'
+        import_bundle(portable, imported)
+        assert inspect_project(imported).project.backend_build_commit == second_commit
+        unstamped = root / 'unstamped.sigma'
+        initialize_project(unstamped, 'Unstamped', 'Legacy compatibility')
+        legacy_content = json.loads((unstamped / 'project.json').read_text())
+        legacy_content.pop('backend_build_commit', None)
+        (unstamped / 'project.json').write_text(json.dumps(legacy_content))
+        assert inspect_project(unstamped).project.backend_build_commit is None
+        with patch('sigma.projects.build_commit', return_value=second_commit):
+            create_strategy(unstamped, 'Next edit', 'Future write stamps the build')
+        assert inspect_project(unstamped).project.backend_build_commit == second_commit
+        bad_commit = json.loads((stamped / 'project.json').read_text())
+        bad_commit['backend_build_commit'] = 'not-a-sha'
+        corrupt_build = root / 'corrupt-build.sigma'
+        corrupt_build.mkdir()
+        (corrupt_build / 'project.json').write_text(json.dumps(bad_commit))
+        rejects(lambda: inspect_project(corrupt_build))
+        print('PASS optional project build SHA creation/edit/no-op/legacy/export/import/validation')
         for version in range(1, 10):
             path = root / f"legacy{version}.sigma"
             initialize_project(path, "Original", "Original question")
@@ -55,6 +95,7 @@ def main():
                     change_stage(path, first.id, "ready")
             raw = json.loads((path / "project.json").read_bytes())
             raw["schema_version"] = version
+            raw.pop('backend_build_commit', None)  # True legacy files never carried the field.
             if version < 8:
                 raw.pop("difficulty", None)
             if version < 9:
