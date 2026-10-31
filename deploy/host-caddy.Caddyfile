@@ -2,17 +2,17 @@
 # Red must install the maintenance static files and create the root-owned
 # /etc/caddy/sigma-maintenance directory before activating the mode.
 sigma-research.duckdns.org {
-    handle_errors 503 {
-        root * /var/www/sigma-maintenance
-        header Cache-Control "no-store, max-age=0"
-        rewrite * /index.html
-        file_server
-    }
+	handle_errors {
+		root * /var/www/sigma-maintenance
+		header Cache-Control "no-store, max-age=0"
+		rewrite * /index.html
+		file_server
+	}
 
-    route {
-        # The wildcard is intentionally empty during normal operation.
-        # The switch utility creates/removes active.caddy and reloads Caddy.
-        import /etc/caddy/sigma-maintenance/*.caddy
-        reverse_proxy 127.0.0.1:18080
-    }
+	route {
+		# The wildcard is intentionally empty during normal operation.
+		# The switch utility creates/removes active.caddy and reloads Caddy.
+		import /etc/caddy/sigma-maintenance/*.caddy
+		reverse_proxy 127.0.0.1:18080
+	}
 }
