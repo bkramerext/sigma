@@ -3,6 +3,7 @@
 import asyncio
 import json
 import shutil
+import sys
 import time
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
@@ -769,6 +770,73 @@ async def test_stop_one_session_does_not_cancel_sibling_and_resume_keeps_work(pa
         assert len(first_result["artifacts"]) == len(second_result["artifacts"]) == 1
         assert attempts[first_id] == 2 and attempts[second_id] == 1
         assert first_result["tokens_reserved"] == second_result["tokens_reserved"] == 0
+
+
+
+async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
+    """Another process's live execution must not be resumed or deleted."""
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+
+    async def provider(_record, _role, _context, timeout_seconds=None, step_id=None):
+        del timeout_seconds, step_id
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("Cancelled provider continued")
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=AsyncMock(side_effect=provider)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 3)
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
+
+        lock_path = research_sessions._worker_lock_path(str(path), started["id"])
+        lock_owner = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            "import fcntl, os, sys; "
+            "fd=os.open(sys.argv[1], os.O_CREAT|os.O_RDWR, 0o600); "
+            "fcntl.flock(fd, fcntl.LOCK_EX); "
+            "print('locked', flush=True); "
+            "sys.stdin.buffer.read(1); os.close(fd)",
+            str(lock_path),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        assert lock_owner.stdout is not None and lock_owner.stdin is not None
+        try:
+            assert await asyncio.wait_for(lock_owner.stdout.readline(), 3) == b"locked\n"
+            for operation in (
+                research_sessions.control_session(str(path), started["id"], "resume"),
+                research_sessions.remove_session(
+                    str(path), started["id"], stopped["updated_at"]
+                ),
+            ):
+                try:
+                    await operation
+                except ProjectError as exc:
+                    assert "releasing resources" in str(exc)
+                else:
+                    raise AssertionError("Live foreign worker ownership was ignored")
+            assert research_sessions.get_session(str(path), started["id"])["status"] == "stopped"
+        finally:
+            lock_owner.stdin.write(b"x")
+            await lock_owner.stdin.drain()
+            lock_owner.stdin.close()
+            assert await asyncio.wait_for(lock_owner.wait(), 3) == 0
+
+        removed = await research_sessions.remove_session(
+            str(path), started["id"], stopped["updated_at"]
+        )
+        assert removed["removed"] is True
 
 
 async def test_three_cycles_and_idempotency(path: Path):
@@ -8756,6 +8824,11 @@ def main():
         asyncio.run(
             test_stop_one_session_does_not_cancel_sibling_and_resume_keeps_work(
                 root / "sibling-stop-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_foreign_worker_lock_blocks_resume_and_removal(
+                root / "foreign-worker-owner.sigma"
             )
         )
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
