@@ -3697,7 +3697,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(final_grant["active"], 0)
 
     def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
-        """The callback must materialize a new domain approval before Guest fallback."""
+        """A new domain admission supersedes old revocation and pending request."""
         local_origin = "http://127.0.0.1:5173"
         email = "previous-invite@gmail.com"
         subject = "fresh-previous-invite-sub"
@@ -3715,17 +3715,43 @@ class CloudAuthTests(TestCase):
                 email="admin@example.org", subject="fresh-policy-admin", client=admin
             )
             admin.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
-            for method, url, payload in (
-                ("POST", "/api/cloud-auth/admin/grants", {"kind": "email", "value": email, "role": "member"}),
-                ("DELETE", "/api/cloud-auth/admin/grants/email/" + email, None),
-                ("POST", "/api/cloud-auth/admin/grants", {"kind": "domain", "value": "gmail.com", "role": "member", "allowance_usd": 10}),
-            ):
-                result = admin.request(
-                    method, url, json=payload, headers={"Origin": local_origin}
+            old_grant = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": email, "role": "member"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(old_grant.status_code, 200, old_grant.text)
+            revoke = admin.delete(
+                "/api/cloud-auth/admin/grants/email/" + email,
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(revoke.status_code, 200, revoke.text)
+            guest = self.finish(email, subject)
+            self.assertEqual(guest.status_code, 303, guest.text)
+            with patch.object(cloud_auth, "_deliver_invitation"):
+                request = self.client.post(
+                    "/api/cloud-auth/invitation-request",
+                    headers={"Origin": local_origin},
                 )
-                self.assertEqual(result.status_code, 200, result.text)
-            signed = self.finish(email, subject)
+            self.assertEqual(request.status_code, 200, request.text)
+            self.client.cookies.clear()
+
+            domain = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "domain",
+                    "value": "gmail.com",
+                    "role": "member",
+                    "allowance_usd": 10,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(domain.status_code, 200, domain.text)
+            with patch.object(cloud_auth, "_deliver_invitation") as notice:
+                signed = self.finish(email, subject)
             self.assertEqual(signed.status_code, 303, signed.text)
+            notice.assert_called_once()
+            self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
             self.assertEqual(
                 self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
             )
@@ -3734,11 +3760,16 @@ class CloudAuthTests(TestCase):
                     "SELECT active,allowance_usd FROM grants WHERE kind='email' AND value=?",
                     (email,),
                 ).fetchone()
+                invitation = db.execute(
+                    "SELECT status FROM invitation_requests WHERE subject=?",
+                    (subject,),
+                ).fetchone()
                 audit = db.execute(
                     "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
                     (email,),
                 ).fetchone()[0]
             self.assertEqual(tuple(grant), (1, 10))
+            self.assertEqual(invitation["status"], "reviewed")
             self.assertEqual(audit, 1)
 
     def test_explicit_user_revocation_prevents_domain_auto_member(self):
