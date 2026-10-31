@@ -1,0 +1,18 @@
+{
+  "artifact_class": "deterministic mocked engineering fixture; not independently validated research",
+  "project_id": "dc98d234-4b89-43e5-962f-aa0182ce9562",
+  "paper_id": "ea1cd494385340bea96bd4494bfaa96a",
+  "snapshot_sha256": "3dcae814d22543d99e4be11f89c0123f8a29d9c7958ca5147f48b7a187c2142e",
+  "source_code_base_sha": "2d0a564c",
+  "provider_calls": 0,
+  "provider_cost_usd": 0,
+  "local_tex_compiler": "Tectonic via SIGMA papers.generate",
+  "includes_diagrams": true,
+  "diagram_count": 1,
+  "files": {
+    "fixture-project-export.json": "332655672808cad51e55b4fb351fa5e04238ebf6d29a52be50e8f2ea8cf373fd",
+    "research-snapshot.json": "affdf20f11b0bf8c8981fb3760040d8b6e1c00bf97e0bb78ae8068d957270008",
+    "paper.tex": "97020cae62077b97057c2336e4cbea1eed1c693678a6984f03839dc9d655d557",
+    "paper.pdf": "2ef868770972d59812e3264733b130c5aecea73f371f849c3638381680a9f4d8"
+  }
+}

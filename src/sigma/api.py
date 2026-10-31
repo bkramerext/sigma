@@ -452,6 +452,7 @@ class PaperGenerateRequest(OpenRequest):
     include_claim_details: bool = False
     include_validation_notes: bool = False
     include_research_excerpts: bool = False
+    include_diagrams: bool = False
 
 
 class PaperCancelRequest(OpenRequest):
@@ -597,6 +598,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             include_claim_details=body.include_claim_details,
             include_validation_notes=body.include_validation_notes,
             include_research_excerpts=body.include_research_excerpts,
+            **({"include_diagrams": True} if body.include_diagrams else {}),
         )
     )
 

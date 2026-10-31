@@ -156,6 +156,33 @@ class PaperSection(BaseModel):
     claim_ids: list[str] = Field(max_length=30)
 
 
+class DiagramNode(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,23}$")
+    label: str = Field(min_length=1, max_length=80)
+
+
+class DiagramEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,23}$")
+    target: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,23}$")
+    label: str = Field(default="", max_length=60)
+
+
+class DiagramBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    label: str = Field(min_length=1, max_length=80)
+    node_ids: list[str] = Field(min_length=1, max_length=8)
+
+
+class PaperDiagram(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    caption: str = Field(min_length=12, max_length=300)
+    nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
+    edges: list[DiagramEdge] = Field(min_length=1, max_length=12)
+    boundaries: list[DiagramBoundary] = Field(default_factory=list, max_length=4)
+
+
 class PaperDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=8, max_length=180)
@@ -172,6 +199,7 @@ class PaperDraft(BaseModel):
     conclusions: list[str] = Field(min_length=1, max_length=8)
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
+    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
 
 
 class EvidenceNote(BaseModel):
@@ -241,7 +269,9 @@ class LongSectionDraft(BaseModel):
     paragraphs: list[LongText] = Field(min_length=1, max_length=80)
 
 
-def _paper_response_schema(model: type[BaseModel]) -> dict[str, Any]:
+def _paper_response_schema(
+    model: type[BaseModel], *, include_diagrams: bool = False
+) -> dict[str, Any]:
     """Turn Pydantic validation schemas into valid strict provider schemas.
 
     Pydantic omits defaulted properties from `required`, but Responses strict
@@ -250,6 +280,12 @@ def _paper_response_schema(model: type[BaseModel]) -> dict[str, Any]:
     wire schema. Nested objects and definitions follow the same contract.
     """
     schema = model.model_json_schema()
+    if not include_diagrams and model in {PaperDraft, LongPaperPlan, FastLongPaperPlan}:
+        schema.get("properties", {}).pop("diagrams", None)
+        schema["required"] = [item for item in schema.get("required", []) if item != "diagrams"]
+        definitions = schema.get("$defs", {})
+        for name in ("PaperDiagram", "DiagramNode", "DiagramEdge", "DiagramBoundary"):
+            definitions.pop(name, None)
 
     def normalize(node: Any) -> None:
         if isinstance(node, dict):
@@ -1558,12 +1594,16 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "progress",
         "explicit_restart_pending",
         "planning_fallback_pending",
+        "include_diagrams",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
     value.setdefault("kind", "long_form")
     value.setdefault("one_shot_draft", None)
+    value.setdefault("include_diagrams", False)
+    if type(value["include_diagrams"]) is not bool:
+        raise ProjectError("Long-paper diagram selection is invalid")
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
     value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
@@ -2524,6 +2564,7 @@ def _tex(
         r"\usepackage{amsmath,amssymb,booktabs,longtable}",
         r"\usepackage{microtype}",
         r"\usepackage{titlesec}",
+        *([r"\usepackage{tikz}", r"\usetikzlibrary{fit}"] if draft.diagrams else []),
         r"\emergencystretch=2em",
         r"\raggedbottom",
         r"\linespread{1.07}",
@@ -2589,6 +2630,102 @@ def _tex(
     parts += [article_paragraph(text) + "\n" for text in draft.methods]
     if include_claim_details and draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
+    if draft.diagrams:
+        for diagram in draft.diagrams:
+            node_ids = [node.id for node in diagram.nodes]
+            if len(set(node_ids)) != len(node_ids):
+                continue
+            known = set(node_ids)
+            if any(edge.source not in known or edge.target not in known for edge in diagram.edges):
+                continue
+            if any(set(boundary.node_ids) - known for boundary in diagram.boundaries):
+                continue
+            # Deterministic three-column layering keeps ordinary request flows
+            # legible without executing model-supplied coordinates or TeX.
+            outgoing = {node_id: [] for node_id in node_ids}
+            indegree = {node_id: 0 for node_id in node_ids}
+            for edge in diagram.edges:
+                outgoing[edge.source].append(edge.target)
+                indegree[edge.target] += 1
+            layers = {node_id: 0 for node_id in node_ids if indegree[node_id] == 0}
+            queue = [node_id for node_id in node_ids if indegree[node_id] == 0]
+            visited = 0
+            while queue:
+                node_id = queue.pop(0)
+                visited += 1
+                for target in outgoing[node_id]:
+                    layers[target] = max(layers.get(target, 0), layers[node_id] + 1)
+                    indegree[target] -= 1
+                    if indegree[target] == 0:
+                        queue.append(target)
+            deep_graph = max(layers.values(), default=0) >= 3
+            positions: dict[str, tuple[float, float]] = {}
+            if visited != len(node_ids) or deep_graph:
+                # Cycles and long chains use a bounded two-column serpentine
+                # layout, keeping an eight-node figure within page width.
+                positions = {
+                    node_id: (index % 2 * 4.6, -(index // 2) * 1.8)
+                    for index, node_id in enumerate(node_ids)
+                }
+            else:
+                layer_nodes: dict[int, list[str]] = {}
+                for node_id in node_ids:
+                    layer_nodes.setdefault(layers.get(node_id, 0), []).append(node_id)
+                for layer, members in layer_nodes.items():
+                    for index, node_id in enumerate(members):
+                        positions[node_id] = (
+                            layer * 4.7,
+                            (len(members) - 1) * 0.95 - index * 1.9,
+                        )
+            parts.extend(
+                [
+                    r"\begin{figure}[htbp]",
+                    r"\centering",
+                    r"\begin{tikzpicture}[>=stealth, every node/.style={draw, rounded corners, align=center, text width=3.4cm, minimum height=0.9cm, font=\small, fill=blue!5}]",
+                ]
+            )
+            for node in diagram.nodes:
+                x, y = positions[node.id]
+                parts.append(
+                    r"\node ("
+                    + node.id
+                    + ") at ("
+                    + str(x)
+                    + ","
+                    + str(y)
+                    + ") {"
+                    + esc(node.label)
+                    + "};"
+                )
+            for edge_number, edge in enumerate(diagram.edges, start=1):
+                parts.append(
+                    r"\draw[->,shorten <=3mm,shorten >=3mm] ("
+                    + edge.source
+                    + r") -- node[midway,fill=white,draw=none,font=\scriptsize,text width=0pt,minimum height=0pt,inner sep=1pt] {"
+                    + str(edge_number)
+                    + "} ("
+                    + edge.target
+                    + ");"
+                )
+            for boundary in diagram.boundaries:
+                fit_nodes = "".join("(" + item + ")" for item in boundary.node_ids)
+                parts.append(
+                    r"\node[draw,dashed,rounded corners,inner sep=7pt,fit="
+                    + fit_nodes
+                    + r",fill=none,label={[font=\scriptsize]above:{"
+                    + esc(boundary.label)
+                    + r"}}] {};"
+                )
+            parts.append(r"\end{tikzpicture}")
+            edge_legend = [
+                str(index) + ": " + esc(edge.label)
+                for index, edge in enumerate(diagram.edges, start=1)
+                if edge.label
+            ]
+            if edge_legend:
+                parts.append(r"\par\smallskip{\footnotesize " + "; ".join(edge_legend) + "}\\")
+            parts.extend([r"\caption{" + esc(diagram.caption) + "}", r"\end{figure}"])
+
     for section in draft.sections:
         parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
         parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
@@ -2753,12 +2890,15 @@ async def _provider(
     config: dict[str, Any],
     project_id: str | None = None,
     project_path_value: str | None = None,
+    include_diagrams: bool = False,
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
     )
     project_data = project_source.get("data", {})
     instructions = INSTRUCTIONS + "\n\n" + PUBLICATION_INSTRUCTIONS
+    if include_diagrams:
+        instructions += """\n\nDIAGRAM REQUEST (experimental): return zero, one or two explanatory diagrams in the diagrams field, only where they clarify saved evidence. Use the bounded node/edge/boundary schema. Label hypothetical architectures explicitly; do not portray proposed federation as an existing MindRouter capability or invent observations. If no useful evidence-supported figure is possible, return an empty list."""
     project_type = (
         project_data.get("investigation_type", "default")
         if isinstance(project_data, dict)
@@ -2780,7 +2920,7 @@ async def _provider(
                 "type": "json_schema",
                 "name": "sigma_research_paper",
                 "strict": True,
-                "schema": _paper_response_schema(PaperDraft),
+                "schema": _paper_response_schema(PaperDraft, include_diagrams=include_diagrams),
             }
         },
     }
@@ -2891,6 +3031,7 @@ async def _provider_structured(
     max_input_bytes: int = MAX_PROVIDER_INPUT_BYTES,
     project_id: str | None = None,
     project_path_value: str | None = None,
+    include_diagrams: bool = False,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
@@ -2907,7 +3048,7 @@ async def _provider_structured(
                 "type": "json_schema",
                 "name": schema_name,
                 "strict": True,
-                "schema": _paper_response_schema(response_model),
+                "schema": _paper_response_schema(response_model, include_diagrams=include_diagrams),
             }
         },
     }
@@ -3160,6 +3301,7 @@ async def _generate_long_draft(
     project_id: str | None = None,
     project_path_value: str | None = None,
     structured_fast_path: bool = False,
+    include_diagrams: bool = False,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     # Existing paid field-extraction checkpoints remain on their original
@@ -3245,6 +3387,7 @@ async def _generate_long_draft(
                     max_input_bytes=max_input_bytes,
                     project_id=project_id,
                     project_path_value=project_path_value,
+                    include_diagrams=(include_diagrams and schema_name == "sigma_long_paper_plan"),
                 )
             except PaperConnectionFailure:
                 if attempt_number == maximum:
@@ -3805,6 +3948,7 @@ or document markup."""
         conclusions=long_plan.conclusions,
         conclusion_claim_ids=long_plan.conclusion_claim_ids,
         validation_warnings=warning_items[:12],
+        diagrams=long_plan.diagrams if include_diagrams else [],
     )
     unknown = {ref for claim in draft.claims for ref in claim.evidence_refs} - source_ids
     if unknown:
@@ -3827,6 +3971,7 @@ async def _generate_impl(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    include_diagrams: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -3922,7 +4067,8 @@ async def _generate_impl(
         long_form = _paper_long_form(package, force_long_form=force_long_form, existing=checkpoint)
         expected_kind = "long_form" if long_form else "one_shot"
         compatible = checkpoint is not None and not any(
-            checkpoint.get(key) != value
+            (checkpoint.get(key, False) if key == "include_diagrams" else checkpoint.get(key))
+            != value
             for key, value in (
                 ("kind", expected_kind),
                 ("snapshot_sha256", snapshot_hash),
@@ -3930,6 +4076,7 @@ async def _generate_impl(
                 ("binding_fingerprint", binding_fingerprint),
                 ("model", config["model"]),
                 ("reasoning_effort", config["reasoning_effort"]),
+                ("include_diagrams", include_diagrams),
             )
         )
         if checkpoint is not None and not compatible:
@@ -3998,6 +4145,8 @@ async def _generate_impl(
                         config["reasoning_effort"],
                         kind="one_shot",
                     )
+                    work["include_diagrams"] = include_diagrams
+                work["include_diagrams"] = include_diagrams
                 work["frozen_package"] = package
                 work["progress"] = {
                     "run_id": run_id,
@@ -4018,7 +4167,19 @@ async def _generate_impl(
                 work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 _save_work(path, work)
                 await report("writing", None, None)
-                draft, model = await _provider(package, initial_auth, config, view.project.id, path)
+                if include_diagrams:
+                    draft, model = await _provider(
+                        package,
+                        initial_auth,
+                        config,
+                        view.project.id,
+                        path,
+                        include_diagrams=True,
+                    )
+                else:
+                    draft, model = await _provider(
+                        package, initial_auth, config, view.project.id, path
+                    )
                 # A complete structured author response is valuable paid work.
                 # Save it before any local reference repair, logical checks or
                 # TeX compilation so a recoverable defect cannot trigger
@@ -4044,11 +4205,13 @@ async def _generate_impl(
                     config["model"],
                     config["reasoning_effort"],
                 )
+                work["include_diagrams"] = include_diagrams
                 work["frozen_package"] = package
                 _save_work(path, work)
             elif "frozen_package" not in work:
                 work["frozen_package"] = package
                 _save_work(path, work)
+            work.setdefault("include_diagrams", include_diagrams)
             draft, provider_calls, evidence_batch_count = await _generate_long_draft(
                 package,
                 initial_auth,
@@ -4059,6 +4222,7 @@ async def _generate_impl(
                 view.project.id,
                 path,
                 structured_fast_path=True,
+                include_diagrams=include_diagrams,
             )
             model = config["model"]
             long_form = True
@@ -4081,6 +4245,24 @@ async def _generate_impl(
         identifier = uuid4().hex
         timestamp = _now()
         warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
+        valid_diagrams: list[PaperDiagram] = []
+        for diagram in draft.diagrams:
+            diagram_ids = [node.id for node in diagram.nodes]
+            known_ids = set(diagram_ids)
+            if (
+                len(known_ids) != len(diagram_ids)
+                or any(
+                    edge.source not in known_ids or edge.target not in known_ids
+                    for edge in diagram.edges
+                )
+                or any(set(boundary.node_ids) - known_ids for boundary in diagram.boundaries)
+            ):
+                warnings.append(
+                    "An experimental diagram had invalid node references and was omitted; the paper continues as text."
+                )
+            else:
+                valid_diagrams.append(diagram)
+        draft = draft.model_copy(update={"diagrams": valid_diagrams})
         record = {
             "schema_version": 1,
             "paper_id": identifier,
@@ -4124,6 +4306,8 @@ async def _generate_impl(
                 "include_claim_details": include_claim_details,
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
+                "include_diagrams": include_diagrams,
+                "diagram_count": len(draft.diagrams),
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
                 "snapshot_size_bytes": len(_json(package)),
@@ -4158,58 +4342,74 @@ async def _generate_impl(
                 isinstance(project_data, dict)
                 and project_data.get("investigation_type") == "mathematical"
             )
-            tex = _tex(
-                draft,
-                warnings,
-                snapshot_hash,
-                math_style=math_style,
-                investigation_type=(
-                    project_data.get("investigation_type", "default")
-                    if isinstance(project_data, dict)
-                    else "default"
-                ),
-                obligation_reconciliation=obligation_reconciliation,
-                integrity_records=(
-                    [
-                        {
-                            "source_ref": item["source_ref"],
-                            "field": item["field"],
-                            "content": {
-                                "excerpt": item["content_excerpt"],
-                                "truncated": item["truncated"],
-                            },
-                        }
-                        for item in _section_original_excerpts(
-                            _research_integrity_records(package),
-                            {source["id"] for source in package["sources"]},
-                            "reasoning proof argument skeptic objection contradiction failure obligation results",
-                            90_000,
-                        )
-                    ]
-                    if work.get("evidence_strategy") == "structured_v1"
-                    else _long_paper_integrity_records(package, work)
-                    if long_form
-                    else None
-                ),
-                material_omissions=material_omissions,
-                integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
-                include_research_details=include_research_details,
-                include_claim_details=include_claim_details,
-                include_validation_notes=include_validation_notes,
-                include_research_excerpts=include_research_excerpts,
+            integrity_records = (
+                [
+                    {
+                        "source_ref": item["source_ref"],
+                        "field": item["field"],
+                        "content": {
+                            "excerpt": item["content_excerpt"],
+                            "truncated": item["truncated"],
+                        },
+                    }
+                    for item in _section_original_excerpts(
+                        _research_integrity_records(package),
+                        {source["id"] for source in package["sources"]},
+                        "reasoning proof argument skeptic objection contradiction failure obligation results",
+                        90_000,
+                    )
+                ]
+                if work.get("evidence_strategy") == "structured_v1"
+                else _long_paper_integrity_records(package, work)
+                if long_form
+                else None
             )
+            tex_options = {
+                "math_style": math_style,
+                "investigation_type": project_data.get("investigation_type", "default")
+                if isinstance(project_data, dict)
+                else "default",
+                "obligation_reconciliation": obligation_reconciliation,
+                "integrity_records": integrity_records,
+                "material_omissions": material_omissions,
+                "integrity_excerpts": work.get("evidence_strategy") == "structured_v1",
+                "include_research_details": include_research_details,
+                "include_claim_details": include_claim_details,
+                "include_validation_notes": include_validation_notes,
+                "include_research_excerpts": include_research_excerpts,
+            }
+            tex = _tex(draft, warnings, snapshot_hash, **tex_options)
             await report("compile", None, None)
-            pdf = await asyncio.to_thread(
-                _compile_pdf,
-                tex,
-                max_source_bytes=50_000_000,
-                timeout_seconds=300,
-                max_pdf_bytes=80_000_000,
-            )
+            try:
+                pdf = await asyncio.to_thread(
+                    _compile_pdf,
+                    tex,
+                    max_source_bytes=50_000_000,
+                    timeout_seconds=300,
+                    max_pdf_bytes=80_000_000,
+                )
+            except RuntimeError:
+                if not draft.diagrams:
+                    raise
+                draft = draft.model_copy(update={"diagrams": []})
+                warnings.append(
+                    "The experimental diagram could not be compiled; the saved paper uses the text-only PDF fallback."
+                )
+                tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+                pdf = await asyncio.to_thread(
+                    _compile_pdf,
+                    tex,
+                    max_source_bytes=50_000_000,
+                    timeout_seconds=300,
+                    max_pdf_bytes=80_000_000,
+                )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
         # Keep the exact source that produced this version's PDF alongside the
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
+        record["draft"] = draft.model_dump()
+        record["validation_warnings"] = warnings
+        record["generation"]["diagram_count"] = len(draft.diagrams)
         record["tex_source"] = tex
         record["generation"]["generation_elapsed_seconds"] = int(
             elapsed_before
@@ -4247,6 +4447,7 @@ async def generate(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    include_diagrams: bool = False,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())
@@ -4265,6 +4466,7 @@ async def generate(
             include_claim_details,
             include_validation_notes,
             include_research_excerpts,
+            include_diagrams,
         )
     )
     _generation_tasks[key] = task
