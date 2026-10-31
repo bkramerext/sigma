@@ -4492,8 +4492,26 @@ async def start_session(
             cloud_research.reconcile_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
+    # Account and model preflight can suspend on network I/O. Never hold
+    # blocking project locks (or the shared manager lock) across those awaits:
+    # another request acquiring that flock could deadlock the event loop.
+    credential = await auth_context()
+    if credential["identity"] != expected_binding:
+        raise ProjectError(
+            "AI account or billing mode changed; review the connection before starting"
+        )
+    config = await configuration(view=view, context=credential)
+    if not config["available"]:
+        raise ProjectError(config["message"])
     async with _manager_lock:
         with _project_manager_lock(view.path):
+            # Preflight ran without admission locks. Reject changed project
+            # semantics before using the saved strategy/model snapshot.
+            locked_view, locked_guard = _snapshot(view.path)
+            if locked_view.project.id != expected_project_id or locked_guard != guard:
+                raise ProjectError(
+                    "Project changed during research preflight; review it and retry"
+                )
             limits = get_limits(view.path)
             limits = _validate_limits(limits)
             if expected_limits is not None and _validate_limits(expected_limits) != limits:
@@ -4525,14 +4543,6 @@ async def start_session(
                     "This project is at its maximum concurrent sessions limit. "
                     f"Sessions occupying slots: {occupants}. Open Research Sessions to inspect or stop them."
                 )
-            credential = await auth_context()
-            if credential["identity"] != expected_binding:
-                raise ProjectError(
-                    "AI account or billing mode changed; review the connection before starting"
-                )
-            config = await configuration(view=view, context=credential)
-            if not config["available"]:
-                raise ProjectError(config["message"])
             if (
                 credential["mode"] == "api_key"
                 and limits["maximum_estimated_cost_usd"] is not None
