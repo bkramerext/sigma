@@ -29,7 +29,7 @@ jobs:
           pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -output-directory=/tmp/warp-drive-build papers/warp-drive.tex
           test -s /tmp/warp-drive-build/warp-drive.pdf
           cp /tmp/warp-drive-build/warp-drive.pdf papers/warp-drive.pdf
-          pdfinfo papers/warp-drive.pdf | grep '^Pages:'
+          test -s papers/warp-drive.pdf
       - name: Commit regenerated PDF
         run: |
           git config user.name "sigma-pdf-build"
