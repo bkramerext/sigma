@@ -458,6 +458,81 @@ async def test_disabled_strategy_never_starts_a_run(path: Path):
     assert research_sessions.list_sessions(str(path)) == []
 
 
+async def test_start_preflight_does_not_hold_project_or_global_admission_locks(path: Path):
+    """A slow credential check must not hold a blocking flock across await."""
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_auth():
+        entered.set()
+        await release.wait()
+        return credential
+
+    async def dormant_worker(_session_id: str, _path: str):
+        return None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=slow_auth),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=dormant_worker),
+    ):
+        task = asyncio.create_task(
+            research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+            # A concurrent request must still be able to acquire both admission
+            # locks while the external account check is pending.
+            async def acquire_both():
+                async with research_sessions._manager_lock:
+                    with research_sessions._project_manager_lock(str(path)):
+                        return True
+
+            assert await asyncio.wait_for(acquire_both(), timeout=2)
+        finally:
+            release.set()
+        result = await asyncio.wait_for(task, timeout=2)
+        await research_sessions._tasks[result["id"]]
+
+
+async def test_start_revalidates_project_after_slow_preflight(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_auth():
+        entered.set()
+        await release.wait()
+        return credential
+
+    with (
+        patch.object(research_sessions, "auth_context", new=slow_auth),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+    ):
+        task = asyncio.create_task(
+            research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+            edit_strategy(
+                str(path), strategy.id, "Revised approach", "Revise the recurrence hypothesis."
+            )
+        finally:
+            release.set()
+        try:
+            await asyncio.wait_for(task, timeout=2)
+        except ProjectError as exc:
+            assert "changed during research preflight" in str(exc)
+        else:
+            raise AssertionError("Stale strategy snapshots must not dispatch research")
+    assert research_sessions.list_sessions(str(path)) == []
+
+
 async def test_project_concurrent_session_limit_is_atomic(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": 2}
