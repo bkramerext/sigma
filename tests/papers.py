@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import shutil
+import threading
 from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
@@ -2650,6 +2651,90 @@ def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
         asyncio.run(check())
 
 
+def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
+    """Both admitted papers compile in parallel; no third paper enters mid-compile."""
+    with TemporaryDirectory() as temporary:
+        paths = [Path(temporary) / f"compile-{index}.sigma" for index in range(3)]
+        views = [
+            initialize_project(path, f"Compile project {index}", "Compile independently")
+            for index, path in enumerate(paths)
+        ]
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        two_compiling = threading.Event()
+        finish_compiling = threading.Event()
+        count_lock = threading.Lock()
+        compilations = 0
+        provider_calls = 0
+
+        def blocked_compiler(*_args, **_kwargs):
+            nonlocal compilations
+            with count_lock:
+                compilations += 1
+                if compilations == 2:
+                    two_compiling.set()
+            if not finish_compiling.wait(timeout=10):
+                raise AssertionError("An independent PDF compiler was serialized or stranded")
+            return b"%PDF-fixture"
+
+        async def provider(context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            return draft(source), "fixture-model"
+
+        async def credentials():
+            return credential
+
+        async def configuration(**_kwargs):
+            return config
+
+        async def check() -> None:
+            with (
+                patch.object(papers, "auth_context", new=credentials),
+                patch.object(papers, "configuration", new=configuration),
+                patch.object(papers, "_provider", new=provider),
+                patch.object(papers, "_compile_pdf", new=blocked_compiler),
+            ):
+                first, second = [
+                    asyncio.create_task(
+                        papers.generate(str(path), credential["identity"], view.project.id)
+                    )
+                    for path, view in zip(paths[:2], views[:2])
+                ]
+                try:
+                    assert await asyncio.wait_for(
+                        asyncio.to_thread(two_compiling.wait, 8), timeout=9
+                    ), "Only one paper reached PDF compilation"
+                    assert compilations == 2
+                    assert len(papers._generating_paper_projects) == 2
+                    try:
+                        await papers.generate(
+                            str(paths[2]), credential["identity"], views[2].project.id
+                        )
+                    except ProjectError as exc:
+                        assert "capacity is full" in str(exc)
+                    else:
+                        raise AssertionError("Third paper entered while two compilers were active")
+                    assert provider_calls == 2
+                    assert compilations == 2
+                finally:
+                    finish_compiling.set()
+                results = await asyncio.wait_for(asyncio.gather(first, second), timeout=6)
+                assert len(results) == 2
+                assert all(len(papers.list_papers(str(path))) == 1 for path in paths[:2])
+                assert papers.list_papers(str(paths[2])) == []
+                assert not papers._busy_paper_projects
+                assert not papers._generating_paper_projects
+
+        asyncio.run(check())
+
+
 def test_fast_long_draft_cancellation_keeps_completed_sections() -> None:
     package, plan = fast_package(section_count=5)
     state = papers._new_work("1" * 64, "fast-fixture", "2" * 64, "fixture-model", "high")
@@ -3735,6 +3820,7 @@ def main() -> None:
     test_fast_long_draft_cancellation_keeps_completed_sections()
     test_paper_generation_rejects_concurrent_duplicate_request()
     test_two_paper_generators_run_concurrently_and_third_fails_fast()
+    test_two_papers_reach_compilation_together_and_hold_capacity()
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
