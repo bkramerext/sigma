@@ -6,6 +6,7 @@ The SQLite database contains only access rules, OAuth flow state, and hashed ses
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -451,6 +452,49 @@ def _authorization_in_db(
         "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
     ).fetchone()
     return allowed["role"] if allowed and allowed["active"] else None
+
+
+def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str) -> bool:
+    """Convert an active member-domain policy into an individual member grant.
+
+    An explicit email grant (including a revoked grant) always wins. The caller
+    must have verified the Google subject and email; neither comes from a form.
+    """
+    if not subject or subject.startswith("legacy-denied:"):
+        return False
+    now = _now()
+    # One conditional INSERT is the admission/approval decision. It checks
+    # the live domain policy and absence of any explicit (including revoked)
+    # email grant under SQLite's writer transaction, so two tabs cannot both
+    # approve or race an administrator's revocation between SELECT and INSERT.
+    inserted = db.execute(
+        "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
+        "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
+        "WHERE d.kind='domain' AND d.value=? AND d.role='member' AND d.active=1 "
+        "AND NOT EXISTS(SELECT 1 FROM grants AS e WHERE e.kind='email' AND e.value=?) "
+        "ON CONFLICT(kind,value) DO NOTHING",
+        (email, now, email.rsplit("@", 1)[1], email),
+    )
+    if inserted.rowcount != 1:
+        return False
+    db.execute(
+        "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
+        "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+        (subject, email, now),
+    )
+    db.execute(
+        "INSERT INTO invitation_requests(subject,email,requested_at,status,request_type) "
+        "VALUES(?,?,?,'reviewed','invitation') "
+        "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,status='reviewed',"
+        "request_type='invitation',notification_started_at=NULL,notification_error=NULL "
+        "WHERE invitation_requests.request_type='invitation'",
+        (subject, email, now),
+    )
+    db.execute(
+        "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+        (email, "domain_auto_member", "email", email, now),
+    )
+    return True
 
 
 def _sponsorship_eligibility_in_db(
@@ -1760,7 +1804,9 @@ async def callback(
                 # workspace. The original guest copy remains intact until expiry.
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
+    auto_domain_member = False
     with _db(cfg) as db:
+        auto_domain_member = role == "member" and _materialize_domain_member(db, subject, email)
         existing_account = db.execute(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
@@ -1809,6 +1855,18 @@ async def callback(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
+    if auto_domain_member:
+        try:
+            await asyncio.to_thread(
+                _deliver_invitation, email, _now(), request_type="auto_approved"
+            )
+        except RuntimeError:
+            # Membership is durable and never rolled back by mail delivery.
+            with _db(cfg) as db:
+                db.execute(
+                    "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
+                    ("delivery failed", subject),
+                )
     response = RedirectResponse(return_to, status_code=303)
     response.set_cookie(
         _cookie_name(SESSION_COOKIE, cfg),
@@ -1885,20 +1943,29 @@ def denied_identity(request: Request):
 
 
 def _notification_admin_recipients(cfg: Config) -> list[str]:
-    """Active admin recipients must have a previously verified Google subject.
+    """Derive active administrators from verified identities and admin grants.
 
-    Resolve from the same authorization logic used for sign-in rather than
-    from the public contact field or an applicant-supplied email.
+    Explicit active administrator email grants are themselves operator
+    authorization; they can receive mail before their first Google sign-in.
+    Never trust an applicant-supplied address.
     """
     with _db(cfg) as db:
         verified = db.execute("SELECT subject,email FROM identities").fetchall()
-        return sorted(
-            {
-                str(row["email"])
-                for row in verified
-                if _authorization_in_db(db, cfg, row["subject"], row["email"]) == "admin"
-            }
+        recipients = {
+            str(row["email"])
+            for row in verified
+            if _authorization_in_db(db, cfg, row["subject"], row["email"]) == "admin"
+        }
+        # An admin grant is an explicit administrator-approved mailbox even
+        # before its first Google sign-in; excluding it would silently miss
+        # a newly added administrator's notifications.
+        recipients.update(
+            str(row["value"])
+            for row in db.execute(
+                "SELECT value FROM grants WHERE kind='email' AND role='admin' AND active=1"
+            )
         )
+        return sorted(recipients)
 
 
 def _deliver_admin_notice(subject: str, body: str) -> None:
@@ -1952,11 +2019,15 @@ def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "i
     title = (
         "SIGMA sponsorship reload request"
         if request_type == "reload"
+        else "SIGMA member automatically approved"
+        if request_type == "auto_approved"
         else "SIGMA invitation request"
     )
     introduction = (
         "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
         if request_type == "reload"
+        else "Automatically approved via member domain. No administrator action is required.\n\n"
+        if request_type == "auto_approved"
         else "A verified Google account requested SIGMA access.\n\n"
     )
     _deliver_admin_notice(
@@ -1991,13 +2062,16 @@ class InvitationRequestBody(BaseModel):
 
 
 @router.post("/invitation-request")
-def request_invitation(request: Request, body: InvitationRequestBody | None = None):
+def request_invitation(
+    request: Request, response: Response, body: InvitationRequestBody | None = None
+):
     """Record an invitation or an eligible signed-in member's reload request."""
     body = body or InvitationRequestBody()
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.database:
         raise HTTPException(503, "Invitation requests are temporarily unavailable.")
     denied_cookie: str | None = None
+    authenticated: Principal | None = None
     if body.request_type == "reload":
         raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
         principal = resolve_session(raw_session)
@@ -2017,7 +2091,7 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         identity = {"email": principal.email, "subject": principal.subject}
     elif (
         authenticated := resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
-    ) is not None and authenticated.role == "guest":
+    ) is not None and authenticated.role in {"guest", "member"}:
         identity = {"email": authenticated.email, "subject": authenticated.subject}
     else:
         denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
@@ -2030,11 +2104,57 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
             ).fetchone()
         if not identity or identity["expires_at"] <= _now():
             raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
-        # A previously denied identity must not submit an invitation after it
-        # gains authorization through the configured contact or a grant.
-        if identity["subject"] and _authorization(cfg, identity["subject"], identity["email"]):
-            raise HTTPException(409, "This Google account is already authorized. Sign in again.")
     now = _now()
+    if body.request_type == "invitation" and identity["subject"]:
+        with _db(cfg) as db:
+            auto_approved = _materialize_domain_member(db, identity["subject"], identity["email"])
+            # A second tab may race after the first has committed the
+            # individual grant. Do not reopen a reviewed request as pending.
+            prior = db.execute(
+                "SELECT 1 FROM grants AS g "
+                "JOIN invitation_requests AS i ON i.email=g.value AND i.subject=? "
+                "WHERE g.kind='email' AND g.value=? AND g.role='member' AND g.active=1 "
+                "AND i.status='reviewed' AND EXISTS("
+                "SELECT 1 FROM audit WHERE action='domain_auto_member' AND kind='email' "
+                "AND value=g.value) LIMIT 1",
+                (identity["subject"], identity["email"]),
+            ).fetchone()
+            duplicate_approval = not auto_approved and prior is not None
+            if auto_approved:
+                _sync_user_state_in_db(db, cfg)
+            token = (
+                secrets.token_urlsafe(32)
+                if denied_cookie and (auto_approved or duplicate_approval)
+                else None
+            )
+            if token:
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (_hash(token), identity["subject"], identity["email"], now + SESSION_SECONDS),
+                )
+        if auto_approved or duplicate_approval:
+            if token:
+                response.set_cookie(
+                    _cookie_name(SESSION_COOKIE, cfg),
+                    token,
+                    **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+                )
+                _clear_cookie(response, cfg, DENIED_COOKIE)
+            if auto_approved:
+                try:
+                    if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
+                        _deliver_invitation(identity["email"], now, request_type="auto_approved")
+                except RuntimeError:
+                    with _db(cfg) as db:
+                        db.execute(
+                            "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
+                            ("delivery failed", identity["subject"]),
+                        )
+            return {"status": "approved", "duplicate": duplicate_approval}
+        if _authorization(cfg, identity["subject"], identity["email"]):
+            raise HTTPException(409, "This Google account is already authorized. Sign in again.")
+    if body.request_type == "invitation" and authenticated is not None and authenticated.role == "member":
+        raise HTTPException(409, "This Google account is already authorized.")
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
         subject = identity["subject"]
@@ -2107,8 +2227,9 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
     except RuntimeError:
         with _db(cfg) as db:
             db.execute(
-                "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? WHERE subject=?",
-                ("delivery failed", subject),
+                "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? "
+                "WHERE subject=? AND status='sending' AND request_type=?",
+                ("delivery failed", subject, body.request_type),
             )
         # The durable request is already recorded and visible to administrators.
         # Notification delivery is best-effort; returning an error here would
@@ -2116,8 +2237,9 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         return {"status": "pending", "duplicate": bool(existing)}
     with _db(cfg) as db:
         db.execute(
-            "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL WHERE subject=?",
-            (subject,),
+            "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL "
+            "WHERE subject=? AND status='sending' AND request_type=?",
+            (subject, body.request_type),
         )
     return {"status": "notified", "duplicate": bool(existing)}
 
