@@ -1,0 +1,48 @@
+name: Dual Tectonic resource acceptance
+
+on:
+  pull_request:
+    paths:
+      - "scripts/measure_dual_tectonic.py"
+      - "papers/**"
+      - ".github/workflows/concurrency-capacity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dual-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the actual backend image with its pinned Tectonic
+        run: docker build -f Dockerfile -t sigma-compile-capacity:ci .
+      - name: Two genuine TeX compilers under the backend CPU/memory/tmpfs limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p capacity-results
+          docker run --rm \
+            --cpus=2 --memory=5g --pids-limit=256 --read-only \
+            --cap-drop=ALL --security-opt=no-new-privileges \
+            --user=10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001,mode=0700 \
+            -e SIGMA_STATE_DIR=/var/lib/sigma-auth \
+            -v "$PWD/papers:/bench/papers:ro" \
+            -v "$PWD/scripts:/bench/scripts:ro" \
+            -w /bench \
+            sigma-compile-capacity:ci \
+            python /bench/scripts/measure_dual_tectonic.py \
+            | tee capacity-results/dual-tectonic.json
+      - name: Preserve compilation evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dual-tectonic-resource-measurements
+          path: capacity-results/
+          if-no-files-found: warn
+          retention-days: 14
