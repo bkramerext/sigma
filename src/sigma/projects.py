@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+from sigma.build_info import build_commit
 from sigma.model_catalog import EFFORTS, legacy_model, validate_pair, validate_stored
 
 MAX_STRATEGY_APPROACH = 50_000
@@ -202,6 +203,7 @@ class Project:
     reasoning_effort: str = "high"
     difficulty: Difficulty | None = None
     show_advanced_outcome_details: bool = False
+    backend_build_commit: str | None = None
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -213,6 +215,12 @@ class Project:
 class ProjectView:
     path: str
     project: Project
+
+
+def _current_build_commit() -> str | None:
+    """Record the process build, not a checkout HEAD that may change mid-run."""
+    value = build_commit()
+    return value if re.fullmatch(r"[0-9a-f]{7,40}", value) else None
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -304,6 +312,12 @@ def _decode(raw: Any) -> Project:
         fields.add("difficulty")
     if version >= 9:
         fields.add("show_advanced_outcome_details")
+    # Optional in all schema versions: existing exported projects must remain readable.
+    if "backend_build_commit" in raw:
+        commit = raw["backend_build_commit"]
+        if commit is not None and (not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", commit)):
+            raise ProjectError("Invalid project backend build commit")
+        fields.add("backend_build_commit")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
     if version == 8 and raw["difficulty"] is None:
@@ -601,11 +615,14 @@ def _decode(raw: Any) -> Project:
         settings.reasoning_effort,
         settings.difficulty,
         settings.show_advanced_outcome_details,
+        raw.get("backend_build_commit"),
     )
 
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if raw["backend_build_commit"] is None:
+        del raw["backend_build_commit"]
     if project.schema_version < 8:
         del raw["difficulty"]
     if project.schema_version < 9:
@@ -718,6 +735,7 @@ def initialize_project(
             reasoning_effort=reasoning_effort,
             difficulty=selected_difficulty,
             show_advanced_outcome_details=show_advanced_outcome_details,
+            backend_build_commit=_current_build_commit(),
         )
         import base64
 
@@ -765,6 +783,7 @@ def initialize_project(
             reasoning_effort=reasoning_effort,
             difficulty=selected_difficulty,
             show_advanced_outcome_details=show_advanced_outcome_details,
+            backend_build_commit=_current_build_commit(),
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -1040,6 +1059,8 @@ def _update_project(
                 def transform(previous: bytes) -> bytes:
                     project = _decode(json.loads(previous))
                     updated = update(project)
+                    if updated != project:
+                        updated = replace(updated, backend_build_commit=_current_build_commit())
                     return _document(updated)
 
                 contents = transform_file(path, STATE, transform)
@@ -1056,6 +1077,8 @@ def _update_project(
             before = (path / STATE).read_bytes()
             project = inspect_project(path).project
             updated = update(project)
+            if updated != project:
+                updated = replace(updated, backend_build_commit=_current_build_commit())
             from sigma.text_views import sync_source_changes
 
             if updated != project or text_edit is not None:
