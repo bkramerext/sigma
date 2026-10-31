@@ -1976,7 +1976,7 @@ def test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
 
 
 def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
-    """Two projects per owner and multiple owners share a bounded global queue."""
+    """Reject excess before persisting; admit after another owner exits."""
     left = workspace(root, "e" * 32)
     right = workspace(root, "f" * 32)
     settings = {
@@ -1987,8 +1987,6 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
         "SIGMA_CLOUD_USER_MAX_CONCURRENT": "2",
         "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "3",
-        "SIGMA_CLOUD_USER_MAX_QUEUED": "4",
-        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
         "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
     }
     entries = [
@@ -2001,12 +1999,27 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
         patch.dict(os.environ, settings, clear=False),
         patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
     ):
-        for owner, record in entries:
+        for owner, record in entries[:3]:
             token = cloud_workspaces._CURRENT.set(owner)
             try:
                 cloud_research.prepare_job(record)
             finally:
                 cloud_workspaces._CURRENT.reset(token)
+
+        # Pending execution claims already occupy a slot: no queue.
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            try:
+                cloud_research.prepare_job(entries[3][1])
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "capacity is currently full" in str(exc)
+            else:
+                raise AssertionError("Fourth research job must be refused immediately")
+            with cloud_research._connect() as db:
+                assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 3
+                assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
 
         for owner, record in entries[:3]:
             token = cloud_workspaces._CURRENT.set(owner)
@@ -2014,22 +2027,15 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
                 assert cloud_research.claim_job(record["id"])
             finally:
                 cloud_workspaces._CURRENT.reset(token)
-
-        token = cloud_workspaces._CURRENT.set(right)
-        try:
-            assert not cloud_research.claim_job(entries[3][1]["id"])
-        finally:
-            cloud_workspaces._CURRENT.reset(token)
-
         token = cloud_workspaces._CURRENT.set(left)
         try:
-            # Releasing one finished job admits the next queued owner safely.
             cloud_research.release_job(entries[0][1]["id"], paused=True)
         finally:
             cloud_workspaces._CURRENT.reset(token)
 
         token = cloud_workspaces._CURRENT.set(right)
         try:
+            cloud_research.prepare_job(entries[3][1])
             assert cloud_research.claim_job(entries[3][1]["id"])
         finally:
             cloud_workspaces._CURRENT.reset(token)
