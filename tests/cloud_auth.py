@@ -3738,9 +3738,7 @@ class CloudAuthTests(TestCase):
             admin_login = self.finish(
                 email="admin@example.org", subject="repeat-domain-admin", client=admin
             )
-            admin.cookies.set(
-                cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE]
-            )
+            admin.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
             for cycle in range(3):
                 granted = admin.post(
                     "/api/cloud-auth/admin/grants",
@@ -3756,7 +3754,8 @@ class CloudAuthTests(TestCase):
                 visible = admin.get("/api/cloud-auth/admin/grants")
                 self.assertEqual(visible.status_code, 200, visible.text)
                 domain = next(
-                    grant for grant in visible.json()["grants"]
+                    grant
+                    for grant in visible.json()["grants"]
                     if grant["kind"] == "domain" and grant["value"] == "gmail.com"
                 )
                 self.assertEqual((domain["role"], domain["active"]), ("member", 1))
@@ -3781,9 +3780,7 @@ class CloudAuthTests(TestCase):
                     )
                     self.assertEqual(removed.status_code, 200, (cycle, removed.text))
                 self.client.cookies.clear()
-                self.assertEqual(
-                    admin.get("/api/cloud-auth/admin/grants").json()["grants"], []
-                )
+                self.assertEqual(admin.get("/api/cloud-auth/admin/grants").json()["grants"], [])
                 with patch.object(cloud_auth, "_deliver_invitation"):
                     guest = self.finish(email, subject)
                 self.assertEqual(guest.status_code, 303, (cycle, guest.text))
