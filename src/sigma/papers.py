@@ -19,6 +19,7 @@ from typing import Annotated, Any, Literal, Protocol, TypedDict
 from uuid import uuid4
 
 import httpx
+import pypdfium2
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -60,6 +61,7 @@ MAX_PROOFREAD_CALLS = 32
 MAX_PROOFREAD_CHUNK_CHARS = 16_000
 MAX_PROOFREAD_CHUNK_BYTES = 32_000
 MAX_PROOFREAD_TEX_BYTES = 2_000_000
+MAX_PDF_TEXT_BOXES = 2_000_000
 MAX_RESPONSE_BYTES = 1_000_000
 # Responses SSE contains event envelopes and can repeat an entire completed output.
 # Keep a finite transport bound separate from the validated 1 MB API response.
@@ -77,6 +79,7 @@ PaperProgressStage = Literal[
     "validation",
     "proofreading",
     "compile",
+    "pdf_check",
     "retry",
     "complete",
 ]
@@ -174,9 +177,22 @@ class PaperClaim(BaseModel):
     reasoning: str = Field(min_length=10, max_length=2400)
 
 
+_INCOMPLETE_CAPTION_ENDING = re.compile(
+    r"(?:\b(?:and|or|but|of|to|for|with|without|from|between|including|versus|not|by|as|that|which)"
+    r"|[,;:/]|[–—(])$",
+    re.IGNORECASE,
+)
+
+
+def _caption_is_obviously_truncated(caption: str) -> bool:
+    """Catch legacy schema-cap truncation without requiring punctuation in captions."""
+    ending = caption.strip()
+    return len(ending) >= 250 and bool(_INCOMPLETE_CAPTION_ENDING.search(ending))
+
+
 class PaperTable(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    caption: str = Field(min_length=12, max_length=300)
+    caption: str = Field(min_length=12, max_length=1000)
     headers: list[str] = Field(min_length=2, max_length=6)
     rows: list[list[str]] = Field(min_length=1, max_length=16)
     evidence_refs: list[str] = Field(min_length=1, max_length=20)
@@ -184,6 +200,10 @@ class PaperTable(BaseModel):
 
     @model_validator(mode="after")
     def validate_rectangular_rows(self) -> PaperTable:
+        if _caption_is_obviously_truncated(self.caption):
+            raise ValueError(
+                "table caption appears incomplete at the previous 300-character schema limit"
+            )
         if any(len(row) != len(self.headers) for row in self.rows):
             raise ValueError("table rows must match the header count")
         if any(
@@ -224,12 +244,20 @@ class DiagramBoundary(BaseModel):
 
 class PaperDiagram(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    caption: str = Field(min_length=12, max_length=300)
+    caption: str = Field(min_length=12, max_length=1000)
     nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
     edges: list[DiagramEdge] = Field(min_length=1, max_length=12)
     boundaries: list[DiagramBoundary] = Field(default_factory=list, max_length=4)
     evidence_refs: list[str] = Field(default_factory=list, max_length=20)
     claim_ids: list[str] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="after")
+    def validate_caption_completeness(self) -> PaperDiagram:
+        if _caption_is_obviously_truncated(self.caption):
+            raise ValueError(
+                "diagram caption appears incomplete at the previous 300-character schema limit"
+            )
+        return self
 
 
 class PaperDraft(BaseModel):
@@ -479,7 +507,7 @@ clearly and economically; identify the precise gap once rather than repeating th
 at the end of every section. A mathematical paper is a sequence of definitions, results, and
 justifications, not a verbose narration of the research process."""
 
-VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
+VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Write complete, grammatical captions; never stop at a schema or character limit. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
 
 SECTION_TABLE_INSTRUCTIONS = """TABLES: Actively consider an informative table when it materially strengthens this section, such as a source-backed comparison, quantitative result, assumptions register, or sensitivity summary. Use only the supplied evidence notes, cite exact source IDs, and use only this section's fixed claim IDs. Avoid decorative or trivial tables, repeated information, fabricated measurements, or unsupported conclusions. Return an empty tables list when evidence does not justify a table."""
 
@@ -640,6 +668,24 @@ _UNICODE_MATH = {
     "∑": r"\sum",
     "∏": r"\prod",
 }
+_UNICODE_TEXT = {
+    "–": "\ue000",
+    "—": "\ue001",
+    "‘": "\ue002",
+    "’": "\ue003",
+    "“": "\ue004",
+    "”": "\ue005",
+    "…": "\ue006",
+}
+_UNICODE_TEXT_TEX = {
+    "\ue000": r"\textendash{}",
+    "\ue001": r"\textemdash{}",
+    "\ue002": r"\textquoteleft{}",
+    "\ue003": r"\textquoteright{}",
+    "\ue004": r"\textquotedblleft{}",
+    "\ue005": r"\textquotedblright{}",
+    "\ue006": r"\ldots{}",
+}
 _SUPERSCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 _SUPERSCRIPT_SUFFIX = re.compile(
     r"(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)?)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)"
@@ -674,6 +720,8 @@ def _latex_prose(source: str) -> str:
                     text = text.replace(symbol, "$" + replacement + "$")
                 else:
                     text = text.replace(symbol, replacement)
+        for symbol, replacement in _UNICODE_TEXT.items():
+            text = text.replace(symbol, replacement)
         escaped: list[str] = []
         position = 0
         for match in _MATH_SPAN.finditer(text):
@@ -687,7 +735,10 @@ def _latex_prose(source: str) -> str:
                 escaped.append(_latex(token))
             position = match.end()
         escaped.append(_latex(text[position:]))
-        return "".join(escaped)
+        rendered = "".join(escaped)
+        for marker, command in _UNICODE_TEXT_TEX.items():
+            rendered = rendered.replace(marker, command)
+        return rendered
 
     def math_body(body: str) -> str:
         body = _SUPERSCRIPT_SUFFIX.sub(
@@ -1973,6 +2024,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 "validation",
                 "proofreading",
                 "compile",
+                "pdf_check",
                 "retry",
                 "complete",
             }
@@ -2767,6 +2819,204 @@ def _paper_style(investigation_type: str) -> tuple[str, str, str, str]:
     return _PAPER_TYPE_STYLES.get(investigation_type, _PAPER_TYPE_STYLES["default"])
 
 
+def _source_reference_records(package: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Map opaque frozen source IDs to stable reader-facing evidence labels."""
+    counters: dict[str, int] = {}
+    records: list[dict[str, str]] = []
+    sources = package.get("sources", [])
+    if not isinstance(sources, list):
+        return records
+    for source in sources:
+        if not isinstance(source, dict) or not isinstance(source.get("id"), str):
+            continue
+        kind = str(source.get("kind", "record"))
+        raw_data = source.get("data")
+        data: Mapping[str, Any] = raw_data if isinstance(raw_data, Mapping) else {}
+        counters[kind] = counters.get(kind, 0) + 1
+        index = counters[kind]
+        if kind == "project":
+            label = "Project overview"
+        elif kind == "strategy":
+            title = " ".join(str(data.get("title", "")).split())[:64]
+            label = f"Strategy {index}" + (f": {title}" if title else "")
+        elif kind == "session":
+            session_number = data.get("session_number")
+            label = (
+                f"Research session {session_number}"
+                if type(session_number) is int and session_number > 0
+                else f"Research session {index}"
+            )
+        elif kind == "artifact":
+            session_id = source["id"].split(":", 2)[1:2]
+            session = next(
+                (
+                    item
+                    for item in sources
+                    if isinstance(item, dict)
+                    and item.get("kind") == "session"
+                    and isinstance(item.get("data"), dict)
+                    and session_id
+                    and item.get("id") == f"session:{session_id[0]}"
+                ),
+                None,
+            )
+            raw_session_data = session.get("data") if isinstance(session, dict) else None
+            session_data: Mapping[str, Any] = (
+                raw_session_data if isinstance(raw_session_data, Mapping) else {}
+            )
+            session_number = session_data.get("session_number")
+            sequence = data.get("sequence")
+            prefix = (
+                f"Research session {session_number}"
+                if type(session_number) is int and session_number > 0
+                else "Research session"
+            )
+            label = (
+                f"{prefix}, artifact {sequence}"
+                if type(sequence) is int and sequence > 0
+                else f"{prefix}, saved artifact {index}"
+            )
+        elif kind == "agentic_run":
+            label = f"Agentic run {index}"
+        elif kind == "agentic_step":
+            label = f"Agentic run step {index}"
+        else:
+            label = f"Saved research record {index}"
+        records.append({"source_ref": source["id"], "label": label})
+    return records
+
+
+def _diagram_layout(
+    diagram: PaperDiagram,
+) -> tuple[dict[str, tuple[float, float]], dict[str, float]] | None:
+    """Lay out small DAGs by rank and label height; return None for safe fallback."""
+    node_ids = [node.id for node in diagram.nodes]
+    outgoing = {node_id: [] for node_id in node_ids}
+    indegree = dict.fromkeys(node_ids, 0)
+    for edge in diagram.edges:
+        outgoing[edge.source].append(edge.target)
+        indegree[edge.target] += 1
+    queue = [node_id for node_id in node_ids if indegree[node_id] == 0]
+    layers = {node_id: 0 for node_id in queue}
+    visited = 0
+    while queue:
+        node_id = queue.pop(0)
+        visited += 1
+        for target in outgoing[node_id]:
+            layers[target] = max(layers.get(target, 0), layers[node_id] + 1)
+            indegree[target] -= 1
+            if indegree[target] == 0:
+                queue.append(target)
+    if visited != len(node_ids) or max(layers.values(), default=0) > 2:
+        return None
+
+    by_layer: dict[int, list[str]] = {}
+    for node in diagram.nodes:
+        by_layer.setdefault(layers[node.id], []).append(node.id)
+    node_heights = {
+        node.id: max(0.78, 0.42 + 0.25 * ((len(node.label) + 27) // 28)) for node in diagram.nodes
+    }
+    vertical_gap = 0.72
+    if (
+        max(
+            sum(node_heights[node_id] for node_id in members)
+            + max(0, len(members) - 1) * vertical_gap
+            for members in by_layer.values()
+        )
+        > 14.0
+    ):
+        return None
+
+    positions: dict[str, tuple[float, float]] = {}
+    for layer, members in by_layer.items():
+        total_height = sum(node_heights[node_id] for node_id in members)
+        total_height += max(0, len(members) - 1) * vertical_gap
+        cursor = total_height / 2
+        for node_id in members:
+            half_height = node_heights[node_id] / 2
+            positions[node_id] = (layer * 5.7, cursor - half_height)
+            cursor -= node_heights[node_id] + vertical_gap
+
+    width = 4.15
+
+    def orientation(
+        a: tuple[float, float], b: tuple[float, float], c: tuple[float, float]
+    ) -> float:
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def proper_intersection(
+        a: tuple[float, float],
+        b: tuple[float, float],
+        c: tuple[float, float],
+        d: tuple[float, float],
+    ) -> bool:
+        return (
+            orientation(a, b, c) * orientation(a, b, d) < -1e-6
+            and orientation(c, d, a) * orientation(c, d, b) < -1e-6
+        )
+
+    def segment_hits_box(
+        start: tuple[float, float],
+        end: tuple[float, float],
+        center: tuple[float, float],
+        height: float,
+    ) -> bool:
+        left, right = center[0] - width / 2, center[0] + width / 2
+        bottom, top = center[1] - height / 2, center[1] + height / 2
+        if left < start[0] < right and bottom < start[1] < top:
+            return True
+        if left < end[0] < right and bottom < end[1] < top:
+            return True
+        corners = [(left, bottom), (right, bottom), (right, top), (left, top)]
+        return any(
+            proper_intersection(start, end, corners[index], corners[(index + 1) % 4])
+            for index in range(4)
+        )
+
+    for left_index, edge in enumerate(diagram.edges):
+        start, end = positions[edge.source], positions[edge.target]
+        for node_id, center in positions.items():
+            if node_id not in {edge.source, edge.target} and segment_hits_box(
+                start, end, center, node_heights[node_id]
+            ):
+                return None
+        midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        for node_id, center in positions.items():
+            if node_id not in {edge.source, edge.target} and segment_hits_box(
+                midpoint, midpoint, center, node_heights[node_id]
+            ):
+                return None
+        for other in diagram.edges[left_index + 1 :]:
+            if {edge.source, edge.target}.isdisjoint(
+                {other.source, other.target}
+            ) and proper_intersection(start, end, positions[other.source], positions[other.target]):
+                return None
+
+    for boundary_index, boundary in enumerate(diagram.boundaries):
+        if any(
+            set(boundary.node_ids) & set(other.node_ids)
+            for other in diagram.boundaries[boundary_index + 1 :]
+        ):
+            return None
+        x_values = [positions[node_id][0] for node_id in boundary.node_ids]
+        y_values = [positions[node_id][1] for node_id in boundary.node_ids]
+        bounds = (
+            min(x_values) - width / 2 - 0.24,
+            max(x_values) + width / 2 + 0.24,
+            min(y_values) - max(node_heights[node_id] for node_id in boundary.node_ids) / 2 - 0.24,
+            max(y_values) + max(node_heights[node_id] for node_id in boundary.node_ids) / 2 + 0.5,
+        )
+        for node_id, center in positions.items():
+            if node_id not in boundary.node_ids and (
+                center[0] + width / 2 > bounds[0]
+                and center[0] - width / 2 < bounds[1]
+                and center[1] + node_heights[node_id] / 2 > bounds[2]
+                and center[1] - node_heights[node_id] / 2 < bounds[3]
+            ):
+                return None
+    return positions, node_heights
+
+
 def _tex(
     draft: PaperDraft,
     warnings: list[str],
@@ -2782,6 +3032,7 @@ def _tex(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    source_reference_map: Mapping[str, str] | None = None,
 ) -> str:
     include_claim_details = include_claim_details or include_research_details
     include_validation_notes = include_validation_notes or include_research_details
@@ -2789,23 +3040,74 @@ def _tex(
     esc = _latex
     prose = _latex_prose
 
+    def readable_source_text(text: str) -> str:
+        for source_ref, label in sorted(
+            (source_reference_map or {}).items(), key=lambda item: len(item[0]), reverse=True
+        ):
+            text = text.replace(source_ref, f"[{label}]")
+        return text
+
+    def readable_refs(refs: list[str]) -> str:
+        return ", ".join(f"[{(source_reference_map or {}).get(ref, ref)}]" for ref in refs)
+
+    def prose_text(text: str) -> str:
+        return prose(readable_source_text(text))
+
     def article_paragraph(text: str) -> str:
-        return "\n\n".join(prose(chunk) for chunk in _publication_paragraphs(text))
+        return "\n\n".join(prose_text(chunk) for chunk in _publication_paragraphs(text))
 
     def render_table(table: PaperTable) -> list[str]:
         columns_count = len(table.headers)
-        column = (
-            r"p{\dimexpr(\linewidth-2\tabcolsep*"
-            + str(columns_count - 1)
-            + r")/"
-            + str(columns_count)
-            + r"\relax}"
+
+        def is_numeric_cell(value: str) -> bool:
+            normalized = value.strip().replace("$", "").replace(",", "")
+            normalized = re.sub(r"\\(?:text|mathrm)\{([^{}]*)\}", r"\1", normalized)
+            return bool(
+                re.fullmatch(
+                    r"[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)(?:\s*(?:%|[A-Za-z]{1,8}))?",
+                    normalized,
+                )
+            )
+
+        def column_weight(column_index: int) -> int:
+            values = [table.headers[column_index], *(row[column_index] for row in table.rows)]
+            maximum = max(len(value.strip()) for value in values)
+            return (
+                14
+                if all(is_numeric_cell(value) for value in values[1:])
+                else min(42, max(20, maximum))
+            )
+
+        weights = [column_weight(index) for index in range(columns_count)]
+        columns = (
+            "@{}"
+            + "".join(
+                r">{\raggedleft\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*"
+                + str(columns_count - 1)
+                + r")/"
+                + str(sum(weights))
+                + "*"
+                + str(weight)
+                + r"\relax}"
+                if all(is_numeric_cell(row[index]) for row in table.rows)
+                else r">{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*"
+                + str(columns_count - 1)
+                + r")/"
+                + str(sum(weights))
+                + "*"
+                + str(weight)
+                + r"\relax}"
+                for index, weight in enumerate(weights)
+            )
+            + "@{}"
         )
-        columns = "@{}" + column * len(table.headers) + "@{}"
-        header = " & ".join(r"\textbf{" + esc(cell) + "}" for cell in table.headers)
+        header = " & ".join(r"\textbf{" + prose_text(cell) + "}" for cell in table.headers)
+        landscape = columns_count >= 4
+        parts = [r"\begin{landscape}", r"\small"] if landscape else []
         parts = [
+            *parts,
             r"\begin{longtable}{" + columns + "}",
-            r"\caption{" + esc(table.caption) + r"}\\",
+            r"\caption{" + prose_text(table.caption) + r"}\\",
             r"\toprule",
             header + r"\\",
             r"\midrule",
@@ -2814,22 +3116,143 @@ def _tex(
             header + r"\\",
             r"\midrule",
             r"\endhead",
+            r"\midrule",
+            r"\multicolumn{" + str(columns_count) + r"}{r}{\footnotesize Continued on next page}\\",
+            r"\endfoot",
+            r"\bottomrule",
+            r"\endlastfoot",
         ]
         parts.extend(
-            " & ".join(esc(" ".join(cell.split())) for cell in row) + r"\\" for row in table.rows
+            " & ".join(prose_text(" ".join(cell.split())) for cell in row) + r"\\"
+            for row in table.rows
         )
         parts.extend(
             [
-                r"\bottomrule",
                 r"\end{longtable}",
                 r"\par\smallskip{\footnotesize Evidence: "
-                + esc(", ".join(table.evidence_refs))
+                + esc(readable_refs(table.evidence_refs))
                 + "; claims: "
                 + esc(", ".join(table.claim_ids))
                 + "}",
             ]
         )
+        if landscape:
+            parts.append(r"\end{landscape}")
         return parts
+
+    def render_diagram(diagram: PaperDiagram) -> list[str]:
+        layout = _diagram_layout(diagram)
+        source_note = (
+            r"\par\smallskip{\footnotesize Evidence: "
+            + esc(readable_refs(diagram.evidence_refs))
+            + "; claims: "
+            + esc(", ".join(diagram.claim_ids))
+            + "}"
+        )
+        if layout is None:
+            warnings.append(
+                "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation."
+            )
+            result = [
+                r"\begin{quote}",
+                r"\textbf{Diagram (readable relationship list).} " + prose_text(diagram.caption),
+                r"\begin{description}",
+            ]
+            node_numbers = {node.id: index for index, node in enumerate(diagram.nodes, start=1)}
+            for index, node in enumerate(diagram.nodes, start=1):
+                result.append(r"\item[\textbf{Node " + str(index) + ".}] " + prose_text(node.label))
+            for index, edge in enumerate(diagram.edges, start=1):
+                description = (
+                    f"Node {node_numbers[edge.source]} points to node {node_numbers[edge.target]}"
+                )
+                if edge.label:
+                    description += ": " + edge.label
+                result.append(
+                    r"\item[\textbf{Edge " + str(index) + ".}] " + prose_text(description)
+                )
+            for index, boundary in enumerate(diagram.boundaries, start=1):
+                members = ", ".join(
+                    f"node {node_numbers[node_id]}" for node_id in boundary.node_ids
+                )
+                result.append(
+                    r"\item[\textbf{Boundary "
+                    + str(index)
+                    + ".}] "
+                    + prose_text(boundary.label + ": " + members)
+                )
+            result.extend([r"\end{description}", source_note, r"\end{quote}"])
+            return result
+
+        positions, heights = layout
+        result = [
+            r"\begin{figure}[!htbp]",
+            r"\centering",
+            r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,main node/.style={draw,rounded corners,align=center,text width=4.15cm,font=\small,fill=blue!5,inner sep=5pt},edge badge/.style={circle,draw=blue!60,fill=white,inner sep=1.4pt,font=\scriptsize},boundary/.style={draw,dashed,rounded corners,inner sep=7pt,fill=none}]",
+        ]
+        for node in diagram.nodes:
+            x, y = positions[node.id]
+            result.append(
+                r"\node[main node,minimum height="
+                + f"{heights[node.id]:.2f}cm"
+                + "] ("
+                + node.id
+                + ") at ("
+                + f"{x:.2f},{y:.2f}"
+                + ") {"
+                + prose_text(node.label)
+                + "};"
+            )
+        for edge_number, edge in enumerate(diagram.edges, start=1):
+            result.append(
+                r"\draw[->,shorten <=2mm,shorten >=2mm] ("
+                + edge.source
+                + r") -- node[edge badge] {"
+                + str(edge_number)
+                + "} ("
+                + edge.target
+                + ");"
+            )
+        for boundary in diagram.boundaries:
+            fit_nodes = "".join("(" + item + ")" for item in boundary.node_ids)
+            result.append(
+                r"\node[boundary,fit="
+                + fit_nodes
+                + r",label={[font=\scriptsize,fill=white,inner sep=1pt]above:{"
+                + prose_text(boundary.label)
+                + r"}}] {};"
+            )
+        result.append(r"\end{tikzpicture}")
+        result.extend(
+            [
+                r"\par\smallskip{\footnotesize\textbf{Numbered relationships:}}",
+                r"\begin{description}",
+            ]
+        )
+        labels = {node.id: node.label for node in diagram.nodes}
+        for index, edge in enumerate(diagram.edges, start=1):
+            text = f"{labels[edge.source]} to {labels[edge.target]}"
+            if edge.label:
+                text += ": " + edge.label
+            result.append(r"\item[\textbf{" + str(index) + ".}] " + prose_text(text))
+        result.extend(
+            [
+                r"\end{description}",
+                r"\caption{" + prose_text(diagram.caption) + "}",
+                source_note,
+                r"\end{figure}",
+            ]
+        )
+        return result
+
+    diagram_assignments: dict[int | None, list[PaperDiagram]] = {}
+    for diagram in draft.diagrams:
+        claim_ids = set(diagram.claim_ids)
+        matches = [
+            (len(claim_ids & set(section.claim_ids)), index)
+            for index, section in enumerate(draft.sections)
+        ]
+        score, target = max(matches, default=(0, -1))
+        diagram_assignments.setdefault(target if score else None, []).append(diagram)
 
     if math_style:
         investigation_type = "mathematical"
@@ -2841,7 +3264,7 @@ def _tex(
         r"\usepackage[T1]{fontenc}",
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage[margin=1in]{geometry}",
-        r"\usepackage{amsmath,amssymb,booktabs,longtable}",
+        r"\usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}",
         r"\usepackage{microtype}",
         r"\usepackage{titlesec}",
         *([r"\usepackage{tikz}", r"\usetikzlibrary{fit}"] if draft.diagrams else []),
@@ -2862,7 +3285,7 @@ def _tex(
             r"\begin{center}\small\textit{AI-generated research synthesis \textperiodcentered{} SIGMA}\end{center}"
         )
     parts.append("")
-    parts.insert(1, r"\title{" + esc(draft.title) + "}")
+    parts.insert(1, r"\title{" + esc(readable_source_text(draft.title)) + "}")
     parts.insert(2, r"\date{}")
     parts.insert(3, r"\author{SIGMA AI-assisted research synthesis}")
     parts += [
@@ -2873,16 +3296,16 @@ def _tex(
     if include_validation_notes:
         parts += [
             r"\section*{About this paper}",
-            prose(
+            prose_text(
                 "This paper was generated by SIGMA, an AI-assisted research system, from the project's recorded investigations, findings, and supporting evidence."
             ),
-            prose(
+            prose_text(
                 "The analysis and conclusions reflect an automated synthesis of that research. Although SIGMA incorporates evidence tracking, critical review, and consistency checks, the resulting paper has not necessarily undergone independent verification or peer review."
             ),
-            prose(
+            prose_text(
                 "Readers should evaluate its arguments, supporting evidence, and stated limitations before relying on its conclusions."
             ),
-            prose("Research style: " + style_note),
+            prose_text("Research style: " + style_note),
         ]
     if material_omissions:
         affected_source_count = len(
@@ -2890,7 +3313,7 @@ def _tex(
         )
         parts += [
             r"\section*{Evidence coverage limitation}",
-            prose(
+            prose_text(
                 f"The evidence index omitted {len(material_omissions)} material saved research "
                 f"field fragment(s) across {affected_source_count} source(s). These fragments "
                 "were not reviewed for this paper. Interpretations that could depend on "
@@ -2900,115 +3323,26 @@ def _tex(
         ]
     if include_claim_details and draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
-    parts.append(r"\section{" + esc(opening_heading) + "}")
+    parts.append(r"\section{" + esc(readable_source_text(opening_heading)) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.problem_framing]
     if include_claim_details and draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
-    parts.append(r"\section{" + esc(methods_heading) + "}")
+    parts.append(r"\section{" + esc(readable_source_text(methods_heading)) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.methods]
     if include_claim_details and draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
-    if draft.diagrams:
-        for diagram in draft.diagrams:
-            node_ids = [node.id for node in diagram.nodes]
-            if len(set(node_ids)) != len(node_ids):
-                continue
-            known = set(node_ids)
-            if any(edge.source not in known or edge.target not in known for edge in diagram.edges):
-                continue
-            if any(set(boundary.node_ids) - known for boundary in diagram.boundaries):
-                continue
-            # Deterministic three-column layering keeps ordinary request flows
-            # legible without executing model-supplied coordinates or TeX.
-            outgoing = {node_id: [] for node_id in node_ids}
-            indegree = {node_id: 0 for node_id in node_ids}
-            for edge in diagram.edges:
-                outgoing[edge.source].append(edge.target)
-                indegree[edge.target] += 1
-            layers = {node_id: 0 for node_id in node_ids if indegree[node_id] == 0}
-            queue = [node_id for node_id in node_ids if indegree[node_id] == 0]
-            visited = 0
-            while queue:
-                node_id = queue.pop(0)
-                visited += 1
-                for target in outgoing[node_id]:
-                    layers[target] = max(layers.get(target, 0), layers[node_id] + 1)
-                    indegree[target] -= 1
-                    if indegree[target] == 0:
-                        queue.append(target)
-            deep_graph = max(layers.values(), default=0) >= 3
-            positions: dict[str, tuple[float, float]] = {}
-            if visited != len(node_ids) or deep_graph:
-                # Cycles and long chains use a bounded two-column serpentine
-                # layout, keeping an eight-node figure within page width.
-                positions = {
-                    node_id: (index % 2 * 4.6, -(index // 2) * 1.8)
-                    for index, node_id in enumerate(node_ids)
-                }
-            else:
-                layer_nodes: dict[int, list[str]] = {}
-                for node_id in node_ids:
-                    layer_nodes.setdefault(layers.get(node_id, 0), []).append(node_id)
-                for layer, members in layer_nodes.items():
-                    for index, node_id in enumerate(members):
-                        positions[node_id] = (
-                            layer * 4.7,
-                            (len(members) - 1) * 0.95 - index * 1.9,
-                        )
-            parts.extend(
-                [
-                    r"\begin{figure}[htbp]",
-                    r"\centering",
-                    r"\begin{tikzpicture}[>=stealth, every node/.style={draw, rounded corners, align=center, text width=3.4cm, minimum height=0.9cm, font=\small, fill=blue!5}]",
-                ]
-            )
-            for node in diagram.nodes:
-                x, y = positions[node.id]
-                parts.append(
-                    r"\node ("
-                    + node.id
-                    + ") at ("
-                    + str(x)
-                    + ","
-                    + str(y)
-                    + ") {"
-                    + esc(node.label)
-                    + "};"
-                )
-            for edge_number, edge in enumerate(diagram.edges, start=1):
-                parts.append(
-                    r"\draw[->,shorten <=3mm,shorten >=3mm] ("
-                    + edge.source
-                    + r") -- node[midway,fill=white,draw=none,font=\scriptsize,inner sep=1pt] {"
-                    + str(edge_number)
-                    + "} ("
-                    + edge.target
-                    + ");"
-                )
-            for boundary in diagram.boundaries:
-                fit_nodes = "".join("(" + item + ")" for item in boundary.node_ids)
-                parts.append(
-                    r"\node[draw,dashed,rounded corners,inner sep=7pt,fit="
-                    + fit_nodes
-                    + r",fill=none,label={[font=\scriptsize]above:{"
-                    + esc(boundary.label)
-                    + r"}}] {};"
-                )
-            parts.append(r"\end{tikzpicture}")
-            edge_legend = [
-                str(index) + ": " + esc(edge.label)
-                for index, edge in enumerate(diagram.edges, start=1)
-                if edge.label
-            ]
-            if edge_legend:
-                parts.append(r"\par\smallskip{\footnotesize " + "; ".join(edge_legend) + "}\\")
-            parts.extend([r"\caption{" + esc(diagram.caption) + "}", r"\end{figure}"])
+    for diagram in diagram_assignments.get(None, []):
+        parts.extend(render_diagram(diagram))
 
-    for section in draft.sections:
-        parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
+    for section_index, section in enumerate(draft.sections):
+        parts.append(
+            r"\section{" + esc(readable_source_text(_publication_heading(section.heading))) + "}"
+        )
         parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
+        for diagram in diagram_assignments.get(section_index, []):
+            parts.extend(render_diagram(diagram))
         for table in section.tables:
             parts.extend(render_table(table))
         if include_claim_details and section.claim_ids:
@@ -3024,12 +3358,12 @@ def _tex(
             parts.extend(
                 [
                     r"\subsection{" + esc(claim.id + " -- " + claim.status.title()) + "}",
-                    prose(claim.statement),
-                    prose(claim.reasoning),
+                    prose_text(claim.statement),
+                    prose_text(claim.reasoning),
                 ]
             )
             if claim.evidence_refs:
-                parts.append(r"\textit{Evidence: }" + esc(", ".join(claim.evidence_refs)))
+                parts.append(r"\textit{Evidence: }" + esc(readable_refs(claim.evidence_refs)))
 
     if include_claim_details and not math_style:
         claim_register()
@@ -3038,20 +3372,20 @@ def _tex(
     )
     parts += (
         [r"\begin{itemize}"]
-        + [r"\item " + prose(item) for item in draft.limitations]
+        + [r"\item " + prose_text(item) for item in draft.limitations]
         + [r"\end{itemize}"]
     )
     if draft.open_obligations:
         parts.append(r"\section{Open obligations}")
         parts += (
             [r"\begin{itemize}"]
-            + [r"\item " + prose(item) for item in draft.open_obligations]
+            + [r"\item " + prose_text(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
     if include_validation_notes and obligation_reconciliation:
         parts.append(r"\section{Frozen obligation reconciliation}")
         parts.append(
-            prose(
+            prose_text(
                 "Unlisted obligations are not presumed resolved. The archived research "
                 "snapshot retains complete source references and the full reconciliation."
             )
@@ -3071,11 +3405,13 @@ def _tex(
         for item in distinct_obligations[:18]:
             source_count = len(item["source_refs"])
             annotation = f" ({item['status']}; {source_count} saved source reference(s))"
-            parts.append(r"\item " + prose(item["text"]) + r" \textit{" + esc(annotation) + "}")
+            parts.append(
+                r"\item " + prose_text(item["text"]) + r" \textit{" + esc(annotation) + "}"
+            )
         parts.append(r"\end{itemize}")
         if len(distinct_obligations) > 18:
             parts.append(
-                prose(
+                prose_text(
                     f"{len(distinct_obligations) - 18} further distinct obligations "
                     "are retained in the archived reconciliation."
                 )
@@ -3094,7 +3430,7 @@ def _tex(
                 if integrity_excerpts
                 else r"\section{Structured reasoning and review records}"
             ),
-            prose(
+            prose_text(
                 "The following are bounded, selected excerpts of original research records. "
                 "They are not exhaustive; consult the full frozen snapshot archived with this paper. "
                 "They do not constitute independent verification."
@@ -3124,7 +3460,7 @@ def _tex(
             parts.append(r"\subsection{" + esc(f"Research excerpt {index}") + "}")
             parts.append(
                 r"\textit{Source and field: }"
-                + esc(str(item["source_ref"]) + ": " + str(item["field"]))
+                + esc(readable_source_text(str(item["source_ref"]) + ": " + str(item["field"])))
                 + r"\par"
             )
             content = item["content"]
@@ -3138,7 +3474,7 @@ def _tex(
             parts.append(article_paragraph(excerpt) + "\n")
         if len(integrity_records) > len(selected):
             parts.append(
-                prose(
+                prose_text(
                     f"{len(integrity_records) - len(selected)} further research records "
                     "are retained in the archived source snapshot."
                 )
@@ -3154,13 +3490,15 @@ def _tex(
         if warnings:
             parts += (
                 [r"\section*{Validation warnings}", r"\begin{itemize}"]
-                + [r"\item " + esc(item) for item in warnings]
+                + [r"\item " + esc(readable_source_text(item)) for item in warnings]
                 + [r"\end{itemize}"]
             )
     else:
         parts += [
             r"\section*{Authorship note}",
-            prose("AI-assisted synthesis from saved research; not independently peer reviewed."),
+            prose_text(
+                "AI-assisted synthesis from saved research; not independently peer reviewed."
+            ),
         ]
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
@@ -4398,6 +4736,11 @@ def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str,
         r"\\textbackslash\{\}(alpha|beta|gamma|pi|sum|prod|frac|sqrt)\b", r"\\\1", source
     )
     source = re.sub(
+        r"\\\$([^$\\\n]{1,80})\\\$",
+        lambda match: "$" + match.group(1) + "$" if _safe_math(match.group(1)) else match.group(0),
+        source,
+    )
+    source = re.sub(
         r"\\begin\{(equation\*?|align\*?|aligned|gather\*?|multline\*?|split)\}",
         r"\\begin{MATH}",
         source,
@@ -4408,6 +4751,8 @@ def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str,
         source,
     )
     source = re.sub(r"\\(?:\(|\)|\[|\])|(?<!\\)\$\$?", "", source)
+    source = re.sub(r"\\emergencystretch\s*=\s*\d+(?:\.\d+)?\w*", " ", source)
+    source = re.sub(r"\\linespread\s*\{[^{}]*\}", " ", source)
     # Coordinates, style options, and the longtable column preamble are geometry.
     source = re.sub(
         r"(\\begin\{tikzpicture\}.*?\\end\{tikzpicture\})",
@@ -4420,18 +4765,27 @@ def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str,
         source,
         flags=re.DOTALL,
     )
-    longtable = re.search(r"\\begin\{longtable\}\s*\{", source)
-    if longtable:
+    preamble_pattern = re.compile(r"\\begin\{longtable\}\s*\{")
+    normalized: list[str] = []
+    source_cursor = 0
+    while preamble := preamble_pattern.search(source, source_cursor):
         depth = 1
-        cursor = longtable.end()
+        preamble_start = preamble.end() - 1
+        cursor = preamble.end()
         while cursor < len(source) and depth:
             if source[cursor] == "{":
                 depth += 1
             elif source[cursor] == "}":
                 depth -= 1
             cursor += 1
-        if depth == 0:
-            source = source[: longtable.end() - 1] + "{}" + source[cursor:]
+        if depth:
+            break
+        normalized.extend([source[source_cursor:preamble_start], "{}"])
+        source_cursor = cursor
+    if normalized:
+        normalized.append(source[source_cursor:])
+        source = "".join(normalized)
+    source = re.sub(r"\\(?:begin|end)\{landscape\}", " ", source)
     source = re.sub(r"\\(?:hspace|vspace|smallskip|medskip|bigskip)\*?(?:\{[^{}]*\})?", " ", source)
     presentation = {
         "begin",
@@ -4447,6 +4801,9 @@ def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str,
         "bigskip",
         "centering",
         "raggedright",
+        "raggedleft",
+        "arraybackslash",
+        "multicolumn",
         "displaystyle",
         "textstyle",
         "left",
@@ -4535,6 +4892,110 @@ def _tex_static_diagnostics(tex: str) -> list[str]:
                 f"Potentially wide diagram or table line {index} ({len(line)} characters)."
             )
     return list(dict.fromkeys(diagnostics))[:100]
+
+
+def _publication_layout_warnings(diagnostics: list[str]) -> list[str]:
+    """Select compiler diagnostics strong enough to require publication review."""
+    warnings: list[str] = []
+    for line in diagnostics:
+        if re.search(r"\bOverfull\s+\\[hv]box\b", line, re.IGNORECASE):
+            warnings.append(line[:500])
+            continue
+        underfull = re.search(r"\bUnderfull\s+\\[hv]box\b.*?badness\s+(\d+)", line, re.IGNORECASE)
+        if underfull and int(underfull.group(1)) >= 9000:
+            warnings.append(line[:500])
+    return warnings[:30]
+
+
+def _pdf_text_bounds_diagnostics(pdf: bytes) -> tuple[int, list[str]]:
+    """Check each PDF text glyph remains inside its rendered page bounds."""
+    try:
+        document = pypdfium2.PdfDocument(pdf)
+    except (ValueError, RuntimeError, TypeError) as exc:
+        raise ProjectError("The compiled PDF could not be inspected safely.") from exc
+    warnings: list[str] = []
+    page_count = len(document)
+    if page_count < 1:
+        document.close()
+        raise ProjectError("The compiled PDF contains no pages.")
+    inspected = 0
+    try:
+        for page_number in range(page_count):
+            page = document[page_number]
+            try:
+                page_bounds = (
+                    (page.get_height(), page.get_width())
+                    if page.get_rotation() in {90, 270}
+                    else (page.get_width(), page.get_height())
+                )
+                textpage = page.get_textpage()
+                try:
+                    character_count = textpage.count_chars()
+                    if inspected + character_count > MAX_PDF_TEXT_BOXES:
+                        warnings.append(
+                            f"PDF geometry inspection reached the {MAX_PDF_TEXT_BOXES:,}-character safety bound."
+                        )
+                        return page_count, warnings
+                    for index in range(character_count):
+                        inspected += 1
+                        bounds = textpage.get_charbox(index)
+                        if bounds is None:
+                            character = textpage.get_text_range(index, 1)
+                            if character.strip():
+                                warnings.append(
+                                    f"Text on PDF page {page_number + 1} has no inspectable glyph bounds."
+                                )
+                                break
+                            continue
+                        x0, y0, x1, y1 = bounds
+                        if not (-1 <= x0 <= x1 <= page_bounds[0] + 1):
+                            warnings.append(
+                                f"Text on PDF page {page_number + 1} extends beyond horizontal page bounds."
+                            )
+                            break
+                        if not (-1 <= y0 <= y1 <= page_bounds[1] + 1):
+                            warnings.append(
+                                f"Text on PDF page {page_number + 1} extends beyond vertical page bounds."
+                            )
+                            break
+                finally:
+                    textpage.close()
+            finally:
+                page.close()
+    finally:
+        document.close()
+    return page_count, list(dict.fromkeys(warnings))[:30]
+
+
+def _repair_tex_layout(tex: str, warnings: list[str]) -> tuple[str, str] | None:
+    """Apply one bounded, semantics-preserving TeX line-break adjustment."""
+    repaired = tex
+    actions: list[str] = []
+    horizontal_overflow = any(
+        re.search(r"\bOverfull\s+\\hbox\b", item, re.IGNORECASE)
+        or "extends beyond horizontal page bounds" in item
+        for item in warnings
+    )
+    if horizontal_overflow:
+        match = re.search(r"(?m)^\\emergencystretch=(2|4)em$", repaired)
+        if match:
+            current = int(match.group(1))
+            updated = current * 2
+            repaired = repaired[: match.start(1)] + str(updated) + repaired[match.end(1) :]
+            actions.append(
+                f"Increased TeX emergency line-breaking stretch from {current}em to {updated}em."
+            )
+    vertical_overflow = any(
+        re.search(r"\bOverfull\s+\\vbox\b", item, re.IGNORECASE)
+        or "extends beyond vertical page bounds" in item
+        for item in warnings
+    )
+    if vertical_overflow:
+        match = re.search(r"(?m)^\\linespread\{(1\.07|1\.0)\}$", repaired)
+        if match and match.group(1) != "1.0":
+            repaired = repaired[: match.start(1)] + "1.0" + repaired[match.end(1) :]
+            actions.append("Reduced TeX line spacing from 1.07 to 1.0 to prevent page overflow.")
+    return (repaired, " ".join(actions)) if actions else None
 
 
 def _diagram_compile_failure_is_identified(diagnostics: list[str], error: RuntimeError) -> bool:
@@ -4737,6 +5198,7 @@ async def _proofread_tex(
             total,
             detail="Checking and correcting typesetting issues.",
         )
+        response_received = False
         try:
             response: BaseModel | None = None
             for attempt_number in range(1, 4):
@@ -4762,6 +5224,7 @@ async def _proofread_tex(
                         project_id=project_id,
                         project_path_value=project_path_value,
                     )
+                    response_received = True
                     break
                 except PaperConnectionFailure:
                     # This exception is defined only for connection failures
@@ -4824,10 +5287,20 @@ async def _proofread_tex(
                 detail="Applying mechanical corrections.",
             )
         except (ProjectError, ValidationError, ValueError, TypeError, OSError) as exc:
-            # The provider response may have consumed allowance. Preserve safe earlier patches,
-            # skip every remaining AI call, and use the authored text for this and later chunks.
             attempts[index] = "rejected"
             corrected[index] = None
+            message = f"Proofreading chunk {index + 1} was not applied: {str(exc)[:240]}"
+            checkpoint["diagnostics"] = list(
+                dict.fromkeys([*checkpoint.get("diagnostics", []), message])
+            )[:100]
+            if response_received:
+                # A returned but unsafe patch is an isolated, known result.
+                # Other exact chunks can still be proofread independently.
+                checkpoint["fallback_reason"] = checkpoint.get("fallback_reason") or (message)
+                save_checkpoint()
+                continue
+            # A failed dispatch, malformed provider response, or unknown paid
+            # outcome is not replayed. Remaining chunks are left untouched.
             for remaining in range(index + 1, total):
                 attempts[remaining] = "skipped"
                 corrected[remaining] = None
@@ -5141,6 +5614,16 @@ async def _generate_impl(
         identifier = uuid4().hex
         timestamp = _now()
         warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
+        source_reference_records = _source_reference_records(package)
+        source_reference_map = {
+            item["source_ref"]: item["label"] for item in source_reference_records
+        }
+        for item in source_reference_records:
+            for source_id in re.findall(
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                item["source_ref"],
+            ):
+                source_reference_map.setdefault(source_id, item["label"])
         valid_diagrams: list[PaperDiagram] = []
         for diagram in draft.diagrams:
             diagram_ids = [node.id for node in diagram.nodes]
@@ -5213,6 +5696,7 @@ async def _generate_impl(
                 "evidence_batch_count": evidence_batch_count,
                 "snapshot_size_bytes": len(_json(package)),
                 "source_count": len(package["sources"]),
+                "source_reference_map": source_reference_records,
                 "section_limit": MAX_LONG_PAPER_SECTIONS if long_form else 0,
                 "evidence_fields_omitted": (
                     len(work.get("omitted_evidence", [])) if long_form else 0
@@ -5278,6 +5762,7 @@ async def _generate_impl(
                 "include_claim_details": include_claim_details,
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
+                "source_reference_map": source_reference_map,
             }
             tex = _tex(draft, warnings, snapshot_hash, **tex_options)
             saved_proofreading = work.get("proofreading")
@@ -5321,8 +5806,9 @@ async def _generate_impl(
             _save_work(path, work)
             if proofreading.get("status") == "fallback":
                 fallback_note = (
-                    "AI TeX proofreading did not complete. The authored typesetting was retained; "
-                    "consult the archived proofreading record for unresolved mechanical diagnostics."
+                    "Needs review: TeX verification is incomplete. The authored research content "
+                    "and safe accepted typesetting corrections were retained. Review the saved "
+                    "proofreading diagnostics before relying on the layout."
                 )
                 warnings.append(fallback_note)
                 marker = r"\end{document}"
@@ -5330,6 +5816,17 @@ async def _generate_impl(
                     raise ProjectError(
                         "TeX proofreading fell back, but the publication note could not be placed safely. The authored draft remains saved."
                     )
+                title_marker = r"\maketitle"
+                if tex.count(title_marker) != 1:
+                    raise ProjectError(
+                        "TeX proofreading fell back, but its review status could not be placed safely at the start of the paper. The authored draft remains saved."
+                    )
+                notice = (
+                    r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
+                    r"TeX verification is incomplete.} Review the archived proofreading "
+                    r"diagnostics before relying on the typesetting.}}\end{center}"
+                )
+                tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
                 tex = tex.replace(
                     marker,
                     r"\section*{Typesetting verification note}"
@@ -5344,6 +5841,9 @@ async def _generate_impl(
                 "attempted": True,
                 "ai_performed": proofreading.get("ai_performed", False),
                 "status": proofreading.get("status"),
+                "verification_status": (
+                    "incomplete" if proofreading.get("status") == "fallback" else "complete"
+                ),
                 "accepted_correction_count": len(proofreading.get("corrections", [])),
                 "correction_categories": sorted(set(proofreading.get("corrections", []))),
                 "unresolved_diagnostics": proofreading.get("diagnostics", [])[:100],
@@ -5358,6 +5858,11 @@ async def _generate_impl(
                 "model": config["model"],
                 "reasoning_effort": config["reasoning_effort"],
             }
+            record["generation"]["publication_status"] = (
+                "needs_review"
+                if proofreading.get("status") == "fallback"
+                else "proofreading_complete"
+            )
             record["generation"]["provider_calls_attempted"] = (
                 int(work.get("provider_calls", provider_calls))
                 + int(work.get("proofreading_calls_prior", 0))
@@ -5370,50 +5875,121 @@ async def _generate_impl(
                 MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS if long_form else 1 + MAX_PROOFREAD_CALLS
             )
             compile_diagnostics: list[str] = []
+            layout_warnings: list[str] = []
+            layout_repairs: list[str] = []
+            pdf_check_passes: list[dict[str, Any]] = []
             diagram_fallback: dict[str, Any] | None = None
-            await report("compile", None, None)
-            try:
-                pdf = await asyncio.to_thread(
-                    _compile_pdf,
-                    tex,
-                    max_source_bytes=50_000_000,
-                    timeout_seconds=300,
-                    max_pdf_bytes=80_000_000,
-                    diagnostics=compile_diagnostics,
-                )
-            except RuntimeError as compile_error:
-                if not draft.diagrams or not _diagram_compile_failure_is_identified(
-                    compile_diagnostics, compile_error
-                ):
-                    raise
-                removed_diagram_count = len(draft.diagrams)
-                tex = _remove_diagram_figures(tex, removed_diagram_count)
-                draft = draft.model_copy(update={"diagrams": []})
-                warnings.append(
-                    "Tectonic reported a TikZ/PGF error in an explanatory diagram; the saved paper uses a text-only PDF fallback."
-                )
-                diagram_fallback = {
-                    "applied": True,
-                    "removed_diagram_count": removed_diagram_count,
-                    "reason": next(
-                        (
-                            line[:500]
-                            for line in [*compile_diagnostics, *str(compile_error).splitlines()]
-                            if _diagram_compile_failure_is_identified([line], RuntimeError(line))
+            pdf = b""
+            for pass_number in range(1, 4):
+                pass_diagnostics: list[str] = []
+                await report("compile", pass_number, 3)
+                try:
+                    pdf = await asyncio.to_thread(
+                        _compile_pdf,
+                        tex,
+                        max_source_bytes=50_000_000,
+                        timeout_seconds=300,
+                        max_pdf_bytes=80_000_000,
+                        diagnostics=pass_diagnostics,
+                    )
+                except RuntimeError as compile_error:
+                    if not draft.diagrams or not _diagram_compile_failure_is_identified(
+                        pass_diagnostics, compile_error
+                    ):
+                        raise ProjectError(str(compile_error)) from compile_error
+                    removed_diagram_count = len(draft.diagrams)
+                    tex = _remove_diagram_figures(tex, removed_diagram_count)
+                    draft = draft.model_copy(update={"diagrams": []})
+                    warnings.append(
+                        "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                    )
+                    diagram_fallback = {
+                        "applied": True,
+                        "removed_diagram_count": removed_diagram_count,
+                        "reason": next(
+                            (
+                                line[:500]
+                                for line in [*pass_diagnostics, *str(compile_error).splitlines()]
+                                if _diagram_compile_failure_is_identified(
+                                    [line], RuntimeError(line)
+                                )
+                            ),
+                            "Tectonic identified a TikZ/PGF compilation error.",
                         ),
-                        "Tectonic identified a TikZ/PGF compilation error.",
+                    }
+                    pass_diagnostics = []
+                    try:
+                        pdf = await asyncio.to_thread(
+                            _compile_pdf,
+                            tex,
+                            max_source_bytes=50_000_000,
+                            timeout_seconds=300,
+                            max_pdf_bytes=80_000_000,
+                            diagnostics=pass_diagnostics,
+                        )
+                    except RuntimeError as fallback_error:
+                        raise ProjectError(
+                            "The safe diagram fallback could not compile; the authored TeX remains saved."
+                        ) from fallback_error
+                compile_diagnostics = list(pass_diagnostics)
+                await report(
+                    "pdf_check",
+                    pass_number,
+                    3,
+                    detail=(
+                        f"Checking PDF pass {pass_number} of 3; TeX is authoritative and PDFs are not edited."
                     ),
+                )
+                if not pdf.startswith(b"%PDF-"):
+                    raise ProjectError(
+                        "The compiled PDF failed its output validity check; the authored paper remains saved."
+                    )
+                page_count, pdf_warnings = await asyncio.to_thread(
+                    _pdf_text_bounds_diagnostics, pdf
+                )
+                layout_warnings = list(
+                    dict.fromkeys([*_publication_layout_warnings(pass_diagnostics), *pdf_warnings])
+                )
+                pass_record: dict[str, Any] = {
+                    "pass": pass_number,
+                    "page_count": page_count,
+                    "compiler_diagnostics": pass_diagnostics[:100],
+                    "diagnostics": layout_warnings,
                 }
-                pdf = await asyncio.to_thread(
-                    _compile_pdf,
-                    tex,
-                    max_source_bytes=50_000_000,
-                    timeout_seconds=300,
-                    max_pdf_bytes=80_000_000,
-                    diagnostics=compile_diagnostics,
+                pdf_check_passes.append(pass_record)
+                if not layout_warnings or pass_number == 3:
+                    break
+                repaired = _repair_tex_layout(tex, layout_warnings)
+                if repaired is None:
+                    break
+                tex, repair = repaired
+                pass_record["tex_repair"] = repair
+                layout_repairs.append(repair)
+                await report(
+                    "pdf_check",
+                    pass_number,
+                    3,
+                    "milestone",
+                    detail=f"Correcting TeX layout for PDF pass {pass_number + 1} of 3.",
                 )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
+        if layout_warnings:
+            warnings.append(
+                "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+            )
+            record["generation"]["publication_status"] = "needs_review"
+            record["generation"]["proofreading"]["verification_status"] = "incomplete"
+            record["generation"]["proofreading"]["review_reason"] = (
+                "Layout warnings remained after the bounded TeX correction passes."
+            )
+        record["generation"]["pdf_check_passes"] = pdf_check_passes
+        record["generation"]["layout_repairs"] = layout_repairs
+        record["generation"]["pdf_check_final_pass"] = len(pdf_check_passes)
+        record["generation"]["layout_status"] = (
+            "needs_review" if layout_warnings else "no_severe_box_warnings_reported"
+        )
+        record["generation"]["layout_warnings"] = layout_warnings
         # Keep the exact source that produced this version's PDF alongside the
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
         record["draft"] = draft.model_dump()
@@ -5649,6 +6225,18 @@ def preflight(
     )
     maximum_restart_calls = maximum_restart_author_calls + MAX_PROOFREAD_CALLS
     saved_proofreading = work_state.get("proofreading") if resume_available else None
+    saved_proofreading_status = (
+        saved_proofreading.get("status") if isinstance(saved_proofreading, dict) else None
+    )
+    preflight_publication_status = (
+        "needs_review"
+        if saved_proofreading_status == "fallback"
+        else "proofreading_incomplete"
+        if saved_proofreading_status == "running"
+        else "proofreading_complete"
+        if saved_proofreading_status == "complete"
+        else "not_proofread"
+    )
     if isinstance(saved_proofreading, dict):
         attempts = saved_proofreading.get("attempts", [])
         proofread_remaining = (
@@ -5723,6 +6311,8 @@ def preflight(
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
         "draft_recovery_available": resume_available and one_shot_draft_available,
+        "proofreading_status": saved_proofreading_status or "not_started",
+        "publication_status": preflight_publication_status,
         "incomplete_one_shot": incomplete_one_shot,
         "completed_batches": work_state.get("next_batch", 0) if resume_available else 0,
         "evidence_indexed": work_state.get("evidence_indexed", False)
@@ -5799,7 +6389,12 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                         "generation": {
                             key: item
                             for key, item in value["generation"].items()
-                            if key not in {"omitted_evidence", "reduction_source_refs_omitted"}
+                            if key
+                            not in {
+                                "omitted_evidence",
+                                "reduction_source_refs_omitted",
+                                "source_reference_map",
+                            }
                         },
                         "pdf_available": _valid_pdf_file(path, value),
                     }

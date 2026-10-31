@@ -759,6 +759,7 @@ def main() -> None:
                 ).json()
                 with (
                     patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nfixture\n"),
+                    patch.object(papers, "_pdf_text_bounds_diagnostics", return_value=(1, [])),
                     patch.object(
                         papers.httpx,
                         "AsyncClient",
@@ -805,6 +806,7 @@ def main() -> None:
                 long_calls_before = provider_calls
                 with (
                     patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nlong fixture\n"),
+                    patch.object(papers, "_pdf_text_bounds_diagnostics", return_value=(1, [])),
                     patch.object(
                         papers.httpx,
                         "AsyncClient",

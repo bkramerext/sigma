@@ -1,3 +1,60 @@
+## PR #395 — Issue #401 publication-quality correction and bounded PDF checks (2026-10-31)
+
+The renderer now preserves validated inline math in table captions, headers, and
+cells; lays out prose columns with content-aware widths and ragged-right text;
+uses landscape pages for dense four-to-six-column comparisons; repeats longtable
+headers; and renders complete long captions with an incomplete-ending guard.
+Unicode dashes, quotation marks, and ellipses are converted through safe TeX
+markers so their commands do not become printable text. Source UUIDs in prose
+and visual evidence notes are replaced with stable reader labels; the exact
+source-reference map remains in the archived generation metadata.
+
+Diagram layout now separates graph nodes, compact numbered edge badges, and
+transparent fitted boundaries. DAG ranks use wrapped-label heights and reject
+cyclic, overly wide, crowded, or crossing graphs into a complete readable
+node/edge/boundary list. Diagrams are attached to the section with the most
+overlapping claim IDs. The fallback keeps all graph semantics and evidence.
+
+After TeX proofreading, SIGMA now compiles and checks the actual PDF with
+Tectonic diagnostics and PDFium per-character page-bound checks. The UI shows
+`Compiling PDF` and `Checking PDF · pass N of 3`, plus the explicit statement
+that TeX is authoritative and PDFs are not edited. If a check detects a
+correctable horizontal/vertical overflow, SIGMA changes only TeX layout
+settings and compiles again. It stops after a clean check or after at most
+three PDF checks; remaining warnings on pass 3 produce a visible `Needs review`
+status and preserve the exact TeX/PDF pair with pass diagnostics. This does not
+rerun the AI proofreader or research author. A diagram-specific Tectonic/PGF
+error retains the existing semantics-preserving TeX fallback.
+
+Deterministic Tectonic fixtures exercise mathematical cells (Maximum Regions),
+the six-node/five-edge/one-boundary Tadpoles graph, an eight-node ONP relationship
+fallback, a readable DAG rendering, and a multi-page five-column ONP table.
+PDFium extracts text, checks every glyph box against the page bounds, renders
+actual pages, and verifies math values, dash glyphs, complete graph
+labels/edges/boundaries, readable evidence labels, and repeated table headers.
+The deterministic pass regression forces pass 1 and 2 line-layout warnings,
+confirms TeX-only repairs stop after a clean pass 2, and confirms unresolved
+warnings stop after pass 3 with a review status. One-shot and long-form flows
+still use exactly one AI proofreading call per bounded source chunk. These are
+engineering fixtures, not fresh research or evidence about live provider
+quality.
+
+Focused `tests/papers.py` passed, including actual Tectonic compilation and
+PDFium text extraction, bounds checks, and raster rendering. The one-shot
+three-pass path performed four Tectonic compiles (one proofreading diagnostic
+compile plus three PDF passes); long-form stopped cleanly after two PDF passes
+and performed three total compiles. Deterministic provider-call assertions
+passed; no live or paid AI calls occurred. Full `./sigma test`, full Ruff,
+Pyright, frontend typecheck/build, and real Chrome against the deterministic
+provider fixture passed. Chrome covered cancel/retry, visible PDF-check pass
+and TeX-authority progress, long-form recovery in a fresh tab, and saved PDF
+availability. Its pass assertion uses captured UI progress history because a
+fast fixture can finish before a later DOM poll. Screenshot capture is
+conditional on the progress still being on screen. The local browser check
+completed successfully; the fixture project/PDFs are temporary and do not
+constitute research results. No AI/provider charges were incurred. GitHub
+workflows on the pushed final SHA remain pending.
+
 ## PR #395 — mandatory TeX proofreading stage (2026-10-31)
 
 Added an automatic, bounded TeX proofreading stage between research validation
