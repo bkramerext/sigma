@@ -31,6 +31,7 @@ from sigma.projects import (
 from sigma.proposals import configuration
 
 MAX_RECORDS = 50
+MAX_PENDING_REQUESTS = 1000
 MAX_RECORD_BYTES = 2_000_000
 MAX_ARCHIVE_BYTES = 30_000_000
 MAX_QUESTION = 4000
@@ -113,8 +114,13 @@ def _load_archive(path: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]
         raise ProjectError("Q/A archive is invalid or belongs to another project")
     records = value["records"]
     pending = value.get("pending_requests", [])
-    if not isinstance(records, list) or len(records) > MAX_RECORDS or not isinstance(pending, list):
-        raise ProjectError("Q/A pending request ledger is invalid")
+    if (
+        not isinstance(records, list)
+        or len(records) > MAX_RECORDS
+        or not isinstance(pending, list)
+        or len(pending) > MAX_PENDING_REQUESTS
+    ):
+        raise ProjectError("Q/A archive exceeds a safe answer or request-marker limit")
     qa_ids: set[str] = set()
     request_ids: set[str] = set()
     for record in records:
@@ -123,13 +129,16 @@ def _load_archive(path: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]
             raise ProjectError("Q/A archive contains duplicate answer identifiers")
         qa_ids.add(record["qa_id"])
         request_ids.add(record["request_id"])
-    if not isinstance(pending, list) or any(
+    if any(
         not isinstance(item, dict)
         or not re.fullmatch(r"[0-9a-f]{32}", str(item.get("request_id", "")))
         or not re.fullmatch(r"[0-9a-f]{64}", str(item.get("question_sha256", "")))
         for item in pending
     ):
         raise ProjectError("Q/A pending request ledger is invalid")
+    pending_ids = [item["request_id"] for item in pending]
+    if len(set(pending_ids)) != len(pending_ids) or set(pending_ids) & request_ids:
+        raise ProjectError("Q/A pending request ledger contains duplicate identifiers")
     return records, pending
 
 
@@ -347,7 +356,7 @@ async def _answer_locked(
         if previous:
             return previous
         _check_pending_request(pending, request_id, question_hash)
-        if len(records) + len(pending) >= MAX_RECORDS:
+        if len(records) >= MAX_RECORDS:
             raise ProjectError("This project has reached the 50 saved Q/A limit")
     package, snapshot_hash = papers._snapshot(path)
     from sigma.research_state import current_understanding
@@ -378,8 +387,10 @@ async def _answer_locked(
         if previous:
             return previous
         _check_pending_request(pending, request_id, question_hash)
-        if len(records) + len(pending) >= MAX_RECORDS:
+        if len(records) >= MAX_RECORDS:
             raise ProjectError("This project has reached the 50 saved Q/A limit")
+        if len(pending) >= MAX_PENDING_REQUESTS:
+            raise ProjectError("This project has reached the safe pending Q/A request limit")
         pending.append({"request_id": request_id, "question_sha256": question_hash})
         _save(path, records, pending)
     structured, _raw = await papers._provider_structured(

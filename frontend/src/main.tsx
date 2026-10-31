@@ -2616,7 +2616,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
     void refresh();
     return () => request.current?.abort();
   }, []);
-  async function refresh(): Promise<ResearchQARecord[]> {
+  async function refresh(): Promise<ResearchQARecord[] | null> {
     setLoading(true);
     try {
       const q = new URLSearchParams({ path });
@@ -2630,7 +2630,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       setAnswers(saved);
       if (configResponse.ok) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
       return saved;
-    } catch (cause) { setError(errorMessage(cause)); return []; }
+    } catch (cause) { setError(errorMessage(cause)); return null; }
     finally { setLoading(false); }
   }
   async function ask(event: React.FormEvent) {
@@ -2656,7 +2656,9 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   async function checkRecovery() {
     if (!recovery) return;
     setError('');
+    setConfirmRestart(false);
     const saved = await refresh();
+    if (saved === null) return;
     const completed = saved.find(record => record.request_id === recovery.id);
     if (completed) {
       window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(completed.qa_id);
@@ -2668,14 +2670,15 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   async function startOver() {
     if (!recovery || busy) return;
     setError('');
+    setConfirmRestart(false);
     const saved = await refresh();
+    if (saved === null) return;
     const completed = saved.find(record => record.request_id === recovery.id);
     if (completed) {
       window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(completed.qa_id);
       setConfirmRestart(false); setSuccess('The previous request completed and its saved answer is open.');
       return;
     }
-    setConfirmRestart(false);
     await submitQuestion(crypto.randomUUID().replaceAll('-', ''));
   }
   async function remove(id: string) {

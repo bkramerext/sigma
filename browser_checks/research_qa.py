@@ -24,9 +24,18 @@ with sync_playwright() as playwright:
     )
     page = context.new_page()
     errors = []
+    fail_archive_reads = [0]
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
+        if "/api/projects/research-qa?" in route.request.url and fail_archive_reads[0]:
+            fail_archive_reads[0] -= 1
+            route.fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"fixture archive unavailable"}',
+            )
+            return
         route.fulfill(
             response=route.fetch(
                 url=route.request.url.replace(
@@ -38,6 +47,9 @@ with sync_playwright() as playwright:
 
     context.route("**/api/**", forward)
     page.goto(UI + "/")
+    welcome = page.locator("#invitation-welcome-dialog")
+    if welcome.count() and welcome.is_visible():
+        welcome.get_by_role("button", name="Let's get started", exact=True).click()
     samples = page.get_by_role("tab", name="Samples", exact=True)
     samples.click()
     page.locator("button.sample-open").filter(has_text="Maximum Regions Formed by Lines").click()
@@ -80,12 +92,10 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
     recovery = dialog.get_by_role("group", name="Recover interrupted Q/A request")
+    fail_archive_reads[0] = 1
     recovery.get_by_role("button", name="Check saved answers").click()
-    confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
-    expect(confirmation).to_be_visible(timeout=5000)
-    needs_second_check = True
-    expect(confirmation).to_contain_text("may incur another charge")
-    confirmation.get_by_role("button", name="Cancel", exact=True).click()
+    expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
+    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
     saved_answers = []
     for _ in range(120):
         saved_answers = page.evaluate(
@@ -96,8 +106,7 @@ with sync_playwright() as playwright:
             break
         page.wait_for_timeout(250)
     assert any(answer["question"] == question for answer in saved_answers), saved_answers
-    if needs_second_check:
-        recovery.get_by_role("button", name="Check saved answers").click()
+    recovery.get_by_role("button", name="Check saved answers").click()
     expect(
         dialog.get_by_text("The previous request completed and its saved answer is open.")
     ).to_be_visible()
@@ -117,6 +126,19 @@ with sync_playwright() as playwright:
     recovery.get_by_role("button", name="Start over / Ask again").click()
     confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
     expect(confirmation).to_contain_text("may incur another charge")
+    failed_state_before_retry = page.evaluate(
+        "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
+    )
+    fail_archive_reads[0] = 1
+    confirmation.get_by_role("button", name="Confirm Start over").click()
+    expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
+    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
+    failed_state_after_archive_error = page.evaluate(
+        "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
+    )
+    assert failed_state_after_archive_error["started"] == failed_state_before_retry["started"]
+    recovery.get_by_role("button", name="Start over / Ask again").click()
+    confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
     confirmation.get_by_role("button", name="Confirm Start over").click()
     expect(dialog.locator(".saved-paper-card").first).to_contain_text(
         failed_question, timeout=30000
