@@ -3720,6 +3720,78 @@ class CloudAuthTests(TestCase):
                 ).fetchone()
             self.assertEqual(tuple(final_grant), (1, 10))
 
+    def test_three_domain_authorization_cycles_reusing_same_google_account(self):
+        """Remove/reauthorize must not poison later logins for the same subject."""
+        local_origin = "http://127.0.0.1:5173"
+        email = "nontrivialzeero@gmail.com"
+        subject = "repeat-domain-member-subject"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            admin_login = self.finish(
+                email="admin@example.org", subject="repeat-domain-admin", client=admin
+            )
+            admin.cookies.set(cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE])
+            for cycle in range(3):
+                granted = admin.post(
+                    "/api/cloud-auth/admin/grants",
+                    json={
+                        "kind": "domain",
+                        "value": "gmail.com",
+                        "role": "member",
+                        "allowance_usd": 10,
+                    },
+                    headers={"Origin": local_origin},
+                )
+                self.assertEqual(granted.status_code, 200, (cycle, granted.text))
+                visible = admin.get("/api/cloud-auth/admin/grants")
+                self.assertEqual(visible.status_code, 200, visible.text)
+                domain = next(
+                    grant for grant in visible.json()["grants"]
+                    if grant["kind"] == "domain" and grant["value"] == "gmail.com"
+                )
+                self.assertEqual((domain["role"], domain["active"]), ("member", 1))
+                with patch.object(cloud_auth, "_deliver_invitation"):
+                    login = self.finish(email, subject)
+                self.assertEqual(login.status_code, 303, (cycle, login.text))
+                role = self.client.get("/api/cloud-auth/status").json()["user"]["role"]
+                self.assertEqual(role, "member", f"member login cycle {cycle}")
+                with cloud_auth._db(cloud_auth.config()) as db:
+                    grant = db.execute(
+                        "SELECT role,active,allowance_usd FROM grants "
+                        "WHERE kind='email' AND value=?",
+                        (email,),
+                    ).fetchone()
+                self.assertEqual(tuple(grant), ("member", 1, 10))
+                # Remove both derived email authorization and its domain.
+                # No permanent deny or stale session may survive this reset.
+                for kind, value in (("email", email), ("domain", "gmail.com")):
+                    removed = admin.delete(
+                        f"/api/cloud-auth/admin/grants/{kind}/{value}",
+                        headers={"Origin": local_origin},
+                    )
+                    self.assertEqual(removed.status_code, 200, (cycle, removed.text))
+                self.client.cookies.clear()
+                self.assertEqual(
+                    admin.get("/api/cloud-auth/admin/grants").json()["grants"], []
+                )
+                with patch.object(cloud_auth, "_deliver_invitation"):
+                    guest = self.finish(email, subject)
+                self.assertEqual(guest.status_code, 303, (cycle, guest.text))
+                self.assertEqual(
+                    self.client.get("/api/cloud-auth/status").json()["user"]["role"],
+                    "guest",
+                    f"guest between cycles {cycle}",
+                )
+                self.client.cookies.clear()
+
     def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
         """A new domain admission supersedes old revocation and pending request."""
         local_origin = "http://127.0.0.1:5173"
