@@ -3361,6 +3361,85 @@ class CloudAuthTests(TestCase):
                 self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
             )
 
+    def test_local_fresh_google_signin_after_admin_domain_grant(self):
+        """Exercise local admin-save -> fresh Google callback, not just session refresh."""
+        local_origin = "http://127.0.0.1:5173"
+        applicant_email = "nontrivialzeero@gmail.com"
+        applicant_subject = "local-fresh-domain-applicant"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            signed_admin = self.finish(
+                email="admin@example.org", subject="local-domain-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", signed_admin.cookies["sigma_session"])
+
+            # Create a pending invitation before domain approval, as in the
+            # failing manual scenario. The subsequent callback is a NEW login.
+            guest = self.finish(applicant_email, applicant_subject)
+            self.assertEqual(guest.status_code, 303)
+            self.assertEqual(self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest")
+            with patch.object(cloud_auth, "_deliver_invitation"):
+                requested = self.client.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                )
+            self.assertEqual(requested.status_code, 200, requested.text)
+            self.client.cookies.clear()
+
+            granted = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "domain",
+                    "value": "gmail.com",
+                    "role": "member",
+                    "allowance_usd": 10,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(granted.status_code, 200, granted.text)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                policy = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants "
+                    "WHERE kind='domain' AND value='gmail.com'"
+                ).fetchone()
+            self.assertEqual(tuple(policy), ("member", 1, 10))
+
+            with patch.object(cloud_auth, "_deliver_invitation") as notice:
+                signed = self.finish(applicant_email, applicant_subject)
+            self.assertEqual(signed.status_code, 303, signed.text)
+            self.assertIn("sigma_session", signed.cookies)
+            notice.assert_called_once()
+            self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
+            self.assertEqual(self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                individual = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants "
+                    "WHERE kind='email' AND value=?", (applicant_email,)
+                ).fetchone()
+                invitation = db.execute(
+                    "SELECT status FROM invitation_requests WHERE subject=?",
+                    (applicant_subject,),
+                ).fetchone()
+                audit_count = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (applicant_email,),
+                ).fetchone()[0]
+            self.assertEqual(tuple(individual), ("member", 1, 10))
+            self.assertEqual(invitation["status"], "reviewed")
+            self.assertEqual(audit_count, 1)
+            listed = admin.get("/api/cloud-auth/admin/grants").json()
+            self.assertTrue(any(
+                item["email"] == applicant_email and item["authorized"]
+                for item in listed["sessions"]
+            ))
+
     def test_domain_approved_google_login_materializes_individual_member(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
