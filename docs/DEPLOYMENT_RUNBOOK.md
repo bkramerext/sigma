@@ -246,8 +246,95 @@ The SSH troubleshooting command briefly enabled
 `networkmanagement.googleapis.com`; it was disabled immediately and verified
 disabled. This deviation made no persistent API or SSH-access change.
 
-The active host Caddy is version 2.6.2. Its `caddy validate` check passed on the
-candidate maintenance Caddyfile after using the version-compatible unqualified
-`handle_errors` form. Validation warned that the maintenance import glob has no
-matching files while the host snippet directory is still absent; installation
-will create that directory and final validation will be repeated before reload.
+The active host Caddy is version 2.6.2. Candidate validation passed after using
+the version-compatible unqualified `handle_errors` form. Before host setup, the
+empty import glob warned that it had no matching files; the maintenance
+configuration was subsequently installed and revalidated before reload. The
+final `off` state intentionally leaves the glob empty and Caddy logs that benign
+warning during validation.
+
+## v0.1.7 production deployment outcome — 2026-10-30
+
+The tested version-bump PR [#390](https://github.com/bkramerext/sigma/pull/390)
+was reviewed and merged after all exact-head workflows passed. The merge commit
+`802e9b6b7da5829868070f760e17280cd8a927f2` is the deployed full `main` SHA;
+its post-merge `SIGMA verification` passed in [run 41177482484](https://github.com/bkramerext/sigma/actions/runs/41177482484). It includes domain-authorization
+PR #389 (merge `e3047b83c0f95c8f1f06cd4a5c66ca55a194745e`) and maintenance PR
+#385 (merge `31ba6c4aba1ed59d2d7e092f589b882d7f134b30`). `./sigma test` passed
+on the exact candidate; the optional graph-present scenario skipped because its
+Python sandbox image was unavailable. No release tag was created.
+
+Immediately before cutover, host checkout and protected `SIGMA_RELEASE` both
+matched `0e51d20341ea5656f971e075b466694393e25d97`, the three containers were
+healthy, all 23 host preflight checks passed, and the persistent state disk was
+mounted at `/srv/sigma-state` from UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. The recovery snapshot
+`sigma-state-v016-pre-20261030-1122` remained `READY` and its isolated
+read-only restore drill had passed. The research database had 40 jobs: 2
+paused and 38 terminal, with zero queued/running/stopping jobs.
+
+The target helper was extracted from the exact merged SHA (helper SHA-256
+`cb8b05579ef1e494143f221130624964356e6d4565654daa6e4bd7f2b8cebf17`). It
+passed host preflight, built both Linux/amd64 images from the target commit's
+Git archive, enabled maintenance, stopped and restarted `sigma.service`,
+verified healthy containers and the state mount, then disabled maintenance.
+The helper reported success. The release record at
+`/var/lib/sigma/releases/802e9b6b7da5829868070f760e17280cd8a927f2.json` records
+backend image ID
+`sha256:d97c4ff5092fb6fedb74d5e6842ae95ddb755fa063958ab24468d1643da20223` and
+frontend image ID
+`sha256:852158bc89470ea2a486f224935ad51b799649b64e9b9082d8fd1329366c682d`;
+source labels and running image IDs match the deployed SHA. All backend,
+frontend, and edge containers were healthy after cutover.
+
+Host maintenance setup completed before deployment. Files from the merged SHA
+were installed at `/var/www/sigma-maintenance/`; the root-owned import directory
+is `/etc/caddy/sigma-maintenance`; and the root-owned mode-0755 switch is
+`/usr/local/libexec/sigma/maintenance-switch.py`. Caddy 2.6.2 validated the
+version-compatible unqualified `handle_errors` config and reloaded while normal
+traffic continued. The original one-site Caddyfile is backed up at
+`/etc/caddy/Caddyfile.pre-sigma-v017-20261031`.
+
+An external HTTPS monitor first observed maintenance HTTP 503 at
+2026-10-31 06:46:53 UTC and last observed it at 06:47:34 UTC; the first normal
+HTTP 200 followed at 06:47:36 UTC. During the 503 window the page included
+`Cache-Control: no-store, max-age=0`; the maintenance image endpoint returned
+HTTP 200 with `image/png` and matched committed asset SHA-256
+`6d7034dcb1d372c43b2a572a5b8c44e3ab68bd84ac3f2a965d3546864a0bf54e`. After
+cutover, the root returned 200 without maintenance content; the image route did
+not return the maintenance PNG. The public endpoint verifier passed DNS, closed
+private ports, HTTP-to-HTTPS redirect, TLS/root, SPA deep link, and hosted API.
+Hosted auth status returned HTTP 200/ready; an unauthenticated member endpoint
+returned HTTP 401. Headless Chrome rendered the SIGMA application. The served
+frontend bundle contains version `0.1.7` and build prefix `802e9b6`.
+
+Post-cutover checkout and protected release pin match the deployed SHA;
+`sigma.service` and Caddy are active with no pending systemd unit reload; all
+three containers are healthy; the state disk remains mounted; and maintenance is
+off. Production availability recovered immediately after the measured
+maintenance window. No paid provider calls or local SIGMA server requests
+occurred. The release snapshot is now pre-v0.1.7, not a post-deployment
+recovery point; take and restore-verify a fresh point before the next release.
+The recurring backup timer remains absent. Exact GCP-billed recovery-drill
+spend was not independently queried.
+
+Schema review found the v0.1.7 database additions use defaulted columns
+(`notification_error`, `job_kind`); old inserts specify their columns, and
+existing job rows receive `job_kind='research'`. The auth migration also removes
+inactive email authorization tombstones as part of the domain-authorization fix.
+The `--schema-compatible` guard was supplied based on this source review,
+pre-cutover zero-active-job check, and preserved backup; it was not an
+end-to-end rehearsal of the exact v0.1.6 binary against the migrated live
+database. Therefore do not treat future code rollback as certified: if a later
+incident needs rollback, preserve the state and logs and first demonstrate exact
+old-binary compatibility or use the separately authorized restore process. The
+normal deployment completed without triggering rollback.
+
+Issue [#383](https://github.com/bkramerext/sigma/issues/383) was auto-closed
+by the PR #385 merge before production verification. Red reopened it after
+discovering that ordering and closed it at 2026-10-31 06:50:23 UTC, after
+successful production verification. During recovery-host troubleshooting,
+`gcloud compute ssh --troubleshoot` briefly enabled
+`networkmanagement.googleapis.com`; it was immediately disabled and verified
+off. Temporary project SSH metadata was removed while preserving the existing
+admin key entry. No persistent API, IAM, SSH, or network change remains.
