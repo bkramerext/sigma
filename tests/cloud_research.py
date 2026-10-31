@@ -2167,8 +2167,13 @@ def main() -> None:
                 assert summary["user_reserved_or_observed_tokens"] == 120
 
                 second = job(a.workspace_id)
-                cloud_research.prepare_job(second)
-                assert not cloud_research.claim_job(second["id"])
+                try:
+                    cloud_research.prepare_job(second)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "capacity is currently full" in str(exc)
+                else:
+                    raise AssertionError("Second research job must fail fast at capacity")
+                assert cloud_research.job_status(second["id"]) is None
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
@@ -2184,8 +2189,13 @@ def main() -> None:
                     pass
                 assert cloud_research.snapshot()["jobs"].get("queued", 0) == 0
                 third = job(b.workspace_id)
-                cloud_research.prepare_job(third)
-                assert not cloud_research.claim_job(third["id"])
+                try:
+                    cloud_research.prepare_job(third)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "capacity is currently full" in str(exc)
+                else:
+                    raise AssertionError("Third research job must fail fast at global capacity")
+                assert cloud_research.job_status(third["id"]) is None
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
