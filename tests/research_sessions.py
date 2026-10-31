@@ -816,9 +816,7 @@ async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
             assert await asyncio.wait_for(lock_owner.stdout.readline(), 3) == b"locked\n"
             for operation in (
                 research_sessions.control_session(str(path), started["id"], "resume"),
-                research_sessions.remove_session(
-                    str(path), started["id"], stopped["updated_at"]
-                ),
+                research_sessions.remove_session(str(path), started["id"], stopped["updated_at"]),
             ):
                 try:
                     await operation
@@ -8827,9 +8825,7 @@ def main():
             )
         )
         asyncio.run(
-            test_foreign_worker_lock_blocks_resume_and_removal(
-                root / "foreign-worker-owner.sigma"
-            )
+            test_foreign_worker_lock_blocks_resume_and_removal(root / "foreign-worker-owner.sigma")
         )
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
         asyncio.run(
