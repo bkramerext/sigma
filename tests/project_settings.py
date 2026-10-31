@@ -1,6 +1,5 @@
 """Atomic settings transactions, strict audit, identity and legacy safety."""
 
-import base64
 import json
 import subprocess
 import sys
