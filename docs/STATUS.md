@@ -8539,3 +8539,9 @@ browser, citation, Research version, TeX download, and PDF browser behavior.
 Captured normal/Copied title and toolbar screenshots are in
 [`docs/evaluations/research_qa/`](evaluations/research_qa/). No paid calls,
 merge, or deployment.
+
+Following review at `f229831acdcdec3d3aa7285e6241a83d759ddf10`, the full saved
+Q/A and TeX title text again toggles its disclosure by click and keyboard
+(Enter/Space); the chevron remains separate and Copy does not toggle. Both
+real-Chrome regressions cover this behavior and the final wrapped-line Copy
+placement, including mobile Copied-state screenshots.

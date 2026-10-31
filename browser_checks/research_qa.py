@@ -193,10 +193,20 @@ with sync_playwright() as playwright:
     expect(title_line.locator(".saved-paper-title")).to_have_count(1)
     expect(title_line.locator("button button")).to_have_count(0)
     expanded_before_copy = card.locator(".saved-paper-expand").get_attribute("aria-expanded")
-    title_rects = title_line.locator(".saved-paper-title").evaluate(
+    title_toggle = title_line.locator(".saved-paper-title-toggle")
+    title_toggle.click()
+    expect(title_toggle).to_have_attribute(
+        "aria-expanded", "false" if expanded_before_copy == "true" else "true"
+    )
+    title_toggle.focus()
+    page.keyboard.press("Enter")
+    expect(title_toggle).to_have_attribute("aria-expanded", expanded_before_copy)
+    title_rects = title_toggle.evaluate(
         "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
     )
     assert len(title_rects) >= 2, title_rects
+    title_toggle.evaluate("el => el.blur()")
+    page.mouse.move(1, 1)
     title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
     normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
     normal_copy_box = normal_copy_button.bounding_box()
@@ -216,6 +226,7 @@ with sync_playwright() as playwright:
     ).bounding_box()
     last_title_rect = title_rects[-1]
     assert copied_icon_box and copied_icon_box["x"] >= last_title_rect["right"] - 1
+    assert copied_icon_box["x"] - last_title_rect["right"] <= 8, (copied_icon_box, last_title_rect)
     assert normal_copy_box and normal_icon_box
     assert copied_icon_box == normal_copy_box
     assert (
@@ -394,6 +405,37 @@ with sync_playwright() as playwright:
     )
     assert len(mobile_title_rects) >= 2, mobile_title_rects
     mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile.png"))
+    mobile_title_toggle = mobile_title.locator(".saved-paper-title-toggle")
+    mobile_toggle_before_copy = mobile_title.locator(".saved-paper-expand").get_attribute(
+        "aria-expanded"
+    )
+    mobile_last_line = mobile_title_toggle.evaluate(
+        "el => { const r=document.createRange(); r.selectNodeContents(el); const a=[...r.getClientRects()]; const x=a.at(-1); return {right:x.right,y:x.y,height:x.height}; }"
+    )
+    mobile_copy = mobile_title.get_by_role("button", name="Copy Markdown answer")
+    mobile_copy.click()
+    expect(
+        mobile_title.get_by_role("button", name="Copied Markdown answer to clipboard")
+    ).to_be_visible(timeout=3000)
+    mobile_copy_box = mobile_title.get_by_role(
+        "button", name="Copied Markdown answer to clipboard"
+    ).bounding_box()
+    assert mobile_copy_box and mobile_copy_box["x"] >= mobile_last_line["right"] - 1
+    assert mobile_copy_box["x"] - mobile_last_line["right"] <= 8
+    assert (
+        abs(
+            (mobile_copy_box["y"] + mobile_copy_box["height"] / 2)
+            - (mobile_last_line["y"] + mobile_last_line["height"] / 2)
+        )
+        < 14
+    )
+    assert (
+        mobile_title.locator(".saved-paper-expand").get_attribute("aria-expanded")
+        == mobile_toggle_before_copy
+    )
+    mobile_copied = page.evaluate("navigator.clipboard.readText()")
+    assert mobile_copied.startswith("# Research Q/A") and question in mobile_copied
+    mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile-copied.png"))
     remove = mobile_dialog.locator(".saved-paper-card").first.get_by_role(
         "button", name="Remove", exact=True
     )

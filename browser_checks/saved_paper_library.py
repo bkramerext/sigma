@@ -110,16 +110,26 @@ with sync_playwright() as playwright:
     title_line = card.locator(".saved-paper-title-line")
     title = title_line.locator(".saved-paper-title")
     expect(title_line.locator("button button")).to_have_count(0)
+    title_toggle = title_line.locator(".saved-paper-title-toggle")
     expect(title).to_have_text(
         "The Maximum Number of Regions Formed by Lines: An Evidence-Bound Mathematical Framework with Explicit Construction and Unverified Claims"
     )
-    title_rects = title.evaluate(
+    title_rects = title_toggle.evaluate(
         "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
     )
     assert len(title_rects) >= 2, title_rects
+    expanded_before_copy = card.locator(".saved-paper-expand").get_attribute("aria-expanded")
+    title_toggle.click()
+    expect(title_toggle).to_have_attribute(
+        "aria-expanded", "false" if expanded_before_copy == "true" else "true"
+    )
+    title_toggle.focus()
+    page.keyboard.press("Space")
+    expect(title_toggle).to_have_attribute("aria-expanded", expanded_before_copy)
+    title_toggle.evaluate("el => el.blur()")
+    page.mouse.move(1, 1)
     title_line.screenshot(path="docs/evaluations/research_qa/tex-title-normal.png")
     copy_button = title_line.get_by_role("button", name="Copy paper text")
-    expanded_before_copy = card.locator(".saved-paper-expand").get_attribute("aria-expanded")
     normal_copy_box = copy_button.bounding_box()
     normal_icon_box = copy_button.locator("svg").bounding_box()
     copy_button.click()
@@ -129,6 +139,7 @@ with sync_playwright() as playwright:
     assert copied_paper == text_response["text"]
     copied_box = copied_button.bounding_box()
     assert copied_box and copied_box["x"] >= title_rects[-1]["right"] - 1
+    assert copied_box["x"] - title_rects[-1]["right"] <= 8, (copied_box, title_rects[-1])
     assert copied_box == normal_copy_box
     assert copied_button.locator("svg").bounding_box() == normal_icon_box
     assert (
@@ -201,6 +212,26 @@ with sync_playwright() as playwright:
     )
     assert len(mobile_title_rects) >= 2, mobile_title_rects
     title_line.screenshot(path="docs/evaluations/research_qa/tex-title-mobile.png")
+    mobile_toggle_before_copy = expand.get_attribute("aria-expanded")
+    mobile_last_line = title_toggle.evaluate(
+        "el => { const r=document.createRange(); r.selectNodeContents(el); const a=[...r.getClientRects()]; const x=a.at(-1); return {right:x.right,y:x.y,height:x.height}; }"
+    )
+    title_line.get_by_role("button", name="Copy paper text").click()
+    mobile_copied_button = title_line.get_by_role("button", name="Copied paper text to clipboard")
+    expect(mobile_copied_button).to_be_visible()
+    mobile_copied_box = mobile_copied_button.bounding_box()
+    assert mobile_copied_box and mobile_copied_box["x"] >= mobile_last_line["right"] - 1
+    assert mobile_copied_box["x"] - mobile_last_line["right"] <= 8
+    assert (
+        abs(
+            (mobile_copied_box["y"] + mobile_copied_box["height"] / 2)
+            - (mobile_last_line["y"] + mobile_last_line["height"] / 2)
+        )
+        < 14
+    )
+    assert expand.get_attribute("aria-expanded") == mobile_toggle_before_copy
+    assert page.evaluate("navigator.clipboard.readText()") == text_response["text"]
+    title_line.screenshot(path="docs/evaluations/research_qa/tex-title-mobile-copied.png")
     mobile_action_lefts = actions.locator("a").evaluate_all(
         "items => items.map(item => item.getBoundingClientRect().left)"
     )

@@ -92,6 +92,7 @@ Focused Q/A and security tests, Ruff, Pyright, frontend typecheck/build, full `.
 - This placement supersedes the earlier presentation note above: the Answer heading no longer carries Copy; Copy follows the saved question title.
 - Q/A Copy now follows the full saved question, on its final wrapped line. The Answer heading no longer has a copy action. TeX Copy now follows the complete paper title; Download text, Download TeX, Download PDF, and Open PDF in browser remain in the existing action column.
 - Saved-title disclosure controls and Copy buttons are separate, keyboard-accessible controls with no nested interactive buttons. Both browser regressions confirm Copy preserves the current expanded/collapsed state and copies the full document/text.
+- Follow-up to review at `f229831acdcdec3d3aa7285e6241a83d759ddf10`: the complete wrapped title text again toggles its row by pointer or Enter/Space keyboard activation. The separate chevron remains available, and Copy does not toggle the row. Chrome regressions cover Q/A click and Enter, TeX click and Space, and Copy while collapsed/expanded.
 - The normal and Copied SVGs now share a fixed 28px control and 18px icon box. The confirmation check uses an inset path; Chrome verifies it is within the viewBox and its bounding box does not move during the transition.
 - Q/A toolbar text is now 17px bold, while its 50×34px footprint remains equal to TEX and LEAN. Chrome checked computed type size/weight, equal control heights, and captured the toolbar.
 - `./sigma test` passed, including Ruff, Pyright (0 errors/warnings/information), frontend typecheck/build and deterministic Q/A/TeX regressions. The optional graph-present sandbox check was skipped because its local image is unavailable; Vite reports the existing large-chunk advisory.
@@ -101,6 +102,7 @@ Focused Q/A and security tests, Ruff, Pyright, frontend typecheck/build, full `.
 ### Status
 
 - **MET** — Q/A and TeX title copy placement/wrapping; stable copied icon; clipboard payload and disclosure behavior; Q/A toolbar typography and retained footprint; Chrome desktop/mobile acceptance and feature regressions.
+- **MET** — full saved title remains a click and keyboard disclosure control, with independent chevron and Copy action.
 - **UNMET** — none identified.
 - **UNVERIFIED** — live external provider behavior. No paid calls were made. All six GitHub workflows passed on implementation commit `4e555df2201c966f726a6bc2fd00cc2c2898ebd5`; workflow status for the final documentation-only follow-up will be reported with the final PR head.
 

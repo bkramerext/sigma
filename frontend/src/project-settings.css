@@ -242,8 +242,9 @@
 .project-settings-dialog.ai-paper-dialog .saved-paper-meta button.text-view-link.destructive-action { color: #e6a092; }
 .project-settings-dialog.ai-paper-dialog .saved-paper-meta button.text-view-link.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
 .project-settings-dialog.ai-paper-dialog .settings-body button:disabled { opacity: .5; cursor: default; }
-.project-settings-dialog.ai-paper-dialog .settings-body .text-copy-button { box-sizing: border-box; display: inline-flex; width: 28px; height: 28px; min-width: 28px; min-height: 28px; margin: 0 0 0 3px; padding: 4px; overflow: visible; vertical-align: -2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; text-decoration: none; }
+.project-settings-dialog.ai-paper-dialog .settings-body button.text-copy-button { box-sizing: border-box; display: inline-flex; width: 28px; height: 28px; min-width: 28px; min-height: 28px; margin: 0 0 0 3px; padding: 4px; overflow: visible; vertical-align: -2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #c7a16d; text-decoration: none; }
 .project-settings-dialog.ai-paper-dialog .settings-body .text-copy-button svg { display: block; width: 18px; height: 18px; flex: 0 0 18px; overflow: visible; }
+.project-settings-dialog.ai-paper-dialog .settings-body .saved-paper-title-line button.text-copy-button { margin-left: -28px; }
 .ai-paper-body select { width: 100%; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-long-form,
 .project-settings-dialog.ai-paper-dialog .ai-paper-open-tab,
