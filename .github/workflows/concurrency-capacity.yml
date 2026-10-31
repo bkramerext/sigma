@@ -38,7 +38,7 @@ jobs:
             -v "$PWD/scripts:/bench/scripts:ro" \
             -w /bench \
             sigma-compile-capacity:ci \
-            python /bench/scripts/measure_dual_tectonic.py \
+            python /bench/scripts/measure_dual_tectonic.py --prewarm \
             | tee capacity-results/dual-tectonic.json
       - name: Preserve compilation evidence even on failure
         if: always()
