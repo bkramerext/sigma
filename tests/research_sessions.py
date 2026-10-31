@@ -470,9 +470,7 @@ def test_project_concurrency_max_four_and_legacy_read(root: Path) -> None:
 
     for invalid in (0, 5, "5", -1, "not-a-number"):
         try:
-            research_sessions.save_limits(
-                path, {**original, "max_concurrent_sessions": invalid}
-            )
+            research_sessions.save_limits(path, {**original, "max_concurrent_sessions": invalid})
         except ProjectError as exc:
             assert "between 1 and 4" in str(exc)
         else:
