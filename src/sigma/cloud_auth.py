@@ -2612,8 +2612,15 @@ def list_grants():
         active: dict[str, dict[str, object]] = {}
         for session in sessions:
             role = _authorization_in_db(db, cfg, session["subject"], session["email"])
-            if session["expires_at"] <= _now() or not role:
+            if session["expires_at"] <= _now():
                 db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
+                continue
+            if not role:
+                # A local verified Guest session is intentional. Opening
+                # Administrator Settings must not destroy it while a newer
+                # domain grant is awaiting materialization on status refresh.
+                if not cfg.local:
+                    db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
                 continue
             current = active.get(session["subject"])
             if current is None:
