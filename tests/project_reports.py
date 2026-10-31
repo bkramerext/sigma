@@ -7,13 +7,41 @@ import os
 from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from sigma.api import app, export_project_view
-from sigma.project_reports import render_report
+from sigma.project_reports import _compile_pdf, render_report
 from sigma.projects import create_strategy, initialize_project
 from sigma.research_epistemics import execution_provenance, verification_label
+
+
+def test_cold_cache_collision_retries_once_without_provider_calls() -> None:
+    """Two cold compilers must not turn a font-cache race into a lost PDF."""
+    cache_homes: list[str] = []
+
+    def compile_fixture(_args, *, cwd, env, **_kwargs):
+        cache_homes.append(env["XDG_CACHE_HOME"])
+        if len(cache_homes) == 1:
+            return SimpleNamespace(
+                returncode=1,
+                stdout=b"Fontconfig error: unavailable\\nMetric (TFM) file or installed font not found",
+            )
+        Path(cwd, "report.pdf").write_bytes(b"%PDF-1.7\\nfixture")
+        return SimpleNamespace(returncode=0, stdout=b"completed")
+
+    with (
+        TemporaryDirectory() as root,
+        patch("sigma.project_reports.shutil.which", return_value="/usr/local/bin/tectonic"),
+        patch("sigma.project_reports.subprocess.run", side_effect=compile_fixture),
+        patch.dict(os.environ, {"SIGMA_STATE_DIR": root}),
+    ):
+        result = _compile_pdf(r"\\documentclass{article}\\begin{document}x\\end{document}")
+        assert result.startswith(b"%PDF-")
+        assert len(cache_homes) == 2
+        assert cache_homes[0] != cache_homes[1]
 
 
 def fixture() -> dict:
@@ -413,6 +441,7 @@ def test_computation_provenance_precedes_authored_claims() -> None:
 
 
 def main() -> None:
+    test_cold_cache_collision_retries_once_without_provider_calls()
     test_computation_provenance_precedes_authored_claims()
     test_verification_presentation()
     test_unequal_metric_groups()

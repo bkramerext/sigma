@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from typing import Any, cast
 
 from sigma.research_epistemics import (
@@ -939,17 +940,34 @@ def _compile_pdf(
             "TECTONIC_UNTRUSTED_MODE": "1",
             "LANG": "C.UTF-8",
         }
-        try:
-            result = subprocess.run(
+        started = time.monotonic()
+
+        def run_compiler(cache_home: str, seconds: float) -> subprocess.CompletedProcess[bytes]:
+            return subprocess.run(
                 [executable, "--untrusted", "--outdir", directory, source],
                 cwd=directory,
-                env=environment,
+                env={**environment, "XDG_CACHE_HOME": cache_home},
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                timeout=timeout_seconds,
+                timeout=seconds,
                 check=False,
             )
+
+        try:
+            result = run_compiler(cache_dir, timeout_seconds)
+            # Tectonic can race when two cold compilers populate its shared
+            # package cache. Recover only the proven missing-TFM failure using
+            # an isolated scratch cache, without replaying any AI provider work.
+            if (
+                result.returncode != 0
+                and b"Metric (TFM) file or installed font not found" in result.stdout
+                and time.monotonic() - started < timeout_seconds - 1
+            ):
+                isolated_cache = os.path.join(directory, "tectonic-recovery-cache")
+                os.makedirs(isolated_cache, mode=0o700)
+                remaining = max(1, timeout_seconds - (time.monotonic() - started))
+                result = run_compiler(isolated_cache, remaining)
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(
                 f"PDF compilation exceeded {timeout_seconds} seconds. No file was downloaded."
