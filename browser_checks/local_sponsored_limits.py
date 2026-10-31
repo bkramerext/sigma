@@ -257,6 +257,35 @@ def main() -> None:
                 expect(
                     settings.get_by_label("Maximum estimated session cost (USD)", exact=True)
                 ).to_have_value("0.5")
+                duration = settings.get_by_label("Maximum session duration", exact=True)
+                unit = settings.get_by_label("Maximum session duration unit", exact=True)
+                unit.select_option("unlimited")
+                expect(duration).to_have_value("")
+                expect(duration).not_to_be_editable()
+                settings.get_by_role("button", name="Save", exact=True).click()
+                expect(settings).to_be_hidden()
+                saved = page.evaluate(
+                    """async () => {
+                      const path = new URL(location.href).searchParams.get('path');
+                      const response = await fetch('/api/projects/research-limits?' + new URLSearchParams({path}));
+                      return await response.json();
+                    }"""
+                )
+                assert saved["session_duration_minutes"] is None, saved
+                page.reload(wait_until="networkidle")
+                settings_button = page.get_by_role("button", name="Project settings", exact=True)
+                settings_button.focus()
+                settings_button.press("Enter")
+                settings = page.get_by_role("dialog", name="Project Settings")
+                settings.get_by_role("tab", name="Limits", exact=True).click()
+                duration = settings.get_by_label("Maximum session duration", exact=True)
+                unit = settings.get_by_label("Maximum session duration unit", exact=True)
+                expect(unit).to_have_value("unlimited")
+                expect(duration).to_have_value("")
+                expect(duration).not_to_be_editable()
+                unit.select_option("hours")
+                expect(duration).to_have_value("1")
+                expect(duration).to_be_editable()
                 assert not errors, errors
                 page.screenshot(path="/tmp/sigma-local-sponsored-limits.png", full_page=True)
             finally:
