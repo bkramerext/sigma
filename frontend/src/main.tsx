@@ -110,7 +110,7 @@ type StrategyFinding = { strategy_id: string; strategy_title: string; status: st
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; configured_duration_limit_minutes?: number; duration_limit_minutes?: number; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
 function sessionEstimatedCostLabel(session: ResearchSession): string {
   const cost = session.estimated_cost_usd;
@@ -501,8 +501,9 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       : session.status === 'stopped' ? 'Session stopped'
         : session.status === 'failed' ? 'Session failed' : 'Session ended';
   const statusNextStep = session.next_step_guidance
-    || (budgetDenied ? 'Review the available research allowance before starting another session.'
-      : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
+    || (session.termination_reason_code === 'research_completed_early' ? 'Review the saved findings and rationale; the configured turn count was an upper limit, not a target.'
+      : budgetDenied ? 'Review the available research allowance before starting another session.'
+        : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
   const zeroPythonRuns = runMetrics.some(item => item.label === 'Python runs by status' && item.value === '0 executions');
   const zeroSageRuns = runMetrics.some(item => item.label === 'SageMath runs by status' && item.value === '0 executions');
   const noSavedLocalComputations = (provenance && provenance.records.length === 0 && provenance.unidentified_count === 0)
@@ -629,7 +630,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
       {provenancePrelude}
-      {(budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+      {(budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
         <strong>{statusHeading}</strong>
         {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
@@ -751,7 +752,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {session.artifacts.length > 0 && <div className="outcome-provenance-group"><h4>Saved artifact origins</h4><ul className="outcome-provenance-list">{session.artifacts.map(artifact => <li key={artifact.id}><div className="outcome-label-value"><dt>Artifact {artifact.sequence}</dt><dd>{artifact.id}</dd></div><p>{artifact.session_id ? `Session ${artifact.session_id}` : 'Source session unavailable'} · {artifact.strategy_id ? `Strategy ${artifact.strategy_id}` : 'Strategy unavailable'} · {typeof artifact.strategy_cycle === 'number' ? `Round ${artifact.strategy_cycle}` : 'Round unavailable'}</p></li>)}</ul></div>}
             {otherPriorFindings.length > 0 && <div className="outcome-provenance-group"><h4>Other prior session sources</h4><p>Available history; these sources are not implied to be researcher-approved transfers.</p><ul className="outcome-provenance-list">{otherPriorFindings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session #{finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
             {!!session.peer_handoffs_prompted?.length && <div className="outcome-provenance-group"><h4>Peer handoffs prompted</h4><ul className="outcome-provenance-list">{session.peer_handoffs_prompted.map((handoff, index) => <li key={index}><pre>{JSON.stringify(handoff, null, 2)}</pre></li>)}</ul></div>}
-            <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Output limit</dt><dd>{typeof session.output_token_limit === 'number' ? `${session.output_token_limit} tokens per call` : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
+            <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div>{typeof session.duration_limit_minutes === 'number' && <div className="outcome-label-value"><dt>Effective time ceiling</dt><dd>{session.duration_limit_minutes} minutes{typeof session.configured_duration_limit_minutes === 'number' && session.configured_duration_limit_minutes !== session.duration_limit_minutes ? ` (project setting: ${session.configured_duration_limit_minutes} minutes)` : ''}</dd></div>}<div className="outcome-label-value"><dt>Output limit</dt><dd>{typeof session.output_token_limit === 'number' ? `${session.output_token_limit} tokens per call` : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
             {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h4><button type="button" title={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h4><ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
           </div>
         </details>
@@ -1188,17 +1189,20 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const stop = useCallback(() => {
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
+  const effectiveDurationMinutes = limits
+    ? Math.min(limits.session_duration_minutes, sponsoredSession ? 15 : limits.session_duration_minutes)
+    : null;
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, sponsoredSession ? 15 : limits.session_duration_minutes)} min` : undefined,
+      confirmationSummary: limits && effectiveDurationMinutes !== null ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${effectiveDurationMinutes} min effective time ceiling${effectiveDurationMinutes < limits.session_duration_minutes ? ` (project setting: ${limits.session_duration_minutes} min)` : ''}` : undefined,
       // The backend atomically enforces each project's configured session limit.
       // A single active session must not unconditionally disable another Play.
       playDisabled: busy || !!readError || confirmStart || !eligible.length,
       stopDisabled: busy || !!readError || !runningSession,
       playLabel,
     });
-  }, [busy, confirmStart, eligible.length, limits, onControlsChange, stop, play, playLabel, readError, runningSession, sessions, sponsoredSession]);
+  }, [busy, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, readError, runningSession, sessions, sponsoredSession]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -1410,12 +1414,15 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
-type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
-type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'compile' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
+type PaperProgress = { status: 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'snapshot' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete' };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function paperProgressOperation(progress: PaperProgress): string {
   const count = progress.current !== null && progress.total !== null ? ` (${progress.current} of ${progress.total})` : '';
+  const pdfPass = progress.current !== null && progress.total !== null
+    ? ` · pass ${progress.current} of ${progress.total}${progress.current === progress.total ? ' (final)' : ''}`
+    : '';
   const milestone = progress.activity_state === 'milestone';
   switch (progress.stage) {
     case 'snapshot': return 'Preparing research evidence';
@@ -1425,10 +1432,18 @@ function paperProgressOperation(progress: PaperProgress): string {
     case 'planning': return milestone ? 'Paper plan ready' : 'Planning the paper';
     case 'sections': return `${milestone ? 'Section written' : 'Writing sections'}${count}`;
     case 'validation': return milestone ? 'Paper validated' : 'Validating the paper';
-    case 'compile': return 'Compiling PDF';
+    case 'proofreading': return 'Proofreading TeX';
+    case 'compile': return `Compiling PDF${pdfPass}`;
+    case 'pdf_check': return `Checking PDF${pdfPass}`;
     case 'retry': return `Retrying provider connection${count}`;
     case 'complete': return 'Complete';
   }
+}
+
+function paperReviewLabel(generation: PaperSummary['generation']): string {
+  return generation.layout_status === 'needs_review'
+    ? 'Needs review · PDF layout warnings remain after three passes'
+    : 'Needs review · TeX verification incomplete';
 }
 
 function paperElapsed(seconds: number): string {
@@ -1464,11 +1479,12 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const [includeClaimDetails, setIncludeClaimDetails] = useState(() => window.localStorage.getItem('sigma.paper.claims:' + projectId) !== 'false');
   const [includeValidationNotes, setIncludeValidationNotes] = useState(() => window.localStorage.getItem('sigma.paper.validation:' + projectId) === 'true');
   const [includeResearchExcerpts, setIncludeResearchExcerpts] = useState(() => window.localStorage.getItem('sigma.paper.excerpts:' + projectId) === 'true');
+  const [includeDiagramsAndTables, setIncludeDiagramsAndTables] = useState(() => window.localStorage.getItem('sigma.paper.diagrams:' + projectId) !== 'false');
   const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [restartableCheckpoint, setRestartableCheckpoint] = useState<any>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [continuationAvailable, setContinuationAvailable] = useState(false);
-  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean } | null>(null);
+  const [resumeDetails, setResumeDetails] = useState<{ outline_complete: boolean; completed_sections: number; evidence_indexed: boolean; completed_batches: number; draft_recovery_available: boolean; planning_fallback_available?: boolean; proofreading_status?: string; publication_status?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState('');
   const [paperProgress, setPaperProgress] = useState<PaperProgress | null>(null);
@@ -1670,7 +1686,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       requestDispatched = true;
       window.localStorage.setItem(paperRecoveryKey(projectId), '1');
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_diagrams: includeDiagramsAndTables }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -1680,7 +1696,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let result: { paper_id: string } | null = null;
+      let result: { paper_id: string; generation?: PaperSummary['generation'] } | null = null;
       while (true) {
         const { done, value } = await reader.read();
         buffer += decoder.decode(value, { stream: !done });
@@ -1710,7 +1726,11 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       }
       if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
       await refresh(result.paper_id);
-      setSuccess('Paper saved in Saved versions.');
+      setSuccess(result.generation?.publication_status === 'needs_review'
+        ? result.generation?.layout_status === 'needs_review'
+          ? 'Paper saved for review. Some PDF layout warnings remain after three TeX correction passes.'
+          : 'Paper saved for review. TeX proofreading did not complete; inspect its archived diagnostics.'
+        : 'Paper saved in Saved versions. TeX proofreading completed; this does not certify independent scientific or visual review.');
     } catch (cause) {
       if (controller.signal.aborted) {
         // An abort may also mean the dialog was unmounted. The server task
@@ -1745,11 +1765,14 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
       <p className="settings-hint"><strong>Experimental feature.</strong> AI-generated papers may contain mistakes, omissions, or unsupported conclusions and have not been independently verified. Review the research evidence before relying on the result.</p>
-      <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX typesetting and PDF compilation do not use AI. Generation may consume provider allowance or incur charges.</p>
+      <p className="settings-hint ai-paper-model">Per project settings, AI model is <strong>{model || 'Loading…'}</strong> and thinking level is <strong>{effort || 'Loading…'}</strong>. TeX proofreading uses this model; PDF compilation does not use AI. Generation may consume provider allowance or incur charges.</p>
       <p className="settings-hint">Paper generation may take five minutes or longer. Keep this dialog open to follow its progress.</p>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include validation notes</label>
-      <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
+      <div className="ai-paper-options">
+        <label className="ai-paper-details"><input type="checkbox" checked={includeDiagramsAndTables} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(event.target.checked)), setIncludeDiagramsAndTables(event.target.checked))}/>Include diagrams and tables</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeClaimDetails} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.claims:' + projectId, String(event.target.checked)), setIncludeClaimDetails(event.target.checked))}/>Include claim details</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeValidationNotes} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.validation:' + projectId, String(event.target.checked)), setIncludeValidationNotes(event.target.checked))}/>Include validation notes</label>
+        <label className="ai-paper-details"><input type="checkbox" checked={includeResearchExcerpts} disabled={generating} onChange={event => (window.localStorage.setItem('sigma.paper.excerpts:' + projectId, String(event.target.checked)), setIncludeResearchExcerpts(event.target.checked))}/>Include research excerpts</label>
+      </div>
       {checkpointMismatch && !generating && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
         <p>{checkpointMismatch.incomplete_one_shot
           ? 'The last writing attempt did not save a draft. Start over to generate again.'
@@ -1769,12 +1792,14 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
         ? 'Continue uses saved evidence to construct an outline without repeating the failed planning request. Section writing still uses AI and may consume allowance.'
         : planningRetry
           ? 'Retry makes another AI request; Start over clears this attempt.'
+          : resumeDetails?.publication_status === 'needs_review'
+          ? 'Saved authored work needs review because TeX proofreading did not complete. Continue reuses the saved draft and does not repeat the ambiguous request.'
           : resumeDetails?.draft_recovery_available
-          ? 'Saved draft ready for PDF compilation.'
+          ? 'Saved draft ready for TeX proofreading and PDF compilation.'
           : `Resuming with ${resumeDetails?.completed_sections ?? 0} saved section(s).`
       }</p>}
       {busy && !paperProgress && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
-      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)}{paperProgress.status === 'active' ? ` · ${paperTimingLabel(paperProgress, paperClock)}` : ''}</span>{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Waiting for the AI response.' : 'Awaiting an update from SIGMA.'}</span>}{paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="settings-hint">{paperProgress.failure_reason}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningFallback ? 'Continue from saved evidence without repeating the failed planning request.' : planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
+      {paperProgress && <p className="ai-paper-status ai-paper-progress" role="status" aria-live="polite"><strong>{paperProgress.status === 'active' ? 'Generating paper' : paperProgress.status === 'failed' ? 'Generation failed' : paperProgress.status === 'cancelled' ? 'Generation cancelled' : paperProgress.status === 'interrupted' ? 'Generation interrupted' : 'Paper complete'}</strong><span>{paperProgressOperation(paperProgress)}{paperProgress.status === 'active' ? ` · ${paperTimingLabel(paperProgress, paperClock)}` : ''}</span>{paperProgress.stage === 'proofreading' && <span className="settings-hint">Checking and correcting typesetting issues.</span>}{paperProgress.stage === 'pdf_check' && <span className="settings-hint">{paperProgress.detail || 'Checking PDF output; the saved TeX remains authoritative and PDFs are not edited.'}</span>}{busy && paperProgress.status === 'active' && (paperProgress.stage === 'planning' || paperProgress.stage === 'sections' || paperProgress.stage === 'proofreading') && <span className="settings-hint">{lastPaperSignalAt !== null && paperClock - lastPaperSignalAt < 5000 ? 'Waiting for the AI response.' : 'Awaiting an update from SIGMA.'}</span>}{paperProgress.status === 'failed' && paperProgress.failure_reason && <span className="settings-hint">{paperProgress.failure_reason}</span>}{['failed', 'cancelled', 'interrupted'].includes(paperProgress.status) && <span>{planningFallback ? 'Continue from saved evidence without repeating the failed planning request.' : planningRetry ? 'Retry or Start over to try a fresh approach.' : continuationAvailable ? 'Continue or Start over.' : checkpointMismatch ? 'Clear outdated paper work to generate again.' : 'Review the error before trying again.'}</span>}</p>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
@@ -1783,12 +1808,16 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
           <div className="saved-paper-heading">
             <SavedPaperTitle title={paper.title} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {papers.length - index}</p><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
+            <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
+              ? paperReviewLabel(paper.generation)
+              : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
           </div>
           <div className="saved-paper-actions">{copyError && <p className="error" role="alert">{copyError}</p>}<a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.txt`}>Download text file</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
         </div>
         {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}><button type="button" className="text-view-link" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></span></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         <h3>{selected.draft.title}</h3>
+        {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
         <h4>Problem framing</h4>{selected.draft.problem_framing.map((text, index) => <p key={`framing-${index}`}>{text}</p>)}

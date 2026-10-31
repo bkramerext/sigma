@@ -1,0 +1,21 @@
+Gray handoff — AI Agent Reliability and Evaluation sample
+
+Branch: gray/ai-agent-reliability
+Base: current main, b2d1c871 (2026-10-31)
+Scope: new sample project only; no unrelated sample or user project was changed.
+
+Implemented samples/ai-agent-reliability/project.json with the requested title and research question, an evidence-centered problem description (4,138 characters), and three fully developed, enabled strategies in active order:
+1. Rigorous reliability measurement.
+2. Failure propagation and recovery.
+3. Controlled tests of architectural interventions.
+
+Verification actually run:
+- JSON parsing and assertions for title, problem length, exactly three strategies, unique IDs and matching active order: passed.
+- uv run --locked --no-sync python tests/test_sample_copies.py: passed, 9 tests.
+- uv run --with playwright --no-sync python browser_checks/guest_samples.py: passed in real Chrome. It exercised the established sample catalog and guest sample-open flow using its existing Jesus sample fixture; it did not directly open the new AI reliability project.
+- ./sigma test: passed all configured steps after npm --prefix frontend ci --no-audit --no-fund installed locked dependencies. Ruff, formatting, Pyright (0 errors/warnings/information), frontend typecheck and production build passed. Existing large JavaScript chunk advisory appeared. The optional graph-present sandbox case skipped because the local Python sandbox image is unavailable.
+- No live or paid provider calls.
+
+Known verification limit: the real-browser check exercised the generic sample catalog/open path but used an existing sample fixture, not this new sample specifically. Project JSON/catalog discovery and copy behavior were covered by the sample-copy suite.
+
+Related status entry: docs/STATUS.md. No deployment or merge was performed.

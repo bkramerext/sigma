@@ -7,6 +7,7 @@ import copy
 import json
 import shutil
 import threading
+import unicodedata
 from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
@@ -16,11 +17,17 @@ from typing import Any, cast
 from unittest.mock import patch
 
 import httpx
+import pypdfium2
 
 from sigma import papers
 from sigma.api import app
 from sigma.plan_stream import completed, failure
-from sigma.projects import ProjectError, initialize_project, inspect_project
+from sigma.projects import ProjectError, initialize_project, inspect_project, read_project_artifact
+
+
+def mock_pdf_inspection():
+    """Fixture control-flow tests use sentinel PDF bytes, not validated PDFs."""
+    return patch.object(papers, "_pdf_text_bounds_diagnostics", return_value=(1, []))
 
 
 def draft(ref: str = "project:pid") -> papers.PaperDraft:
@@ -303,7 +310,7 @@ def test_chatgpt_schema_rejection_is_actionable_and_redacted() -> None:
         raise AssertionError("Strict-schema rejection must be reported")
 
 
-def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() -> None:
+def test_visual_preference_controls_one_shot_and_long_paper_wire_schemas() -> None:
     requests: list[dict] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -332,6 +339,12 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
                     {"sources": []},
                     {"mode": "api_key", "token": "fixture"},
                     {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                ),
+                papers._provider(
+                    {"sources": []},
+                    {"mode": "api_key", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                    include_diagrams=False,
                 ),
                 papers._provider_structured(
                     {"fixture": "input"},
@@ -362,7 +375,18 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
 
         asyncio.run(exercise())
 
-    assert len(requests) == 3  # one attempt per path/stage; no retry/fallback
+        assert len(requests) == 4  # one attempt per path/stage; no retry/fallback
+        checked_schema = requests[0]["text"]["format"]["schema"]
+        assert "diagrams" in checked_schema["properties"]
+        assert "tables" in checked_schema["$defs"]["PaperSection"]["properties"]
+        assert "VISUALS" in requests[0]["instructions"]
+        unchecked_schema = requests[1]["text"]["format"]["schema"]
+        assert "diagrams" not in unchecked_schema["properties"]
+        assert "tables" not in unchecked_schema["$defs"]["PaperSection"]["properties"]
+        assert "PaperDiagram" not in unchecked_schema["$defs"]
+        assert "PaperTable" not in unchecked_schema["$defs"]
+        assert "VISUALS" not in requests[1]["instructions"]
+        assert "TABLES" not in requests[1]["instructions"]
     for request in requests:
         assert request["model"] == "gpt-6.1-sol"
         assert request["reasoning"] == {"effort": "high"}
@@ -379,6 +403,488 @@ def test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once() 
         "covered_field_refs",
         "omitted_fields",
     }
+
+
+def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> None:
+    with TemporaryDirectory() as temporary:
+        checkpoint_path = Path(temporary) / "proofreading.sigma"
+        initialize_project(checkpoint_path, "Proofreading fixture", "Preserve authored TeX.")
+        view = inspect_project(checkpoint_path)
+        state = papers._new_work(
+            "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = (
+            r"\documentclass{article}"
+            + "\n"
+            + r"\begin{document}"
+            + "\n"
+            + r"$\\alpha=3$"
+            + "\n"
+            + r"The result holds. \\cite{source:one}"
+            + "\n"
+            + r"\end{document}"
+            + "\n"
+        )
+        calls = 0
+        progress: list[papers.PaperProgressEvent] = []
+
+        async def provider(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal calls
+            calls += 1
+            assert response_model is papers.TeXProofreadResult
+            return (
+                response_model(
+                    corrections=[
+                        papers.TeXCorrection(
+                            category="math_notation",
+                            find=r"\\alpha",
+                            replace=r"\alpha",
+                            rationale="Remove an accidental extra escape in math mode.",
+                        )
+                    ]
+                ),
+                "fixture",
+            )
+
+        async def report(
+            stage: papers.PaperProgressStage,
+            current: int | None,
+            total: int | None,
+            state: papers.PaperProgressState = "active",
+            *,
+            detail: str | None = None,
+        ) -> None:
+            progress.append(
+                {
+                    "type": "progress",
+                    "state": state,
+                    "stage": stage,
+                    "current": current,
+                    "total": total,
+                    "started_at": "2026-10-31T00:00:00+00:00",
+                    "elapsed_seconds": 0,
+                    "detail": detail,
+                }
+            )
+
+        async def run() -> tuple[str, dict]:
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
+                patch.object(papers, "_provider_structured", new=provider),
+            ):
+                return await papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(checkpoint_path),
+                    report=report,
+                )
+
+        corrected, provenance = asyncio.run(run())
+        assert corrected != tex
+        assert r"$\alpha=3$" in corrected
+        assert r"\\cite{source:one}" in corrected
+        assert provenance["status"] == "complete"
+        assert provenance["provider_calls_attempted"] == 1
+        assert provenance["corrections"] == ["math_notation"]
+        assert provenance["initial_sha256"] == papers.hashlib.sha256(tex.encode()).hexdigest()
+        proofread_progress = [item for item in progress if item["stage"] == "proofreading"]
+        assert proofread_progress
+        assert all(
+            item["state"] in {"active", "milestone", "complete", "failed", "cancelled"}
+            for item in progress
+        )
+        assert any(
+            item["detail"] == "Checking and correcting typesetting issues."
+            for item in proofread_progress
+        )
+        assert any(
+            item["detail"] == "Applying mechanical corrections." and item["state"] == "milestone"
+            for item in proofread_progress
+        )
+        assert any(
+            item["detail"] == "Verifying corrected TeX." and item["state"] == "milestone"
+            for item in proofread_progress
+        )
+        completed_calls = calls
+        resumed, reused = asyncio.run(run())
+        assert resumed == corrected
+        assert reused["status"] == "complete"
+        assert calls == completed_calls, "A completed proofreading call must not be repeated"
+        if shutil.which("tectonic"):
+            compiled = papers._compile_pdf(corrected, timeout_seconds=90)
+            assert compiled.startswith(b"%PDF-")
+
+
+def test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data() -> None:
+    normal = r"\documentclass{article}\begin{document}Result $x=3$.\end{document}"
+    assert papers._tex_static_diagnostics(normal) == []
+    malformed = (
+        r"\documentclass{article}\begin{document}\begin{align}x=3\end{equation}"
+        r"\\alpha\end{document}"
+    )
+    warnings = papers._tex_static_diagnostics(malformed)
+    assert any("Mismatched TeX environment" in warning for warning in warnings)
+    assert any("double-escaped" in warning for warning in warnings)
+
+    table_before = (
+        r"\begin{longtable}{p{\dimexpr\linewidth/2\relax}p{\dimexpr\linewidth/2\relax}}"
+        r"Campus & 3 GPUs\\\end{longtable}"
+    )
+    table_after = (
+        r"\begin{longtable}{p{\dimexpr\linewidth/3\relax}p{\dimexpr\linewidth*2/3\relax}}"
+        r"Campus & 3 GPUs\\\end{longtable}"
+    )
+    assert papers._tex_semantic_signature(table_before) == papers._tex_semantic_signature(
+        table_after
+    )
+    assert papers._tex_semantic_signature(table_before) != papers._tex_semantic_signature(
+        table_after.replace("3 GPUs", "4 GPUs")
+    )
+
+    diagram_before = (
+        r"\begin{tikzpicture}\node[draw,text width=3cm] (campus) at (0,0) {Campus model};"
+        r"\end{tikzpicture}"
+    )
+    diagram_after = (
+        r"\begin{tikzpicture}\node[draw,text width=4cm] (campus) at (2,1) {Campus model};"
+        r"\end{tikzpicture}"
+    )
+    assert papers._tex_semantic_signature(diagram_before) == papers._tex_semantic_signature(
+        diagram_after
+    )
+    assert papers._tex_semantic_signature(diagram_before) != papers._tex_semantic_signature(
+        diagram_after.replace("Campus model", "Frontier model")
+    )
+    assert papers._tex_semantic_signature("$α=3$") == papers._tex_semantic_signature(r"$\alpha=3$")
+
+
+def test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "proofreading-recovery.sigma"
+        view = initialize_project(path, "Proofreading recovery", "Preserve an authored conclusion.")
+        state = papers._new_work(
+            "c" * 64, view.project.id, "d" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = "\\documentclass{article}\n\\begin{document}\nThe result is 3.\n\\end{document}\n"
+        calls = 0
+
+        async def mutate(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal calls
+            calls += 1
+            return (
+                response_model(
+                    corrections=[
+                        papers.TeXCorrection(
+                            category="spacing",
+                            find="result is 3",
+                            replace="result is 4",
+                            rationale="Fixture malicious scientific edit.",
+                        )
+                    ]
+                ),
+                "fixture",
+            )
+
+        async def report(*_args, **_kwargs):
+            return None
+
+        async def run() -> tuple[str, dict]:
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
+                patch.object(papers, "_provider_structured", new=mutate),
+            ):
+                return await papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+
+        preserved, provenance = asyncio.run(run())
+        assert preserved == tex
+        assert provenance["status"] == "fallback"
+        assert provenance["corrections"] == []
+        assert "changed protected scientific" in provenance["fallback_reason"]
+        assert calls == 1
+
+        interrupted_state = papers._new_work(
+            "e" * 64, view.project.id, "f" * 64, "fixture", "high", kind="one_shot"
+        )
+        large_tex = (
+            "\\documentclass{article}\n\\begin{document}\n\n"
+            + "A " * 5_500
+            + "\n\n"
+            + "B " * 5_500
+            + "\n\n\\end{document}\n"
+        )
+        assert len(papers._tex_chunks(large_tex)) == 2
+        resumed_calls = 0
+
+        async def interrupt_second(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal resumed_calls
+            resumed_calls += 1
+            if resumed_calls == 2:
+                raise asyncio.CancelledError()
+            return response_model(corrections=[]), "fixture"
+
+        async def interrupt() -> None:
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
+                patch.object(papers, "_provider_structured", new=interrupt_second),
+            ):
+                await papers._proofread_tex(
+                    large_tex,
+                    interrupted_state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+
+        try:
+            asyncio.run(interrupt())
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("The proofreader fixture should interrupt on its second chunk")
+        assert interrupted_state["proofreading"]["attempts"] == ["complete", "dispatched"]
+        with patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"):
+            recovered, recovered_provenance = asyncio.run(
+                papers._proofread_tex(
+                    large_tex,
+                    interrupted_state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+            )
+        assert recovered == large_tex
+        assert recovered_provenance["status"] == "fallback"
+        assert resumed_calls == 2, "The ambiguous second provider call must not be replayed"
+
+
+def test_one_shot_and_long_form_both_proofread_before_compiling() -> None:
+    with TemporaryDirectory() as temporary:
+        one_path = Path(temporary) / "one-shot.sigma"
+        long_path = Path(temporary) / "long-form.sigma"
+        one_view = initialize_project(one_path, "One-shot proofreading", "Test stage ordering.")
+        long_view = initialize_project(long_path, "Long-form proofreading", "Test stage ordering.")
+        credential = {"identity": "fixture:proofread", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        events: dict[str, list[papers.PaperProgressEvent]] = {"one": [], "long": []}
+        compile_timings: dict[str, list[float]] = {"one": [], "long": []}
+        compile_calls: dict[str, int] = {"one": 0, "long": 0}
+        proofreader_calls = 0
+        real_compile = papers._compile_pdf
+
+        async def author(package, *_args):
+            source = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            return draft(source), config["model"]
+
+        async def long_author(package, _binding, _config, state, _save, *_args, **_kwargs):
+            source = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            state["provider_calls"] = 2
+            state["provider_calls_total"] = 2
+            long_draft = draft(source)
+            passages = [
+                "The frozen premise identifies the scope of this deterministic review. ",
+                "The displayed recurrence is interpreted only under the recorded assumptions. ",
+                "The boundary case is retained as an explicit check on the stated implication. ",
+                "No additional empirical observation or theorem is inferred from this fixture. ",
+            ]
+            sections = [
+                papers.PaperSection(
+                    heading=f"Long-form evidence analysis {section_number}",
+                    paragraphs=[
+                        f"Case {section_number}.{paragraph_number}: "
+                        + passages[(section_number + paragraph_number) % len(passages)] * 6
+                        for paragraph_number in range(8)
+                    ],
+                    claim_ids=["C1"],
+                )
+                for section_number in range(1, 5)
+            ]
+            table = papers.PaperTable(
+                caption="Long-form fixture assumptions and validation outcomes.",
+                headers=["Case", "Assumption", "Outcome"],
+                rows=[
+                    ["Initial", "Saved value fixed", "Checked"],
+                    ["Step", "Recurrence applies", "Conditional"],
+                    ["Extension", "No new premise", "Unresolved"],
+                ],
+                evidence_refs=[source],
+                claim_ids=["C1"],
+            )
+            sections[0] = sections[0].model_copy(update={"tables": [table]})
+            long_diagram = papers.PaperDiagram(
+                caption="The bounded long-form analysis workflow.",
+                nodes=[
+                    papers.DiagramNode(id="source", label="Frozen evidence"),
+                    papers.DiagramNode(id="analysis", label="Analyze assumptions"),
+                    papers.DiagramNode(id="checks", label="Check boundary cases"),
+                    papers.DiagramNode(id="limits", label="Record limitations"),
+                ],
+                edges=[
+                    papers.DiagramEdge(source="source", target="analysis"),
+                    papers.DiagramEdge(source="analysis", target="checks"),
+                    papers.DiagramEdge(source="checks", target="limits"),
+                ],
+                evidence_refs=[source],
+                claim_ids=["C1"],
+            )
+            return (
+                long_draft.model_copy(update={"sections": sections, "diagrams": [long_diagram]}),
+                2,
+                0,
+            )
+
+        async def proofreader(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal proofreader_calls
+            proofreader_calls += 1
+            assert response_model is papers.TeXProofreadResult
+            return response_model(corrections=[]), config["model"]
+
+        async def run(path: Path, view, key: str, force_long: bool = False):
+            async def collect(event: papers.PaperProgressEvent) -> None:
+                events[key].append(event)
+
+            def measured_compile(tex: str, **kwargs) -> bytes:
+                compile_calls[key] += 1
+                compile_number = compile_calls[key]
+                if not shutil.which("tectonic"):
+                    has_layout_warning = (key == "one" and compile_number in {2, 3, 4}) or (
+                        key == "long" and compile_number == 2
+                    )
+                    if has_layout_warning:
+                        kwargs["diagnostics"].append("Overfull \\hbox (10.0pt too wide)")
+                    return b"%PDF-fixture"
+                started = perf_counter()
+                result = real_compile(tex, **kwargs)
+                compile_timings[key].append(perf_counter() - started)
+                has_layout_warning = (key == "one" and compile_number in {2, 3, 4}) or (
+                    key == "long" and compile_number == 2
+                )
+                if has_layout_warning:
+                    kwargs["diagnostics"].append("Overfull \\hbox (10.0pt too wide)")
+                return result
+
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=author),
+                patch.object(papers, "_generate_long_draft", new=long_author),
+                patch.object(papers, "_provider_structured", new=proofreader),
+                patch.object(papers, "_compile_pdf", new=measured_compile),
+                mock_pdf_inspection(),
+            ):
+                return await papers.generate(
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
+                    progress=collect,
+                    force_long_form=force_long,
+                )
+
+        one = asyncio.run(run(one_path, one_view, "one"))
+        long = asyncio.run(run(long_path, long_view, "long", force_long=True))
+        expected_proofreader_calls = 0
+        for key, result in (("one", one), ("long", long)):
+            stages = [
+                event["stage"]
+                for event in events[key]
+                if event["state"] in {"active", "milestone", "complete"}
+            ]
+            assert (
+                stages.index("validation") < stages.index("proofreading") < stages.index("compile")
+            )
+            assert stages.index("compile") < stages.index("pdf_check") < stages.index("complete")
+            check_events = [event for event in events[key] if event["stage"] == "pdf_check"]
+            assert len(check_events) >= 1, events[key]
+            assert check_events[0]["detail"] == (
+                "Checking PDF pass 1 of 3; TeX is authoritative and PDFs are not edited."
+            )
+            record = papers.get_paper(
+                str(one_path if key == "one" else long_path), result["paper_id"]
+            )
+            assert record["generation"]["proofreading"]["attempted"] is True
+            assert record["generation"]["proofreading"]["ai_performed"] is True
+            assert (
+                1
+                <= record["generation"]["proofreading"]["provider_calls_attempted"]
+                <= (papers.MAX_PROOFREAD_CALLS)
+            )
+            expected_proofreader_calls += record["generation"]["proofreading"][
+                "provider_calls_attempted"
+            ]
+            assert (
+                record["generation"]["provider_calls_attempted"]
+                == record["generation"]["provider_calls_lifetime_total"]
+            )
+            assert record["generation"]["long_form"] is (key == "long")
+            if key == "one":
+                assert record["generation"]["pdf_check_final_pass"] == 3
+                assert [item["pass"] for item in record["generation"]["pdf_check_passes"]] == [
+                    1,
+                    2,
+                    3,
+                ]
+                assert len(record["generation"]["layout_repairs"]) == 2
+                assert r"\emergencystretch=8em" in record["tex_source"]
+                assert record["generation"]["layout_status"] == "needs_review"
+                assert record["generation"]["publication_status"] == "needs_review"
+                assert any(
+                    "within three TeX rendering passes" in warning
+                    for warning in record["validation_warnings"]
+                )
+                assert [
+                    event["current"]
+                    for event in events[key]
+                    if event["stage"] == "pdf_check" and event["state"] == "active"
+                ] == [1, 2, 3]
+            else:
+                assert record["generation"]["pdf_check_final_pass"] == 2
+                assert len(record["generation"]["layout_repairs"]) == 1
+                assert record["generation"]["layout_status"] == "no_severe_box_warnings_reported"
+            pdf = papers.get_pdf(str(one_path if key == "one" else long_path), result["paper_id"])
+            assert pdf.startswith(b"%PDF-")
+            if key == "long":
+                assert not any(
+                    "Overfull" in diagnostic
+                    for diagnostic in record["generation"]["proofreading"]["unresolved_diagnostics"]
+                )
+            if shutil.which("tectonic"):
+                expected_compiles = 4 if key == "one" else 3
+                assert compile_calls[key] == expected_compiles
+                print(
+                    f"PASS deterministic {key} end-to-end Tectonic path: "
+                    f"{len(record['tex_source'].encode())} TeX bytes, {len(pdf)} PDF bytes, "
+                    f"{expected_compiles} compiles in {sum(compile_timings[key]):.3f}s, "
+                    f"{record['generation']['proofreading']['provider_calls_attempted']} proofreader call(s)"
+                )
+            else:
+                assert compile_timings[key] == []
+        assert proofreader_calls == expected_proofreader_calls
 
 
 def test_strict_paper_schemas_require_all_properties() -> None:
@@ -520,13 +1026,40 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
             project_source = next(
                 source["id"] for source in context["sources"] if source["kind"] == "project"
             )
-            return draft(project_source), config["model"]
+            authored = draft(project_source)
+            table = papers.PaperTable(
+                caption="Saved quantitative comparison retained through checkbox changes.",
+                headers=["Route", "Evidence"],
+                rows=[["Campus", "Frozen"], ["Approved frontier", "Frozen"]],
+                evidence_refs=[project_source],
+                claim_ids=["C1"],
+            )
+            figure = papers.PaperDiagram(
+                caption="Saved policy decision flow for the frozen project evidence.",
+                nodes=[
+                    papers.DiagramNode(id="task", label="Research task"),
+                    papers.DiagramNode(id="policy", label="Policy gate"),
+                ],
+                edges=[papers.DiagramEdge(source="task", target="policy", label="classify")],
+                evidence_refs=[project_source],
+                claim_ids=["C1"],
+            )
+            authored = authored.model_copy(
+                update={
+                    "diagrams": [figure],
+                    "sections": [
+                        authored.sections[0].model_copy(update={"tables": [table]}),
+                        authored.sections[1],
+                    ],
+                }
+            )
+            return authored, config["model"]
 
-        def fail_compile_once(_tex, **_kwargs):
+        def fail_compile_visual_and_fallback(_tex, **_kwargs):
             nonlocal compile_calls
             compile_calls += 1
-            if compile_calls == 1:
-                raise RuntimeError("fixture compiler unavailable")
+            if compile_calls == 2:
+                raise RuntimeError("fixture compiler unavailable for an unrelated reason")
             return b"%PDF-fixture"
 
         with (
@@ -535,7 +1068,8 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
                 papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
             ),
             patch.object(papers, "_provider", new=fake_provider),
-            patch.object(papers, "_compile_pdf", new=fail_compile_once),
+            patch.object(papers, "_compile_pdf", new=fail_compile_visual_and_fallback),
+            mock_pdf_inspection(),
         ):
 
             async def first_attempt() -> None:
@@ -573,6 +1107,8 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
             checkpoint = papers._load_work(str(path))
             assert checkpoint is not None and checkpoint["kind"] == "one_shot"
             assert checkpoint["provider_calls"] == 1
+            assert checkpoint["one_shot_draft"]["diagrams"]
+            assert checkpoint["one_shot_draft"]["sections"][0]["tables"]
             preflight = papers.preflight(
                 str(path),
                 expected_project_id=view.project.id,
@@ -598,27 +1134,391 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
                         view.project.id,
                         progress=collect,
                         include_research_details=True,
+                        include_diagrams=False,
                     )
 
                 result = asyncio.run(resume())
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert compile_calls == 2
-        assert saved["generation"]["provider_calls_attempted"] == 1
-        assert saved["generation"]["provider_calls_lifetime_total"] == 1
+        assert compile_calls == 4
+        assert saved["generation"]["provider_calls_attempted"] == 3
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["provider_calls_lifetime_total"] == 3
         assert saved["generation"]["include_research_details"] is True
+        assert saved["generation"]["include_diagrams_and_tables"] is False
+        assert saved["draft"]["diagrams"] == []
+        assert all(not section["tables"] for section in saved["draft"]["sections"])
+        assert r"\usepackage{tikz}" not in saved["tex_source"]
+        assert r"\begin{longtable}" not in saved["tex_source"]
         assert r"\section*{About this paper}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
-        assert [event["stage"] for event in first_events if event["state"] == "active"] == [
-            "snapshot",
-            "writing",
-            "validation",
-            "compile",
-        ]
+        first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
+        assert first_stages.index("validation") < first_stages.index("proofreading")
+        assert first_stages.index("proofreading") < first_stages.index("compile")
         assert retry_events[-1]["stage"] == "complete" and retry_events[-1]["state"] == "complete"
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
+
+
+def test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts() -> None:
+    """Repeated TeX option changes retain drafts and count each paid call once."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "proofreading-render-call-accounting.sigma"
+        initialize_project(path, "Proofreading accounting", "Keep the saved paper draft.")
+        view = inspect_project(path)
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        project_package, _ = papers._snapshot(str(path))
+        project_ref = next(
+            item["id"] for item in project_package["sources"] if item["kind"] == "project"
+        )
+        authored = draft(project_ref)
+        authored = authored.model_copy(
+            update={
+                "diagrams": [
+                    papers.PaperDiagram(
+                        caption="Evidence flow for the saved project.",
+                        nodes=[
+                            papers.DiagramNode(id="source", label="Source"),
+                            papers.DiagramNode(id="claim", label="Claim"),
+                        ],
+                        edges=[papers.DiagramEdge(source="source", target="claim")],
+                        evidence_refs=[project_ref],
+                        claim_ids=["C1"],
+                    )
+                ]
+            }
+        )
+        author_calls = 0
+        proofreading_calls = 0
+        compile_calls = 0
+        diagnostic_sources: list[str] = []
+
+        async def author(_context, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            return authored, config["model"]
+
+        async def proofreader(*_args, **_kwargs):
+            nonlocal proofreading_calls
+            proofreading_calls += 1
+            return papers.TeXProofreadResult(corrections=[]), config["model"]
+
+        def split_tex(tex: str) -> list[tuple[int, int]]:
+            middle = len(tex) // 2
+            return [(0, middle), (middle, len(tex))]
+
+        def intermittent_compile(tex: str, **_kwargs) -> bytes:
+            nonlocal compile_calls
+            compile_calls += 1
+            if compile_calls % 2:
+                diagnostic_sources.append(tex)
+                return b"%PDF-diagnostics-fixture"
+            if compile_calls in {2, 4}:
+                raise RuntimeError("fixture final compile failure; preserve checkpoint")
+            return b"%PDF-final-fixture"
+
+        async def run(*, details: bool = False, diagrams: bool = True, notes: bool = False):
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=author),
+                patch.object(papers, "_provider_structured", new=proofreader),
+                patch.object(papers, "_tex_chunks", new=split_tex),
+                patch.object(papers, "_compile_pdf", new=intermittent_compile),
+                mock_pdf_inspection(),
+            ):
+                return await papers.generate(
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
+                    include_research_details=details,
+                    include_diagrams=diagrams,
+                    include_validation_notes=notes,
+                )
+
+        async def exercise() -> dict[str, Any]:
+            for options in (
+                {"details": False, "diagrams": True},
+                {"details": True, "diagrams": False},
+            ):
+                try:
+                    await run(**options)
+                except ProjectError as exc:
+                    assert "fixture final compile failure" in str(exc)
+                else:
+                    raise AssertionError("The first two versions must preserve resumable work")
+                checkpoint = papers._load_work(str(path))
+                assert checkpoint is not None
+                assert checkpoint["proofreading"]["provider_calls_attempted"] == 2
+                expected_prior = 0 if options["details"] is False else 2
+                assert checkpoint["proofreading_calls_prior"] == expected_prior
+            preflight = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=credential["identity"],
+                mode=credential["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert preflight["draft_recovery_available"] is True
+            assert preflight["provider_calls_attempted"] == 5  # author 1 + proofreader 4
+            assert preflight["provider_calls_lifetime_total"] == 5
+            return await run(details=False, diagrams=True, notes=True)
+
+        result = asyncio.run(exercise())
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert author_calls == 1, "Option changes must reuse the saved authored draft."
+        assert proofreading_calls == 6  # two bounded chunks for each TeX rendering
+        assert compile_calls == 6
+        assert len(diagnostic_sources) == 3 and len(set(diagnostic_sources)) == 3
+        assert saved["generation"]["proofreading"]["provider_calls_current_render"] == 2
+        assert saved["generation"]["proofreading"]["prior_render_provider_calls"] == 4
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 6
+        assert saved["generation"]["provider_calls_attempted"] == 7
+        assert saved["generation"]["provider_calls_lifetime_total"] == 7
+        assert saved["generation"]["include_validation_notes"] is True
+        assert saved["generation"]["include_diagrams_and_tables"] is True
+        assert papers._load_work(str(path)) is None
+
+
+def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_accounting() -> None:
+    """TikZ fallback preserves accepted proofreading patches and exact PDF source."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "diagram-compile-fallback.json"
+        view = initialize_project(path, "Diagram fallback", "Preserve the paper evidence.")
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        package, snapshot_hash = papers._snapshot(str(path))
+        project_ref = next(
+            source["id"] for source in package["sources"] if source["kind"] == "project"
+        )
+        figure = papers.PaperDiagram(
+            caption="Illustrative evidence boundary for the saved research.",
+            nodes=[
+                papers.DiagramNode(id="source", label="Saved source"),
+                papers.DiagramNode(id="claim", label="Claim register"),
+            ],
+            edges=[papers.DiagramEdge(source="source", target="claim", label="supports")],
+            evidence_refs=[project_ref],
+            claim_ids=["C1"],
+        )
+        table = papers.PaperTable(
+            caption="Bounded evidence summary for the saved project.",
+            headers=["Record", "Status", "Note"],
+            rows=[["Project question", "Saved", "Frozen"]],
+            evidence_refs=[project_ref],
+            claim_ids=["C1"],
+        )
+        authored = draft(project_ref).model_copy(
+            update={
+                "diagrams": [figure],
+                "sections": [
+                    draft(project_ref).sections[0].model_copy(update={"tables": [table]}),
+                    draft(project_ref).sections[1],
+                ],
+            }
+        )
+        provider_calls = 0
+        compile_tex: list[str] = []
+        successful_tex: list[str] = []
+        successful_pdf: list[bytes] = []
+        fallback_diagnostics: list[str] = []
+        real_compile = papers._compile_pdf
+        real_tex = papers._tex
+
+        async def fake_provider(_context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            return authored, config["model"]
+
+        async def fake_proofreader(_context, *_args, **_kwargs):
+            return (
+                papers.TeXProofreadResult(
+                    corrections=[
+                        papers.TeXCorrection(
+                            category="math_notation",
+                            find=r"\\alpha",
+                            replace=r"\alpha",
+                            rationale="Remove an accidental extra escape in math mode.",
+                        )
+                    ]
+                ),
+                config["model"],
+            )
+
+        def tex_with_mechanical_defect(*args, **kwargs):
+            source = real_tex(*args, **kwargs)
+            return source.replace(r"\end{document}", r"$\\alpha=3$" + "\n" + r"\end{document}")
+
+        def fail_diagram_then_compile(tex: str, **kwargs):
+            compile_tex.append(tex)
+            if len(compile_tex) == 1:
+                # The pre-proofread temporary compile is intentionally a fixture:
+                # the provider receives the generated source next.
+                return b"%PDF-initial-diagnostic-fixture"
+            if len(compile_tex) == 2:
+                assert r"$\alpha=3$" in tex
+                assert r"\begin{tikzpicture}" in tex
+                if diagnostics := kwargs.get("diagnostics"):
+                    diagnostics.append(
+                        "error: report.tex: Package pgfkeys Error: TikZ node geometry failed."
+                    )
+                raise RuntimeError("Package pgfkeys Error: TikZ node geometry failed.")
+            assert r"$\alpha=3$" in tex, "fallback must retain accepted math correction"
+            assert r"\\alpha" not in tex
+            assert r"\begin{tikzpicture}" not in tex
+            assert r"\usepackage{tikz}" not in tex
+            successful_tex.append(tex)
+            kwargs["diagnostics"] = fallback_diagnostics
+            pdf = real_compile(tex, **kwargs) if shutil.which("tectonic") else b"%PDF-fixture"
+            successful_pdf.append(pdf)
+            return pdf
+
+        async def run() -> dict[str, Any]:
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=fake_provider),
+                patch.object(papers, "_provider_structured", new=fake_proofreader),
+                patch.object(papers, "_tex", new=tex_with_mechanical_defect),
+                patch.object(papers, "_compile_pdf", new=fail_diagram_then_compile),
+                mock_pdf_inspection(),
+            ):
+                return await papers.generate(str(path), credential["identity"], view.project.id)
+
+        result = asyncio.run(run())
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert provider_calls == 1
+        assert len(compile_tex) == 3
+        assert len(successful_tex) == 1
+        assert r"$\\alpha=3$" in compile_tex[0]
+        assert r"$\alpha=3$" in compile_tex[1]
+        assert r"$\alpha=3$" in successful_tex[0]
+        assert r"\usepackage{tikz}" in compile_tex[0]
+        assert r"\usepackage{tikz}" in compile_tex[1]
+        assert r"\usepackage{tikz}" not in successful_tex[0]
+        assert all(r"\begin{longtable}" in source for source in compile_tex)
+        assert r"\begin{longtable}" in successful_tex[0]
+        assert saved["snapshot_sha256"] == snapshot_hash
+        assert saved["generation"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["proofreading"]["correction_categories"] == ["math_notation"]
+        assert saved["draft"]["diagrams"] == []
+        assert saved["draft"]["sections"][0]["tables"]
+        assert saved["tex_source"] == successful_tex[0]
+        assert saved["generation"]["proofreading"]["corrected_tex_sha256"] == (
+            papers.hashlib.sha256(compile_tex[1].encode()).hexdigest()
+        )
+        assert saved["generation"]["proofreading"]["final_tex_sha256"] == (
+            papers.hashlib.sha256(saved["tex_source"].encode()).hexdigest()
+        )
+        assert saved["generation"]["diagram_fallback"]["applied"] is True
+        assert saved["generation"]["diagram_fallback"]["removed_diagram_count"] == 1
+        archived_pdf = read_project_artifact(
+            str(path), f"artifacts/papers/{result['paper_id']}.pdf"
+        )
+        assert archived_pdf.startswith(b"%PDF-")
+        assert archived_pdf == successful_pdf[0]
+        if shutil.which("tectonic"):
+            assert not any("Overfull" in diagnostic for diagnostic in fallback_diagnostics)
+        assert any("text-only PDF fallback" in warning for warning in saved["validation_warnings"])
+
+
+def test_unrelated_compile_failure_does_not_remove_valid_diagrams() -> None:
+    """Only a diagnosed TikZ/PGF error is eligible for the text-only fallback."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "unrelated-compile-failure.json"
+        view = initialize_project(path, "Unrelated compile failure", "Keep the diagram.")
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        package, _ = papers._snapshot(str(path))
+        project_ref = next(
+            source["id"] for source in package["sources"] if source["kind"] == "project"
+        )
+        authored = draft(project_ref).model_copy(
+            update={
+                "diagrams": [
+                    papers.PaperDiagram(
+                        caption="Illustrative evidence boundary for the saved research.",
+                        nodes=[
+                            papers.DiagramNode(id="source", label="Saved source"),
+                            papers.DiagramNode(id="claim", label="Claim register"),
+                        ],
+                        edges=[papers.DiagramEdge(source="source", target="claim")],
+                        evidence_refs=[project_ref],
+                        claim_ids=["C1"],
+                    )
+                ]
+            }
+        )
+        compile_calls = 0
+
+        async def fake_provider(_context, *_args):
+            return authored, config["model"]
+
+        async def fake_proofreader(_context, *_args, **_kwargs):
+            return papers.TeXProofreadResult(corrections=[]), config["model"]
+
+        def unrelated_failure(_tex: str, **kwargs):
+            nonlocal compile_calls
+            compile_calls += 1
+            if compile_calls == 1:
+                return b"%PDF-initial-fixture"
+            if diagnostics := kwargs.get("diagnostics"):
+                diagnostics.append("error: report.tex: Missing $ inserted.")
+            raise RuntimeError("Tectonic failed: Missing $ inserted.")
+
+        async def run() -> None:
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=fake_provider),
+                patch.object(papers, "_provider_structured", new=fake_proofreader),
+                patch.object(papers, "_compile_pdf", new=unrelated_failure),
+                mock_pdf_inspection(),
+            ):
+                await papers.generate(str(path), credential["identity"], view.project.id)
+
+        try:
+            asyncio.run(run())
+        except ProjectError as exc:
+            assert "Missing $ inserted" in str(exc)
+        else:
+            raise AssertionError("An unrelated TeX error must remain a recoverable failure")
+        checkpoint = papers._load_work(str(path))
+        assert checkpoint is not None
+        assert checkpoint["one_shot_draft"]["diagrams"]
+        assert compile_calls == 2, "The unsafe text-only fallback must not be attempted"
+        assert papers.list_papers(str(path)) == []
 
 
 def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> None:
@@ -898,11 +1798,13 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 include_claim_details,
                 include_validation_notes,
                 include_research_excerpts,
+                include_diagrams,
             ):
                 assert include_research_details is False
                 assert include_claim_details is False
                 assert include_validation_notes is False
                 assert include_research_excerpts is False
+                assert include_diagrams is True
                 await progress(
                     {
                         "type": "progress",
@@ -1187,6 +2089,7 @@ def test_explicit_restart_checkpoint_migrates_and_rebinds_safely() -> None:
             patch.object(papers, "configuration", new=current_configuration),
             patch.object(papers, "_generate_long_draft", new=fake_long_draft),
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             result = asyncio.run(
                 papers.generate(
@@ -1519,7 +2422,15 @@ def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
 
         saved = []
 
-        async def record_progress(stage, current, total, state) -> None:
+        async def record_progress(
+            stage: papers.PaperProgressStage,
+            current: int | None,
+            total: int | None,
+            state: papers.PaperProgressState = "active",
+            *,
+            detail: str | None = None,
+        ) -> None:
+            del detail
             stage_events.append((stage, current, total, state))
 
         async def run():
@@ -1765,6 +2676,7 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
             ),
             patch.object(papers, "_provider_structured", new=fake_structured),
             patch.object(papers, "_compile_pdf", new=lambda _tex, **_kwargs: b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             try:
                 asyncio.run(papers.generate(str(path), credential["identity"]))
@@ -1848,7 +2760,10 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
                 return b"%PDF-fixture"
 
             try:
-                with patch.object(papers, "_compile_pdf", new=fail_compile_once):
+                with (
+                    patch.object(papers, "_compile_pdf", new=fail_compile_once),
+                    mock_pdf_inspection(),
+                ):
                     asyncio.run(papers.generate(str(path), credential["identity"]))
             except ProjectError as exc:
                 assert "fixture TeX compilation failure" in str(exc)
@@ -1876,7 +2791,9 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert saved["snapshot_sha256"] == result["snapshot_sha256"]
         assert len(papers._json(saved["snapshot"])) == target_bytes
         assert saved["generation"]["long_form"] is True
-        assert saved["generation"]["call_limit"] == papers.MAX_LONG_PAPER_CALLS
+        assert saved["generation"]["call_limit"] == (
+            papers.MAX_LONG_PAPER_CALLS + papers.MAX_PROOFREAD_CALLS
+        )
         assert saved["generation"]["provider_calls_attempted"] == provider_calls - calls_at_restart
         assert saved["generation"]["evidence_fields_omitted"] == batch_count
         assert len(saved["generation"]["omitted_evidence"]) == batch_count
@@ -2212,8 +3129,16 @@ def test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint() -> None
             paragraphs=[f"Saved section {number} preserves the recorded limitation."]
         ), "fixture-model"
 
-    async def progress(stage, current, total, activity):
-        retry_progress.append((stage, current, total, activity))
+    async def progress(
+        stage: papers.PaperProgressStage,
+        current: int | None,
+        total: int | None,
+        state: papers.PaperProgressState = "active",
+        *,
+        detail: str | None = None,
+    ):
+        del detail
+        retry_progress.append((stage, current, total, state))
 
     saved_states: list[dict[str, Any]] = []
 
@@ -2390,8 +3315,16 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
             active -= 1
 
     async def check() -> tuple[papers.PaperDraft, int]:
-        async def progress(stage, current, total, activity):
-            progress_events.append((stage, current, total, activity))
+        async def progress(
+            stage: papers.PaperProgressStage,
+            current: int | None,
+            total: int | None,
+            state: papers.PaperProgressState = "active",
+            *,
+            detail: str | None = None,
+        ):
+            del detail
+            progress_events.append((stage, current, total, state))
 
         with patch.object(papers, "_provider_structured", new=provider):
             result, calls, _ = await papers._generate_long_draft(
@@ -2451,17 +3384,37 @@ def test_fast_long_draft_concurrency_ordered_checkpoints_and_resume() -> None:
 
 def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
     package, plan = fast_package(section_count=2)
+    project_ref = "project:fast-fixture"
+    saved_table = papers.PaperTable(
+        caption="A source-backed table completed before interruption.",
+        headers=["Record", "Status"],
+        rows=[["Investigator", "Saved"]],
+        evidence_refs=[project_ref],
+        claim_ids=["C1"],
+    )
+    saved_figure = papers.PaperDiagram(
+        caption="A bounded diagram saved before the section interruption.",
+        nodes=[
+            papers.DiagramNode(id="evidence", label="Saved evidence"),
+            papers.DiagramNode(id="claim", label="Paper claim"),
+        ],
+        edges=[papers.DiagramEdge(source="evidence", target="claim", label="supports")],
+        evidence_refs=[project_ref],
+        claim_ids=["C1"],
+    )
+    plan = plan.model_copy(update={"diagrams": [saved_figure]})
     state = papers._new_work("3" * 64, "fast-fixture", "4" * 64, "fixture-model", "high")
     attempts: list[tuple[str, int | None]] = []
 
-    async def first_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+    async def first_provider(input_value, _binding, _config, *, schema_name, **kwargs):
         number = input_value.get("section_number")
         attempts.append((schema_name, number))
         if schema_name == "sigma_long_paper_plan":
+            assert kwargs["include_diagrams"] is True
             return plan, "fixture-model"
         if number == 1:
             return papers.LongSectionDraft(
-                paragraphs=["This completed section is durable."]
+                paragraphs=["This completed section is durable."], tables=[saved_table]
             ), "fixture-model"
         await asyncio.sleep(0.05)
         raise ProjectError("fixture section failure after another section was saved")
@@ -2490,12 +3443,18 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
     assert attempts.count(("sigma_long_paper_section", 1)) == 1
     assert attempts.count(("sigma_long_paper_section", 2)) == 1
 
-    async def resume_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
+    async def resume_provider(input_value, _binding, _config, *, schema_name, **kwargs):
         number = input_value.get("section_number")
         assert schema_name == "sigma_long_paper_section" and number == 2
+        assert kwargs["include_diagrams"] is False
+        schema = papers._paper_response_schema(
+            kwargs["response_model"], include_diagrams=kwargs["include_diagrams"]
+        )
+        assert "tables" not in schema["properties"]
+        assert "TABLES:" not in kwargs["instructions"]
         attempts.append((schema_name, number))
         return papers.LongSectionDraft(
-            paragraphs=["Only the incomplete section is retried."]
+            paragraphs=["Only the incomplete section is retried."], tables=[saved_table]
         ), "fixture-model"
 
     async def resume() -> None:
@@ -2507,6 +3466,7 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
                 state,
                 lambda _value: None,
                 structured_fast_path=True,
+                include_diagrams=False,
             )
         assert [section.paragraphs[0] for section in result.sections] == [
             "This completed section is durable.",
@@ -2514,12 +3474,16 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
         ]
         assert calls == 4  # outline, completed section, uncertain failure, continuation
         assert batches == 0
+        assert result.diagrams == []
+        assert all(not section.tables for section in result.sections)
 
     asyncio.run(resume())
     assert attempts.count(("sigma_long_paper_plan", None)) == 1
     assert attempts.count(("sigma_long_paper_section", 1)) == 1
     assert attempts.count(("sigma_long_paper_section", 2)) == 2
     assert set(state["section_drafts"]) == {"1", "2"}
+    assert state["plan"]["diagrams"]  # saved paid output stays available for recovery
+    assert all(state["section_drafts"][key]["tables"] for key in ("1", "2"))
 
 
 def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
@@ -2557,6 +3521,7 @@ def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
                 patch.object(papers, "configuration", new=configuration),
                 patch.object(papers, "_provider", new=blocked_provider),
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
             ):
                 first = asyncio.create_task(
                     papers.generate(str(path), credential["identity"], view.project.id)
@@ -2618,6 +3583,7 @@ def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
                 patch.object(papers, "configuration", new=configuration),
                 patch.object(papers, "_provider", new=blocked_provider),
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
             ):
                 first, second = [
                     asyncio.create_task(
@@ -2700,6 +3666,7 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
                 patch.object(papers, "configuration", new=configuration),
                 patch.object(papers, "_provider", new=provider),
                 patch.object(papers, "_compile_pdf", new=blocked_compiler),
+                mock_pdf_inspection(),
             ):
                 first, second = [
                     asyncio.create_task(
@@ -2835,6 +3802,7 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
             patch.object(papers, "configuration", new=paper_configuration),
             patch.object(papers, "_provider", new=paper_provider),
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-mock"),
+            mock_pdf_inspection(),
         ):
             starts = await asyncio.gather(
                 *(
@@ -3007,6 +3975,8 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
 
         async def simulated_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
             mock_calls.append(schema_name)
+            if schema_name == "sigma_tex_proofread_patches":
+                return papers.TeXProofreadResult(corrections=[]), config["model"]
             if schema_name == "sigma_long_paper_plan":
                 refs = sorted(
                     {ref for item in input_value["evidence_index"] for ref in item["evidence_refs"]}
@@ -3085,10 +4055,12 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         compiler_context = (
             nullcontext()
             if tectonic_available
-            else patch.object(
+            else patch.multiple(
                 papers,
-                "_compile_pdf",
-                return_value=b"%PDF-1.4\\n" + b"% deterministic test fixture\\n" * 40,
+                _compile_pdf=lambda *_args, **_kwargs: (
+                    b"%PDF-1.4\\n" + b"% deterministic test fixture\\n" * 40
+                ),
+                _pdf_text_bounds_diagnostics=lambda _pdf: (1, []),
             )
         )
 
@@ -3115,7 +4087,7 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         record = papers.get_paper(str(path), result["paper_id"])
         assert record["pdf_available"] is True
         assert record["pdf_size_bytes"] > 500
-        assert record["generation"]["provider_calls_attempted"] == 3
+        assert record["generation"]["provider_calls_attempted"] == 4
         assert record["generation"]["evidence_batch_count"] == 0
         assert record["generation"]["evidence_fields_omitted"] == 0
         assert (
@@ -3135,7 +4107,7 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
             and item["status"] == "Listed as open in paper"
             for item in record["obligation_reconciliation"]
         )
-        assert len(mock_calls) == 3
+        assert len(mock_calls) == 4
         assert elapsed_seconds < 300
         compiler_label = (
             "real Tectonic compilation" if tectonic_available else "stub PDF (Tectonic unavailable)"
@@ -3412,7 +4384,7 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
                 reasoning_effort="high",
             )
             assert after["long_form"] is False
-            assert after["maximum_provider_calls"] == 1
+            assert after["maximum_provider_calls"] == 1 + papers.MAX_PROOFREAD_CALLS
             assert after["provider_calls_attempted"] == 0
 
 
@@ -3454,6 +4426,7 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
                 patch.object(papers, "_provider", new=provider),
                 patch.object(papers, "_validate", new=validate),
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
             ):
                 try:
                     await papers.generate(str(path), account["identity"], view.project.id)
@@ -3469,7 +4442,7 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
                 assert provider_calls == 1
                 saved = papers.get_paper(str(path), result["paper_id"])
                 assert saved["pdf_available"] is True
-                assert saved["generation"]["provider_calls_attempted"] == 1
+                assert saved["generation"]["provider_calls_attempted"] == 2
                 assert papers._load_work(str(path)) is None
 
         asyncio.run(run())
@@ -3515,6 +4488,7 @@ def test_live_research_change_does_not_discard_completed_paper() -> None:
             ),
             patch.object(papers, "_provider", new=provider),
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             completed = asyncio.run(
                 papers.generate(str(path), identity["identity"], view.project.id)
@@ -3567,6 +4541,7 @@ def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
                 papers, "_provider", side_effect=AssertionError("paid draft must be reused")
             ),
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             preflight = papers.preflight(
                 str(path),
@@ -3589,7 +4564,8 @@ def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
         saved = papers.get_paper(str(path), completed["paper_id"])
         assert saved["snapshot_sha256"] == fingerprint
         assert saved["snapshot"] == package
-        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["proofreading"]["attempted"] is True
 
 
 def test_one_shot_publishes_with_repaired_claim_links() -> None:
@@ -3629,6 +4605,7 @@ def test_one_shot_publishes_with_repaired_claim_links() -> None:
             ),
             patch.object(papers, "_provider", new=provider),
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             result = asyncio.run(papers.generate(str(path), account["identity"], view.project.id))
 
@@ -3637,7 +4614,8 @@ def test_one_shot_publishes_with_repaired_claim_links() -> None:
         assert saved["draft"]["abstract_claim_ids"] == ["C1"]
         assert saved["draft"]["claims"][0]["status"] == "unresolved"
         assert saved["draft"]["claims"][0]["evidence_refs"] == []
-        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["proofreading"]["attempted"] is True
         assert any("not established" in x for x in saved["draft"]["limitations"])
         assert saved["pdf_available"] is True
         assert papers._load_work(str(path)) is None
@@ -3695,7 +4673,7 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
         calls = 0
         reject = True
 
-        async def provider(context, _account, settings, *_args):
+        async def provider(context, _account, settings, *_args, **_kwargs):
             nonlocal calls
             calls += 1
             if reject:
@@ -3716,6 +4694,7 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 ),
                 patch.object(papers, "_provider", new=provider),
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                mock_pdf_inspection(),
             ):
                 try:
                     await papers.generate(str(path), account["identity"], view.project.id)
@@ -3763,9 +4742,9 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 result = await papers.generate(str(path), account["identity"], view.project.id)
                 assert calls == 2
                 record = papers.get_paper(str(path), result["paper_id"])
-                assert record["generation"]["provider_calls_attempted"] == 1
+                assert record["generation"]["provider_calls_attempted"] == 2
                 assert record["generation"]["provider_calls_prior_runs"] == 1
-                assert record["generation"]["provider_calls_lifetime_total"] == 2
+                assert record["generation"]["provider_calls_lifetime_total"] == 3
                 assert papers._load_work(str(path)) is None
 
         asyncio.run(check())
@@ -3912,7 +4891,602 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
     assert observed == [3600, 3600]
 
 
+def test_combined_visual_schema_and_safe_tex_rendering() -> None:
+    unchecked = papers._paper_response_schema(papers.PaperDraft)
+    checked = papers._paper_response_schema(papers.PaperDraft, include_diagrams=True)
+    assert "diagrams" not in unchecked["properties"]
+    assert "tables" not in unchecked["$defs"]["PaperSection"]["properties"]
+    assert "PaperTable" not in unchecked["$defs"]
+    assert "PaperDiagram" not in unchecked["$defs"]
+    assert "diagrams" in checked["properties"]
+    assert "tables" in checked["$defs"]["PaperSection"]["properties"]
+    assert "PaperTable" in checked["$defs"]
+    assert "diagrams" not in papers._paper_response_schema(papers.FastLongPaperPlan)["properties"]
+    assert (
+        "diagrams"
+        in papers._paper_response_schema(papers.FastLongPaperPlan, include_diagrams=True)[
+            "properties"
+        ]
+    )
+    assert "tables" not in papers._paper_response_schema(papers.LongSectionDraft)["properties"]
+    assert (
+        "tables"
+        in papers._paper_response_schema(papers.LongSectionDraft, include_diagrams=True)[
+            "properties"
+        ]
+    )
+    figure = papers.PaperDiagram.model_validate(
+        {
+            "caption": "Proposed policy-first routing; not an implemented federation.",
+            "nodes": [
+                {"id": "campus", "label": r"Campus & \input{secret}"},
+                {"id": "policy", "label": "Policy gate"},
+                {"id": "frontier", "label": "Approved frontier API"},
+            ],
+            "edges": [
+                {"source": "campus", "target": "policy", "label": "request"},
+                {"source": "policy", "target": "frontier", "label": "allow only"},
+            ],
+            "boundaries": [
+                {"label": "Proposed campus trust boundary", "node_ids": ["campus", "policy"]}
+            ],
+            "evidence_refs": ["project:pid"],
+            "claim_ids": ["C1"],
+        }
+    )
+    paper = draft()
+    table = papers.PaperTable.model_validate(
+        {
+            "caption": "Evidence-bound comparison of local and approved routes.",
+            "headers": ["Route", "Policy", "Evidence"],
+            "rows": [
+                ["Campus local", "Allowed", "Saved project"],
+                ["Frontier", "Approved only", "Saved project"],
+            ],
+            "evidence_refs": ["project:pid"],
+            "claim_ids": ["C1"],
+        }
+    )
+    sections = [
+        paper.sections[0].model_copy(update={"tables": [table]}),
+        paper.sections[1],
+    ]
+    paper = paper.model_copy(update={"diagrams": [figure], "sections": sections})
+    tex = papers._tex(paper, [], "a" * 64)
+    assert tex.index(r"\usepackage{tikz}") < tex.index(r"\begin{document}")
+    assert r"\input{secret}" not in tex
+    assert r"Campus \&" in tex
+    assert "Proposed campus trust boundary" in tex
+    assert r"\begin{longtable}" in tex
+    assert "Evidence: [project:pid]; claims: C1" in tex
+    assert papers._validate(paper, {"sources": [{"id": "project:pid", "data": {}}]})
+    visual_free = papers._without_optional_visuals(paper)
+    assert visual_free.diagrams == []
+    assert all(not section.tables for section in visual_free.sections)
+    visual_free_tex = papers._tex(visual_free, [], "a" * 64)
+    assert r"\usepackage{tikz}" not in visual_free_tex
+    assert r"\begin{longtable}" not in visual_free_tex
+    if shutil.which("tectonic"):
+        pdf = papers._compile_pdf(tex, timeout_seconds=90)
+        assert pdf.startswith(b"%PDF-")
+
+
+def test_longtable_semantic_signature_normalizes_every_table_preamble() -> None:
+    original = r"""\begin{longtable}{p{2cm}p{4cm}}n & $0$\\Claim C1 supports source project:fixture\\\end{longtable}
+\begin{longtable}{>{\raggedright}p{3cm}p{5cm}}n & $1$\\Claim C2\\\end{longtable}
+\begin{longtable}{p{7cm}p{2cm}}n & $2$\\Claim C3\\\end{longtable}"""
+    adjusted = r"""\begin{longtable}{p{1cm}p{5cm}}n & $0$\\Claim C1 supports source project:fixture\\\end{longtable}
+\begin{longtable}{>{\raggedleft}p{8cm}p{1cm}}n & $1$\\Claim C2\\\end{longtable}
+\begin{longtable}{p{2cm}p{6cm}}n & $2$\\Claim C3\\\end{longtable}"""
+    assert papers._tex_semantic_signature(original) == papers._tex_semantic_signature(adjusted)
+    escaped_math = original.replace("$0$", r"\$0\$")
+    assert papers._tex_semantic_signature(original) == papers._tex_semantic_signature(escaped_math)
+    for mutation in (
+        adjusted.replace("$2$", "$9$"),
+        adjusted.replace("Claim C3", "Claim C8"),
+        adjusted.replace("project:fixture", "project:foreign"),
+    ):
+        assert papers._tex_semantic_signature(original) != papers._tex_semantic_signature(mutation)
+
+
+def test_pdf_layout_repairs_are_bounded_and_protect_research_semantics() -> None:
+    source = (
+        "\\documentclass{article}\n"
+        + "\\emergencystretch=2em\n"
+        + "\\linespread{1.07}\n"
+        + r"\begin{document}The result remains 3 units.\end{document}"
+    )
+    warnings = [r"Overfull \hbox (12.0pt too wide)", r"Overfull \vbox (8.0pt too high)"]
+    first = papers._repair_tex_layout(source, warnings)
+    assert first is not None
+    first_tex, first_detail = first
+    assert r"\emergencystretch=4em" in first_tex
+    assert r"\linespread{1.0}" in first_tex
+    assert "line-breaking stretch" in first_detail and "line spacing" in first_detail
+    assert papers._tex_semantic_signature(source) == papers._tex_semantic_signature(first_tex)
+    second = papers._repair_tex_layout(first_tex, [warnings[0]])
+    assert second is not None and r"\emergencystretch=8em" in second[0]
+    assert papers._tex_semantic_signature(first_tex) == papers._tex_semantic_signature(second[0])
+    assert papers._repair_tex_layout(second[0], [warnings[0]]) is None
+    assert papers._repair_tex_layout(source, [r"Underfull \hbox badness 10000"]) is None
+
+
+def test_caption_limits_reject_cutoff_and_allow_complete_long_caption() -> None:
+    common = {
+        "headers": ["Condition", "Outcome"],
+        "rows": [["Control", "Recorded"]],
+        "evidence_refs": ["project:pid"],
+        "claim_ids": ["C1"],
+    }
+    truncated = "A" * 296 + " or "
+    assert len(truncated) == 300
+    try:
+        papers.PaperTable.model_validate({**common, "caption": truncated})
+    except papers.ValidationError as exc:
+        assert "appears incomplete" in str(exc)
+    else:
+        raise AssertionError("A caption cut at the old schema boundary must be rejected")
+    complete = "A source-grounded caption describing the table and its caveat. " + "x" * 275
+    parsed = papers.PaperTable.model_validate({**common, "caption": complete})
+    assert len(parsed.caption) > 300
+
+
+def test_real_tadpole_onp_and_math_table_pdfs() -> None:
+    """Compile realistic fixture PDFs and gate on width/layout warnings."""
+    if not shutil.which("tectonic"):
+        return
+    source_map = {"project:pid": "Project overview", "session:sid": "Research session 1"}
+    mathematical = draft("project:pid")
+    math_table = papers.PaperTable(
+        caption="Small cases for the region count M(n), with symbols typeset as mathematics.",
+        headers=["Input n", "Added regions", "Maximum M(n)"],
+        rows=[
+            ["$0$", "$0$", "$1$"],
+            ["$1$", "$1$", "$2$"],
+            ["$2$", "$2$", "$4$"],
+            ["$3$", "$3$", "$7$"],
+        ],
+        evidence_refs=["project:pid"],
+        claim_ids=["C1"],
+    )
+    mathematical = mathematical.model_copy(
+        update={
+            "title": "Maximum Regions Mathematical Table Fixture",
+            "sections": [
+                mathematical.sections[0].model_copy(update={"tables": [math_table]}),
+                mathematical.sections[1],
+            ],
+        }
+    )
+
+    tadpole_caption = (
+        "Candidate stage–time dependency map: arrows indicate hypotheses about the sequence "
+        "from injury response to later epidermal activation and matrix remodeling. These are "
+        "candidate relationships, not measured or validated mechanisms."
+    )
+    tadpole_diagram = papers.PaperDiagram(
+        caption=tadpole_caption,
+        nodes=[
+            papers.DiagramNode(id="injury", label="Amputation injury and early wound response"),
+            papers.DiagramNode(id="ric", label="RIC formation and basal epidermal response"),
+            papers.DiagramNode(id="matrix", label="Extracellular matrix remodeling"),
+            papers.DiagramNode(id="stage40", label="Stage 40: competent condition"),
+            papers.DiagramNode(id="stage46", label="Stage 46: refractory condition"),
+            papers.DiagramNode(id="regrowth", label="Observed regeneration outcome"),
+        ],
+        edges=[
+            papers.DiagramEdge(source="injury", target="ric", label="candidate input"),
+            papers.DiagramEdge(source="ric", target="matrix", label="candidate coupling"),
+            papers.DiagramEdge(source="matrix", target="regrowth", label="candidate relation"),
+            papers.DiagramEdge(source="stage40", target="ric", label="comparison condition"),
+            papers.DiagramEdge(source="stage46", target="ric", label="comparison condition"),
+        ],
+        boundaries=[
+            papers.DiagramBoundary(
+                label="Proposed intermediate process", node_ids=["ric", "matrix"]
+            )
+        ],
+        evidence_refs=["session:sid"],
+        claim_ids=["C1"],
+    )
+    tadpole_table = papers.PaperTable(
+        caption="Candidate transcriptomic contrasts and the inferential limitation for each proposed comparison.",
+        headers=["Stage and time", "Candidate contrast", "Interpretive limit"],
+        rows=[
+            ["Stage 40, 0 h", "Baseline after sham handling", "Specimen links are unverified"],
+            ["Stage 40, 0.5 h", "Early injury response", "Does not establish later dependency"],
+            ["Stage 40, 6 h", "Intermediate response", "Biological replication is unverified"],
+            ["Stage 46, 3 d", "Later regeneration program", "No animal-level pairing is supplied"],
+        ],
+        evidence_refs=["project:pid", "session:sid"],
+        claim_ids=["C1"],
+    )
+    tadpole = draft("project:pid").model_copy(
+        update={
+            "title": "Tadpoles Publication Layout Fixture",
+            "diagrams": [tadpole_diagram],
+            "sections": [
+                draft("project:pid").sections[0].model_copy(update={"tables": [tadpole_table]}),
+                draft("project:pid").sections[1],
+            ],
+        }
+    )
+
+    onp_nodes = [
+        papers.DiagramNode(
+            id=f"actor{index}",
+            label=f"Actor {index}: sovereign decision authority and operational constraint",
+        )
+        for index in range(1, 9)
+    ]
+    onp_edges = [
+        papers.DiagramEdge(
+            source=onp_nodes[index % 8].id,
+            target=onp_nodes[(index + 1) % 8].id,
+            label=f"conditional action {index + 1}",
+        )
+        for index in range(12)
+    ]
+    onp_diagram = papers.PaperDiagram(
+        caption="Long-label scenario map — the links identify conditional dependencies, not asserted control over another sovereign actor.",
+        nodes=onp_nodes,
+        edges=onp_edges,
+        boundaries=[
+            papers.DiagramBoundary(
+                label="National decision authority", node_ids=["actor1", "actor2", "actor3"]
+            )
+        ],
+        evidence_refs=["project:pid"],
+        claim_ids=["C1"],
+    )
+    onp_rows = [
+        [
+            f"Course {index + 1}",
+            "Preserve personnel safety while establishing whether access is physically available",
+            "Requires confirmed receipt and observed unit compliance before treating the pause as operative",
+            "Conditional on timely medical and engineering assessments",
+            "Does not establish legal authority or control over escalation",
+        ]
+        for index in range(12)
+    ]
+    onp_table = papers.PaperTable(
+        caption="Five-column conditional course comparison. All criteria remain uncertain where the scenario supplies no validated evidence.",
+        headers=[
+            "Course",
+            "Personnel objective",
+            "Operational dependency",
+            "Feasibility condition",
+            "Unresolved limit",
+        ],
+        rows=onp_rows,
+        evidence_refs=["project:pid"],
+        claim_ids=["C1"],
+    )
+    onp = draft("project:pid").model_copy(
+        update={
+            "title": "Operation Narrow Passage Layout Fixture",
+            "diagrams": [onp_diagram],
+            "sections": [
+                draft("project:pid").sections[0].model_copy(update={"tables": [onp_table]}),
+                draft("project:pid").sections[1],
+            ],
+        }
+    )
+
+    graph_nodes = [
+        papers.DiagramNode(id="evidence", label="Saved evidence"),
+        papers.DiagramNode(id="author", label="Author review"),
+        papers.DiagramNode(id="skeptic", label="Skeptic review"),
+        papers.DiagramNode(id="finding", label="Qualified finding"),
+    ]
+    graph_edges = [
+        papers.DiagramEdge(source="evidence", target="author", label="supports"),
+        papers.DiagramEdge(source="evidence", target="skeptic", label="challenges"),
+        papers.DiagramEdge(source="author", target="finding", label="accepted with caveat"),
+        papers.DiagramEdge(source="skeptic", target="finding", label="obligation remains"),
+    ]
+    graph_diagram = papers.PaperDiagram(
+        caption="Source-grounded review flow; the remaining obligation qualifies the finding.",
+        nodes=graph_nodes,
+        edges=graph_edges,
+        boundaries=[
+            papers.DiagramBoundary(label="Independent review", node_ids=["author", "skeptic"])
+        ],
+        evidence_refs=["session:sid"],
+        claim_ids=["C1"],
+    )
+    graph = draft("project:pid").model_copy(
+        update={"title": "Readable Graph Layout Fixture", "diagrams": [graph_diagram]}
+    )
+
+    fixtures = [
+        ("Maximum Regions", mathematical),
+        ("Tadpoles", tadpole),
+        ("ONP", onp),
+        ("Diagram", graph),
+    ]
+    with TemporaryDirectory():
+        for name, value in fixtures:
+            warnings: list[str] = []
+            tex = papers._tex(
+                value,
+                warnings,
+                "f" * 64,
+                source_reference_map=source_map,
+            )
+            assert "project:pid" not in tex and "session:sid" not in tex
+            if name == "Maximum Regions":
+                assert r"\textbf{Input n}" in tex and r"\textbf{Maximum M(n)}" in tex
+                assert r"$0$ & $0$ & $1$" in tex
+                assert r"M(n)" in tex
+                assert r"\$0\$" not in tex
+            if name == "Tadpoles":
+                assert r"Candidate stage\textendash{}time dependency map" in tex
+                assert r"\textendash{}" in tex
+                assert "Diagram (readable relationship list)." in tex
+                for node in tadpole_diagram.nodes:
+                    assert node.label in tex
+                for edge in tadpole_diagram.edges:
+                    assert edge.label in tex
+                assert "Proposed intermediate process" in tex
+            if name == "ONP":
+                assert r"\begin{landscape}" in tex and r"\endlastfoot" in tex
+                assert "Diagram (readable relationship list)." in tex
+                assert len(onp_rows) == 12
+            diagnostics: list[str] = []
+            pdf = papers._compile_pdf(
+                tex,
+                timeout_seconds=120,
+                diagnostics=diagnostics,
+                max_pdf_bytes=40_000_000,
+            )
+            assert pdf.startswith(b"%PDF-"), f"{name} did not yield a real PDF"
+            assert not papers._publication_layout_warnings(diagnostics), (name, diagnostics)
+            assert len(pdf) > 5_000
+            document = pypdfium2.PdfDocument(pdf)
+            inspected_page_count, pdf_diagnostics = papers._pdf_text_bounds_diagnostics(pdf)
+            assert inspected_page_count == len(document)
+            assert pdf_diagnostics == [], (name, pdf_diagnostics)
+            pages = [document[index] for index in range(len(document))]
+            extracted = "\n".join(page.get_textpage().get_text_range() for page in pages)
+            normalized_text = unicodedata.normalize("NFKC", " ".join(extracted.split()))
+            assert len(document) >= 2
+            for page in pages:
+                bounds = (
+                    (page.get_height(), page.get_width())
+                    if page.get_rotation() in {90, 270}
+                    else (page.get_width(), page.get_height())
+                )
+                textpage = page.get_textpage()
+                for character_index in range(textpage.count_chars()):
+                    char_bounds = textpage.get_charbox(character_index)
+                    assert char_bounds is not None, (name, character_index)
+                    x0, y0, x1, y1 = char_bounds
+                    assert -1 <= x0 <= x1 <= bounds[0] + 1 and -1 <= y0 <= y1 <= bounds[1] + 1, (
+                        name,
+                        textpage.get_text_range(character_index, 1),
+                        char_bounds,
+                        bounds,
+                    )
+                rendered_page = page.render(scale=1).to_pil()
+                assert rendered_page.width > 500 and rendered_page.height > 500
+            if name == "Maximum Regions":
+                table_page = next(
+                    page.get_textpage().get_text_range()
+                    for page in pages
+                    if "Table 1:" in page.get_textpage().get_text_range()
+                )
+                assert "$0$" not in table_page and "$1$" not in table_page
+                assert all(value in table_page for value in ("0", "1", "2", "4", "7", "M(n)"))
+            if name == "Tadpoles":
+                assert "stage–time" in extracted
+                assert "not measured or validated mechanisms" in normalized_text
+                assert "Research session 1" in normalized_text and "session:sid" not in extracted
+                assert all(
+                    " ".join(node.label.split()) in normalized_text
+                    for node in tadpole_diagram.nodes
+                )
+                assert all(
+                    " ".join(edge.label.split()) in normalized_text
+                    for edge in tadpole_diagram.edges
+                )
+                assert "Proposed intermediate process" in normalized_text
+            if name == "ONP":
+                assert normalized_text.count("Course") >= 2  # repeated header on continuation page
+                assert all(f"Course {index}" in normalized_text for index in range(1, 13))
+                assert (
+                    "Does not establish legal authority or control over escalation"
+                    in normalized_text
+                )
+                assert "Diagram (readable relationship list)." in normalized_text
+                assert all(" ".join(node.label.split()) in normalized_text for node in onp_nodes)
+                assert all(" ".join(edge.label.split()) in normalized_text for edge in onp_edges)
+                assert "project:pid" not in extracted
+            if name == "Diagram":
+                assert papers._diagram_layout(graph_diagram) is not None
+                assert "edge badge" in tex and "minimum height=" in tex
+                assert "Independent review" in normalized_text
+                assert all(node.label in normalized_text for node in graph_nodes)
+                assert all(edge.label in normalized_text for edge in graph_edges)
+            print(
+                f"PASS real {name} PDF layout: {len(document)} pages, "
+                f"{len(tex.encode())} TeX bytes, "
+                f"{len(pdf)} PDF bytes, {len(diagnostics)} compiler diagnostics"
+            )
+
+    overlap_tex = papers._tex(draft(), [], "f" * 64, source_reference_map=source_map).replace(
+        r"\end{document}",
+        r"\par\noindent OVERLAP CONTROL\llap{OBSCURED CONTROL}\par" + "\n" + r"\end{document}",
+    )
+    overlap_pdf = papers._compile_pdf(
+        overlap_tex,
+        timeout_seconds=120,
+        max_pdf_bytes=40_000_000,
+    )
+    _, overlap_warnings = papers._pdf_text_bounds_diagnostics(overlap_pdf)
+    assert any("substantially overlap" in item for item in overlap_warnings), overlap_warnings
+    assert papers._repair_tex_layout(overlap_tex, overlap_warnings) is None
+    print("PASS real overprint negative control: overlapping glyph boxes require layout review")
+
+
+def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
+    package, plan = fast_package()
+    plan = plan.model_copy(
+        update={
+            "diagrams": [
+                papers.PaperDiagram(
+                    caption="Saved proof candidate and its recorded unresolved check.",
+                    nodes=[
+                        papers.DiagramNode(id="candidate", label="Candidate argument"),
+                        papers.DiagramNode(id="skeptic", label="Skeptic obligation"),
+                    ],
+                    edges=[
+                        papers.DiagramEdge(
+                            source="candidate", target="skeptic", label="requires review"
+                        )
+                    ],
+                    evidence_refs=["session:onp-fixture"],
+                    claim_ids=["C1"],
+                )
+            ]
+        }
+    )
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    observed: list[tuple[str, bool | None]] = []
+    checked_details: list[tuple[str, dict, str]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **kwargs):
+        observed.append((schema_name, kwargs.get("include_diagrams")))
+        schema = papers._paper_response_schema(
+            kwargs["response_model"], include_diagrams=kwargs["include_diagrams"]
+        )
+        checked_details.append((schema_name, schema, kwargs["instructions"]))
+        if schema_name == "sigma_long_paper_plan":
+            assert kwargs["include_diagrams"] is True
+            assert "diagrams" in schema["properties"]
+            assert "VISUALS" in kwargs["instructions"]
+            assert "tables" in kwargs["instructions"]
+            return plan, "fixture-model"
+        assert kwargs["include_diagrams"] is True
+        assert "tables" in schema["properties"]
+        assert "TABLES:" in kwargs["instructions"]
+        return (
+            papers.LongSectionDraft(
+                paragraphs=["The section preserves the source-linked candidate and limitation."],
+                tables=[
+                    papers.PaperTable(
+                        caption="Evidence types represented in this section.",
+                        headers=["Record", "Finding"],
+                        rows=[
+                            ["Investigator", "Candidate construction"],
+                            ["Skeptic", "Open obligation"],
+                        ],
+                        evidence_refs=["session:onp-fixture"],
+                        claim_ids=["C1"],
+                    )
+                ],
+            ),
+            "fixture-model",
+        )
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+                structured_fast_path=True,
+            )
+        assert result.diagrams == plan.diagrams
+        assert all(section.tables for section in result.sections)
+        assert all(
+            set(table.evidence_refs) <= {"session:onp-fixture"} and set(table.claim_ids) == {"C1"}
+            for section in result.sections
+            for table in section.tables
+        )
+        assert calls == 1 + len(result.sections)
+        assert batches == 0
+
+    asyncio.run(check())
+    assert observed[0] == ("sigma_long_paper_plan", True)
+    assert all(name == "sigma_long_paper_section" for name, _ in observed[1:])
+    assert "diagrams" in checked_details[0][1]["properties"]
+    assert "VISUALS" in checked_details[0][2]
+    assert all(
+        "tables" in schema["properties"] and "TABLES:" in instructions
+        for name, schema, instructions in checked_details[1:]
+        if name == "sigma_long_paper_section"
+    )
+    assert state["plan"]["diagrams"][0]["evidence_refs"] == ["session:onp-fixture"]
+
+    unchecked_state = papers._new_work("b" * 64, "fast-fixture", "c" * 64, "fixture-model", "high")
+    unchecked_calls: list[tuple[str, bool | None]] = []
+    unchecked_details: list[tuple[dict, str]] = []
+
+    async def unchecked_provider(input_value, _binding, _config, *, schema_name, **kwargs):
+        unchecked_calls.append((schema_name, kwargs.get("include_diagrams")))
+        schema = papers._paper_response_schema(
+            kwargs["response_model"], include_diagrams=kwargs["include_diagrams"]
+        )
+        unchecked_details.append((schema, kwargs["instructions"]))
+        if schema_name == "sigma_long_paper_plan":
+            assert kwargs["include_diagrams"] is False
+            return plan.model_copy(update={"diagrams": []}), "fixture-model"
+        return papers.LongSectionDraft(
+            paragraphs=["Saved prose remains available."],
+            tables=[
+                papers.PaperTable(
+                    caption="A prior section table that must stay out of unchecked output.",
+                    headers=["Record", "Finding"],
+                    rows=[["Investigator", "Saved"]],
+                    evidence_refs=["session:onp-fixture"],
+                    claim_ids=["C1"],
+                )
+            ],
+        ), "fixture-model"
+
+    async def check_unchecked() -> None:
+        with patch.object(papers, "_provider_structured", new=unchecked_provider):
+            result, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                unchecked_state,
+                lambda _state: None,
+                structured_fast_path=True,
+                include_diagrams=False,
+            )
+        assert result.diagrams == []
+        assert all(not section.tables for section in result.sections)
+        assert calls == 1 + len(result.sections)
+
+    asyncio.run(check_unchecked())
+    assert unchecked_calls[0] == ("sigma_long_paper_plan", False)
+    assert all(value is False for _, value in unchecked_calls)
+    assert all(
+        "diagrams" not in schema["properties"]
+        and "tables" not in schema["properties"]
+        and "VISUALS" not in instructions
+        and "TABLES:" not in instructions
+        for schema, instructions in unchecked_details
+    )
+
+
 def main() -> None:
+    test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
+    test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data()
+    test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls()
+    test_longtable_semantic_signature_normalizes_every_table_preamble()
+    test_pdf_layout_repairs_are_bounded_and_protect_research_semantics()
+    test_caption_limits_reject_cutoff_and_allow_complete_long_caption()
+    test_real_tadpole_onp_and_math_table_pdfs()
+    test_one_shot_and_long_form_both_proofread_before_compiling()
+    test_combined_visual_schema_and_safe_tex_rendering()
+    test_fast_long_draft_obeys_combined_diagram_and_table_preference()
+    test_diagram_compile_fallback_preserves_evidence_tables_and_provider_accounting()
+    test_unrelated_compile_failure_does_not_remove_valid_diagrams()
     test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
     test_publication_paragraphs_math_and_bounded_optional_appendix()
     test_summary_only_research_uses_zero_paid_evidence_extraction_calls()
@@ -3933,11 +5507,12 @@ def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
     test_chatgpt_schema_rejection_is_actionable_and_redacted()
-    test_one_shot_and_long_paper_requests_report_mocked_schema_rejection_once()
+    test_visual_preference_controls_one_shot_and_long_paper_wire_schemas()
     test_strict_paper_schemas_require_all_properties()
     test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
+    test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_paper_progress_endpoint_recovers_interrupted_checkpoint()
@@ -4442,6 +6017,7 @@ def main() -> None:
             ),
             patch.object(papers, "_provider", new=fake_provider),
             patch.object(papers, "_compile_pdf", new=lambda *_args, **_kwargs: b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             first = asyncio.run(papers.generate(str(path), credential["identity"]))
             second = asyncio.run(papers.generate(str(path), credential["identity"]))
@@ -4456,7 +6032,7 @@ def main() -> None:
         assert r"\section*{About this paper}" not in record["tex_source"]
         assert "AI-generated research synthesis" not in record["tex_source"]
         assert "SIGMA AI-assisted research synthesis" in record["tex_source"]
-        assert record["generation"]["call_limit"] == 1
+        assert record["generation"]["call_limit"] == 1 + papers.MAX_PROOFREAD_CALLS
         assert papers.get_pdf(str(path), first["paper_id"]).startswith(b"%PDF-")
         saved_text = papers.paper_text(str(path), first["paper_id"])
         assert saved_text.startswith("An evidence-bound exploratory note\n")
@@ -4536,6 +6112,7 @@ def main() -> None:
             ),
             patch.object(papers, "_provider", new=exploratory_provider),
             patch.object(papers, "_compile_pdf", new=lambda *_args, **_kwargs: b"%PDF-fixture"),
+            mock_pdf_inspection(),
         ):
             exploratory = asyncio.run(papers.generate(str(exploratory_path)))
         exploratory_record = papers.get_paper(str(exploratory_path), exploratory["paper_id"])
@@ -4550,4 +6127,23 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Fixture credentials must never reach the real model service. Provider
+    # protocol tests install their own MockTransport; all other client calls
+    # receive a local response so the engineering suite cannot incur charges.
+    real_async_client = httpx.AsyncClient
+
+    def offline_async_client(*args, **kwargs):
+        if "transport" not in kwargs:
+            kwargs["transport"] = httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    503,
+                    json={"error": {"code": "offline_test_fixture", "message": "offline"}},
+                )
+            )
+        return real_async_client(*args, **kwargs)
+
+    httpx.AsyncClient = offline_async_client  # type: ignore[assignment]
+    try:
+        main()
+    finally:
+        httpx.AsyncClient = real_async_client

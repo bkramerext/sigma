@@ -1,6 +1,6 @@
 # SIGMA backlog
 
-Open ideas and possible follow-up work, not implementation commitments. Implemented behavior is tracked in code, tests, [STATUS](STATUS.md), and the ticket tracker; historical decisions are not maintained here.
+Open ideas and possible follow-up work, not implementation commitments. Implemented behavior is tracked in code, tests, and the ticket tracker; historical decisions are not maintained here.
 
 **Times:** Approximate local times reconstructed from discussions. Preserve timestamps for retained ideas.
 

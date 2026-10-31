@@ -67,7 +67,8 @@ smallest safe recovery path. Resume only after the owner reviews any new scope.
    `--no-build`, then verify service/container health, image IDs and labels,
    public HTTPS, authentication, and persistence without paid provider calls.
 6. Record the actual cutover SHA, image IDs, downtime, health evidence, recovery
-   point, and operator outcome in `OPERATION_RUNBOOK.md` and `STATUS.md`.
+   point, and operator outcome in `OPERATION_RUNBOOK.md` and the committed PR
+   handoff under `messages/`.
 
 ## Routine-release autonomy
 

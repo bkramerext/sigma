@@ -44,7 +44,8 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(dialog).to_contain_text("Create a LaTeX paper from this project’s saved research")
     expect(dialog).to_contain_text("Per project settings, AI model is gpt-6.1-sol")
-    expect(dialog.locator("input[type=checkbox]")).to_have_count(3)
+    expect(dialog.locator("input[type=checkbox]")).to_have_count(4)
+    expect(dialog.get_by_role("checkbox", name="Include diagrams and tables")).to_be_checked()
     expect(dialog.locator(".ai-paper-controls button")).to_have_count(1)
     for implementation_detail in (
         "Advanced options",
@@ -58,10 +59,10 @@ with sync_playwright() as playwright:
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
     expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_be_enabled(timeout=10000)
-    expect(dialog.get_by_role("status")).to_be_visible()
+    expect(dialog.locator(".ai-paper-status")).to_be_visible()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
-    expect(dialog.get_by_role("status")).to_contain_text("Paper saved in Saved versions.")
+    expect(dialog.locator(".ai-paper-status")).to_contain_text("Paper saved in Saved versions.")
     tex_download = card.get_by_role("link", name="Download TeX file")
     expect(tex_download).to_be_visible()
     with page.expect_download() as tex_download_event:

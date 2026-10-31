@@ -17,7 +17,7 @@ Open the source-controlled `projects/rh.sigma/` seed in a local browser, showing
 
 ## Verification
 
-Run scenarios, API/CLI checks, frontend typecheck/build, Ruff, and Pyright. Record actual results in `docs/STATUS.md`.
+Run scenarios, API/CLI checks, frontend typecheck/build, Ruff, and Pyright. Record actual results in the active ticket or a committed PR handoff under `messages/`.
 
 ## Scope
 

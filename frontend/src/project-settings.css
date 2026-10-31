@@ -224,6 +224,8 @@
 .project-settings-dialog.ai-paper-dialog { display: flex; flex-direction: column; width: min(880px, calc(100vw - 28px)); height: fit-content; max-height: min(90dvh, 900px); }
 .project-settings-dialog.ai-paper-dialog > .settings-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 14px 24px 18px; }
 .ai-paper-body { display: grid; gap: 9px; }
+.ai-paper-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
+.ai-paper-options .ai-paper-details { min-width: 0; }
 .ai-paper-body > p { margin: 0; }
 .project-settings-dialog.ai-paper-dialog .ai-paper-body > p.settings-hint { font-size: 14px; line-height: 1.55; }
 .ai-paper-body .ai-paper-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

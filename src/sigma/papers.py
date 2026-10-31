@@ -12,12 +12,22 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict
+from time import monotonic
+from typing import Annotated, Any, Literal, Protocol, TypedDict
 from uuid import uuid4
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+import pypdfium2
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 from sigma import cloud_research, cloud_workspaces
 from sigma.openai_connection import auth_context, cloud_credential
@@ -47,6 +57,11 @@ MAX_LONG_PAPER_CALLS = (
     + MAX_LONG_PAPER_OUTLINE_CALLS
     + MAX_LONG_PAPER_SECTIONS
 )
+MAX_PROOFREAD_CALLS = 32
+MAX_PROOFREAD_CHUNK_CHARS = 16_000
+MAX_PROOFREAD_CHUNK_BYTES = 32_000
+MAX_PROOFREAD_TEX_BYTES = 2_000_000
+MAX_PDF_TEXT_BOXES = 2_000_000
 MAX_RESPONSE_BYTES = 1_000_000
 # Responses SSE contains event envelopes and can repeat an entire completed output.
 # Keep a finite transport bound separate from the validated 1 MB API response.
@@ -62,7 +77,9 @@ PaperProgressStage = Literal[
     "planning",
     "sections",
     "validation",
+    "proofreading",
     "compile",
+    "pdf_check",
     "retry",
     "complete",
 ]
@@ -77,13 +94,24 @@ class PaperProgressEvent(TypedDict):
     total: int | None
     started_at: str
     elapsed_seconds: int
+    detail: str | None
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
-PaperStageCallback = Callable[
-    [PaperProgressStage, int | None, int | None, Literal["active", "milestone", "complete"]],
-    Awaitable[None],
-]
+
+
+class PaperStageCallback(Protocol):
+    def __call__(
+        self,
+        stage: PaperProgressStage,
+        current: int | None,
+        total: int | None,
+        state: Literal["active", "milestone", "complete"] = "active",
+        *,
+        detail: str | None = None,
+    ) -> Awaitable[None]: ...
+
+
 # High-thinking paper inference can legitimately take much longer than five minutes.
 # Give each provider request up to one hour; this is a ceiling, not a target.
 # It does not authorize repeating an ambiguous paid provider request.
@@ -149,11 +177,87 @@ class PaperClaim(BaseModel):
     reasoning: str = Field(min_length=10, max_length=2400)
 
 
+_INCOMPLETE_CAPTION_ENDING = re.compile(
+    r"(?:\b(?:and|or|but|of|to|for|with|without|from|between|including|versus|not|by|as|that|which)"
+    r"|[,;:/]|[–—(])$",
+    re.IGNORECASE,
+)
+
+
+def _caption_is_obviously_truncated(caption: str) -> bool:
+    """Catch legacy schema-cap truncation without requiring punctuation in captions."""
+    ending = caption.strip()
+    return len(ending) >= 250 and bool(_INCOMPLETE_CAPTION_ENDING.search(ending))
+
+
+class PaperTable(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    caption: str = Field(min_length=12, max_length=1000)
+    headers: list[str] = Field(min_length=2, max_length=6)
+    rows: list[list[str]] = Field(min_length=1, max_length=16)
+    evidence_refs: list[str] = Field(min_length=1, max_length=20)
+    claim_ids: list[str] = Field(min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def validate_rectangular_rows(self) -> PaperTable:
+        if _caption_is_obviously_truncated(self.caption):
+            raise ValueError(
+                "table caption appears incomplete at the previous 300-character schema limit"
+            )
+        if any(len(row) != len(self.headers) for row in self.rows):
+            raise ValueError("table rows must match the header count")
+        if any(
+            not cell.strip() or len(cell) > 240
+            for row in [self.headers, *self.rows]
+            for cell in row
+        ):
+            raise ValueError("table cells must be nonempty and at most 240 characters")
+        return self
+
+
 class PaperSection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     heading: str = Field(min_length=2, max_length=120)
     paragraphs: list[str] = Field(min_length=1, max_length=80)
     claim_ids: list[str] = Field(max_length=30)
+    tables: list[PaperTable] = Field(default_factory=list, max_length=4)
+
+
+class DiagramNode(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,23}$")
+    label: str = Field(min_length=1, max_length=80)
+
+
+class DiagramEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,23}$")
+    target: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,23}$")
+    label: str = Field(default="", max_length=60)
+
+
+class DiagramBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    label: str = Field(min_length=1, max_length=80)
+    node_ids: list[str] = Field(min_length=1, max_length=8)
+
+
+class PaperDiagram(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    caption: str = Field(min_length=12, max_length=1000)
+    nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
+    edges: list[DiagramEdge] = Field(min_length=1, max_length=12)
+    boundaries: list[DiagramBoundary] = Field(default_factory=list, max_length=4)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    claim_ids: list[str] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="after")
+    def validate_caption_completeness(self) -> PaperDiagram:
+        if _caption_is_obviously_truncated(self.caption):
+            raise ValueError(
+                "diagram caption appears incomplete at the previous 300-character schema limit"
+            )
+        return self
 
 
 class PaperDraft(BaseModel):
@@ -172,6 +276,28 @@ class PaperDraft(BaseModel):
     conclusions: list[str] = Field(min_length=1, max_length=8)
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
+    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
+
+
+class TeXCorrection(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    category: Literal[
+        "math_notation",
+        "escaping",
+        "environment",
+        "unicode",
+        "diagram_layout",
+        "table_layout",
+        "spacing",
+    ]
+    find: str = Field(min_length=1, max_length=2_000)
+    replace: str = Field(max_length=2_000)
+    rationale: str = Field(min_length=3, max_length=240)
+
+
+class TeXProofreadResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    corrections: list[TeXCorrection] = Field(max_length=16)
 
 
 class EvidenceNote(BaseModel):
@@ -225,6 +351,8 @@ class LongPaperPlan(BaseModel):
     conclusions: list[str] = Field(min_length=1, max_length=8)
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
+    # Defaulted for compatibility with plans saved before diagrams were added.
+    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
 
 
 FAST_MAX_SECTIONS = 8
@@ -239,10 +367,26 @@ class FastLongPaperPlan(LongPaperPlan):
 class LongSectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     paragraphs: list[LongText] = Field(min_length=1, max_length=80)
+    tables: list[PaperTable] = Field(default_factory=list, max_length=4)
 
 
-def _paper_response_schema(model: type[BaseModel]) -> dict[str, Any]:
+def _without_optional_visuals(draft: PaperDraft) -> PaperDraft:
+    """Remove both generated visual types when the combined preference is off."""
+    return draft.model_copy(
+        update={
+            "diagrams": [],
+            "sections": [section.model_copy(update={"tables": []}) for section in draft.sections],
+        }
+    )
+
+
+def _paper_response_schema(
+    model: type[BaseModel], *, include_diagrams: bool = False
+) -> dict[str, Any]:
     """Turn Pydantic validation schemas into valid strict provider schemas.
+
+    The compatibility-named `include_diagrams` preference gates both diagrams
+    and tables in every paper-output schema.
 
     Pydantic omits defaulted properties from `required`, but Responses strict
     structured output requires every declared object property to be required.
@@ -250,6 +394,35 @@ def _paper_response_schema(model: type[BaseModel]) -> dict[str, Any]:
     wire schema. Nested objects and definitions follow the same contract.
     """
     schema = model.model_json_schema()
+    if not include_diagrams:
+
+        def omit_visual_properties(node: Any) -> None:
+            if isinstance(node, dict):
+                properties = node.get("properties")
+                if isinstance(properties, dict):
+                    properties.pop("diagrams", None)
+                    properties.pop("tables", None)
+                    required = node.get("required")
+                    if isinstance(required, list):
+                        node["required"] = [
+                            name for name in required if name not in {"diagrams", "tables"}
+                        ]
+                for value in node.values():
+                    omit_visual_properties(value)
+            elif isinstance(node, list):
+                for value in node:
+                    omit_visual_properties(value)
+
+        omit_visual_properties(schema)
+        definitions = schema.get("$defs", {})
+        for name in (
+            "PaperDiagram",
+            "DiagramNode",
+            "DiagramEdge",
+            "DiagramBoundary",
+            "PaperTable",
+        ):
+            definitions.pop(name, None)
 
     def normalize(node: Any) -> None:
         if isinstance(node, dict):
@@ -333,6 +506,10 @@ incomplete or unverified, say so plainly while still explaining the supported pr
 clearly and economically; identify the precise gap once rather than repeating the same caveat
 at the end of every section. A mathematical paper is a sequence of definitions, results, and
 justifications, not a verbose narration of the research process."""
+
+VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Write complete, grammatical captions; never stop at a schema or character limit. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
+
+SECTION_TABLE_INSTRUCTIONS = """TABLES: Actively consider an informative table when it materially strengthens this section, such as a source-backed comparison, quantitative result, assumptions register, or sensitivity summary. Use only the supplied evidence notes, cite exact source IDs, and use only this section's fixed claim IDs. Avoid decorative or trivial tables, repeated information, fabricated measurements, or unsupported conclusions. Return an empty tables list when evidence does not justify a table."""
 
 _MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-\s])")
 _SAFE_MATH_COMMANDS = {
@@ -491,6 +668,24 @@ _UNICODE_MATH = {
     "∑": r"\sum",
     "∏": r"\prod",
 }
+_UNICODE_TEXT = {
+    "–": "\ue000",
+    "—": "\ue001",
+    "‘": "\ue002",
+    "’": "\ue003",
+    "“": "\ue004",
+    "”": "\ue005",
+    "…": "\ue006",
+}
+_UNICODE_TEXT_TEX = {
+    "\ue000": r"\textendash{}",
+    "\ue001": r"\textemdash{}",
+    "\ue002": r"\textquoteleft{}",
+    "\ue003": r"\textquoteright{}",
+    "\ue004": r"\textquotedblleft{}",
+    "\ue005": r"\textquotedblright{}",
+    "\ue006": r"\ldots{}",
+}
 _SUPERSCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 _SUPERSCRIPT_SUFFIX = re.compile(
     r"(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)?)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)"
@@ -525,6 +720,8 @@ def _latex_prose(source: str) -> str:
                     text = text.replace(symbol, "$" + replacement + "$")
                 else:
                     text = text.replace(symbol, replacement)
+        for symbol, replacement in _UNICODE_TEXT.items():
+            text = text.replace(symbol, replacement)
         escaped: list[str] = []
         position = 0
         for match in _MATH_SPAN.finditer(text):
@@ -538,7 +735,10 @@ def _latex_prose(source: str) -> str:
                 escaped.append(_latex(token))
             position = match.end()
         escaped.append(_latex(text[position:]))
-        return "".join(escaped)
+        rendered = "".join(escaped)
+        for marker, command in _UNICODE_TEXT_TEX.items():
+            rendered = rendered.replace(marker, command)
+        return rendered
 
     def math_body(body: str) -> str:
         body = _SUPERSCRIPT_SUFFIX.sub(
@@ -574,6 +774,7 @@ def _publication_paragraphs(source: str) -> list[str]:
     Explicit paragraph boundaries win. For legacy one-block AI prose, split
     only at complete sentence boundaries; never truncate or paraphrase.
     """
+
     result: list[str] = []
     for block in re.split(r"\n\s*\n", source.strip()):
         if not block.strip():
@@ -1365,6 +1566,7 @@ def _evidence_based_long_plan(
         ],
         conclusion_claim_ids=[claims[-1].id],
         validation_warnings=warnings,
+        diagrams=[],
     )
 
 
@@ -1558,12 +1760,23 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "progress",
         "explicit_restart_pending",
         "planning_fallback_pending",
+        "include_diagrams",
+        "proofreading",
+        "proofreading_calls_prior",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
+    value.setdefault("proofreading_calls_prior", 0)
     value.setdefault("kind", "long_form")
     value.setdefault("one_shot_draft", None)
+    if "include_diagrams" in value and type(value["include_diagrams"]) is not bool:
+        raise ProjectError("Long-paper diagram selection is invalid")
+    if (
+        type(value["proofreading_calls_prior"]) is not int
+        or not 0 <= value["proofreading_calls_prior"] <= MAX_PROOFREAD_CALLS
+    ):
+        raise ProjectError("TeX proofreading prior-call accounting is invalid")
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
     value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
@@ -1616,7 +1829,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
     if any(
         not isinstance(run, dict)
         or type(run.get("provider_calls_attempted")) is not int
-        or not 0 <= run["provider_calls_attempted"] <= MAX_LONG_PAPER_CALLS
+        or not 0 <= run["provider_calls_attempted"] <= MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
         or not isinstance(run.get("reset_at"), str)
         for run in prior_runs
     ):
@@ -1678,6 +1891,79 @@ def _load_work(path: str) -> dict[str, Any] | None:
         LongPaperPlan.model_validate(value["plan"])
     if value["one_shot_draft"] is not None:
         PaperDraft.model_validate(value["one_shot_draft"])
+    proofreading = value.get("proofreading")
+    if proofreading is not None:
+        if (
+            not isinstance(proofreading, dict)
+            or proofreading.get("status") not in {"running", "complete", "fallback"}
+            or not isinstance(proofreading.get("initial_tex"), str)
+            or len(proofreading["initial_tex"].encode("utf-8")) > MAX_PROOFREAD_TEX_BYTES
+            or hashlib.sha256(proofreading["initial_tex"].encode()).hexdigest()
+            != proofreading.get("initial_sha256")
+        ):
+            raise ProjectError("TeX proofreading checkpoint is invalid")
+        bounds = proofreading.get("bounds")
+        corrected = proofreading.get("corrected_chunks")
+        attempts = proofreading.get("attempts")
+        if (
+            not isinstance(bounds, list)
+            or not 1 <= len(bounds) <= MAX_PROOFREAD_CALLS
+            or not isinstance(corrected, list)
+            or len(corrected) != len(bounds)
+            or not isinstance(attempts, list)
+            or len(attempts) != len(bounds)
+        ):
+            raise ProjectError("TeX proofreading checkpoint chunks are invalid")
+        cursor = 0
+        for index, bounds_item in enumerate(bounds):
+            if (
+                not isinstance(bounds_item, list)
+                or len(bounds_item) != 2
+                or type(bounds_item[0]) is not int
+                or type(bounds_item[1]) is not int
+                or bounds_item[0] != cursor
+                or bounds_item[1] < bounds_item[0]
+                or bounds_item[1] > len(proofreading["initial_tex"])
+                or attempts[index]
+                not in {"pending", "dispatched", "complete", "uncertain", "rejected", "skipped"}
+                or (corrected[index] is not None and not isinstance(corrected[index], str))
+            ):
+                raise ProjectError("TeX proofreading checkpoint chunk bounds are invalid")
+            if (
+                isinstance(corrected[index], str)
+                and len(corrected[index]) > MAX_PROOFREAD_CHUNK_CHARS * 2
+            ):
+                raise ProjectError("TeX proofreading correction exceeds its safety bound")
+            cursor = bounds_item[1]
+        if cursor != len(proofreading["initial_tex"]):
+            raise ProjectError("TeX proofreading checkpoint does not cover its complete source")
+        if (
+            not isinstance(proofreading.get("corrections"), list)
+            or len(proofreading["corrections"]) > MAX_PROOFREAD_CALLS * 16
+            or not all(
+                isinstance(item, str) and len(item) <= 40 for item in proofreading["corrections"]
+            )
+            or not isinstance(proofreading.get("diagnostics"), list)
+            or len(proofreading["diagnostics"]) > 100
+            or not all(
+                isinstance(item, str) and len(item) <= 1500 for item in proofreading["diagnostics"]
+            )
+            or type(proofreading.get("provider_calls_attempted")) is not int
+            or not 0 <= proofreading["provider_calls_attempted"] <= MAX_PROOFREAD_CALLS
+            or type(proofreading.get("provider_calls_prior_at_start", 0)) is not int
+            or not 0 <= proofreading.get("provider_calls_prior_at_start", 0) <= MAX_PROOFREAD_CALLS
+            or type(proofreading.get("provider_calls_accounting_version", 1)) is not int
+            or proofreading.get("provider_calls_accounting_version", 1) not in {1, 2}
+            or type(proofreading.get("safe_retry_count", 0)) is not int
+            or not 0 <= proofreading.get("safe_retry_count", 0) <= MAX_PROOFREAD_CALLS * 2
+            or type(proofreading.get("ai_performed")) is not bool
+            or type(proofreading.get("elapsed_seconds")) is not int
+        ):
+            raise ProjectError("TeX proofreading checkpoint provenance is invalid")
+        if "final_sha256" in proofreading and not re.fullmatch(
+            r"[0-9a-f]{64}", proofreading["final_sha256"]
+        ):
+            raise ProjectError("TeX proofreading final source hash is invalid")
     for key in ("reduction_input", "reduction_output"):
         if key in value:
             items = value[key]
@@ -1708,12 +1994,20 @@ def _load_work(path: str) -> dict[str, Any] | None:
         if (
             not isinstance(progress_state, dict)
             or not required_progress_keys.issubset(progress_state)
-            or set(progress_state) - required_progress_keys not in (set(), {"failure_reason"})
+            or set(progress_state) - required_progress_keys
+            not in (set(), {"failure_reason"}, {"detail"}, {"failure_reason", "detail"})
             or (
                 "failure_reason" in progress_state
                 and (
                     not isinstance(progress_state["failure_reason"], str)
                     or len(progress_state["failure_reason"]) > 500
+                )
+            )
+            or (
+                "detail" in progress_state
+                and (
+                    not isinstance(progress_state["detail"], str)
+                    or len(progress_state["detail"]) > 160
                 )
             )
             or not isinstance(progress_state.get("run_id"), str)
@@ -1728,7 +2022,9 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 "planning",
                 "sections",
                 "validation",
+                "proofreading",
                 "compile",
+                "pdf_check",
                 "retry",
                 "complete",
             }
@@ -1806,6 +2102,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
+        **({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {}),
         **(
             {"failure_reason": state["failure_reason"]}
             if status == "failed" and state.get("failure_reason")
@@ -1964,7 +2261,8 @@ async def _restart_work_locked(
     if not _can_rebase_explicit_restart(state, view.project.id):
         history.append(
             {
-                "provider_calls_attempted": state.get("provider_calls", 0),
+                "provider_calls_attempted": state.get("provider_calls", 0)
+                + (state.get("proofreading") or {}).get("provider_calls_attempted", 0),
                 "snapshot_sha256": state["snapshot_sha256"],
                 "model": state["model"],
                 "reset_at": _now(),
@@ -1989,7 +2287,11 @@ async def _restart_work_locked(
     return {
         "provider_calls_attempted": 0,
         "provider_calls_previous_runs": sum(item["provider_calls_attempted"] for item in history),
-        "maximum_provider_calls": MAX_LONG_PAPER_CALLS,
+        "maximum_provider_calls": (
+            MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+            if restarted["kind"] == "long_form"
+            else 1 + MAX_PROOFREAD_CALLS
+        ),
         "snapshot_bytes": len(_json(package)),
         "snapshot_sha256": snapshot_hash,
         "evidence_updated_since_preflight": snapshot_hash != expected_snapshot_sha256,
@@ -2093,6 +2395,37 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
         if not linked_ids:
             warnings.append(
                 f"The {label} narrative has no linked claim IDs; check it for unsupported factual statements."
+            )
+    for section in draft.sections:
+        for table in section.tables:
+            invalid_sources = sorted(set(table.evidence_refs) - source_ids)
+            invalid_claims = sorted(set(table.claim_ids) - claim_ids)
+            if invalid_sources:
+                raise ProjectError(
+                    f"Table in {section.heading} cites unknown evidence IDs: "
+                    f"{', '.join(invalid_sources[:5])}"
+                )
+            if invalid_claims:
+                raise ProjectError(
+                    f"Table in {section.heading} cites unknown claims: "
+                    f"{', '.join(invalid_claims[:5])}"
+                )
+            if not set(table.claim_ids) <= set(section.claim_ids):
+                raise ProjectError(f"Table in {section.heading} cites claims outside its section")
+    for diagram in draft.diagrams:
+        invalid_sources = sorted(set(diagram.evidence_refs) - source_ids)
+        invalid_claims = sorted(set(diagram.claim_ids) - claim_ids)
+        if invalid_sources:
+            raise ProjectError(
+                f"Paper diagram cites unknown evidence IDs: {', '.join(invalid_sources[:5])}"
+            )
+        if invalid_claims:
+            raise ProjectError(
+                f"Paper diagram cites unknown claims: {', '.join(invalid_claims[:5])}"
+            )
+        if not diagram.evidence_refs or not diagram.claim_ids:
+            warnings.append(
+                "A diagram lacks source or claim links; inspect it before relying on the figure."
             )
     if not any(
         "verification" in item.casefold() or "formal" in item.casefold() for item in warnings
@@ -2486,6 +2819,204 @@ def _paper_style(investigation_type: str) -> tuple[str, str, str, str]:
     return _PAPER_TYPE_STYLES.get(investigation_type, _PAPER_TYPE_STYLES["default"])
 
 
+def _source_reference_records(package: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Map opaque frozen source IDs to stable reader-facing evidence labels."""
+    counters: dict[str, int] = {}
+    records: list[dict[str, str]] = []
+    sources = package.get("sources", [])
+    if not isinstance(sources, list):
+        return records
+    for source in sources:
+        if not isinstance(source, dict) or not isinstance(source.get("id"), str):
+            continue
+        kind = str(source.get("kind", "record"))
+        raw_data = source.get("data")
+        data: Mapping[str, Any] = raw_data if isinstance(raw_data, Mapping) else {}
+        counters[kind] = counters.get(kind, 0) + 1
+        index = counters[kind]
+        if kind == "project":
+            label = "Project overview"
+        elif kind == "strategy":
+            title = " ".join(str(data.get("title", "")).split())[:64]
+            label = f"Strategy {index}" + (f": {title}" if title else "")
+        elif kind == "session":
+            session_number = data.get("session_number")
+            label = (
+                f"Research session {session_number}"
+                if type(session_number) is int and session_number > 0
+                else f"Research session {index}"
+            )
+        elif kind == "artifact":
+            session_id = source["id"].split(":", 2)[1:2]
+            session = next(
+                (
+                    item
+                    for item in sources
+                    if isinstance(item, dict)
+                    and item.get("kind") == "session"
+                    and isinstance(item.get("data"), dict)
+                    and session_id
+                    and item.get("id") == f"session:{session_id[0]}"
+                ),
+                None,
+            )
+            raw_session_data = session.get("data") if isinstance(session, dict) else None
+            session_data: Mapping[str, Any] = (
+                raw_session_data if isinstance(raw_session_data, Mapping) else {}
+            )
+            session_number = session_data.get("session_number")
+            sequence = data.get("sequence")
+            prefix = (
+                f"Research session {session_number}"
+                if type(session_number) is int and session_number > 0
+                else "Research session"
+            )
+            label = (
+                f"{prefix}, artifact {sequence}"
+                if type(sequence) is int and sequence > 0
+                else f"{prefix}, saved artifact {index}"
+            )
+        elif kind == "agentic_run":
+            label = f"Agentic run {index}"
+        elif kind == "agentic_step":
+            label = f"Agentic run step {index}"
+        else:
+            label = f"Saved research record {index}"
+        records.append({"source_ref": source["id"], "label": label})
+    return records
+
+
+def _diagram_layout(
+    diagram: PaperDiagram,
+) -> tuple[dict[str, tuple[float, float]], dict[str, float]] | None:
+    """Lay out small DAGs by rank and label height; return None for safe fallback."""
+    node_ids = [node.id for node in diagram.nodes]
+    outgoing = {node_id: [] for node_id in node_ids}
+    indegree = dict.fromkeys(node_ids, 0)
+    for edge in diagram.edges:
+        outgoing[edge.source].append(edge.target)
+        indegree[edge.target] += 1
+    queue = [node_id for node_id in node_ids if indegree[node_id] == 0]
+    layers = {node_id: 0 for node_id in queue}
+    visited = 0
+    while queue:
+        node_id = queue.pop(0)
+        visited += 1
+        for target in outgoing[node_id]:
+            layers[target] = max(layers.get(target, 0), layers[node_id] + 1)
+            indegree[target] -= 1
+            if indegree[target] == 0:
+                queue.append(target)
+    if visited != len(node_ids) or max(layers.values(), default=0) > 2:
+        return None
+
+    by_layer: dict[int, list[str]] = {}
+    for node in diagram.nodes:
+        by_layer.setdefault(layers[node.id], []).append(node.id)
+    node_heights = {
+        node.id: max(0.78, 0.42 + 0.25 * ((len(node.label) + 27) // 28)) for node in diagram.nodes
+    }
+    vertical_gap = 0.72
+    if (
+        max(
+            sum(node_heights[node_id] for node_id in members)
+            + max(0, len(members) - 1) * vertical_gap
+            for members in by_layer.values()
+        )
+        > 14.0
+    ):
+        return None
+
+    positions: dict[str, tuple[float, float]] = {}
+    for layer, members in by_layer.items():
+        total_height = sum(node_heights[node_id] for node_id in members)
+        total_height += max(0, len(members) - 1) * vertical_gap
+        cursor = total_height / 2
+        for node_id in members:
+            half_height = node_heights[node_id] / 2
+            positions[node_id] = (layer * 5.7, cursor - half_height)
+            cursor -= node_heights[node_id] + vertical_gap
+
+    width = 4.15
+
+    def orientation(
+        a: tuple[float, float], b: tuple[float, float], c: tuple[float, float]
+    ) -> float:
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def proper_intersection(
+        a: tuple[float, float],
+        b: tuple[float, float],
+        c: tuple[float, float],
+        d: tuple[float, float],
+    ) -> bool:
+        return (
+            orientation(a, b, c) * orientation(a, b, d) < -1e-6
+            and orientation(c, d, a) * orientation(c, d, b) < -1e-6
+        )
+
+    def segment_hits_box(
+        start: tuple[float, float],
+        end: tuple[float, float],
+        center: tuple[float, float],
+        height: float,
+    ) -> bool:
+        left, right = center[0] - width / 2, center[0] + width / 2
+        bottom, top = center[1] - height / 2, center[1] + height / 2
+        if left < start[0] < right and bottom < start[1] < top:
+            return True
+        if left < end[0] < right and bottom < end[1] < top:
+            return True
+        corners = [(left, bottom), (right, bottom), (right, top), (left, top)]
+        return any(
+            proper_intersection(start, end, corners[index], corners[(index + 1) % 4])
+            for index in range(4)
+        )
+
+    for left_index, edge in enumerate(diagram.edges):
+        start, end = positions[edge.source], positions[edge.target]
+        for node_id, center in positions.items():
+            if node_id not in {edge.source, edge.target} and segment_hits_box(
+                start, end, center, node_heights[node_id]
+            ):
+                return None
+        midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        for node_id, center in positions.items():
+            if node_id not in {edge.source, edge.target} and segment_hits_box(
+                midpoint, midpoint, center, node_heights[node_id]
+            ):
+                return None
+        for other in diagram.edges[left_index + 1 :]:
+            if {edge.source, edge.target}.isdisjoint(
+                {other.source, other.target}
+            ) and proper_intersection(start, end, positions[other.source], positions[other.target]):
+                return None
+
+    for boundary_index, boundary in enumerate(diagram.boundaries):
+        if any(
+            set(boundary.node_ids) & set(other.node_ids)
+            for other in diagram.boundaries[boundary_index + 1 :]
+        ):
+            return None
+        x_values = [positions[node_id][0] for node_id in boundary.node_ids]
+        y_values = [positions[node_id][1] for node_id in boundary.node_ids]
+        bounds = (
+            min(x_values) - width / 2 - 0.24,
+            max(x_values) + width / 2 + 0.24,
+            min(y_values) - max(node_heights[node_id] for node_id in boundary.node_ids) / 2 - 0.24,
+            max(y_values) + max(node_heights[node_id] for node_id in boundary.node_ids) / 2 + 0.5,
+        )
+        for node_id, center in positions.items():
+            if node_id not in boundary.node_ids and (
+                center[0] + width / 2 > bounds[0]
+                and center[0] - width / 2 < bounds[1]
+                and center[1] + node_heights[node_id] / 2 > bounds[2]
+                and center[1] - node_heights[node_id] / 2 < bounds[3]
+            ):
+                return None
+    return positions, node_heights
+
+
 def _tex(
     draft: PaperDraft,
     warnings: list[str],
@@ -2501,6 +3032,7 @@ def _tex(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    source_reference_map: Mapping[str, str] | None = None,
 ) -> str:
     include_claim_details = include_claim_details or include_research_details
     include_validation_notes = include_validation_notes or include_research_details
@@ -2508,8 +3040,219 @@ def _tex(
     esc = _latex
     prose = _latex_prose
 
+    def readable_source_text(text: str) -> str:
+        for source_ref, label in sorted(
+            (source_reference_map or {}).items(), key=lambda item: len(item[0]), reverse=True
+        ):
+            text = text.replace(source_ref, f"[{label}]")
+        return text
+
+    def readable_refs(refs: list[str]) -> str:
+        return ", ".join(f"[{(source_reference_map or {}).get(ref, ref)}]" for ref in refs)
+
+    def prose_text(text: str) -> str:
+        return prose(readable_source_text(text))
+
     def article_paragraph(text: str) -> str:
-        return "\n\n".join(prose(chunk) for chunk in _publication_paragraphs(text))
+        return "\n\n".join(prose_text(chunk) for chunk in _publication_paragraphs(text))
+
+    def render_table(table: PaperTable) -> list[str]:
+        columns_count = len(table.headers)
+
+        def is_numeric_cell(value: str) -> bool:
+            normalized = value.strip().replace("$", "").replace(",", "")
+            normalized = re.sub(r"\\(?:text|mathrm)\{([^{}]*)\}", r"\1", normalized)
+            return bool(
+                re.fullmatch(
+                    r"[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)(?:\s*(?:%|[A-Za-z]{1,8}))?",
+                    normalized,
+                )
+            )
+
+        def column_weight(column_index: int) -> int:
+            values = [table.headers[column_index], *(row[column_index] for row in table.rows)]
+            maximum = max(len(value.strip()) for value in values)
+            return (
+                14
+                if all(is_numeric_cell(value) for value in values[1:])
+                else min(42, max(20, maximum))
+            )
+
+        weights = [column_weight(index) for index in range(columns_count)]
+        columns = (
+            "@{}"
+            + "".join(
+                r">{\raggedleft\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*"
+                + str(columns_count - 1)
+                + r")/"
+                + str(sum(weights))
+                + "*"
+                + str(weight)
+                + r"\relax}"
+                if all(is_numeric_cell(row[index]) for row in table.rows)
+                else r">{\raggedright\arraybackslash}p{\dimexpr(\linewidth-2\tabcolsep*"
+                + str(columns_count - 1)
+                + r")/"
+                + str(sum(weights))
+                + "*"
+                + str(weight)
+                + r"\relax}"
+                for index, weight in enumerate(weights)
+            )
+            + "@{}"
+        )
+        header = " & ".join(r"\textbf{" + prose_text(cell) + "}" for cell in table.headers)
+        landscape = columns_count >= 4
+        parts = [r"\begin{landscape}", r"\small"] if landscape else []
+        parts = [
+            *parts,
+            r"\begin{longtable}{" + columns + "}",
+            r"\caption{" + prose_text(table.caption) + r"}\\",
+            r"\toprule",
+            header + r"\\",
+            r"\midrule",
+            r"\endfirsthead",
+            r"\toprule",
+            header + r"\\",
+            r"\midrule",
+            r"\endhead",
+            r"\midrule",
+            r"\multicolumn{" + str(columns_count) + r"}{r}{\footnotesize Continued on next page}\\",
+            r"\endfoot",
+            r"\bottomrule",
+            r"\endlastfoot",
+        ]
+        parts.extend(
+            " & ".join(prose_text(" ".join(cell.split())) for cell in row) + r"\\"
+            for row in table.rows
+        )
+        parts.extend(
+            [
+                r"\end{longtable}",
+                r"\par\smallskip{\footnotesize Evidence: "
+                + esc(readable_refs(table.evidence_refs))
+                + "; claims: "
+                + esc(", ".join(table.claim_ids))
+                + "}",
+            ]
+        )
+        if landscape:
+            parts.append(r"\end{landscape}")
+        return parts
+
+    def render_diagram(diagram: PaperDiagram) -> list[str]:
+        layout = _diagram_layout(diagram)
+        source_note = (
+            r"\par\smallskip{\footnotesize Evidence: "
+            + esc(readable_refs(diagram.evidence_refs))
+            + "; claims: "
+            + esc(", ".join(diagram.claim_ids))
+            + "}"
+        )
+        if layout is None:
+            warnings.append(
+                "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation."
+            )
+            result = [
+                r"\begin{quote}",
+                r"\textbf{Diagram (readable relationship list).} " + prose_text(diagram.caption),
+                r"\begin{description}",
+            ]
+            node_numbers = {node.id: index for index, node in enumerate(diagram.nodes, start=1)}
+            for index, node in enumerate(diagram.nodes, start=1):
+                result.append(r"\item[\textbf{Node " + str(index) + ".}] " + prose_text(node.label))
+            for index, edge in enumerate(diagram.edges, start=1):
+                description = (
+                    f"Node {node_numbers[edge.source]} points to node {node_numbers[edge.target]}"
+                )
+                if edge.label:
+                    description += ": " + edge.label
+                result.append(
+                    r"\item[\textbf{Edge " + str(index) + ".}] " + prose_text(description)
+                )
+            for index, boundary in enumerate(diagram.boundaries, start=1):
+                members = ", ".join(
+                    f"node {node_numbers[node_id]}" for node_id in boundary.node_ids
+                )
+                result.append(
+                    r"\item[\textbf{Boundary "
+                    + str(index)
+                    + ".}] "
+                    + prose_text(boundary.label + ": " + members)
+                )
+            result.extend([r"\end{description}", source_note, r"\end{quote}"])
+            return result
+
+        positions, heights = layout
+        result = [
+            r"\begin{figure}[!htbp]",
+            r"\centering",
+            r"\begin{tikzpicture}[x=1cm,y=1cm,>=stealth,main node/.style={draw,rounded corners,align=center,text width=4.15cm,font=\small,fill=blue!5,inner sep=5pt},edge badge/.style={circle,draw=blue!60,fill=white,inner sep=1.4pt,font=\scriptsize},boundary/.style={draw,dashed,rounded corners,inner sep=7pt,fill=none}]",
+        ]
+        for node in diagram.nodes:
+            x, y = positions[node.id]
+            result.append(
+                r"\node[main node,minimum height="
+                + f"{heights[node.id]:.2f}cm"
+                + "] ("
+                + node.id
+                + ") at ("
+                + f"{x:.2f},{y:.2f}"
+                + ") {"
+                + prose_text(node.label)
+                + "};"
+            )
+        for edge_number, edge in enumerate(diagram.edges, start=1):
+            result.append(
+                r"\draw[->,shorten <=2mm,shorten >=2mm] ("
+                + edge.source
+                + r") -- node[edge badge] {"
+                + str(edge_number)
+                + "} ("
+                + edge.target
+                + ");"
+            )
+        for boundary in diagram.boundaries:
+            fit_nodes = "".join("(" + item + ")" for item in boundary.node_ids)
+            result.append(
+                r"\node[boundary,fit="
+                + fit_nodes
+                + r",label={[font=\scriptsize,fill=white,inner sep=1pt]above:{"
+                + prose_text(boundary.label)
+                + r"}}] {};"
+            )
+        result.append(r"\end{tikzpicture}")
+        result.extend(
+            [
+                r"\par\smallskip{\footnotesize\textbf{Numbered relationships:}}",
+                r"\begin{description}",
+            ]
+        )
+        labels = {node.id: node.label for node in diagram.nodes}
+        for index, edge in enumerate(diagram.edges, start=1):
+            text = f"{labels[edge.source]} to {labels[edge.target]}"
+            if edge.label:
+                text += ": " + edge.label
+            result.append(r"\item[\textbf{" + str(index) + ".}] " + prose_text(text))
+        result.extend(
+            [
+                r"\end{description}",
+                r"\caption{" + prose_text(diagram.caption) + "}",
+                source_note,
+                r"\end{figure}",
+            ]
+        )
+        return result
+
+    diagram_assignments: dict[int | None, list[PaperDiagram]] = {}
+    for diagram in draft.diagrams:
+        claim_ids = set(diagram.claim_ids)
+        matches = [
+            (len(claim_ids & set(section.claim_ids)), index)
+            for index, section in enumerate(draft.sections)
+        ]
+        score, target = max(matches, default=(0, -1))
+        diagram_assignments.setdefault(target if score else None, []).append(diagram)
 
     if math_style:
         investigation_type = "mathematical"
@@ -2521,9 +3264,10 @@ def _tex(
         r"\usepackage[T1]{fontenc}",
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage[margin=1in]{geometry}",
-        r"\usepackage{amsmath,amssymb,booktabs,longtable}",
+        r"\usepackage{amsmath,amssymb,array,booktabs,longtable,pdflscape}",
         r"\usepackage{microtype}",
         r"\usepackage{titlesec}",
+        *([r"\usepackage{tikz}", r"\usetikzlibrary{fit}"] if draft.diagrams else []),
         r"\emergencystretch=2em",
         r"\raggedbottom",
         r"\linespread{1.07}",
@@ -2541,7 +3285,7 @@ def _tex(
             r"\begin{center}\small\textit{AI-generated research synthesis \textperiodcentered{} SIGMA}\end{center}"
         )
     parts.append("")
-    parts.insert(1, r"\title{" + esc(draft.title) + "}")
+    parts.insert(1, r"\title{" + esc(readable_source_text(draft.title)) + "}")
     parts.insert(2, r"\date{}")
     parts.insert(3, r"\author{SIGMA AI-assisted research synthesis}")
     parts += [
@@ -2552,16 +3296,16 @@ def _tex(
     if include_validation_notes:
         parts += [
             r"\section*{About this paper}",
-            prose(
+            prose_text(
                 "This paper was generated by SIGMA, an AI-assisted research system, from the project's recorded investigations, findings, and supporting evidence."
             ),
-            prose(
+            prose_text(
                 "The analysis and conclusions reflect an automated synthesis of that research. Although SIGMA incorporates evidence tracking, critical review, and consistency checks, the resulting paper has not necessarily undergone independent verification or peer review."
             ),
-            prose(
+            prose_text(
                 "Readers should evaluate its arguments, supporting evidence, and stated limitations before relying on its conclusions."
             ),
-            prose("Research style: " + style_note),
+            prose_text("Research style: " + style_note),
         ]
     if material_omissions:
         affected_source_count = len(
@@ -2569,7 +3313,7 @@ def _tex(
         )
         parts += [
             r"\section*{Evidence coverage limitation}",
-            prose(
+            prose_text(
                 f"The evidence index omitted {len(material_omissions)} material saved research "
                 f"field fragment(s) across {affected_source_count} source(s). These fragments "
                 "were not reviewed for this paper. Interpretations that could depend on "
@@ -2579,19 +3323,28 @@ def _tex(
         ]
     if include_claim_details and draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
-    parts.append(r"\section{" + esc(opening_heading) + "}")
+    parts.append(r"\section{" + esc(readable_source_text(opening_heading)) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.problem_framing]
     if include_claim_details and draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
-    parts.append(r"\section{" + esc(methods_heading) + "}")
+    parts.append(r"\section{" + esc(readable_source_text(methods_heading)) + "}")
     parts += [article_paragraph(text) + "\n" for text in draft.methods]
     if include_claim_details and draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
-    for section in draft.sections:
-        parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
+    for diagram in diagram_assignments.get(None, []):
+        parts.extend(render_diagram(diagram))
+
+    for section_index, section in enumerate(draft.sections):
+        parts.append(
+            r"\section{" + esc(readable_source_text(_publication_heading(section.heading))) + "}"
+        )
         parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
+        for diagram in diagram_assignments.get(section_index, []):
+            parts.extend(render_diagram(diagram))
+        for table in section.tables:
+            parts.extend(render_table(table))
         if include_claim_details and section.claim_ids:
             parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
 
@@ -2605,12 +3358,12 @@ def _tex(
             parts.extend(
                 [
                     r"\subsection{" + esc(claim.id + " -- " + claim.status.title()) + "}",
-                    prose(claim.statement),
-                    prose(claim.reasoning),
+                    prose_text(claim.statement),
+                    prose_text(claim.reasoning),
                 ]
             )
             if claim.evidence_refs:
-                parts.append(r"\textit{Evidence: }" + esc(", ".join(claim.evidence_refs)))
+                parts.append(r"\textit{Evidence: }" + esc(readable_refs(claim.evidence_refs)))
 
     if include_claim_details and not math_style:
         claim_register()
@@ -2619,20 +3372,20 @@ def _tex(
     )
     parts += (
         [r"\begin{itemize}"]
-        + [r"\item " + prose(item) for item in draft.limitations]
+        + [r"\item " + prose_text(item) for item in draft.limitations]
         + [r"\end{itemize}"]
     )
     if draft.open_obligations:
         parts.append(r"\section{Open obligations}")
         parts += (
             [r"\begin{itemize}"]
-            + [r"\item " + prose(item) for item in draft.open_obligations]
+            + [r"\item " + prose_text(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
     if include_validation_notes and obligation_reconciliation:
         parts.append(r"\section{Frozen obligation reconciliation}")
         parts.append(
-            prose(
+            prose_text(
                 "Unlisted obligations are not presumed resolved. The archived research "
                 "snapshot retains complete source references and the full reconciliation."
             )
@@ -2652,11 +3405,13 @@ def _tex(
         for item in distinct_obligations[:18]:
             source_count = len(item["source_refs"])
             annotation = f" ({item['status']}; {source_count} saved source reference(s))"
-            parts.append(r"\item " + prose(item["text"]) + r" \textit{" + esc(annotation) + "}")
+            parts.append(
+                r"\item " + prose_text(item["text"]) + r" \textit{" + esc(annotation) + "}"
+            )
         parts.append(r"\end{itemize}")
         if len(distinct_obligations) > 18:
             parts.append(
-                prose(
+                prose_text(
                     f"{len(distinct_obligations) - 18} further distinct obligations "
                     "are retained in the archived reconciliation."
                 )
@@ -2675,7 +3430,7 @@ def _tex(
                 if integrity_excerpts
                 else r"\section{Structured reasoning and review records}"
             ),
-            prose(
+            prose_text(
                 "The following are bounded, selected excerpts of original research records. "
                 "They are not exhaustive; consult the full frozen snapshot archived with this paper. "
                 "They do not constitute independent verification."
@@ -2705,7 +3460,7 @@ def _tex(
             parts.append(r"\subsection{" + esc(f"Research excerpt {index}") + "}")
             parts.append(
                 r"\textit{Source and field: }"
-                + esc(str(item["source_ref"]) + ": " + str(item["field"]))
+                + esc(readable_source_text(str(item["source_ref"]) + ": " + str(item["field"])))
                 + r"\par"
             )
             content = item["content"]
@@ -2719,7 +3474,7 @@ def _tex(
             parts.append(article_paragraph(excerpt) + "\n")
         if len(integrity_records) > len(selected):
             parts.append(
-                prose(
+                prose_text(
                     f"{len(integrity_records) - len(selected)} further research records "
                     "are retained in the archived source snapshot."
                 )
@@ -2735,13 +3490,15 @@ def _tex(
         if warnings:
             parts += (
                 [r"\section*{Validation warnings}", r"\begin{itemize}"]
-                + [r"\item " + esc(item) for item in warnings]
+                + [r"\item " + esc(readable_source_text(item)) for item in warnings]
                 + [r"\end{itemize}"]
             )
     else:
         parts += [
             r"\section*{Authorship note}",
-            prose("AI-assisted synthesis from saved research; not independently peer reviewed."),
+            prose_text(
+                "AI-assisted synthesis from saved research; not independently peer reviewed."
+            ),
         ]
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
@@ -2753,12 +3510,15 @@ async def _provider(
     config: dict[str, Any],
     project_id: str | None = None,
     project_path_value: str | None = None,
+    include_diagrams: bool = True,
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
     )
     project_data = project_source.get("data", {})
     instructions = INSTRUCTIONS + "\n\n" + PUBLICATION_INSTRUCTIONS
+    if include_diagrams:
+        instructions += "\n\n" + VISUAL_AUTHORING_INSTRUCTIONS
     project_type = (
         project_data.get("investigation_type", "default")
         if isinstance(project_data, dict)
@@ -2780,7 +3540,7 @@ async def _provider(
                 "type": "json_schema",
                 "name": "sigma_research_paper",
                 "strict": True,
-                "schema": _paper_response_schema(PaperDraft),
+                "schema": _paper_response_schema(PaperDraft, include_diagrams=include_diagrams),
             }
         },
     }
@@ -2891,6 +3651,7 @@ async def _provider_structured(
     max_input_bytes: int = MAX_PROVIDER_INPUT_BYTES,
     project_id: str | None = None,
     project_path_value: str | None = None,
+    include_diagrams: bool = False,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
@@ -2907,7 +3668,7 @@ async def _provider_structured(
                 "type": "json_schema",
                 "name": schema_name,
                 "strict": True,
-                "schema": _paper_response_schema(response_model),
+                "schema": _paper_response_schema(response_model, include_diagrams=include_diagrams),
             }
         },
     }
@@ -3081,7 +3842,25 @@ def _repair_paper_references(
                 section.model_copy(update={"evidence_refs": refs, "claim_ids": section_claims})
             )
         else:
-            sections.append(section.model_copy(update={"claim_ids": section_claims}))
+            valid_tables: list[PaperTable] = []
+            for table in section.tables:
+                table_sources = list(
+                    dict.fromkeys(ref for ref in table.evidence_refs if ref in known_evidence)
+                )
+                table_claims = links(table.claim_ids, f"table in {section.heading}")
+                if not table_sources or not table_claims:
+                    diagnostics.append(
+                        f"A table in {section.heading} without valid evidence and claim links was omitted."
+                    )
+                    continue
+                valid_tables.append(
+                    table.model_copy(
+                        update={"evidence_refs": table_sources, "claim_ids": table_claims}
+                    )
+                )
+            sections.append(
+                section.model_copy(update={"claim_ids": section_claims, "tables": valid_tables})
+            )
 
     updated = {
         "claims": claims,
@@ -3091,6 +3870,19 @@ def _repair_paper_references(
         "methods_claim_ids": links(paper.methods_claim_ids, "methods"),
         "conclusion_claim_ids": links(paper.conclusion_claim_ids, "conclusions"),
     }
+    valid_diagrams: list[PaperDiagram] = []
+    for diagram in paper.diagrams:
+        sources = list(dict.fromkeys(ref for ref in diagram.evidence_refs if ref in known_evidence))
+        diagram_claims = links(diagram.claim_ids, "diagram")
+        if not sources or not diagram_claims:
+            diagnostics.append(
+                "A diagram without valid saved-evidence and claim links was omitted."
+            )
+            continue
+        valid_diagrams.append(
+            diagram.model_copy(update={"evidence_refs": sources, "claim_ids": diagram_claims})
+        )
+    updated["diagrams"] = valid_diagrams
     if diagnostics:
         updated["validation_warnings"] = list(
             dict.fromkeys([*paper.validation_warnings, *diagnostics])
@@ -3132,6 +3924,11 @@ def _validate_long_plan_references(plan: LongPaperPlan, indexed_refs: set[str]) 
             )
         if set(section.claim_ids) - claim_ids:
             raise ProjectError(f"Paper outline for {section.heading} cites an unknown claim")
+    for diagram in plan.diagrams:
+        if not diagram.evidence_refs or set(diagram.evidence_refs) - indexed_refs:
+            raise ProjectError("Paper diagram must cite evidence from the frozen research index")
+        if not diagram.claim_ids or set(diagram.claim_ids) - claim_ids:
+            raise ProjectError("Paper diagram must link to claims in the paper outline")
 
 
 def _provider_input_text(input_value: Any, schema_name: str, max_input_bytes: int) -> str:
@@ -3160,6 +3957,7 @@ async def _generate_long_draft(
     project_id: str | None = None,
     project_path_value: str | None = None,
     structured_fast_path: bool = False,
+    include_diagrams: bool = True,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     # Existing paid field-extraction checkpoints remain on their original
@@ -3245,6 +4043,10 @@ async def _generate_long_draft(
                     max_input_bytes=max_input_bytes,
                     project_id=project_id,
                     project_path_value=project_path_value,
+                    include_diagrams=(
+                        include_diagrams
+                        and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+                    ),
                 )
             except PaperConnectionFailure:
                 if attempt_number == maximum:
@@ -3504,6 +4306,7 @@ that occur in the input. Do not add scientific claims or outside citations."""
         + PUBLICATION_INSTRUCTIONS
         + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
+        + ("\n\n" + VISUAL_AUTHORING_INSTRUCTIONS if include_diagrams else "")
         + (
             "\n\nProduce between 2 and 8 substantial, logically connected sections. "
             "Each section should provide enough space for a detailed argument; "
@@ -3628,17 +4431,34 @@ Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical 
 write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
 or document markup."""
     section_instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
+    if include_diagrams:
+        section_instructions += "\n\n" + SECTION_TABLE_INSTRUCTIONS
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
     original_records = _research_integrity_records(package) if fast_path else []
+
+    def validate_section_tables(section: LongSectionPlan, draft: LongSectionDraft) -> None:
+        allowed_refs = set(section.evidence_refs)
+        allowed_claims = set(section.claim_ids)
+        for table in draft.tables:
+            if set(table.evidence_refs) - allowed_refs:
+                raise ProjectError(
+                    f"A table in {section.heading} cites evidence outside its section outline"
+                )
+            if set(table.claim_ids) - allowed_claims:
+                raise ProjectError(
+                    f"A table in {section.heading} cites claims outside its section outline"
+                )
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
+            validate_section_tables(section, section_draft)
             return PaperSection(
                 heading=section.heading,
                 paragraphs=section_draft.paragraphs,
                 claim_ids=section.claim_ids,
+                tables=section_draft.tables if include_diagrams else [],
             )
         if progress and not fast_path:
             await progress("sections", section_number, len(long_plan.sections), "active")
@@ -3689,6 +4509,7 @@ or document markup."""
             legacy=not fast_path,
         )
         section_draft = LongSectionDraft.model_validate(body)
+        validate_section_tables(section, section_draft)
         encoded_section = _json(section_draft.model_dump())
         if len(encoded_section) > 250_000:
             raise ProjectError(
@@ -3708,6 +4529,7 @@ or document markup."""
             heading=section.heading,
             paragraphs=section_draft.paragraphs,
             claim_ids=section.claim_ids,
+            tables=section_draft.tables if include_diagrams else [],
         )
 
     if fast_path:
@@ -3747,6 +4569,11 @@ or document markup."""
                 heading=section.heading,
                 paragraphs=LongSectionDraft.model_validate(saved_sections[str(number)]).paragraphs,
                 claim_ids=section.claim_ids,
+                tables=(
+                    LongSectionDraft.model_validate(saved_sections[str(number)]).tables
+                    if include_diagrams
+                    else []
+                ),
             )
             for number, section in enumerate(long_plan.sections, start=1)
         ]
@@ -3805,6 +4632,7 @@ or document markup."""
         conclusions=long_plan.conclusions,
         conclusion_claim_ids=long_plan.conclusion_claim_ids,
         validation_warnings=warning_items[:12],
+        diagrams=long_plan.diagrams if include_diagrams else [],
     )
     unknown = {ref for claim in draft.claims for ref in claim.evidence_refs} - source_ids
     if unknown:
@@ -3814,6 +4642,728 @@ or document markup."""
     if calls > MAX_LONG_PAPER_CALLS:
         raise ProjectError("Long-paper generation exceeded its bounded provider-call budget")
     return draft, calls, len(batches)
+
+
+def _tex_chunks(tex: str) -> list[tuple[int, int]]:
+    """Split at paragraph boundaries while keeping every byte and visual block."""
+    if len(tex.encode("utf-8")) > MAX_PROOFREAD_TEX_BYTES:
+        raise ProjectError(
+            "The authored TeX exceeds the bounded proofreading size; the draft is saved."
+        )
+    separators = list(re.finditer(r"\n{2,}", tex))
+    units: list[tuple[int, int]] = []
+    start = 0
+    for separator in separators:
+        end = separator.end()
+        units.append((start, end))
+        start = end
+    if start < len(tex):
+        units.append((start, len(tex)))
+    chunks: list[tuple[int, int]] = []
+    chunk_start = 0
+    chunk_end = 0
+
+    def fits(start: int, end: int) -> bool:
+        return (
+            end - start <= MAX_PROOFREAD_CHUNK_CHARS
+            and len(tex[start:end].encode("utf-8")) <= MAX_PROOFREAD_CHUNK_BYTES
+        )
+
+    for start, end in units:
+        if not fits(start, end):
+            if chunk_start < chunk_end:
+                chunks.append((chunk_start, chunk_end))
+                chunk_start = chunk_end = start
+            position = start
+            while position < end:
+                limit = min(position + MAX_PROOFREAD_CHUNK_CHARS, end)
+                while (
+                    limit > position + 1
+                    and len(tex[position:limit].encode("utf-8")) > MAX_PROOFREAD_CHUNK_BYTES
+                ):
+                    limit = position + max(1, (limit - position) // 2)
+                if limit < end:
+                    newline = tex.rfind("\n", position, limit)
+                    if newline > position and fits(position, newline + 1):
+                        limit = newline + 1
+                if not fits(position, limit) or limit == position:
+                    raise ProjectError(
+                        "A single TeX line is too long to proofread safely; the draft is saved."
+                    )
+                chunks.append((position, limit))
+                position = limit
+            chunk_start = chunk_end = end
+        elif chunk_end == chunk_start:
+            chunk_start, chunk_end = start, end
+        elif fits(chunk_start, end):
+            chunk_end = end
+        else:
+            chunks.append((chunk_start, chunk_end))
+            chunk_start, chunk_end = start, end
+    if chunk_end > chunk_start:
+        chunks.append((chunk_start, chunk_end))
+    if not chunks:
+        chunks = [(0, len(tex))]
+    if len(chunks) > MAX_PROOFREAD_CALLS:
+        raise ProjectError(
+            f"The paper needs more than {MAX_PROOFREAD_CALLS} bounded proofreading calls; the authored draft is saved."
+        )
+    if (
+        chunks[0][0] != 0
+        or chunks[-1][1] != len(tex)
+        or any(left[1] != right[0] for left, right in pairwise(chunks))
+    ):
+        raise ProjectError(
+            "TeX proofreading could not partition the complete draft safely; the draft is saved."
+        )
+    return chunks
+
+
+def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """Conservatively fingerprint authored words, math tokens, values, and references."""
+    source = re.sub(r"(?<!\\)%[^\n]*", "", tex)
+    refs = tuple(
+        (match.group(1), match.group(2).strip())
+        for match in re.finditer(
+            r"\\(cite\w*|ref|eqref|pageref|autoref|label)\s*\{([^{}]*)\}", source
+        )
+    )
+    for symbol, replacement in _UNICODE_MATH.items():
+        source = source.replace(symbol, replacement)
+    # These are unambiguous repairs of a command accidentally made printable.
+    source = re.sub(r"\\{2}(alpha|beta|gamma|pi|sum|prod|frac|sqrt)\b", r"\\\1", source)
+    source = re.sub(
+        r"\\textbackslash\{\}(alpha|beta|gamma|pi|sum|prod|frac|sqrt)\b", r"\\\1", source
+    )
+    source = re.sub(
+        r"\\\$([^$\\\n]{1,80})\\\$",
+        lambda match: "$" + match.group(1) + "$" if _safe_math(match.group(1)) else match.group(0),
+        source,
+    )
+    source = re.sub(
+        r"\\begin\{(equation\*?|align\*?|aligned|gather\*?|multline\*?|split)\}",
+        r"\\begin{MATH}",
+        source,
+    )
+    source = re.sub(
+        r"\\end\{(equation\*?|align\*?|aligned|gather\*?|multline\*?|split)\}",
+        r"\\end{MATH}",
+        source,
+    )
+    source = re.sub(r"\\(?:\(|\)|\[|\])|(?<!\\)\$\$?", "", source)
+    source = re.sub(r"\\emergencystretch\s*=\s*\d+(?:\.\d+)?\w*", " ", source)
+    source = re.sub(r"\\linespread\s*\{[^{}]*\}", " ", source)
+    # Coordinates, style options, and the longtable column preamble are geometry.
+    source = re.sub(
+        r"(\\begin\{tikzpicture\}.*?\\end\{tikzpicture\})",
+        lambda match: re.sub(
+            r"\[[^\[\]]*\]|\(-?\d+(?:\.\d+)?(?:cm|mm|pt)?\s*,\s*-?\d+(?:\.\d+)?(?:cm|mm|pt)?\)",
+            " ",
+            match.group(1),
+            flags=re.DOTALL,
+        ),
+        source,
+        flags=re.DOTALL,
+    )
+    preamble_pattern = re.compile(r"\\begin\{longtable\}\s*\{")
+    normalized: list[str] = []
+    source_cursor = 0
+    while preamble := preamble_pattern.search(source, source_cursor):
+        depth = 1
+        preamble_start = preamble.end() - 1
+        cursor = preamble.end()
+        while cursor < len(source) and depth:
+            if source[cursor] == "{":
+                depth += 1
+            elif source[cursor] == "}":
+                depth -= 1
+            cursor += 1
+        if depth:
+            break
+        normalized.extend([source[source_cursor:preamble_start], "{}"])
+        source_cursor = cursor
+    if normalized:
+        normalized.append(source[source_cursor:])
+        source = "".join(normalized)
+    source = re.sub(r"\\(?:begin|end)\{landscape\}", " ", source)
+    source = re.sub(r"\\(?:hspace|vspace|smallskip|medskip|bigskip)\*?(?:\{[^{}]*\})?", " ", source)
+    presentation = {
+        "begin",
+        "end",
+        "textbf",
+        "textit",
+        "emph",
+        "small",
+        "scriptsize",
+        "footnotesize",
+        "smallskip",
+        "medskip",
+        "bigskip",
+        "centering",
+        "raggedright",
+        "raggedleft",
+        "arraybackslash",
+        "multicolumn",
+        "displaystyle",
+        "textstyle",
+        "left",
+        "right",
+        "!",
+        ",",
+        ";",
+        "quad",
+        "qquad",
+        "labelsep",
+        "hfill",
+        "newpage",
+        "clearpage",
+        "pagebreak",
+        "linebreak",
+        "newline",
+        "par",
+        "noindent",
+        "resizebox",
+        "makebox",
+        "textwidth",
+        "linewidth",
+        "columnwidth",
+        "arraystretch",
+        "tabcolsep",
+        "setlength",
+    }
+    tokens: list[str] = []
+    for token in re.findall(
+        r"\\[A-Za-z]+|\\[^A-Za-z]|[A-Za-z]+|\d+(?:[.,]\d+)*(?:%?)|[^\s{}]", source
+    ):
+        if token.startswith("\\"):
+            name = token[1:]
+            if name in presentation:
+                continue
+            tokens.append(token[1:] if len(token) == 2 else token)
+        elif token.startswith("\\") and len(token) == 2:
+            tokens.append(token[1:])
+        else:
+            tokens.append(token)
+    return tuple(tokens), refs
+
+
+def _tex_static_diagnostics(tex: str) -> list[str]:
+    diagnostics: list[str] = []
+    if tex.count(r"\begin{document}") != 1 or tex.count(r"\end{document}") != 1:
+        diagnostics.append("Document start/end structure is missing or duplicated.")
+    environments: list[str] = []
+    for match in re.finditer(r"\\(begin|end)\{([A-Za-z*]+)\}", tex):
+        action, environment = match.groups()
+        if action == "begin":
+            environments.append(environment)
+        elif not environments or environments[-1] != environment:
+            diagnostics.append(f"Mismatched TeX environment near {environment}.")
+            break
+        else:
+            environments.pop()
+    if environments:
+        diagnostics.append(f"Unclosed TeX environment: {environments[-1]}.")
+    for command in ("alpha", "beta", "gamma", "pi", "frac", "sqrt", "text", "begin", "end"):
+        if re.search(r"\\\\" + command + r"\b", tex):
+            diagnostics.append(f"Potentially double-escaped TeX command: {command}.")
+    if tex.count(r"\(") != tex.count(r"\)") or tex.count(r"\[") != tex.count(r"\]"):
+        diagnostics.append("Math delimiter counts do not match.")
+    math_tokens = re.findall(r"\\\[|\\\]|\\\(|\\\)|(?<!\\)\$\$?", tex)
+    math_stack: list[str] = []
+    expected_close = {r"\[": r"\]", r"\(": r"\)"}
+    for token in math_tokens:
+        if token in {"$", "$$"}:
+            if math_stack and math_stack[-1] == token:
+                math_stack.pop()
+            else:
+                math_stack.append(token)
+        elif token in expected_close:
+            math_stack.append(expected_close[token])
+        elif not math_stack or math_stack.pop() != token:
+            diagnostics.append("Math delimiters are crossed or incorrectly paired.")
+            break
+    if math_stack:
+        diagnostics.append("A math delimiter is unclosed.")
+    if re.search(r"\\\\(?:textbackslash|verb|begin|end)\b", tex):
+        diagnostics.append("A literal TeX command may be double-escaped into printable text.")
+    for index, line in enumerate(tex.splitlines(), start=1):
+        if len(line) > 180 and (r"\node" in line or r"&" in line):
+            diagnostics.append(
+                f"Potentially wide diagram or table line {index} ({len(line)} characters)."
+            )
+    return list(dict.fromkeys(diagnostics))[:100]
+
+
+def _publication_layout_warnings(diagnostics: list[str]) -> list[str]:
+    """Select compiler diagnostics strong enough to require publication review."""
+    warnings: list[str] = []
+    for line in diagnostics:
+        if re.search(r"\bOverfull\s+\\[hv]box\b", line, re.IGNORECASE):
+            warnings.append(line[:500])
+            continue
+        underfull = re.search(r"\bUnderfull\s+\\[hv]box\b.*?badness\s+(\d+)", line, re.IGNORECASE)
+        if underfull and int(underfull.group(1)) >= 9000:
+            warnings.append(line[:500])
+    return warnings[:30]
+
+
+def _pdf_text_bounds_diagnostics(pdf: bytes) -> tuple[int, list[str]]:
+    """Check each PDF text glyph remains inside its rendered page bounds."""
+    try:
+        document = pypdfium2.PdfDocument(pdf)
+    except (ValueError, RuntimeError, TypeError) as exc:
+        raise ProjectError("The compiled PDF could not be inspected safely.") from exc
+    warnings: list[str] = []
+    page_count = len(document)
+    if page_count < 1:
+        document.close()
+        raise ProjectError("The compiled PDF contains no pages.")
+    inspected = 0
+    try:
+        for page_number in range(page_count):
+            page = document[page_number]
+            try:
+                page_bounds = (
+                    (page.get_height(), page.get_width())
+                    if page.get_rotation() in {90, 270}
+                    else (page.get_width(), page.get_height())
+                )
+                textpage = page.get_textpage()
+                try:
+                    character_count = textpage.count_chars()
+                    if inspected + character_count > MAX_PDF_TEXT_BOXES:
+                        warnings.append(
+                            f"PDF geometry inspection reached the {MAX_PDF_TEXT_BOXES:,}-character safety bound."
+                        )
+                        return page_count, warnings
+                    glyph_rows: dict[int, list[tuple[int, float, float, float, float, str]]] = {}
+                    for index in range(character_count):
+                        inspected += 1
+                        bounds = textpage.get_charbox(index)
+                        if bounds is None:
+                            character = textpage.get_text_range(index, 1)
+                            if character.strip():
+                                warnings.append(
+                                    f"Text on PDF page {page_number + 1} has no inspectable glyph bounds."
+                                )
+                                break
+                            continue
+                        x0, y0, x1, y1 = bounds
+                        if not (-1 <= x0 <= x1 <= page_bounds[0] + 1):
+                            warnings.append(
+                                f"Text on PDF page {page_number + 1} extends beyond horizontal page bounds."
+                            )
+                            break
+                        if not (-1 <= y0 <= y1 <= page_bounds[1] + 1):
+                            warnings.append(
+                                f"Text on PDF page {page_number + 1} extends beyond vertical page bounds."
+                            )
+                            break
+                        character = textpage.get_text_range(index, 1)
+                        if not character.strip() or (x1 - x0) * (y1 - y0) < 0.04:
+                            continue
+                        # Detect severe same-line text overlap, such as an
+                        # \llap label drawn over existing text. The high
+                        # horizontal-overlap threshold and baseline match
+                        # avoid flagging normal kerning, ligatures, and math.
+                        baseline = round(y0 * 2)
+                        candidates = [
+                            glyph
+                            for row_key in (baseline - 1, baseline, baseline + 1)
+                            for glyph in glyph_rows.get(row_key, [])
+                        ]
+                        for (
+                            prior_index,
+                            prior_x0,
+                            prior_y0,
+                            prior_x1,
+                            prior_y1,
+                            prior_character,
+                        ) in candidates:
+                            overlap_width = min(x1, prior_x1) - max(x0, prior_x0)
+                            smaller_width = min(x1 - x0, prior_x1 - prior_x0)
+                            same_baseline = abs(y0 - prior_y0) <= 0.75
+                            if (
+                                abs(index - prior_index) > 2
+                                and same_baseline
+                                and smaller_width > 0
+                                and overlap_width / smaller_width >= 0.55
+                            ):
+                                overlap_height = min(y1, prior_y1) - max(y0, prior_y0)
+                                if overlap_height > 0:
+                                    warnings.append(
+                                        f"Potential obscured text on PDF page {page_number + 1}: glyphs {prior_character!r} and {character!r} substantially overlap; manual layout review is required."
+                                    )
+                                    break
+                        if warnings:
+                            break
+                        row = glyph_rows.setdefault(baseline, [])
+                        if len(row) >= 512:
+                            warnings.append(
+                                f"Text overlap inspection reached its 512-glyph row bound on PDF page {page_number + 1}; manual layout review is required."
+                            )
+                            break
+                        row.append((index, x0, y0, x1, y1, character))
+                finally:
+                    textpage.close()
+            finally:
+                page.close()
+    finally:
+        document.close()
+    return page_count, list(dict.fromkeys(warnings))[:30]
+
+
+def _repair_tex_layout(tex: str, warnings: list[str]) -> tuple[str, str] | None:
+    """Apply one bounded, semantics-preserving TeX line-break adjustment."""
+    repaired = tex
+    actions: list[str] = []
+    horizontal_overflow = any(
+        re.search(r"\bOverfull\s+\\hbox\b", item, re.IGNORECASE)
+        or "extends beyond horizontal page bounds" in item
+        for item in warnings
+    )
+    if horizontal_overflow:
+        match = re.search(r"(?m)^\\emergencystretch=(2|4)em$", repaired)
+        if match:
+            current = int(match.group(1))
+            updated = current * 2
+            repaired = repaired[: match.start(1)] + str(updated) + repaired[match.end(1) :]
+            actions.append(
+                f"Increased TeX emergency line-breaking stretch from {current}em to {updated}em."
+            )
+    vertical_overflow = any(
+        re.search(r"\bOverfull\s+\\vbox\b", item, re.IGNORECASE)
+        or "extends beyond vertical page bounds" in item
+        for item in warnings
+    )
+    if vertical_overflow:
+        match = re.search(r"(?m)^\\linespread\{(1\.07|1\.0)\}$", repaired)
+        if match and match.group(1) != "1.0":
+            repaired = repaired[: match.start(1)] + "1.0" + repaired[match.end(1) :]
+            actions.append("Reduced TeX line spacing from 1.07 to 1.0 to prevent page overflow.")
+    return (repaired, " ".join(actions)) if actions else None
+
+
+def _diagram_compile_failure_is_identified(diagnostics: list[str], error: RuntimeError) -> bool:
+    """Return true only when compiler output connects an error to TikZ/PGF."""
+    output = "\n".join([*diagnostics, str(error)])
+    for line in output.splitlines():
+        if re.search(r"\b(?:error|fatal)\b", line, re.IGNORECASE) and re.search(
+            r"\b(?:tikz|pgf(?:keys|math|plots|fpu|core|basiclayer)?)\b",
+            line,
+            re.IGNORECASE,
+        ):
+            return True
+        if re.search(r"^!", line) and re.search(
+            r"\b(?:tikz|pgf(?:keys|math|plots|fpu|core|basiclayer)?)\b",
+            line,
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def _remove_diagram_figures(tex: str, expected_count: int) -> str:
+    """Remove only generated TikZ figures while preserving all other corrected TeX."""
+    figure_pattern = re.compile(
+        r"\\begin\{figure\}(?:(?!\\begin\{figure\}).)*?"
+        r"\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}.*?\\end\{figure\}\n?",
+        re.DOTALL,
+    )
+    matches = list(figure_pattern.finditer(tex))
+    if (
+        expected_count < 1
+        or len(matches) != expected_count
+        or tex.count(r"\begin{figure}") != expected_count
+        or tex.count(r"\begin{tikzpicture}") != expected_count
+        or tex.count(r"\end{figure}") != expected_count
+        or tex.count(r"\end{tikzpicture}") != expected_count
+    ):
+        raise ProjectError(
+            "The diagnosed diagram fallback could not identify every generated figure safely. The authored draft is preserved."
+        )
+    result = figure_pattern.sub("", tex)
+    result, tikz_package_count = re.subn(r"(?m)^\\usepackage\{tikz\}\n?", "", result)
+    result, tikz_library_count = re.subn(r"(?m)^\\usetikzlibrary\{fit\}\n?", "", result)
+    if tikz_package_count != 1 or tikz_library_count != 1:
+        raise ProjectError(
+            "The diagnosed diagram fallback could not remove the generated TikZ preamble safely. The authored draft is preserved."
+        )
+    if r"\begin{tikzpicture}" in result or r"\usetikzlibrary" in result:
+        raise ProjectError(
+            "The diagnosed diagram fallback left TikZ content behind. The authored draft is preserved."
+        )
+    return result
+
+
+async def _proofread_tex(
+    tex: str,
+    state: dict[str, Any],
+    *,
+    binding: Mapping[str, Any],
+    config: dict[str, Any],
+    project_id: str,
+    project_path_value: str,
+    report: PaperStageCallback,
+) -> tuple[str, dict[str, Any]]:
+    """Checkpoint exact authored TeX and bounded, content-preserving patches."""
+    checkpoint = state.get("proofreading")
+    if checkpoint is None:
+        bounds = _tex_chunks(tex)
+        checkpoint = {
+            "status": "running",
+            "initial_tex": tex,
+            "initial_sha256": hashlib.sha256(tex.encode()).hexdigest(),
+            "bounds": [[start, end] for start, end in bounds],
+            "corrected_chunks": [None] * len(bounds),
+            "attempts": ["pending"] * len(bounds),
+            "corrections": [],
+            "diagnostics": _tex_static_diagnostics(tex),
+            "provider_calls_attempted": 0,
+            "provider_calls_prior_at_start": int(state.get("proofreading_calls_prior", 0)),
+            "provider_calls_accounting_version": 2,
+            "safe_retry_count": 0,
+            "elapsed_seconds": 0,
+            "ai_performed": False,
+            "fallback_reason": None,
+        }
+        state["proofreading"] = checkpoint
+        _save_work(project_path_value, state)
+    elif not isinstance(checkpoint, dict):
+        raise ProjectError(
+            "The saved TeX proofreading checkpoint is invalid; authored work is preserved."
+        )
+    initial = checkpoint.get("initial_tex")
+    if (
+        not isinstance(initial, str)
+        or hashlib.sha256(initial.encode()).hexdigest() != checkpoint.get("initial_sha256")
+        or initial != tex
+    ):
+        raise ProjectError(
+            "The saved authored TeX no longer matches its proofreading checkpoint; the draft is preserved."
+        )
+    bounds = checkpoint.get("bounds")
+    corrected = checkpoint.get("corrected_chunks")
+    attempts = checkpoint.get("attempts")
+    if (
+        not isinstance(bounds, list)
+        or not isinstance(corrected, list)
+        or not isinstance(attempts, list)
+    ):
+        raise ProjectError(
+            "The saved TeX proofreading chunks are invalid; authored work is preserved."
+        )
+    if (
+        len(bounds) != len(corrected)
+        or len(bounds) != len(attempts)
+        or len(bounds) > MAX_PROOFREAD_CALLS
+    ):
+        raise ProjectError(
+            "The saved TeX proofreading chunk count is invalid; authored work is preserved."
+        )
+    elapsed_before = int(checkpoint.get("elapsed_seconds", 0))
+    elapsed_started = monotonic()
+
+    def save_checkpoint() -> None:
+        checkpoint["elapsed_seconds"] = elapsed_before + max(0, int(monotonic() - elapsed_started))
+        state["proofreading"] = checkpoint
+        _save_work(project_path_value, state)
+
+    def compose() -> str:
+        return "".join(
+            corrected[index] if isinstance(corrected[index], str) else initial[start:end]
+            for index, (start, end) in enumerate(bounds)
+        )
+
+    if checkpoint.get("status") in {"complete", "fallback"}:
+        final_tex = compose()
+        if checkpoint.get("final_sha256") not in (
+            None,
+            hashlib.sha256(final_tex.encode()).hexdigest(),
+        ):
+            raise ProjectError(
+                "The saved corrected TeX checksum is invalid; the draft is preserved."
+            )
+        return final_tex, checkpoint
+    if int(state.get("proofreading_calls_prior", 0)) + len(bounds) > MAX_PROOFREAD_CALLS:
+        raise ProjectError(
+            "The bounded proofreading call limit is exhausted; the authored draft remains saved."
+        )
+
+    # An interruption after dispatch is ambiguous and must not replay a paid call.
+    if "dispatched" in attempts:
+        checkpoint["status"] = "fallback"
+        checkpoint["fallback_reason"] = (
+            "An AI proofreading response was interrupted after dispatch; it was not replayed."
+        )
+        for index, attempt in enumerate(attempts):
+            if attempt == "dispatched":
+                attempts[index] = "uncertain"
+                corrected[index] = None
+            elif attempt == "pending":
+                attempts[index] = "skipped"
+                corrected[index] = None
+        save_checkpoint()
+        final_tex = compose()
+        diagnostics = [*_tex_static_diagnostics(final_tex), checkpoint["fallback_reason"]]
+        checkpoint["diagnostics"] = list(
+            dict.fromkeys([*checkpoint.get("diagnostics", []), *diagnostics])
+        )[:100]
+        checkpoint["final_sha256"] = hashlib.sha256(final_tex.encode()).hexdigest()
+        save_checkpoint()
+        return final_tex, checkpoint
+
+    compiler_diagnostics: list[str] = []
+    try:
+        await asyncio.to_thread(
+            _compile_pdf,
+            initial,
+            max_source_bytes=50_000_000,
+            timeout_seconds=300,
+            max_pdf_bytes=80_000_000,
+            diagnostics=compiler_diagnostics,
+        )
+    except RuntimeError:
+        if not compiler_diagnostics:
+            compiler_diagnostics.append(
+                "Temporary Tectonic compilation failed without a classifiable diagnostic."
+            )
+    checkpoint["diagnostics"] = list(
+        dict.fromkeys([*checkpoint.get("diagnostics", []), *compiler_diagnostics])
+    )[:100]
+    save_checkpoint()
+    total = len(bounds)
+    instructions = """You are a mechanical LaTeX proofreader, not a researcher, author, mathematician, or fact checker. Correct only definite TeX syntax, escaping, math delimiter/environment, Unicode rendering, or visual layout defects in the supplied exact chunk. Preserve every word, scientific claim, conclusion, counterexample, limitation, equation meaning, numerical value and unit, citation, label, reference, and source identifier. Never add, remove, reorder, summarize, or reinterpret research content. Diagrams and tables are encouraged when supported by evidence; improve their geometry and readability, never delete them. Return only minimal exact find/replace patches. Each find string must occur exactly once in this chunk. Leave ambiguous notation unchanged. An empty corrections list is correct when no safe repair is justified."""
+    for index, (start, end) in enumerate(bounds):
+        if attempts[index] == "complete":
+            continue
+        chunk = initial[start:end]
+        await report(
+            "proofreading",
+            index + 1,
+            total,
+            detail="Checking and correcting typesetting issues.",
+        )
+        response_received = False
+        try:
+            response: BaseModel | None = None
+            for attempt_number in range(1, 4):
+                attempts[index] = "dispatched"
+                checkpoint["provider_calls_attempted"] += 1
+                state["provider_calls_total"] = int(state.get("provider_calls_total", 0)) + 1
+                save_checkpoint()
+                try:
+                    response, _ = await _provider_structured(
+                        {
+                            "chunk_number": index + 1,
+                            "chunk_count": total,
+                            "exact_tex_chunk": chunk,
+                            "diagnostics": checkpoint["diagnostics"][:20],
+                            "chunk_sha256": hashlib.sha256(chunk.encode()).hexdigest(),
+                        },
+                        binding,
+                        config,
+                        instructions=instructions,
+                        schema_name="sigma_tex_proofread_patches",
+                        response_model=TeXProofreadResult,
+                        max_input_bytes=MAX_PROVIDER_INPUT_BYTES,
+                        project_id=project_id,
+                        project_path_value=project_path_value,
+                    )
+                    response_received = True
+                    break
+                except PaperConnectionFailure:
+                    # This exception is defined only for connection failures
+                    # known to precede request delivery, so these attempts are
+                    # accounted for separately and can safely be retried.
+                    checkpoint["provider_calls_attempted"] -= 1
+                    checkpoint["safe_retry_count"] = int(checkpoint.get("safe_retry_count", 0)) + 1
+                    state["provider_calls_total"] = max(
+                        0, int(state.get("provider_calls_total", 0)) - 1
+                    )
+                    attempts[index] = "pending"
+                    save_checkpoint()
+                    if attempt_number == 3:
+                        raise
+                    await report(
+                        "proofreading",
+                        index + 1,
+                        total,
+                        detail="Retrying a connection failure before provider delivery.",
+                    )
+                    await asyncio.sleep(0.4 * attempt_number)
+                except asyncio.CancelledError:
+                    save_checkpoint()
+                    raise
+            if response is None:
+                raise ProjectError("The proofreader returned no structured response.")
+            proposals = TeXProofreadResult.model_validate(response).corrections
+            candidate = chunk
+            for proposal in proposals:
+                if candidate.count(proposal.find) != 1:
+                    raise ValueError(
+                        "A proposed TeX correction did not identify one exact source span."
+                    )
+                candidate = candidate.replace(proposal.find, proposal.replace, 1)
+            before_signature = _tex_semantic_signature(chunk)
+            after_signature = _tex_semantic_signature(candidate)
+            if before_signature != after_signature:
+                raise ValueError(
+                    "A proposed correction changed protected scientific or reference content."
+                )
+            current_chunks = [
+                corrected[item] if isinstance(corrected[item], str) else initial[left:right]
+                for item, (left, right) in enumerate(bounds)
+            ]
+            current_chunks[index] = candidate
+            if _tex_semantic_signature(initial) != _tex_semantic_signature("".join(current_chunks)):
+                raise ValueError(
+                    "A proposed correction changed the full paper's protected content."
+                )
+            corrected[index] = candidate if candidate != chunk else None
+            attempts[index] = "complete"
+            checkpoint["ai_performed"] = True
+            for proposal in proposals:
+                checkpoint["corrections"].append(proposal.category)
+            await report(
+                "proofreading",
+                index + 1,
+                total,
+                "milestone",
+                detail="Applying mechanical corrections.",
+            )
+        except (ProjectError, ValidationError, ValueError, TypeError, OSError) as exc:
+            attempts[index] = "rejected"
+            corrected[index] = None
+            message = f"Proofreading chunk {index + 1} was not applied: {str(exc)[:240]}"
+            checkpoint["diagnostics"] = list(
+                dict.fromkeys([*checkpoint.get("diagnostics", []), message])
+            )[:100]
+            if response_received:
+                # A returned but unsafe patch is an isolated, known result.
+                # Other exact chunks can still be proofread independently.
+                checkpoint["fallback_reason"] = checkpoint.get("fallback_reason") or (message)
+                save_checkpoint()
+                continue
+            # A failed dispatch, malformed provider response, or unknown paid
+            # outcome is not replayed. Remaining chunks are left untouched.
+            for remaining in range(index + 1, total):
+                attempts[remaining] = "skipped"
+                corrected[remaining] = None
+            checkpoint["status"] = "fallback"
+            checkpoint["fallback_reason"] = "AI proofreading stopped safely: " + str(exc)[:300]
+            save_checkpoint()
+            break
+        save_checkpoint()
+    final_tex = compose()
+    checkpoint["status"] = "fallback" if checkpoint.get("fallback_reason") else "complete"
+    checkpoint["final_sha256"] = hashlib.sha256(final_tex.encode()).hexdigest()
+    checkpoint["diagnostics"] = list(
+        dict.fromkeys([*checkpoint.get("diagnostics", []), *_tex_static_diagnostics(final_tex)])
+    )[:100]
+    save_checkpoint()
+    await report("proofreading", total, total, "milestone", detail="Verifying corrected TeX.")
+    return final_tex, checkpoint
 
 
 async def _generate_impl(
@@ -3827,6 +5377,7 @@ async def _generate_impl(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    include_diagrams: bool = True,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -3840,6 +5391,8 @@ async def _generate_impl(
             current: int | None,
             total: int | None,
             state: Literal["active", "milestone", "complete"] = "active",
+            *,
+            detail: str | None = None,
         ) -> None:
             now = _now()
             elapsed = elapsed_before + max(
@@ -3855,6 +5408,8 @@ async def _generate_impl(
                 "updated_at": now,
                 "elapsed_seconds": elapsed,
             }
+            if detail:
+                saved_progress["detail"] = detail[:160]
             _active_progress[project_key] = saved_progress
             if work:
                 work["progress"] = saved_progress
@@ -3869,6 +5424,7 @@ async def _generate_impl(
                         "total": total,
                         "started_at": started_at,
                         "elapsed_seconds": elapsed,
+                        "detail": detail,
                     }
                 )
 
@@ -3921,17 +5477,20 @@ async def _generate_impl(
             work = checkpoint
         long_form = _paper_long_form(package, force_long_form=force_long_form, existing=checkpoint)
         expected_kind = "long_form" if long_form else "one_shot"
-        compatible = checkpoint is not None and not any(
-            checkpoint.get(key) != value
-            for key, value in (
-                ("kind", expected_kind),
-                ("snapshot_sha256", snapshot_hash),
-                ("project_id", view.project.id),
-                ("binding_fingerprint", binding_fingerprint),
-                ("model", config["model"]),
-                ("reasoning_effort", config["reasoning_effort"]),
+
+        compatible = False
+        if checkpoint is not None:
+            compatible = all(
+                checkpoint.get(key) == value
+                for key, value in (
+                    ("kind", expected_kind),
+                    ("snapshot_sha256", snapshot_hash),
+                    ("project_id", view.project.id),
+                    ("binding_fingerprint", binding_fingerprint),
+                    ("model", config["model"]),
+                    ("reasoning_effort", config["reasoning_effort"]),
+                )
             )
-        )
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -3949,6 +5508,12 @@ async def _generate_impl(
                 raise ProjectError(
                     "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
                 )
+        if checkpoint is not None and work.get("include_diagrams") != include_diagrams:
+            # The combined diagrams-and-tables preference changes only what is
+            # included in the final rendering and any unfinished authoring.
+            # Keep completed one-shot drafts, plans, and section tables intact.
+            work["include_diagrams"] = include_diagrams
+            _save_work(path, work)
         # Preserve the decision to recover an interrupted planning call before
         # report() replaces the old stage with this run's progress. A second
         # interruption must not silently dispatch the ambiguous paid call again.
@@ -3998,6 +5563,8 @@ async def _generate_impl(
                         config["reasoning_effort"],
                         kind="one_shot",
                     )
+                    work["include_diagrams"] = include_diagrams
+                work["include_diagrams"] = include_diagrams
                 work["frozen_package"] = package
                 work["progress"] = {
                     "run_id": run_id,
@@ -4018,7 +5585,14 @@ async def _generate_impl(
                 work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 _save_work(path, work)
                 await report("writing", None, None)
-                draft, model = await _provider(package, initial_auth, config, view.project.id, path)
+                draft, model = await _provider(
+                    package,
+                    initial_auth,
+                    config,
+                    view.project.id,
+                    path,
+                    include_diagrams,
+                )
                 # A complete structured author response is valuable paid work.
                 # Save it before any local reference repair, logical checks or
                 # TeX compilation so a recoverable defect cannot trigger
@@ -4044,11 +5618,13 @@ async def _generate_impl(
                     config["model"],
                     config["reasoning_effort"],
                 )
+                work["include_diagrams"] = include_diagrams
                 work["frozen_package"] = package
                 _save_work(path, work)
             elif "frozen_package" not in work:
                 work["frozen_package"] = package
                 _save_work(path, work)
+            work.setdefault("include_diagrams", include_diagrams)
             draft, provider_calls, evidence_batch_count = await _generate_long_draft(
                 package,
                 initial_auth,
@@ -4059,6 +5635,7 @@ async def _generate_impl(
                 view.project.id,
                 path,
                 structured_fast_path=True,
+                include_diagrams=include_diagrams,
             )
             model = config["model"]
             long_form = True
@@ -4069,6 +5646,8 @@ async def _generate_impl(
         )
         if material_omissions:
             draft = _apply_omission_limits(draft, material_omissions)
+        if not include_diagrams:
+            draft = _without_optional_visuals(draft)
         draft = PaperDraft.model_validate(
             _repair_paper_references(draft, {item["id"] for item in package["sources"]})
         )
@@ -4081,6 +5660,34 @@ async def _generate_impl(
         identifier = uuid4().hex
         timestamp = _now()
         warnings = list(dict.fromkeys([*validation_warnings, *draft.validation_warnings]))
+        source_reference_records = _source_reference_records(package)
+        source_reference_map = {
+            item["source_ref"]: item["label"] for item in source_reference_records
+        }
+        for item in source_reference_records:
+            for source_id in re.findall(
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                item["source_ref"],
+            ):
+                source_reference_map.setdefault(source_id, item["label"])
+        valid_diagrams: list[PaperDiagram] = []
+        for diagram in draft.diagrams:
+            diagram_ids = [node.id for node in diagram.nodes]
+            known_ids = set(diagram_ids)
+            if (
+                len(known_ids) != len(diagram_ids)
+                or any(
+                    edge.source not in known_ids or edge.target not in known_ids
+                    for edge in diagram.edges
+                )
+                or any(set(boundary.node_ids) - known_ids for boundary in diagram.boundaries)
+            ):
+                warnings.append(
+                    "An experimental diagram had invalid node references and was omitted; the paper continues as text."
+                )
+            else:
+                valid_diagrams.append(diagram)
+        draft = draft.model_copy(update={"diagrams": valid_diagrams})
         record = {
             "schema_version": 1,
             "paper_id": identifier,
@@ -4099,7 +5706,11 @@ async def _generate_impl(
                 "reasoning_effort": config["reasoning_effort"],
                 "max_output_tokens_per_call": 12000 if initial_auth["mode"] == "api_key" else None,
                 "max_response_bytes": MAX_RESPONSE_BYTES,
-                "call_limit": MAX_LONG_PAPER_CALLS if long_form else 1,
+                "call_limit": (
+                    MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+                    if long_form
+                    else 1 + MAX_PROOFREAD_CALLS
+                ),
                 "provider_calls_attempted": provider_calls,
                 "provider_calls_prior_runs": (
                     sum(item["provider_calls_attempted"] for item in work.get("prior_runs", []))
@@ -4124,10 +5735,14 @@ async def _generate_impl(
                 "include_claim_details": include_claim_details,
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
+                "include_diagrams": include_diagrams,
+                "include_diagrams_and_tables": include_diagrams,
+                "diagram_count": len(draft.diagrams),
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
                 "snapshot_size_bytes": len(_json(package)),
                 "source_count": len(package["sources"]),
+                "source_reference_map": source_reference_records,
                 "section_limit": MAX_LONG_PAPER_SECTIONS if long_form else 0,
                 "evidence_fields_omitted": (
                     len(work.get("omitted_evidence", [])) if long_form else 0
@@ -4158,58 +5773,286 @@ async def _generate_impl(
                 isinstance(project_data, dict)
                 and project_data.get("investigation_type") == "mathematical"
             )
-            tex = _tex(
-                draft,
-                warnings,
-                snapshot_hash,
-                math_style=math_style,
-                investigation_type=(
-                    project_data.get("investigation_type", "default")
-                    if isinstance(project_data, dict)
-                    else "default"
-                ),
-                obligation_reconciliation=obligation_reconciliation,
-                integrity_records=(
-                    [
-                        {
-                            "source_ref": item["source_ref"],
-                            "field": item["field"],
-                            "content": {
-                                "excerpt": item["content_excerpt"],
-                                "truncated": item["truncated"],
-                            },
-                        }
-                        for item in _section_original_excerpts(
-                            _research_integrity_records(package),
-                            {source["id"] for source in package["sources"]},
-                            "reasoning proof argument skeptic objection contradiction failure obligation results",
-                            90_000,
+            integrity_records = (
+                [
+                    {
+                        "source_ref": item["source_ref"],
+                        "field": item["field"],
+                        "content": {
+                            "excerpt": item["content_excerpt"],
+                            "truncated": item["truncated"],
+                        },
+                    }
+                    for item in _section_original_excerpts(
+                        _research_integrity_records(package),
+                        {source["id"] for source in package["sources"]},
+                        "reasoning proof argument skeptic objection contradiction failure obligation results",
+                        90_000,
+                    )
+                ]
+                if work.get("evidence_strategy") == "structured_v1"
+                else _long_paper_integrity_records(package, work)
+                if long_form
+                else None
+            )
+            tex_options = {
+                "math_style": math_style,
+                "investigation_type": project_data.get("investigation_type", "default")
+                if isinstance(project_data, dict)
+                else "default",
+                "obligation_reconciliation": obligation_reconciliation,
+                "integrity_records": integrity_records,
+                "material_omissions": material_omissions,
+                "integrity_excerpts": work.get("evidence_strategy") == "structured_v1",
+                "include_research_details": include_research_details,
+                "include_claim_details": include_claim_details,
+                "include_validation_notes": include_validation_notes,
+                "include_research_excerpts": include_research_excerpts,
+                "source_reference_map": source_reference_map,
+            }
+            tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+            saved_proofreading = work.get("proofreading")
+            if isinstance(saved_proofreading, dict):
+                if saved_proofreading.get("initial_tex") == tex:
+                    # Continue resumes the exact source frozen before proofreading.
+                    tex = saved_proofreading["initial_tex"]
+                else:
+                    # A user changed an authoring preference or TeX render option.
+                    # Keep the old paid result in the attempt ledger and proofread
+                    # only this new rendering; never regenerate the paper draft.
+                    # Older checkpoints included the prior-render total in
+                    # provider_calls_attempted. New checkpoints keep that
+                    # total separately and count only calls for this TeX.
+                    prior_calls = int(work.get("proofreading_calls_prior", 0))
+                    checkpoint_calls = int(saved_proofreading.get("provider_calls_attempted", 0))
+                    if saved_proofreading.get("provider_calls_accounting_version", 1) == 2:
+                        render_calls = checkpoint_calls
+                    else:
+                        # Version 1 included the prior-render total in this
+                        # checkpoint's count; subtract its value at creation.
+                        calls_at_render_start = int(
+                            saved_proofreading.get("provider_calls_prior_at_start", prior_calls)
                         )
-                    ]
-                    if work.get("evidence_strategy") == "structured_v1"
-                    else _long_paper_integrity_records(package, work)
-                    if long_form
-                    else None
-                ),
-                material_omissions=material_omissions,
-                integrity_excerpts=work.get("evidence_strategy") == "structured_v1",
-                include_research_details=include_research_details,
-                include_claim_details=include_claim_details,
-                include_validation_notes=include_validation_notes,
-                include_research_excerpts=include_research_excerpts,
+                        render_calls = max(0, checkpoint_calls - calls_at_render_start)
+                    work["proofreading_calls_prior"] = prior_calls + render_calls
+                    work.pop("proofreading", None)
+                    _save_work(path, work)
+            await report(
+                "proofreading", None, None, detail="Checking and correcting typesetting issues."
             )
-            await report("compile", None, None)
-            pdf = await asyncio.to_thread(
-                _compile_pdf,
+            tex, proofreading = await _proofread_tex(
                 tex,
-                max_source_bytes=50_000_000,
-                timeout_seconds=300,
-                max_pdf_bytes=80_000_000,
+                work,
+                binding=initial_auth,
+                config=config,
+                project_id=view.project.id,
+                project_path_value=path,
+                report=report,
             )
+            _save_work(path, work)
+            if proofreading.get("status") == "fallback":
+                fallback_note = (
+                    "Needs review: TeX verification is incomplete. The authored research content "
+                    "and safe accepted typesetting corrections were retained. Review the saved "
+                    "proofreading diagnostics before relying on the layout."
+                )
+                warnings.append(fallback_note)
+                marker = r"\end{document}"
+                if tex.count(marker) != 1:
+                    raise ProjectError(
+                        "TeX proofreading fell back, but the publication note could not be placed safely. The authored draft remains saved."
+                    )
+                title_marker = r"\maketitle"
+                if tex.count(title_marker) != 1:
+                    raise ProjectError(
+                        "TeX proofreading fell back, but its review status could not be placed safely at the start of the paper. The authored draft remains saved."
+                    )
+                notice = (
+                    r"\begin{center}\fbox{\parbox{.92\linewidth}{\textbf{Needs review: "
+                    r"TeX verification is incomplete.} Review the archived proofreading "
+                    r"diagnostics before relying on the typesetting.}}\end{center}"
+                )
+                tex = tex.replace(title_marker, title_marker + "\n" + notice, 1)
+                tex = tex.replace(
+                    marker,
+                    r"\section*{Typesetting verification note}"
+                    + "\n"
+                    + _latex(fallback_note)
+                    + "\n"
+                    + marker,
+                    1,
+                )
+                proofreading["publication_note_added"] = True
+            record["generation"]["proofreading"] = {
+                "attempted": True,
+                "ai_performed": proofreading.get("ai_performed", False),
+                "status": proofreading.get("status"),
+                "verification_status": (
+                    "incomplete" if proofreading.get("status") == "fallback" else "complete"
+                ),
+                "accepted_correction_count": len(proofreading.get("corrections", [])),
+                "correction_categories": sorted(set(proofreading.get("corrections", []))),
+                "unresolved_diagnostics": proofreading.get("diagnostics", [])[:100],
+                "fallback_reason": proofreading.get("fallback_reason"),
+                "original_tex_sha256": proofreading.get("initial_sha256"),
+                "corrected_tex_sha256": proofreading.get("final_sha256"),
+                "provider_calls_attempted": int(work.get("proofreading_calls_prior", 0))
+                + int(proofreading.get("provider_calls_attempted", 0)),
+                "provider_calls_current_render": proofreading.get("provider_calls_attempted", 0),
+                "prior_render_provider_calls": int(work.get("proofreading_calls_prior", 0)),
+                "elapsed_seconds": proofreading.get("elapsed_seconds", 0),
+                "model": config["model"],
+                "reasoning_effort": config["reasoning_effort"],
+            }
+            record["generation"]["publication_status"] = (
+                "needs_review"
+                if proofreading.get("status") == "fallback"
+                else "proofreading_complete"
+            )
+            record["generation"]["provider_calls_attempted"] = (
+                int(work.get("provider_calls", provider_calls))
+                + int(work.get("proofreading_calls_prior", 0))
+                + int(proofreading.get("provider_calls_attempted", 0))
+            )
+            record["generation"]["provider_calls_lifetime_total"] = int(
+                work.get("provider_calls_total", provider_calls)
+            )
+            record["generation"]["call_limit"] = (
+                MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS if long_form else 1 + MAX_PROOFREAD_CALLS
+            )
+            compile_diagnostics: list[str] = []
+            layout_warnings: list[str] = []
+            layout_repairs: list[str] = []
+            pdf_check_passes: list[dict[str, Any]] = []
+            diagram_fallback: dict[str, Any] | None = None
+            pdf = b""
+            for pass_number in range(1, 4):
+                pass_diagnostics: list[str] = []
+                await report("compile", pass_number, 3)
+                try:
+                    pdf = await asyncio.to_thread(
+                        _compile_pdf,
+                        tex,
+                        max_source_bytes=50_000_000,
+                        timeout_seconds=300,
+                        max_pdf_bytes=80_000_000,
+                        diagnostics=pass_diagnostics,
+                    )
+                except RuntimeError as compile_error:
+                    if not draft.diagrams or not _diagram_compile_failure_is_identified(
+                        pass_diagnostics, compile_error
+                    ):
+                        raise ProjectError(str(compile_error)) from compile_error
+                    removed_diagram_count = len(draft.diagrams)
+                    tex = _remove_diagram_figures(tex, removed_diagram_count)
+                    draft = draft.model_copy(update={"diagrams": []})
+                    warnings.append(
+                        "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                    )
+                    diagram_fallback = {
+                        "applied": True,
+                        "removed_diagram_count": removed_diagram_count,
+                        "reason": next(
+                            (
+                                line[:500]
+                                for line in [*pass_diagnostics, *str(compile_error).splitlines()]
+                                if _diagram_compile_failure_is_identified(
+                                    [line], RuntimeError(line)
+                                )
+                            ),
+                            "Tectonic identified a TikZ/PGF compilation error.",
+                        ),
+                    }
+                    pass_diagnostics = []
+                    try:
+                        pdf = await asyncio.to_thread(
+                            _compile_pdf,
+                            tex,
+                            max_source_bytes=50_000_000,
+                            timeout_seconds=300,
+                            max_pdf_bytes=80_000_000,
+                            diagnostics=pass_diagnostics,
+                        )
+                    except RuntimeError as fallback_error:
+                        raise ProjectError(
+                            "The safe diagram fallback could not compile; the authored TeX remains saved."
+                        ) from fallback_error
+                compile_diagnostics = list(pass_diagnostics)
+                await report(
+                    "pdf_check",
+                    pass_number,
+                    3,
+                    detail=(
+                        f"Checking PDF pass {pass_number} of 3; TeX is authoritative and PDFs are not edited."
+                    ),
+                )
+                if not pdf.startswith(b"%PDF-"):
+                    raise ProjectError(
+                        "The compiled PDF failed its output validity check; the authored paper remains saved."
+                    )
+                page_count, pdf_warnings = await asyncio.to_thread(
+                    _pdf_text_bounds_diagnostics, pdf
+                )
+                layout_warnings = list(
+                    dict.fromkeys([*_publication_layout_warnings(pass_diagnostics), *pdf_warnings])
+                )
+                pass_record: dict[str, Any] = {
+                    "pass": pass_number,
+                    "page_count": page_count,
+                    "compiler_diagnostics": pass_diagnostics[:100],
+                    "diagnostics": layout_warnings,
+                }
+                pdf_check_passes.append(pass_record)
+                if not layout_warnings or pass_number == 3:
+                    break
+                repaired = _repair_tex_layout(tex, layout_warnings)
+                if repaired is None:
+                    break
+                tex, repair = repaired
+                pass_record["tex_repair"] = repair
+                layout_repairs.append(repair)
+                await report(
+                    "pdf_check",
+                    pass_number,
+                    3,
+                    "milestone",
+                    detail=f"Correcting TeX layout for PDF pass {pass_number + 1} of 3.",
+                )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
+        if layout_warnings:
+            warnings.append(
+                "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+            )
+            record["generation"]["publication_status"] = "needs_review"
+            record["generation"]["proofreading"]["verification_status"] = "incomplete"
+            record["generation"]["proofreading"]["review_reason"] = (
+                "Layout warnings remained after the bounded TeX correction passes."
+            )
+        record["generation"]["pdf_check_passes"] = pdf_check_passes
+        record["generation"]["layout_repairs"] = layout_repairs
+        record["generation"]["pdf_check_final_pass"] = len(pdf_check_passes)
+        record["generation"]["layout_status"] = (
+            "needs_review" if layout_warnings else "no_severe_box_warnings_reported"
+        )
+        record["generation"]["layout_warnings"] = layout_warnings
         # Keep the exact source that produced this version's PDF alongside the
         # frozen evidence and draft. A PDF alone is not a reproducible artifact.
+        record["draft"] = draft.model_dump()
+        record["validation_warnings"] = warnings
+        record["generation"]["diagram_count"] = len(draft.diagrams)
+        record["generation"]["diagram_fallback"] = diagram_fallback
+        record["generation"]["proofreading"]["unresolved_diagnostics"] = list(
+            dict.fromkeys(
+                [
+                    *record["generation"]["proofreading"]["unresolved_diagnostics"],
+                    *compile_diagnostics,
+                ]
+            )
+        )[:100]
+        record["generation"]["proofreading"]["final_tex_sha256"] = hashlib.sha256(
+            tex.encode()
+        ).hexdigest()
         record["tex_source"] = tex
         record["generation"]["generation_elapsed_seconds"] = int(
             elapsed_before
@@ -4247,6 +6090,7 @@ async def generate(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
+    include_diagrams: bool = True,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())
@@ -4265,6 +6109,7 @@ async def generate(
             include_claim_details,
             include_validation_notes,
             include_research_excerpts,
+            include_diagrams,
         )
     )
     _generation_tasks[key] = task
@@ -4396,7 +6241,7 @@ def preflight(
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
     )
-    maximum_calls = (
+    maximum_author_calls = (
         (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
         if fast_preflight
         else min(
@@ -4411,7 +6256,7 @@ def preflight(
         if one_shot_draft_available
         else 1
     )
-    maximum_restart_calls = (
+    maximum_restart_author_calls = (
         (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
         if fast_preflight
         else min(
@@ -4424,16 +6269,45 @@ def preflight(
         if long_form
         else 1
     )
-    calls_remaining = (
+    maximum_restart_calls = maximum_restart_author_calls + MAX_PROOFREAD_CALLS
+    saved_proofreading = work_state.get("proofreading") if resume_available else None
+    saved_proofreading_status = (
+        saved_proofreading.get("status") if isinstance(saved_proofreading, dict) else None
+    )
+    preflight_publication_status = (
+        "needs_review"
+        if saved_proofreading_status == "fallback"
+        else "proofreading_incomplete"
+        if saved_proofreading_status == "running"
+        else "proofreading_complete"
+        if saved_proofreading_status == "complete"
+        else "not_proofread"
+    )
+    if isinstance(saved_proofreading, dict):
+        attempts = saved_proofreading.get("attempts", [])
+        proofread_remaining = (
+            sum(attempt == "pending" for attempt in attempts)
+            if saved_proofreading.get("status") == "running"
+            else 0
+        )
+    else:
+        proofread_remaining = max(
+            0,
+            MAX_PROOFREAD_CALLS - int(work_state.get("proofreading_calls_prior", 0)),
+        )
+    author_remaining = (
         0
-        if one_shot_draft_available and resume_available
+        if one_shot_draft_available
         else max(
             0,
-            (maximum_calls if fast_preflight else MAX_LONG_PAPER_CALLS)
-            - work_state.get("provider_calls", 0),
+            (maximum_author_calls if long_form else 1) - work_state.get("provider_calls", 0),
         )
         if resume_available
-        else maximum_calls
+        else maximum_author_calls
+    )
+    calls_remaining = author_remaining + proofread_remaining
+    maximum_calls = (
+        calls_remaining if resume_available else maximum_author_calls + MAX_PROOFREAD_CALLS
     )
     maximum_output_tokens = calls_remaining * 12_000 if mode == "api_key" else None
     maximum_structured_input_bytes = (
@@ -4483,6 +6357,8 @@ def preflight(
         "checkpoint_matches_snapshot": same_project_and_snapshot,
         "resume_available": resume_available,
         "draft_recovery_available": resume_available and one_shot_draft_available,
+        "proofreading_status": saved_proofreading_status or "not_started",
+        "publication_status": preflight_publication_status,
         "incomplete_one_shot": incomplete_one_shot,
         "completed_batches": work_state.get("next_batch", 0) if resume_available else 0,
         "evidence_indexed": work_state.get("evidence_indexed", False)
@@ -4497,7 +6373,9 @@ def preflight(
         "evidence_fields_omitted": (
             len(work_state.get("omitted_evidence", [])) if resume_available else 0
         ),
-        "provider_calls_attempted": work_state.get("provider_calls", 0),
+        "provider_calls_attempted": work_state.get("provider_calls", 0)
+        + work_state.get("proofreading_calls_prior", 0)
+        + (saved_proofreading or {}).get("provider_calls_attempted", 0),
         "provider_calls_previous_runs": previous_calls,
         "provider_calls_lifetime_total": work_state.get("provider_calls_total", 0),
         "provider_calls_remaining": calls_remaining,
@@ -4557,7 +6435,12 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                         "generation": {
                             key: item
                             for key, item in value["generation"].items()
-                            if key not in {"omitted_evidence", "reduction_source_refs_omitted"}
+                            if key
+                            not in {
+                                "omitted_evidence",
+                                "reduction_source_refs_omitted",
+                                "source_reference_map",
+                            }
                         },
                         "pdf_available": _valid_pdf_file(path, value),
                     }

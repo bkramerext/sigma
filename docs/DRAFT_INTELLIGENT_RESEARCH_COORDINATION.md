@@ -216,7 +216,7 @@ Precommit rubrics, task inputs, reference answers, max call counts, and stopping
 
 **Phase 3 — controlled action execution.** Route accepted next questions/tests/priority changes into A18's scheduler at safe wave boundaries, capture consumed decision IDs, and evaluate results. Connect genuine A19 execution artifacts when available. Avoid adding a new orchestrator runtime if the existing worker can do the job.
 
-**Phase 4 — evaluation and integration.** Run adversarial fixtures, existing A18/17/20 regression suites, real-browser supervision checks, and an authorized conservative ChatGPT-plan live comparison. Record actual runs, spend, failures, and limitations in `docs/STATUS.md`; prepare a reviewable PR. Do not self-merge.
+**Phase 4 — evaluation and integration.** Run adversarial fixtures, existing A18/17/20 regression suites, real-browser supervision checks, and an authorized conservative ChatGPT-plan live comparison. Record actual runs, spend, failures, and limitations in the active ticket or committed PR handoff under `messages/`; prepare a reviewable PR. Do not self-merge.
 
 ## 9. Out of scope
 

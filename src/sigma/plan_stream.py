@@ -1,7 +1,9 @@
 """Bounded Responses SSE completion; no partial draft counts as a result."""
 
 import codecs
+import email.utils
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -66,6 +68,7 @@ class ChatGPTProviderRejection(ProjectError):
         http_status: int,
         streamed: bool,
         stream_event: str | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(message)
         self.state = state
@@ -76,6 +79,7 @@ class ChatGPTProviderRejection(ProjectError):
         self.stream_event = (
             stream_event if streamed and stream_event in {"error", "response.failed"} else None
         )
+        self.retry_after_seconds = retry_after_seconds
 
 
 def failure(
@@ -86,7 +90,22 @@ def failure(
     *,
     streamed: bool = False,
     stream_event: str | None = None,
+    retry_after: str | None = None,
 ) -> None:
+    retry_after_seconds = None
+    if retry_after is not None:
+        try:
+            parsed_retry_after = float(retry_after.strip())
+        except (TypeError, ValueError):
+            try:
+                retry_date = email.utils.parsedate_to_datetime(retry_after)
+                if retry_date.tzinfo is None:
+                    retry_date = retry_date.replace(tzinfo=UTC)
+                parsed_retry_after = (retry_date - datetime.now(UTC)).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                parsed_retry_after = None
+        if parsed_retry_after is not None and 0 <= parsed_retry_after <= 3600:
+            retry_after_seconds = parsed_retry_after
     error = raw.get("error") if isinstance(raw, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
     # Direct-route admission errors can have {"detail": "..."} rather
@@ -119,6 +138,7 @@ def failure(
                 http_status=status,
                 streamed=streamed,
                 stream_event=stream_event,
+                retry_after_seconds=retry_after_seconds,
             )
         state, message = KNOWN_ERRORS.get(
             code if isinstance(code, str) else "",
@@ -161,6 +181,7 @@ def failure(
                 http_status=status,
                 streamed=streamed,
                 stream_event=stream_event,
+                retry_after_seconds=retry_after_seconds,
             )
         # A Responses stream is admitted at the outer HTTP status and can then
         # fail in-band; the provider error code is not a second HTTP response.
@@ -189,6 +210,7 @@ def failure(
             http_status=status,
             streamed=streamed,
             stream_event=stream_event,
+            retry_after_seconds=retry_after_seconds,
         )
     # Provider error bodies can contain request context or other sensitive
     # values. Surface only a small allowlist of machine fields; never echo the
@@ -234,10 +256,12 @@ def failure(
     if safe_param:
         details.append(f"param={safe_param}")
     detail_text = f" ({', '.join(details)})" if details else ""
-    raise ProjectError(
+    error = ProjectError(
         f"OpenAI API request failed (HTTP {status}): {diagnosis}{detail_text} "
         "No automatic retry or billing fallback occurred; no paper was saved."
     )
+    error.retry_after_seconds = retry_after_seconds  # type: ignore[attr-defined]
+    raise error
 
 
 async def completed(
@@ -246,6 +270,7 @@ async def completed(
     *,
     max_stream_bytes: int = MAX_STREAM_BYTES,
     overflow_message: str = "Provider stream exceeded the byte limit; no strategy was saved.",
+    retry_after: str | None = None,
 ) -> dict:
     content_type = response.headers.get("content-type", "")
     ct_main = content_type.split(";")[0].strip().lower()
@@ -328,6 +353,7 @@ async def completed(
                     guard,
                     streamed=True,
                     stream_event="error",
+                    retry_after=retry_after,
                 )
             if kind == "response.created":
                 if response_id is not None or not isinstance(
@@ -349,6 +375,7 @@ async def completed(
                         guard,
                         streamed=True,
                         stream_event="response.failed",
+                        retry_after=retry_after,
                     )
                 if kind == "response.incomplete":
                     raise ProjectError(
