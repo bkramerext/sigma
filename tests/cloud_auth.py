@@ -3236,6 +3236,69 @@ class CloudAuthTests(TestCase):
                     "sponsored",
                 )
 
+    def test_pending_guest_invitation_is_auto_approved_on_next_google_signin(self):
+        """A prior pending request must not block a newly authorized domain."""
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="pending-domain-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        applicant_email = "nontrivialzeero@gmail.com"
+        applicant_subject = "pending-domain-applicant"
+        denied = self.finish(applicant_email, applicant_subject)
+        self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(cloud_auth, "_deliver_invitation"):
+            requested = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(requested.status_code, 200, requested.text)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            pending = db.execute(
+                "SELECT status FROM invitation_requests WHERE subject=?", (applicant_subject,)
+            ).fetchone()
+        self.assertIn(pending["status"], {"notified", "pending"})
+        granted = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={
+                "kind": "domain", "value": "gmail.com",
+                "role": "member", "allowance_usd": 10,
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(granted.status_code, 200, granted.text)
+        with patch.object(cloud_auth, "_deliver_invitation") as notice:
+            signed = self.finish(applicant_email, applicant_subject)
+        self.assertIn(cloud_auth.SESSION_COOKIE, signed.cookies)
+        principal = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
+        self.assertIsNotNone(principal)
+        self.assertEqual(principal.role, "member")
+        notice.assert_called_once()
+        self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            grant = db.execute(
+                "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                (applicant_email,),
+            ).fetchone()
+            request = db.execute(
+                "SELECT status FROM invitation_requests WHERE subject=?", (applicant_subject,)
+            ).fetchone()
+        self.assertEqual((grant["role"], grant["active"], grant["allowance_usd"]), ("member", 1, 10))
+        self.assertEqual(request["status"], "reviewed")
+        listed = admin.get("/api/cloud-auth/admin/grants").json()
+        self.assertTrue(any(
+            account["email"] == applicant_email and account["authorized"]
+            for account in listed["sessions"]
+        ))
+        self.assertFalse(any(
+            req["email"] == applicant_email
+            for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+        ))
+
     def test_domain_approved_google_login_materializes_individual_member(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
