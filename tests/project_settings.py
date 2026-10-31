@@ -270,7 +270,7 @@ def main():
             assert defaults == {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": "1"}
             assert defaults["research_rounds"] == 2
             assert defaults["model_calls"] == 12
-            assert defaults["session_duration_minutes"] == 30
+            assert defaults["session_duration_minutes"] == 60
             assert defaults["output_tokens_per_call"] == 4000
             changed_limits = {**defaults, "research_rounds": 2, "model_calls": 4}
             saved_limits = client.put(limits_url, json={"path": str(path), **changed_limits})

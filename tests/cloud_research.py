@@ -1089,7 +1089,7 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         )
         assert sponsored["maximum_estimated_cost_usd"] == user_cost_limit
         assert sponsored["model_calls"] == 30 and sponsored["research_rounds"] == 1
-        assert sponsored["session_duration_minutes"] == cloud_research.MAX_SESSION_MINUTES
+        assert sponsored["session_duration_minutes"] == 30
     project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
     limits = {
         **research_sessions.DEFAULT_LIMITS,
@@ -1134,7 +1134,7 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert research_sessions.get_limits(project.path) == hosted_duration
         assert (
             cloud_research.evaluation_session_limits(hosted_duration)["session_duration_minutes"]
-            == 15
+            == 60
         )
     with (
         patch.object(cloud_workspaces, "enabled", return_value=False),

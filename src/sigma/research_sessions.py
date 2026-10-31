@@ -78,6 +78,16 @@ MAX_REJECTED_INTERVENTIONS = 8
 # format until an unscripted comparison establishes that aliasing is understood.
 EXPERIMENTAL_EXACT_TEXT_POOL = False
 CALL_TIMEOUT = 15 * 60
+# OpenAI's GPT-6 API model catalog declares 128,000 maximum output tokens for
+# the supported research models. This is the provider/model bound for API-key
+# requests, not the smaller internal reservation estimate stored in projects.
+MODEL_OUTPUT_LIMITS = {
+    "gpt-6-astra": 128_000,
+    "gpt-6-sol": 128_000,
+    "gpt-6.1-sol": 128_000,
+    "gpt-6.1-terra": 128_000,
+    "gpt-6-luna": 128_000,
+}
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
     "max_concurrent_sessions": 1,
@@ -2216,7 +2226,8 @@ AMBIENT_RESEARCH_RUBRIC = (
     "from standard techniques and proposed experiments from measured results. When "
     "literature or external verification is unavailable, label novelty and empirical "
     "generality not assessed rather than inventing citations or certainty. This is "
-    "a quality rubric, not a proof certificate or an additive progress score. "
+    "Project-specific evaluation criteria remain authoritative. This is a quality rubric, "
+    "not a proof certificate or an additive progress score. "
 )
 
 INVESTIGATOR_GUIDANCE = (
@@ -2678,7 +2689,6 @@ def _role_request_payload(
     payload: dict[str, Any] = {
         "model": record["model"],
         "store": False,
-        "max_output_tokens": record.get("output_token_limit", 4000),
         "reasoning": {"effort": record["reasoning_effort"]},
         "instructions": _role_instructions(role, context),
         "input": input_text,
@@ -2692,9 +2702,15 @@ def _role_request_payload(
         },
     }
     if record.get("mode") == "chatgpt":
-        payload.pop("max_output_tokens")
         payload["stream"] = True
         payload["input"] = [{"role": "user", "content": input_text}]
+    else:
+        output_limit = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
+        if output_limit is None:
+            raise ProjectError(
+                "No safe provider output bound is available for this model; select a supported research model."
+            )
+        payload["max_output_tokens"] = output_limit
     return payload
 
 
@@ -3308,8 +3324,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                     "ChatGPT controls its own output ceiling; changing SIGMA's "
                     "per-call token setting cannot increase that provider ceiling. "
                     if record.get("mode") == "chatgpt"
-                    else "Review the per-call output-token limit in Project Settings → Limits "
-                    "and increase it if appropriate. "
+                    else "SIGMA will retry once with a compact response when safe; "
+                    "review the saved partial output and current spending allowance. "
                 )
                 + "Resume to request a new complete response. Another attempt consumes "
                 "a model call and may incur a charge."
@@ -3317,7 +3333,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 or result["recoverable_clipped_response"]
                 else "The provider response was clipped and no further calls were available. "
                 "The ended session cannot resume; start a new session after reviewing "
-                "output-token and spending limits. Saved work is preserved."
+                "provider output and spending allowance. Saved work is preserved."
             )
         elif "backend restarted" in message:
             result["next_step_guidance"] = (
@@ -8664,7 +8680,7 @@ async def _portfolio_role_call(
                                 "ChatGPT's output ceiling is provider-controlled; "
                                 "review provider usage before resuming."
                                 if record.get("mode") == "chatgpt"
-                                else "Review the per-call output-token limit before resuming."
+                                else "Review the saved partial output and current spending allowance before resuming."
                             )
                         )
                         record["current_action"] = "Clipped response · recovery available"

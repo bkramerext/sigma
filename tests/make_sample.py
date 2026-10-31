@@ -1,6 +1,7 @@
 """End-to-end conversion of an exported project into an editable Samples entry."""
 
 import asyncio
+import hashlib
 import json
 import shutil
 import sys
@@ -19,7 +20,7 @@ from research_sessions import (
     wait_for,
 )
 
-from sigma import agentic_evidence, cli, research_sessions, samples
+from sigma import agentic_evidence, cli, papers, project_bundle, research_sessions, samples
 from sigma.api import export_project_view
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 from sigma.recents import home_projects
@@ -198,7 +199,35 @@ async def main() -> None:
             patch("sigma.recents.state_directory", lambda: state_root),
         ):
             source, success_id, failed_id, run_id = await create_source_project(projects_root)
+            paper_id = uuid4().hex
+            paper_pdf = b"%PDF-1.4\nfixture reusable paper\n%%EOF\n"
+            paper_record = {
+                "paper_id": paper_id,
+                "project_id": inspect_project(source).project.id,
+                "created_at": "2026-10-31T12:00:00+00:00",
+                "snapshot_sha256": "a" * 64,
+                "validation_warnings": [],
+                "generation": {"provider_calls": 1},
+                "draft": {"title": "Reusable fixture paper"},
+                "tex_source": r"\\documentclass{article}\\begin{document}Evidence.\\end{document}",
+                "pdf_sha256": hashlib.sha256(paper_pdf).hexdigest(),
+                "pdf_size_bytes": len(paper_pdf),
+            }
+            paper_dir = source / "artifacts" / "papers"
+            paper_dir.mkdir(parents=True)
+            (paper_dir / f"{paper_id}.json").write_text(json.dumps(paper_record))
+            (paper_dir / f"{paper_id}.pdf").write_bytes(paper_pdf)
             source_before = snapshot_tree(source)
+            complete_bundle = project_bundle.encode(source)
+            complete_file = root / "complete-project.json"
+            complete_file.write_bytes(complete_bundle)
+            samples.make_sample(complete_file, "t30-paper")
+            paper_copy = samples.open_sample_project("t30-paper")
+            assert papers.paper_tex(paper_copy.path, paper_id) == paper_record["tex_source"]
+            assert papers.get_pdf(paper_copy.path, paper_id) == paper_pdf
+            copied_paper = papers.get_paper(paper_copy.path, paper_id)
+            assert copied_paper["project_id"] == paper_copy.project.id
+            assert copied_paper["pdf_sha256"] == paper_record["pdf_sha256"]
             export = export_project_view(str(source))
             export_file = root / "exported-project.json"
             export_file.write_text(json.dumps(export, ensure_ascii=False), encoding="utf-8")
@@ -222,6 +251,109 @@ async def main() -> None:
                 assert secret not in raw_sample and secret not in sidecar
             assert "$SIGMA_SAMPLE_PROJECT_PATH" not in raw_sample
             assert samples.sample_projects()["projects"][0]["id"] == "t30-exported"
+            shutil.copytree(Path("samples/ai-agent-reliability"), catalog / "ai-agent-reliability")
+            reliability = samples.open_sample_project("ai-agent-reliability")
+            reliability_limits = research_sessions.get_limits(reliability.path)
+            assert reliability_limits["research_rounds"] == 3
+            assert reliability_limits["model_calls"] >= 18
+            assert reliability_limits["session_duration_minutes"] == 60
+            assert len(reliability.project.active_order) == 3
+            reliability_ids = list(reliability.project.active_order)
+            reliable_calls = []
+            sample_credential = {
+                "identity": "sample-fixture-member",
+                "mode": "api_key",
+                "token": "deterministic-sample-fixture",
+                "status": "connected",
+            }
+            sample_config = {
+                "available": True,
+                "model": reliability.project.ai_model,
+                "reasoning_effort": reliability.project.reasoning_effort,
+            }
+
+            async def reliability_handler(request):
+                payload = json.loads(request.content)
+                context = json.loads(payload["input"])
+                role = payload["text"]["format"]["name"]
+                cycle = context["cycle"]
+                reliable_calls.append((context["strategy"]["id"], cycle, role))
+                result = (
+                    investigation(cycle)
+                    if role == "research_investigator"
+                    else skeptic(
+                        cycle,
+                        "stop" if cycle == 3 else "continue",
+                        "no_progress" if cycle == 3 else "recoverable_objection",
+                    )
+                )
+                return httpx.Response(200, json=provider_response(result))
+
+            with (
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=sample_credential)
+                ),
+                patch.object(
+                    research_sessions, "configuration", new=AsyncMock(return_value=sample_config)
+                ),
+                patch(
+                    "sigma.research_sessions.httpx.AsyncClient",
+                    side_effect=lambda **kwargs: REAL_CLIENT(
+                        transport=httpx.MockTransport(reliability_handler), **kwargs
+                    ),
+                ),
+            ):
+                started_reliability = await research_sessions.start_session(
+                    reliability.path,
+                    reliability_ids[0],
+                    str(uuid4()),
+                    reliability.project.id,
+                    sample_credential["identity"],
+                    expected_limits=reliability_limits,
+                    strategy_ids=reliability_ids,
+                )
+                finished_reliability = await wait_for(reliability.path, started_reliability["id"])
+            assert finished_reliability["calls_used"] == len(reliable_calls) == 18
+            assert finished_reliability["cycle_limit"] == 3
+            assert finished_reliability["status"] == "ended"
+            assert {(strategy_id, cycle, role) for strategy_id, cycle, role in reliable_calls} == {
+                (strategy_id, cycle, role)
+                for strategy_id in reliability_ids
+                for cycle in (1, 2, 3)
+                for role in ("research_investigator", "research_skeptic")
+            }
+            limits_12 = research_sessions.save_limits(
+                reliability.path,
+                {**reliability_limits, "model_calls": 12},
+            )
+            reliable_calls.clear()
+            with (
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=sample_credential)
+                ),
+                patch.object(
+                    research_sessions, "configuration", new=AsyncMock(return_value=sample_config)
+                ),
+                patch(
+                    "sigma.research_sessions.httpx.AsyncClient",
+                    side_effect=lambda **kwargs: REAL_CLIENT(
+                        transport=httpx.MockTransport(reliability_handler), **kwargs
+                    ),
+                ),
+            ):
+                started_12 = await research_sessions.start_session(
+                    reliability.path,
+                    reliability_ids[0],
+                    str(uuid4()),
+                    reliability.project.id,
+                    sample_credential["identity"],
+                    expected_limits=limits_12,
+                    strategy_ids=reliability_ids,
+                )
+                finished_12 = await wait_for(reliability.path, started_12["id"])
+            assert finished_12["calls_used"] == len(reliable_calls) == 12
+            assert len(finished_12["artifacts"]) >= 6
+            assert finished_12["termination_reason_code"] == "turn_limit_reached"
             rejects(lambda: samples.make_sample(export_file, "../escape"), "Sample name")
             rejects(lambda: samples.make_sample(export_file, "t30-exported"), "already exists")
             invalid_export = root / "invalid.json"
@@ -235,7 +367,7 @@ async def main() -> None:
 
             opened = samples.open_sample_project("t30-exported")
             assert opened.project.id != export["project"]["id"]
-            assert opened.project.title.endswith("v1")
+            assert opened.project.title.endswith("v2")
             assert len(opened.project.strategies) == 2
             copied_sessions = research_sessions.list_sessions(opened.path)
             assert len(copied_sessions) == 2

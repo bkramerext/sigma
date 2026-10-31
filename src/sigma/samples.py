@@ -1,5 +1,6 @@
 """Discover shipped sample projects and create independent working projects."""
 
+import hashlib
 import json
 import os
 import re
@@ -25,6 +26,8 @@ from sigma.projects import (
 
 SAMPLES = ROOT / "samples"
 SAMPLE_EVIDENCE = "sample-evidence.json"
+SAMPLE_LIMITS = "limits.json"
+SAMPLE_PAPERS = "sample-papers"
 MAX_EXPORT_BYTES = 32 * 1024 * 1024
 MAX_SAMPLE_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _SAMPLE_PROJECT_ID = "$SIGMA_SAMPLE_PROJECT_ID"
@@ -156,7 +159,111 @@ def _sample_evidence(identifier: str) -> dict[str, Any]:
     return value
 
 
-def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+def _sample_limits(identifier: str) -> dict[str, Any] | None:
+    """Load optional, validated limits for a shipped sample template."""
+    match = next(((name, path) for name, path in _projects() if name == identifier), None)
+    if match is None:
+        raise ProjectError("Sample project was not found.")
+    path = match[1].parent / SAMPLE_LIMITS
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4096:
+        raise ProjectError("Sample limits are unsafe or exceed their size limit.")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        from sigma.research_sessions import DEFAULT_LIMITS, _validate_limits
+
+        if not isinstance(value, dict) or not set(value) <= set(DEFAULT_LIMITS):
+            raise ValueError("Invalid sample limits")
+        return _validate_limits(value)
+    except (OSError, ValueError, TypeError) as exc:
+        raise ProjectError("Sample limits are invalid.") from exc
+
+
+def _sample_papers(identifier: str) -> dict[str, tuple[dict[str, Any], bytes]]:
+    directory = SAMPLES / identifier / SAMPLE_PAPERS
+    if not directory.exists() and not directory.is_symlink():
+        return {}
+    if directory.is_symlink() or not directory.is_dir():
+        raise ProjectError("Sample paper storage is unsafe.")
+    entries = list(directory.iterdir())
+    if any(item.is_symlink() or not item.is_file() for item in entries):
+        raise ProjectError("Sample paper storage is unsafe.")
+    names = {item.name for item in entries}
+    json_ids = {item.stem for item in entries if item.suffix == ".json"}
+    if (
+        len(json_ids) > 50
+        or names != {f"{paper_id}{suffix}" for paper_id in json_ids for suffix in (".json", ".pdf")}
+        or sum(item.stat().st_size for item in entries) > MAX_EXPORT_BYTES
+    ):
+        raise ProjectError("Sample paper files are incomplete or exceed their storage bounds.")
+    papers: dict[str, tuple[dict[str, Any], bytes]] = {}
+    for metadata_path in sorted(directory.glob("*.json")):
+        paper_id = metadata_path.stem
+        pdf_path = directory / f"{paper_id}.pdf"
+        if (
+            not re.fullmatch(r"[0-9a-f]{32}", paper_id)
+            or metadata_path.is_symlink()
+            or not metadata_path.is_file()
+            or metadata_path.stat().st_size > 12 * 1024 * 1024
+            or pdf_path.is_symlink()
+            or not pdf_path.is_file()
+            or pdf_path.stat().st_size > 12 * 1024 * 1024
+        ):
+            raise ProjectError("Sample paper metadata or PDF is unsafe.")
+        try:
+            record = json.loads(metadata_path.read_text(encoding="utf-8"))
+            pdf = pdf_path.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ProjectError("Sample paper is unreadable.") from exc
+        if (
+            not isinstance(record, dict)
+            or record.get("paper_id") != paper_id
+            or record.get("project_id") != _SAMPLE_PROJECT_ID
+            or not isinstance(record.get("tex_source"), str)
+            or not pdf.startswith(b"%PDF-")
+            or record.get("pdf_size_bytes") != len(pdf)
+            or record.get("pdf_sha256") != hashlib.sha256(pdf).hexdigest()
+        ):
+            raise ProjectError("Sample paper provenance is invalid.")
+        papers[paper_id] = (record, pdf)
+    return papers
+
+
+def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any], dict[str, bytes]]:
+    paper_members: dict[str, bytes] = {}
+    if isinstance(value, dict) and value.get("format") == "sigma.project.bundle":
+        from sigma.project_bundle import BundleError
+        from sigma.project_bundle import _decode as _decode_bundle
+
+        try:
+            members = _decode_bundle(value)
+            project_document = json.loads(members["project.json"])
+            sessions = [
+                json.loads(contents)
+                for name, contents in members.items()
+                if name.startswith("research-sessions/")
+                and name.endswith(".json")
+                and name not in {"research-sessions/limits.json", "research-sessions/sequence.json"}
+            ]
+            runs = [
+                json.loads(contents)
+                for name, contents in members.items()
+                if name.startswith("agentic-runs/") and name.endswith(".json")
+            ]
+        except (BundleError, KeyError, ValueError, UnicodeDecodeError) as exc:
+            raise ProjectError("Expected a valid complete SIGMA project bundle.") from exc
+        value = {
+            "export_version": 2,
+            "project": project_document,
+            "agentic_runs": runs,
+            "research_sessions": sessions,
+        }
+        paper_members = {
+            name: contents
+            for name, contents in members.items()
+            if name.startswith("artifacts/papers/")
+        }
     if isinstance(value, dict) and value.get("continuations"):
         raise ProjectError(
             "Sample conversion of continuation approvals is not supported; preserve the Project Audit JSON and working project to retain lineage."
@@ -261,7 +368,52 @@ def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         "agentic_runs": clean_runs,
         "research_sessions": clean_sessions,
     }
-    return clean_project, evidence
+    clean_papers: dict[str, bytes] = {}
+    if paper_members:
+        identifiers = {
+            name.removeprefix("artifacts/papers/").removesuffix(".json")
+            for name in paper_members
+            if name.endswith(".json")
+        }
+        if len(identifiers) > 50:
+            raise ProjectError("Exported papers exceed the existing per-project retention count.")
+        expected_members = {
+            f"artifacts/papers/{identifier}{suffix}"
+            for identifier in identifiers
+            for suffix in (".json", ".pdf")
+        }
+        if set(paper_members) != expected_members:
+            raise ProjectError("Exported paper files are incomplete or have unsupported names.")
+        for identifier in identifiers:
+            if not re.fullmatch(r"[0-9a-f]{32}", identifier):
+                raise ProjectError("Exported paper has an invalid identifier.")
+            json_name = f"artifacts/papers/{identifier}.json"
+            pdf_name = f"artifacts/papers/{identifier}.pdf"
+            if json_name not in paper_members or pdf_name not in paper_members:
+                raise ProjectError("Exported paper is missing its metadata or PDF file.")
+            if len(paper_members[json_name]) + len(paper_members[pdf_name]) > 12 * 1024 * 1024:
+                raise ProjectError("Exported paper exceeds its safe storage limit.")
+            try:
+                paper = json.loads(paper_members[json_name])
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise ProjectError("Exported paper metadata is unreadable.") from exc
+            pdf = paper_members[pdf_name]
+            if (
+                not isinstance(paper, dict)
+                or paper.get("paper_id") != identifier
+                or paper.get("project_id") != source_id
+                or not isinstance(paper.get("tex_source"), str)
+                or not pdf.startswith(b"%PDF-")
+                or paper.get("pdf_size_bytes") != len(pdf)
+                or paper.get("pdf_sha256") != hashlib.sha256(pdf).hexdigest()
+            ):
+                raise ProjectError("Exported paper identity, TeX, or PDF provenance is invalid.")
+            clean_paper = _sanitize(paper, source_id)
+            clean_papers[f"{identifier}.json"] = (
+                json.dumps(clean_paper, ensure_ascii=False, separators=(",", ":")) + "\n"
+            ).encode("utf-8")
+            clean_papers[f"{identifier}.pdf"] = pdf
+    return clean_project, evidence, clean_papers
 
 
 def make_sample(export_file: str | Path, name: str) -> Path:
@@ -300,13 +452,15 @@ def make_sample(export_file: str | Path, name: str) -> Path:
     except (OSError, ValueError, UnicodeError) as exc:
         raise ProjectError("Export file is unreadable or is not valid UTF-8 JSON.") from exc
     try:
-        project, evidence = _validate_export(exported)
+        project, evidence, papers = _validate_export(exported)
     except RecursionError as exc:
         raise ProjectError("Export structure is too deeply nested to sanitize safely.") from exc
     project_bytes = (json.dumps(project, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     evidence_bytes = (json.dumps(evidence, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     if len(evidence_bytes) > MAX_EXPORT_BYTES:
         raise ProjectError("Sanitized sample evidence exceeds the 32 MB storage limit.")
+    if sum(map(len, papers.values())) > MAX_EXPORT_BYTES:
+        raise ProjectError("Sanitized sample papers exceed the 32 MB storage limit.")
     destination = SAMPLES / name
     try:
         destination.mkdir(mode=0o755)
@@ -322,6 +476,16 @@ def make_sample(export_file: str | Path, name: str) -> Path:
                 os.link(staged, destination / filename)
             finally:
                 staged.unlink(missing_ok=True)
+        if papers:
+            paper_directory = destination / SAMPLE_PAPERS
+            paper_directory.mkdir(mode=0o755)
+            for filename, contents in papers.items():
+                staged = _stage(paper_directory, contents)
+                try:
+                    os.chmod(staged, 0o644)
+                    os.link(staged, paper_directory / filename)
+                finally:
+                    staged.unlink(missing_ok=True)
         return destination
     except OSError as exc:
         for filename in (STATE, SAMPLE_EVIDENCE):
@@ -356,14 +520,19 @@ def _rebind_history(
     return value
 
 
-def _install_sample_evidence(destination: Path, project_id: str, evidence: dict[str, Any]) -> None:
+def _install_sample_evidence(
+    destination: Path,
+    project_id: str,
+    evidence: dict[str, Any],
+    session_ids: dict[str, str] | None = None,
+) -> None:
     from sigma import agentic_evidence, research_sessions
 
     canonical_path = str(destination.resolve())
     # A sample's saved session IDs are template data. Each copy needs its own
     # IDs because the hosted research ledger is shared across workspaces and
     # enforces one owner/project for each session ID.
-    session_ids = {
+    session_ids = session_ids or {
         raw["id"]: str(uuid4())
         for raw in evidence["research_sessions"]
         if isinstance(raw, dict) and isinstance(raw.get("id"), str)
@@ -391,6 +560,18 @@ def _discard_partial_copy(destination: Path) -> None:
             directory.rmdir()
         except OSError:
             pass
+    for directory_name in ("papers", "artifacts/papers"):
+        directory = destination / directory_name
+        if directory.is_symlink() or not directory.is_dir():
+            continue
+        for item in directory.iterdir():
+            if not item.is_symlink() and item.is_file():
+                item.unlink(missing_ok=True)
+        try:
+            directory.rmdir()
+            (destination / "artifacts").rmdir()
+        except OSError:
+            pass
     for filename in (STATE, ".agentic-runs.lock"):
         item = destination / filename
         if not item.is_symlink() and item.is_file():
@@ -414,6 +595,8 @@ def open_sample_project(identifier: str) -> ProjectView:
     """Create an independent working project named 'Title v1', etc."""
     raw, _ = _load(identifier)
     evidence = _sample_evidence(identifier)
+    limits = _sample_limits(identifier)
+    papers = _sample_papers(identifier)
     root = projects_root()
     if root.is_relative_to(SAMPLES):
         raise ProjectError("Sample projects cannot be installed inside the source catalog.")
@@ -456,7 +639,36 @@ def open_sample_project(identifier: str) -> ProjectView:
             staged = _stage(destination, (json.dumps(copied, indent=2) + "\n").encode("utf-8"))
             os.link(staged, destination / STATE)
             view = inspect_project(destination)
-            _install_sample_evidence(destination, view.project.id, evidence)
+            session_ids = {
+                raw["id"]: str(uuid4())
+                for raw in evidence["research_sessions"]
+                if isinstance(raw, dict) and isinstance(raw.get("id"), str)
+            }
+            if limits is not None:
+                from sigma.research_sessions import save_limits
+
+                save_limits(str(destination), limits)
+            if papers:
+                paper_directory = destination / "papers"
+                paper_directory.mkdir(parents=True, mode=0o700)
+                for paper_id, (sample_record, pdf) in papers.items():
+                    record = _rebind_history(
+                        sample_record,
+                        view.project.id,
+                        str(destination.resolve()),
+                        session_ids,
+                    )
+                    metadata = (
+                        json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+                    ).encode("utf-8")
+                    for suffix, contents in ((".json", metadata), (".pdf", pdf)):
+                        staged_paper = _stage(paper_directory, contents)
+                        try:
+                            os.link(staged_paper, paper_directory / f"{paper_id}{suffix}")
+                        finally:
+                            staged_paper.unlink(missing_ok=True)
+            view = inspect_project(destination)
+            _install_sample_evidence(destination, view.project.id, evidence, session_ids)
             view = inspect_project(destination)
         except Exception as exc:
             _discard_partial_copy(destination)

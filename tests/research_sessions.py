@@ -393,7 +393,7 @@ async def test_expired_deadline_preserves_sibling_partial_artifacts(path: Path):
         if role == "research_skeptic":
             record = research_sessions._read(str(path), holder["id"])
             record["configured_duration_limit_minutes"] = 60
-            record["duration_limit_minutes"] = 15
+            record["duration_limit_minutes"] = 60
             record["deadline_at"] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
             research_sessions._save(str(path), record)
             output = skeptic(1, "stop", "no_progress")
@@ -438,8 +438,7 @@ async def test_expired_deadline_preserves_sibling_partial_artifacts(path: Path):
     assert branches[saved_strategy_id]["status"] == "ended"
     assert branches[second.id if saved_strategy_id == first.id else first.id]["status"] == "ended"
     assert finished["termination_reason_code"] == "time_limit_reached"
-    assert "effective time ceiling of 15 minutes" in finished["message"]
-    assert "project setting: 60 minutes" in finished["message"]
+    assert "effective time ceiling of 60 minutes" in finished["message"]
     assert "1 finding was preserved" in finished["message"]
     assert "incomplete" in finished["message"]
 
@@ -1310,7 +1309,7 @@ async def test_three_cycles_and_idempotency(path: Path):
     async def handler(request):
         payload = json.loads(request.content)
         assert payload["model"] == MODEL and payload["store"] is False
-        assert payload["max_output_tokens"] == 4000
+        assert payload["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}
         if payload["text"]["format"]["name"] == "research_skeptic":
@@ -3602,7 +3601,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
 
     async def handler(request):
         payload = json.loads(request.content)
-        assert payload["max_output_tokens"] == 700
+        assert payload["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -9258,7 +9257,7 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
         assert "$0.0605" in message
         assert "$0.0500" in message
         assert "No provider call was dispatched" in message
-        assert "Project Settings" in message
+        assert "session cost allowance" in message
     else:
         raise AssertionError("A $0.05 session cap funded a $0.0605 provider reserve")
     assert ledger["calls"] == []

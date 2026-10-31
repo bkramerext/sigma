@@ -45,6 +45,16 @@ class Increment22BudgetTests(unittest.TestCase):
         self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 500)
         self.assertEqual(totals(budget)["cost_usd_used_or_reserved"], 0.0225)
 
+    def test_completed_output_above_estimate_is_settled_and_blocks_future_spend(self):
+        budget = ledger(calls=4, output_tokens=4096, cost=0.08)
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x")
+        settle_after_response(budget, call_id="call-1", input_tokens=100, output_tokens=7000)
+        self.assertEqual(budget["calls"][0]["status"], "settled")
+        self.assertEqual(budget["calls"][0]["output_tokens"], 7000)
+        self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 7000)
+        with self.assertRaisesRegex(BudgetExceeded, "cost limit"):
+            reserve_before_dispatch(budget, call_id="call-2", request_body=b"x")
+
     def test_input_cap_is_checked_before_any_dispatch(self):
         budget = ledger(input_tokens=9191)
         before = totals(budget)
