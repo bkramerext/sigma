@@ -479,6 +479,13 @@ def main() -> None:
                     raise AssertionError("Invalid session record was saved")
             assert _read(created.path, session_id) == record
             try:
+                _save(created.path, dict(record, backend_build_commit="b" * 40))
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Saved session build provenance was overwritten")
+            assert _read(created.path, session_id) == record
+            try:
                 _save(created.path, dict(record, project_path=str(root / "other.json")))
             except ProjectError:
                 pass
