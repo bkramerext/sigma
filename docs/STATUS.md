@@ -1,3 +1,11 @@
+## Gray — AI Agent Reliability and Evaluation sample (2026-10-31)
+
+Added `samples/ai-agent-reliability/project.json` as a new schema-v8 sample, based on current `main` at `b2d1c871`. No existing sample or project data was modified. The project has the requested title, a substantial 4,138-character problem description, and three complementary research strategies covering reliability measurement, failure propagation and recovery, and controlled evaluation of architectural interventions. All three strategies are enabled and present in active order.
+
+Verification on branch `gray/ai-agent-reliability`: `uv run --locked --no-sync python tests/test_sample_copies.py` passed (9 tests), the JSON/schema-content assertions passed, and the real Chrome `browser_checks/guest_samples.py` workflow passed. The browser workflow verifies the sample catalog and guest open flow using its established sample fixture; direct content checks confirmed this project's title, question length, strategy count, and active ordering. `./sigma test` passed all configured steps after installing the locked frontend dependencies with `npm --prefix frontend ci --no-audit --no-fund`; this included Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production build. The optional graph-present sandbox case skipped because the local sandbox image is unavailable. The build emitted the existing large-chunk advisory. No live or paid provider calls were made.
+
+The handoff is in `messages/ai_agent_reliability_gray.txt`. No deployment or merge was performed.
+
 ## PR #395 — Issue #401 publication-quality correction and bounded PDF checks (2026-10-31)
 
 The renderer now preserves validated inline math in table captions, headers, and
