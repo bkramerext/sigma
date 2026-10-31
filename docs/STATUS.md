@@ -77,17 +77,21 @@ distinguish evidence-led early completion, incomplete failure, and other stop
 conditions while reporting preserved findings. The UI names effective and
 configured time ceilings separately.
 
-Adversarial coverage includes retry classification/exhaustion, timeout retry
-accounting, ambiguous spend holds, 60-to-15 clamping, 7/30 incomplete outcomes,
-and legitimate evidence-led early completion. `./sigma test` passed after
-formatting correction; Pyright, Ruff, frontend typecheck/build passed within
-the suite. The optional graph-present sandbox check skipped because its local
-image is unavailable. The isolated real-Chrome paused-session check passed
-desktop/mobile reload, reopen, and guarded resume; terminal outcome fixtures
-also verify truthful early/incomplete summaries and duration disclosure. No
-scheduler rewrite was needed. Remaining limitation: only one automatic retry
-is made per transient provider failure, and ambiguous calls are deliberately
-left for explicit recovery rather than risking duplicate provider work.
+Adversarial scheduler coverage includes transient retry success and exhaustion,
+failure on the final available turn with both the provider failure and turn
+exhaustion preserved in the saved session message, deadline expiry with another
+strategy's finding retained, rate-limit Retry-After/minimum backoff, and a
+genuine evidence-backed early stop. Budget/round exhaustion uses incomplete
+termination wording and a termination event; no budget path labels itself
+Completed. `./sigma test` passed in full, including Pyright, Ruff, frontend
+typecheck, and production build. The optional graph-present sandbox check
+skipped because its local image is unavailable. The isolated real-Chrome check
+passed reload/reopen/guarded resume, desktop/mobile layout, early/incomplete
+outcomes, and the effective 15-minute versus configured 60-minute disclosure
+for both start and expired-time result surfaces. No scheduler rewrite was
+needed. Remaining limitation: only one automatic retry is made per transient
+provider failure; ambiguous calls are deliberately left for explicit recovery
+to avoid duplicating provider work.
 
 ## Production About build SHA correction (2026-10-30)
 

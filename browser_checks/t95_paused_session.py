@@ -168,6 +168,33 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
         json.dumps(interrupted, separators=(",", ":")), encoding="utf-8"
     )
 
+    timed = json.loads(json.dumps(session))
+    timed_id = str(uuid4())
+    timed.update(
+        {
+            "id": timed_id,
+            "session_number": 11,
+            "strategy_title": "Time ceiling reached",
+            "status": "ended",
+            "calls_used": 5,
+            "call_limit": 30,
+            "cycle": 2,
+            "cycle_limit": 3,
+            "configured_duration_limit_minutes": 60,
+            "duration_limit_minutes": 15,
+            "termination_reason_code": "time_limit_reached",
+            "message": (
+                "Research stopped after 5 of 30 available turns (round 2 of 3). The effective time ceiling "
+                "of 15 minutes (project setting: 60 minutes) stopped further research. 2 findings were "
+                "preserved; research is incomplete."
+            ),
+            "current_action": "Ended · time ceiling",
+        }
+    )
+    (sessions_path / f"{timed_id}.json").write_text(
+        json.dumps(timed, separators=(",", ":")), encoding="utf-8"
+    )
+
     api_port, ui_port = free_port(), free_port()
     while api_port == ui_port:
         ui_port = free_port()
@@ -264,6 +291,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                 expect(variant.locator(".stopped-session-guidance")).to_contain_text(guidance)
             completed_row = page.locator(f'li[data-session-id="{early_id}"]')
             interrupted_row = page.locator(f'li[data-session-id="{interrupted_id}"]')
+            timed_row = page.locator(f'li[data-session-id="{timed_id}"]')
             completed_row.locator(".session-row-disclosure").click()
             completed_summary = completed_row.get_by_role(
                 "complementary", name="Session status and next steps"
@@ -291,6 +319,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
                     has_text="Effective time ceiling"
                 )
             ).to_contain_text("15 minutes (project setting: 60 minutes)")
+            timed_row.locator(".session-row-disclosure").click()
+            timed_summary = timed_row.get_by_role(
+                "complementary", name="Session status and next steps"
+            )
+            expect(timed_summary).to_contain_text("effective time ceiling")
+            expect(timed_summary).to_contain_text("15 minutes (project setting: 60 minutes)")
+            expect(timed_summary).to_contain_text("2 findings were preserved")
+            expect(timed_summary).to_contain_text("research is incomplete")
             for width in (1440, 390):
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

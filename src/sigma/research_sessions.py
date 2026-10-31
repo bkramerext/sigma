@@ -2546,6 +2546,8 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
             fields["provider_error_code"] = exc.code
         if exc.stream_event is not None:
             fields["provider_stream_event"] = exc.stream_event
+        if exc.retry_after_seconds is not None:
+            fields["retry_after_seconds"] = exc.retry_after_seconds
         return fields
     message = str(exc)
     if "8 MB safety bound" in message:
@@ -2567,6 +2569,9 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
         else "provider_error"
     }
     result["provider_http_status"] = status
+    retry_after_seconds = getattr(exc, "retry_after_seconds", None)
+    if isinstance(retry_after_seconds, (int, float)) and 0 <= retry_after_seconds <= 3600:
+        result["retry_after_seconds"] = float(retry_after_seconds)
     return result
 
 
@@ -4965,20 +4970,29 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record.pop("stopped_at", None)
     if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
         record["status"] = "ended"
+        record["current_action"] = "Ended · time ceiling"
+        record["termination_reason_code"] = "time_limit_reached"
         record["message"] = (
-            "Configured session duration reached. Existing notes are preserved and remain unverified."
+            f"The effective session time ceiling of {record.get('duration_limit_minutes', 'configured')} minutes was reached. "
+            + (
+                f"The project setting is {record['configured_duration_limit_minutes']} minutes. "
+                if record.get("configured_duration_limit_minutes")
+                != record.get("duration_limit_minutes")
+                else ""
+            )
+            + f"{len(record.get('artifacts', []))} saved findings were preserved; research is incomplete."
         )
         for branch in record.get("strategy_runs", []):
             if branch.get("status") in {"queued", "running", "paused", "stopped"}:
                 branch["status"] = "ended"
-                branch["current_action"] = "Duration limit"
+                branch["current_action"] = "Ended · time ceiling"
                 branch["reason"] = record["message"]
         if record.get("strategy_runs"):
             record["outcome"] = _outcome(record)
             record["strategy_assessments"] = _strategy_assessments(record)
             record["portfolio_decision"] = _portfolio_decision(record)
         record["updated_at"] = _now()
-        _event(record, "portfolio.completed", record["message"])
+        _event(record, "portfolio.terminated", record["message"])
         _save(record["project_path"], record)
         return _public(record)
     view, guard = _snapshot(record["project_path"])
@@ -5016,8 +5030,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         raise ProjectError(record["message"])
     if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
         record["status"] = "ended"
+        record["current_action"] = "Ended · turn limit"
+        record["termination_reason_code"] = "turn_limit_reached"
         record["message"] = (
-            "Call limit reached; no further provider calls were made. Results remain unverified research notes."
+            f"The shared turn limit stopped research after {record['calls_used']} of {record.get('call_limit', CALL_LIMIT)} available turns. "
+            f"{len(record.get('artifacts', []))} saved findings were preserved; research is incomplete."
         )
         for branch in record.get("strategy_runs", []):
             if branch.get("status") in {"queued", "running", "paused", "stopped"}:
@@ -5029,7 +5046,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record["strategy_assessments"] = _strategy_assessments(record)
             record["portfolio_decision"] = _portfolio_decision(record)
         record["updated_at"] = _now()
-        _event(record, "portfolio.completed", record["message"])
+        _event(record, "portfolio.terminated", record["message"])
         _save(record["project_path"], record)
         return _public(record)
     async with state_lock, _manager_lock:
@@ -5399,13 +5416,20 @@ async def _call_provider(
                         "elapsed_seconds": round(time.monotonic() - started, 3),
                     },
                 )
-            failure(response.status_code, error_data, credential["mode"], "research")
+            failure(
+                response.status_code,
+                error_data,
+                credential["mode"],
+                "research",
+                retry_after=response.headers.get("retry-after"),
+            )
         if credential["mode"] == "chatgpt":
             raw = await completed(
                 httpx.Response(response.status_code, headers=response.headers, content=body),
                 "research",
                 max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
                 overflow_message="Research provider stream exceeded the 8 MB safety bound",
+                retry_after=response.headers.get("retry-after"),
             )
         else:
             try:
@@ -8046,7 +8070,20 @@ def _commit_portfolio_review(
         else decision.replace("_", " ").capitalize()
     )
     branch["status"] = "running" if decision in {"continue", "revise"} else "ended"
-    branch["current_action"] = "Investigator" if branch["status"] == "running" else "Completed"
+    branch["current_action"] = (
+        "Investigator"
+        if branch["status"] == "running"
+        else {
+            "stop_productive_conclusion": "Research conclusion · unverified",
+            "stop_decisive_counterexample": "Ended · counterexample reported",
+            "stop_no_progress": "Ended · no next question",
+            "stop_budget_exhausted": (
+                "Ended · turn limit"
+                if int(record.get("calls_used", 0)) >= int(record.get("call_limit", CALL_LIMIT))
+                else "Ended · round limit"
+            ),
+        }.get(decision, "Ended · strategy stop")
+    )
     branch.pop("active_peer_handoffs", None)
     _retract_peer_handoffs(record, branch, artifact)
     _queue_peer_handoffs(record, branch, artifact)
@@ -8194,7 +8231,8 @@ async def _portfolio_role_call(
             if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
                 branch["status"] = "ended"
                 branch["reason"] = "Session duration limit reached before a call was dispatched."
-                branch["current_action"] = "Budget exhausted"
+                branch["current_action"] = "Time limit"
+                branch["termination_reason_code"] = "time_limit_reached"
                 _save(path, record)
                 return False
             if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
@@ -8229,12 +8267,13 @@ async def _portfolio_role_call(
                     branch["reason"] = str(exc)
                     branch["current_action"] = "Budget limit"
                     record["status"] = "ended"
-                    record["current_action"] = "Completed · budget limit"
+                    record["current_action"] = "Ended · hard budget limit"
+                    record["termination_reason_code"] = "budget_limit_reached"
                     record["terminal_reason"] = str(exc)
                     record["message"] = (
                         f"Session stopped at round {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
                         f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} agent turns "
-                        f"because the hard token/cost budget refused another provider call. {exc}"
+                        f"because the hard token/cost budget refused another provider call. Research is incomplete. {exc}"
                         + (
                             " No Skeptic agent turn was dispatched for this round."
                             if role == "skeptic"
@@ -8774,6 +8813,17 @@ async def _portfolio_role_call(
                         and not response_received
                     )
                 )
+                if retry_kind is not None and not retry_allowed:
+                    if prior_transient_retries >= MAX_TRANSIENT_AUTO_RETRIES:
+                        branch["recovery_attempts_exhausted"] = True
+                    elif remaining_turns < (2 if role == "investigator" else 1):
+                        branch["retry_blocked_reason"] = (
+                            "The remaining turn budget did not allow another safe recovery attempt."
+                        )
+                    elif _call_timeout_seconds(record) < 10:
+                        branch["retry_blocked_reason"] = (
+                            "The remaining session time was too short for another provider attempt."
+                        )
                 retry_label = (
                     retry_kind.replace("_", " ") if retry_kind else "temporary provider failure"
                 )
@@ -9289,6 +9339,13 @@ def _affordable_portfolio_branches(
     return selected, next_cursor
 
 
+def _portfolio_retry_delay(step: dict[str, Any], attempt: int) -> float:
+    delay = min(0.25 * (2**attempt), 2.0)
+    if step.get("failure_kind") == "provider_rate_limited":
+        delay = max(5.0, float(step.get("retry_after_seconds") or 0.0))
+    return delay
+
+
 async def _portfolio_role_call_with_recovery(
     session_id: str,
     path: str,
@@ -9306,9 +9363,42 @@ async def _portfolio_role_call_with_recovery(
         )
         if result != "retry":
             return result
-        delay = min(0.25 * (2**attempt), 2.0)
         record = _read(path, session_id)
+        prior_attempt = next(
+            (
+                step
+                for step in reversed(record.get("steps", []))
+                if step.get("strategy_id") == strategy_id
+                and step.get("role") == role
+                and step.get("cycle") == cycle
+                and step.get("status") == "failed"
+            ),
+            {},
+        )
+        retry_kind = prior_attempt.get("failure_kind")
+        # Respect provider guidance when available; without it, give a
+        # rate-limited endpoint a short recovery window instead of burning
+        # another counted agent turn almost immediately.
+        delay = _portfolio_retry_delay(prior_attempt, attempt)
         if _call_timeout_seconds(record) <= delay + 2:
+            async with state_lock:
+                record = _read(path, session_id)
+                branch = next(
+                    item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
+                )
+                if branch.get("status") == "queued":
+                    branch["status"] = "failed"
+                    branch["current_action"] = "Failed · recovery window unavailable"
+                    branch["termination_reason_code"] = str(retry_kind or "provider_failure")
+                    branch["retry_blocked_reason"] = (
+                        "The remaining session time was shorter than the provider retry window."
+                    )
+                    branch["reason"] = (
+                        f"The {retry_kind or 'provider'} attempt remains recorded. "
+                        "The remaining session time was too short for a safe retry."
+                    )
+                    _event(record, "strategy.retry_window_unavailable", branch["reason"])
+                    _save(path, record)
             return False
         await asyncio.sleep(delay)
     async with state_lock:
@@ -9319,9 +9409,9 @@ async def _portfolio_role_call_with_recovery(
         if branch.get("status") == "queued":
             branch["status"] = "failed"
             branch["current_action"] = "Failed · recovery attempts exhausted"
-            branch["termination_reason_code"] = "retry_exhausted"
+            branch["recovery_attempts_exhausted"] = True
             branch["reason"] = (
-                "The bounded automatic recovery attempts were exhausted. "
+                "The bounded automatic retry was exhausted after the provider failure. "
                 "Recorded work is preserved; review provider usage before continuing."
             )
             _event(record, "strategy.recovery_exhausted", branch["reason"])
@@ -9335,8 +9425,24 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
     call_limit = int(record.get("call_limit", 0))
     cycle = int(record.get("cycle", 0))
     cycle_limit = int(record.get("cycle_limit", 0))
+    deadline = record.get("deadline_at")
+    time_exhausted = isinstance(deadline, str) and datetime.fromisoformat(deadline) <= datetime.now(
+        UTC
+    )
+    configured_minutes = record.get("configured_duration_limit_minutes")
+    effective_minutes = record.get("duration_limit_minutes")
+    time_reason = ""
+    if time_exhausted:
+        time_reason = f"The effective time ceiling of {effective_minutes} minutes"
+        if isinstance(configured_minutes, int) and configured_minutes != effective_minutes:
+            time_reason += f" (project setting: {configured_minutes} minutes)"
+        time_reason += " stopped further research."
+
     completed = [
-        branch for branch in runs if branch.get("last_decision") == "stop_productive_conclusion"
+        branch
+        for branch in runs
+        if branch.get("last_decision")
+        in {"stop_productive_conclusion", "stop_decisive_counterexample"}
     ]
     failed = [branch for branch in runs if branch.get("status") == "failed"]
     if completed and len(completed) == len(runs):
@@ -9370,6 +9476,7 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
                 "Findings remain unverified research results."
             ),
         )
+
     if failed:
         failure_labels = {
             "timeout": "provider response timed out",
@@ -9386,37 +9493,102 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
             "context_limit": "required research context exceeded its safe limit",
             "unsupported_context_reference": "strategy referenced evidence that was not supplied in its research context",
             "research_validation_failure": "research response failed an evidence requirement",
-            "retry_exhausted": "automatic recovery attempts were exhausted",
         }
-        reasons = ", ".join(
-            f"{item.get('strategy_title') or 'Strategy'}: "
-            f"{failure_labels.get(str(item.get('termination_reason_code')), 'strategy could not complete')}"
-            for item in failed
-        )
+        reasons = []
+        for branch in failed:
+            failure_text = failure_labels.get(
+                str(branch.get("termination_reason_code")), "strategy could not complete"
+            )
+            failed_attempts = sum(
+                step.get("strategy_id") == branch.get("strategy_id")
+                and step.get("cycle") == branch.get("cycle")
+                and step.get("failure_kind")
+                in {
+                    "timeout",
+                    "transport_interrupted",
+                    "provider_temporary",
+                    "provider_rate_limited",
+                    "stream_incomplete",
+                }
+                for step in record.get("steps", [])
+            )
+            if branch.get("recovery_attempts_exhausted") or failed_attempts > 1:
+                failure_text += " after one automatic retry"
+            reasons.append(f"{branch.get('strategy_title') or 'Strategy'}: {failure_text}")
+
         saved = sum(len(item.get("artifacts", [])) for item in runs)
+        recovery_reason = ""
+        if calls >= call_limit:
+            recovery_reason = " The failed attempt used the final available turn; no further agent turn remained for recovery."
+        else:
+            blocked = [
+                str(item["retry_blocked_reason"])
+                for item in failed
+                if item.get("retry_blocked_reason")
+            ]
+            if blocked:
+                recovery_reason = " " + "; ".join(blocked)
+        if time_exhausted:
+            recovery_reason += " " + time_reason
         return (
             "provider_or_strategy_failure",
             (
                 f"Research stopped early after {calls} of {call_limit} available turns "
-                f"(round {cycle} of {cycle_limit}). {reasons}; "
-                f"{saved} findings were preserved. Research is incomplete. Review the saved "
-                "attempts before resuming or starting new work."
+                f"(round {cycle} of {cycle_limit}). {', '.join(reasons)}; "
+                f"{saved} finding{'s were' if saved != 1 else ' was'} preserved. Research is incomplete. "
+                "Review the saved attempts before resuming or starting new work." + recovery_reason
             ),
         )
+
+    if time_exhausted:
+        saved = sum(len(item.get("artifacts", [])) for item in runs)
+        return (
+            "time_limit_reached",
+            (
+                f"Research stopped after {calls} of {call_limit} available turns "
+                f"(round {cycle} of {cycle_limit}). {time_reason} "
+                f"{saved} finding{'s were' if saved != 1 else ' was'} preserved; research is incomplete."
+            ),
+        )
+
+    budget_stopped = [
+        branch
+        for branch in runs
+        if branch.get("last_decision") == "stop_budget_exhausted"
+        or branch.get("current_action") == "Budget exhausted"
+    ]
+    if budget_stopped:
+        limit_kind = "turn" if calls >= call_limit else "round"
+        saved = sum(len(item.get("artifacts", [])) for item in runs)
+        why = (
+            "the shared turn limit was reached"
+            if calls >= call_limit
+            else "the remaining shared turns could not fund another complete Investigator/Skeptic pair"
+        )
+        return (
+            f"{limit_kind}_limit_reached",
+            (
+                f"Research stopped at the configured {limit_kind} limit after {calls} of "
+                f"{call_limit} available turns (round {cycle} of {cycle_limit}) because {why}. "
+                f"{saved} finding{'s were' if saved != 1 else ' was'} preserved; the overall research session is incomplete."
+            ),
+        )
+
     limited = any(
-        branch.get("current_action")
-        in {"Budget exhausted", "Cost limit", "Token limit", "Budget limit"}
+        branch.get("current_action") in {"Cost limit", "Budget limit", "Token limit"}
         for branch in runs
     )
     if limited:
+        saved = sum(len(item.get("artifacts", [])) for item in runs)
         return (
             "session_limit_reached",
             (
-                f"Research stopped at its remaining turn, time, or spending limit after "
-                f"{calls} of {call_limit} available turns (round {cycle} of {cycle_limit}). "
-                "Saved findings are preserved; strategies without a completed review remain incomplete."
+                f"Research stopped at a spending or token limit after {calls} of {call_limit} "
+                f"available turns (round {cycle} of {cycle_limit}). "
+                f"{saved} finding{'s were' if saved != 1 else ' was'} preserved; strategies without a completed review remain incomplete."
             ),
         )
+
     return (
         "strategies_terminal_without_research_completion",
         (
@@ -9589,13 +9761,21 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     )
                 if not record.get("terminal_reason"):
                     record["terminal_reason"] = record["message"]
+                if record.get("termination_reason_code") == "research_completed_early":
+                    record["current_action"] = "Completed · early research conclusion"
                 record["updated_at"] = _now()
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
                 record["portfolio_decision"] = _portfolio_decision(record)
                 if len(runs) == 1 and str(runs[0].get("last_decision", "")).startswith("stop_"):
                     record["terminal_reason"] = runs[0]["last_decision"]
-                _event(record, "portfolio.completed", record["message"])
+                _event(
+                    record,
+                    "portfolio.completed"
+                    if record.get("termination_reason_code") == "research_completed_early"
+                    else "portfolio.terminated",
+                    record["message"],
+                )
                 _save(path, record)
                 return
             selected, next_cursor = _affordable_portfolio_branches(
@@ -9606,26 +9786,24 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 for branch in active:
                     branch["status"] = "ended"
                     branch["current_action"] = "Budget exhausted"
+                    branch["termination_reason_code"] = "turn_limit_reached"
                     branch["reason"] = (
                         "Deferred: fewer than two shared turns remain for a complete Investigator/Skeptic pair."
                     )
                 record["status"] = "ended"
-                record["current_action"] = "Completed · budget exhausted"
-                record["message"] = (
-                    "The shared turn ceiling is exhausted for complete Investigator/Skeptic pairs. "
-                    + "Deferred branches: "
-                    + ", ".join(deferred)
-                    + ". "
-                    + "Saved findings and each branch's stopping reason are available in the Outcome."
+                record["current_action"] = "Ended · turn limit"
+                record["termination_reason_code"], record["message"] = _portfolio_termination(
+                    record, runs
                 )
+                if deferred:
+                    record["message"] += " Deferred strategies: " + ", ".join(deferred) + "."
                 record["terminal_reason"] = record["message"]
-                record["termination_reason_code"] = "turn_limit_reached"
                 record["cycle"] = max((branch["cycle"] for branch in runs), default=0)
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
                 record["portfolio_decision"] = _portfolio_decision(record)
                 record["updated_at"] = _now()
-                _event(record, "portfolio.completed", record["message"])
+                _event(record, "portfolio.terminated", record["message"])
                 _save(path, record)
                 return
             record["portfolio_cursor"] = next_cursor
@@ -10336,8 +10514,11 @@ async def _worker(session_id: str, path: str) -> None:
             _save(path, record)
             if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
                 record["status"] = "ended"
+                record["current_action"] = "Ended · turn limit"
+                record["termination_reason_code"] = "turn_limit_reached"
                 record["message"] = (
-                    "Configured model-call limit reached. Findings are unverified research notes."
+                    f"The configured turn limit stopped research after {record['calls_used']} of {record.get('call_limit', CALL_LIMIT)} available turns. "
+                    f"{len(record.get('artifacts', []))} findings were preserved; research is incomplete."
                 )
                 record["updated_at"] = _now()
                 _save(path, record)
@@ -10744,7 +10925,11 @@ async def _worker(session_id: str, path: str) -> None:
             record["current_question"] = next_question
             if decision.startswith("stop_") and decision != "stop_budget_exhausted":
                 record["status"] = "ended"
-                record["current_action"] = "Completed"
+                record["current_action"] = (
+                    "Completed · early research conclusion"
+                    if decision in {"stop_productive_conclusion", "stop_decisive_counterexample"}
+                    else "Ended · no next question"
+                )
                 record["message"] = {
                     "stop_decisive_counterexample": "The Skeptic reported a decisive counterexample; saved notes remain unverified.",
                     "stop_productive_conclusion": "The roles reported a useful conclusion; it is not independently verified.",
@@ -10754,9 +10939,16 @@ async def _worker(session_id: str, path: str) -> None:
                 "call_limit", CALL_LIMIT
             ):
                 record["status"] = "ended"
-                record["current_action"] = "Completed · budget exhausted"
+                record["current_action"] = "Ended · turn limit"
+                record["termination_reason_code"] = (
+                    "turn_limit_reached"
+                    if record["calls_used"] >= record.get("call_limit", CALL_LIMIT)
+                    else "round_limit_reached"
+                )
                 record["message"] = (
-                    "Configured research-round or model-call limit reached. Findings are unverified research notes."
+                    f"The configured {'turn' if record['calls_used'] >= record.get('call_limit', CALL_LIMIT) else 'round'} limit stopped research after "
+                    f"{record['calls_used']} of {record.get('call_limit', CALL_LIMIT)} available turns. "
+                    f"{len(record.get('artifacts', []))} findings were preserved; research is incomplete."
                 )
             else:
                 record["status"] = "running"

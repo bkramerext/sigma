@@ -1151,7 +1151,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits && effectiveDurationMinutes !== null ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${effectiveDurationMinutes} min time ceiling${effectiveDurationMinutes < limits.session_duration_minutes ? ` (project setting: ${limits.session_duration_minutes} min)` : ''}` : undefined,
+      confirmationSummary: limits && effectiveDurationMinutes !== null ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${effectiveDurationMinutes} min effective time ceiling${effectiveDurationMinutes < limits.session_duration_minutes ? ` (project setting: ${limits.session_duration_minutes} min)` : ''}` : undefined,
       // The backend atomically enforces each project's configured session limit.
       // A single active session must not unconditionally disable another Play.
       playDisabled: busy || !!readError || confirmStart || !eligible.length,
