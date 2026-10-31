@@ -544,9 +544,7 @@ def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str
         raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
 
 
-def _require_research_capacity(
-    db: sqlite3.Connection, owner: str, session_id: str
-) -> None:
+def _require_research_capacity(db: sqlite3.Connection, owner: str, session_id: str) -> None:
     """Reserve running capacity before publishing a session; no execution queue."""
     user_limit, global_limit, _, _ = _evaluation_queue_limits()
     states = "('queued','running','stopping')"
