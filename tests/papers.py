@@ -2735,6 +2735,146 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
         asyncio.run(check())
 
 
+
+def test_eight_research_sessions_overlap_two_paper_generators() -> None:
+    """Cross-feature smoke: 8 live mock research calls + 2 paper model calls."""
+    from contextvars import ContextVar
+    from uuid import uuid4
+
+    import research_sessions as research_fixture
+    from sigma import research_sessions
+    from sigma.projects import create_strategy
+
+    subject: ContextVar[str] = ContextVar("test-concurrency-subject", default="fixture")
+    research_ids: set[str] = set()
+    research_ready = asyncio.Event()
+    paper_ready = asyncio.Event()
+    release = asyncio.Event()
+    paper_count = 0
+
+    async def credentials():
+        return {
+            "identity": subject.get(),
+            "mode": "api_key",
+            "token": "local-fixture-only",
+            "status": "connected",
+        }
+
+    async def research_configuration(**_kwargs):
+        return {
+            "available": True,
+            "model": research_fixture.MODEL,
+            "reasoning_effort": "high",
+        }
+
+    async def paper_configuration(**_kwargs):
+        return {
+            "available": True,
+            "binding": subject.get(),
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+
+    async def research_provider(record, role, _context, timeout_seconds=None, step_id=None):
+        del timeout_seconds
+        assert isinstance(step_id, str)
+        if role == "investigator":
+            research_ids.add(record["id"])
+            if len(research_ids) == 8:
+                research_ready.set()
+            await release.wait()
+            return research_fixture.investigation(1), {
+                "input_tokens": 120, "output_tokens": 90
+            }
+        return research_fixture.skeptic(1, "stop"), {
+            "input_tokens": 120, "output_tokens": 90
+        }
+
+    async def paper_provider(context, *_args):
+        nonlocal paper_count
+        paper_count += 1
+        if paper_count == 2:
+            paper_ready.set()
+        await release.wait()
+        source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+        return draft(source), "fixture-model"
+
+    async def check(root: Path):
+        research_projects = []
+        for index in range(8):
+            path = root / f"research-{index}.sigma"
+            view = initialize_project(path, f"Research {index}", "Check independent cases")
+            strategy = create_strategy(
+                path, "Bounded method", "Investigate an independent research approach"
+            ).project.strategies[0]
+            research_projects.append((path, view, strategy))
+        paper_projects = [
+            (path, initialize_project(path, f"Paper {index}", "Independent paper"))
+            for index in range(2)
+            for path in [root / f"paper-{index}.sigma"]
+        ]
+
+        async def start_research(index, path, view, strategy):
+            token = subject.set(f"research-user-{index}")
+            try:
+                return await research_sessions.start_session(
+                    str(path), strategy.id, str(uuid4()), view.project.id, subject.get()
+                )
+            finally:
+                subject.reset(token)
+
+        async def start_paper(index, path, view):
+            token = subject.set(f"paper-user-{index}")
+            try:
+                return await papers.generate(str(path), subject.get(), view.project.id)
+            finally:
+                subject.reset(token)
+
+        with (
+            patch.object(research_sessions, "auth_context", new=credentials),
+            patch.object(research_sessions, "configuration", new=research_configuration),
+            patch.object(research_sessions, "_call", new=research_provider),
+            patch.object(research_sessions, "execution_capabilities", return_value=[]),
+            patch.object(papers, "auth_context", new=credentials),
+            patch.object(papers, "configuration", new=paper_configuration),
+            patch.object(papers, "_provider", new=paper_provider),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-mock"),
+        ):
+            starts = await asyncio.gather(
+                *(start_research(i, path, view, strategy)
+                  for i, (path, view, strategy) in enumerate(research_projects))
+            )
+            paper_tasks = []
+            try:
+                await asyncio.wait_for(research_ready.wait(), 15)
+                assert len(research_ids) == 8
+                paper_tasks = [
+                    asyncio.create_task(start_paper(i, path, view))
+                    for i, (path, view) in enumerate(paper_projects)
+                ]
+                await asyncio.wait_for(paper_ready.wait(), 15)
+                assert len(papers._generating_paper_projects) == 2
+                assert all(not research_sessions._tasks[row["id"]].done() for row in starts)
+                assert paper_count == 2
+            finally:
+                release.set()
+            await asyncio.wait_for(asyncio.gather(*paper_tasks), 15)
+            finished = await asyncio.wait_for(
+                asyncio.gather(
+                    *(research_fixture.wait_for(path, row["id"])
+                      for (path, _, _), row in zip(research_projects, starts))
+                ), 15
+            )
+            assert all(row["status"] == "ended" for row in finished)
+            assert all(row["tokens_reserved"] == 0 for row in finished)
+            assert all(len(papers.list_papers(str(path))) == 1 for path, _ in paper_projects)
+            assert not papers._generating_paper_projects
+
+    with TemporaryDirectory() as temporary:
+        asyncio.run(check(Path(temporary)))
+
+
+
 def test_fast_long_draft_cancellation_keeps_completed_sections() -> None:
     package, plan = fast_package(section_count=5)
     state = papers._new_work("1" * 64, "fast-fixture", "2" * 64, "fixture-model", "high")
@@ -3821,6 +3961,7 @@ def main() -> None:
     test_paper_generation_rejects_concurrent_duplicate_request()
     test_two_paper_generators_run_concurrently_and_third_fails_fast()
     test_two_papers_reach_compilation_together_and_hold_capacity()
+    test_eight_research_sessions_overlap_two_paper_generators()
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
