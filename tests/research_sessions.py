@@ -5758,9 +5758,10 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
     def fail_first_worker_snapshot(target):
         nonlocal snapshot_calls
         snapshot_calls += 1
-        # start_session takes the first snapshot. The first branch then fails
-        # preflight; its sibling proceeds to the provider fixture.
-        if snapshot_calls == 2:
+        # start_session takes the initial snapshot and revalidates it after
+        # asynchronous preflight. The first worker snapshot then fails;
+        # its sibling proceeds to the provider fixture.
+        if snapshot_calls == 3:
             raise ProjectError("temporary project snapshot service failure")
         return real_snapshot(target)
 
