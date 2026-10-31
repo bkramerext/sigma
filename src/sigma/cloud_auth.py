@@ -2095,34 +2095,37 @@ def request_invitation(
             ).fetchone()
         if not identity or identity["expires_at"] <= _now():
             raise HTTPException(401, "Your verified sign-in expired. Sign in again to continue.")
-        # A previously denied identity must not submit an invitation after it
-        # gains authorization through the configured contact or a grant.
-        if identity["subject"] and _authorization(cfg, identity["subject"], identity["email"]):
-            # A domain added since Google sign-in can now auto-invite this
-            # previously denied, verified identity. Existing explicit grants
-            # and administrator identities are not re-granted.
-            with _db(cfg) as db:
-                email_grant = db.execute(
-                    "SELECT 1 FROM grants WHERE kind='email' AND value=?",
-                    (identity["email"],),
-                ).fetchone()
-            if email_grant or _authorization(cfg, identity["subject"], identity["email"]) != "member":
-                raise HTTPException(409, "This Google account is already authorized. Sign in again.")
     now = _now()
     if body.request_type == "invitation" and identity["subject"]:
         with _db(cfg) as db:
             auto_approved = _materialize_domain_member(
                 db, identity["subject"], identity["email"]
             )
+            # A second tab may race after the first has committed the
+            # individual grant. Do not reopen a reviewed request as pending.
+            prior = db.execute(
+                "SELECT 1 FROM grants AS g "
+                "JOIN invitation_requests AS i ON i.email=g.value AND i.subject=? "
+                "WHERE g.kind='email' AND g.value=? AND g.role='member' AND g.active=1 "
+                "AND i.status='reviewed' AND EXISTS("
+                "SELECT 1 FROM audit WHERE action='domain_auto_member' AND kind='email' "
+                "AND value=g.value) LIMIT 1",
+                (identity["subject"], identity["email"]),
+            ).fetchone()
+            duplicate_approval = not auto_approved and prior is not None
             if auto_approved:
                 _sync_user_state_in_db(db, cfg)
-                token = secrets.token_urlsafe(32) if denied_cookie else None
-                if token:
-                    db.execute(
-                        "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
-                        (_hash(token), identity["subject"], identity["email"], now + SESSION_SECONDS),
-                    )
-        if auto_approved:
+            token = (
+                secrets.token_urlsafe(32)
+                if denied_cookie and (auto_approved or duplicate_approval)
+                else None
+            )
+            if token:
+                db.execute(
+                    "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                    (_hash(token), identity["subject"], identity["email"], now + SESSION_SECONDS),
+                )
+        if auto_approved or duplicate_approval:
             if token:
                 response.set_cookie(
                     _cookie_name(SESSION_COOKIE, cfg),
@@ -2130,26 +2133,21 @@ def request_invitation(
                     **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
                 )
                 _clear_cookie(response, cfg, DENIED_COOKIE)
-            try:
-                if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
-                    _deliver_invitation(identity["email"], now, request_type="auto_approved")
-            except RuntimeError:
-                with _db(cfg) as db:
-                    db.execute(
-                        "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
-                        ("delivery failed", identity["subject"]),
-                    )
-            return {"status": "approved", "duplicate": False}
+            if auto_approved:
+                try:
+                    if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
+                        _deliver_invitation(identity["email"], now, request_type="auto_approved")
+                except RuntimeError:
+                    with _db(cfg) as db:
+                        db.execute(
+                            "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
+                            ("delivery failed", identity["subject"]),
+                        )
+            return {"status": "approved", "duplicate": duplicate_approval}
+        if _authorization(cfg, identity["subject"], identity["email"]):
+            raise HTTPException(409, "This Google account is already authorized. Sign in again.")
     if body.request_type == "invitation" and authenticated is not None:
         if authenticated.role == "member":
-            with _db(cfg) as db:
-                prior = db.execute(
-                    "SELECT 1 FROM audit WHERE action='domain_auto_member' AND kind='email' "
-                    "AND value=? LIMIT 1",
-                    (authenticated.email,),
-                ).fetchone()
-            if prior:
-                return {"status": "approved", "duplicate": True}
             raise HTTPException(409, "This Google account is already authorized.")
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
