@@ -261,6 +261,7 @@ def check_frontend_cache_policy() -> None:
     # HTML disguised as a JavaScript/CSS response.
     missing = httpx.get(BASE_URL + "/assets/sigma-stale-release-00000000.js", timeout=15)
     assert missing.status_code == 404, missing.status_code
+    assert "immutable" not in missing.headers.get("cache-control", "").lower()
     assert missing.content != html.content, "Missing JS fell back to the SPA document"
 
     # SPA deep links still return HTML and are also revalidated on refresh.
