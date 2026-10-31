@@ -3626,16 +3626,29 @@ class CloudAuthTests(TestCase):
         admin.cookies.set(
             cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
         )
-        admin.post(
+        granted = admin.post(
             "/api/cloud-auth/admin/grants",
-            json={"kind": "domain", "value": "example.org", "role": "member"},
+            json={
+                "kind": "domain",
+                "value": "example.org",
+                "role": "member",
+                "allowance_usd": 10,
+            },
             headers={"Origin": ORIGIN},
         )
+        self.assertEqual(granted.status_code, 200, granted.text)
+        # A user revoked after a previous invitation remains blocked on login.
+        # They can nevertheless submit a NEW request for administrator review.
         with cloud_auth._db(cloud_auth.config()) as db:
             db.execute(
                 "INSERT INTO grants(kind,value,role,active,updated_at) "
                 "VALUES('email','blocked@example.org','member',0,?)",
                 (cloud_auth._now(),),
+            )
+            db.execute(
+                "INSERT INTO invitation_requests(subject,email,requested_at,status,request_type) "
+                "VALUES('auto-blocked-member','blocked@example.org',?,'reviewed','invitation')",
+                (cloud_auth._now() - 3600,),
             )
         denied = self.finish("blocked@example.org", "auto-blocked-member")
         self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
@@ -3652,6 +3665,43 @@ class CloudAuthTests(TestCase):
                 "SELECT active FROM grants WHERE kind='email' AND value='blocked@example.org'"
             ).fetchone()
         self.assertEqual(row["active"], 0)
+        pending = admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["email"], "blocked@example.org")
+        self.assertEqual(pending[0]["subject"], "auto-blocked-member")
+        # No automatic reinstatement. Explicit admin approval restores access,
+        # while using the active domain policy's $10 allowance.
+        approved = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={
+                "kind": "email",
+                "value": "blocked@example.org",
+                "role": "member",
+                "allowance_usd": 10,
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+        reviewed = admin.put(
+            "/api/cloud-auth/admin/invitation-requests/auto-blocked-member",
+            json={"status": "reviewed"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(reviewed.status_code, 200, reviewed.text)
+        self.assertEqual(
+            admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"], []
+        )
+        with cloud_auth._db(cloud_auth.config()) as db:
+            member = db.execute(
+                "SELECT active,role,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                ("blocked@example.org",),
+            ).fetchone()
+        self.assertEqual(tuple(member), (1, "member", 10))
+        signed = self.finish("blocked@example.org", "auto-blocked-member")
+        principal = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
+        self.assertIsNotNone(principal)
+        assert principal is not None
+        self.assertEqual(principal.role, "member")
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
