@@ -11,7 +11,7 @@ Production's public TLS endpoint is **host Caddy**, not Nginx. The app and Compo
 
 ## Cutover
 
-Before stopping SIGMA, run `sudo python3 /opt/sigma/current/deploy/maintenance/switch.py on`. Verify the public endpoint returns HTTP 503 and the maintenance image path returns 200. Stop/start the app, verify the replacement using the existing release health checks, then run `sudo python3 /opt/sigma/current/deploy/maintenance/switch.py off`. Verify normal traffic and image route no longer serves maintenance content.
+Before stopping SIGMA, run `sudo python3 /opt/sigma/current/deploy/maintenance/switch.py on`. Verify the public endpoint displays the maintenance page and the maintenance image path returns 200. Stop/start the app, verify the replacement using the existing release health checks, then run `sudo python3 /opt/sigma/current/deploy/maintenance/switch.py off`. Verify normal traffic and image route no longer serves maintenance content.
 
 The switch uses an imported Caddy snippet and reload, not GCloud resource changes. The snippet is persistent across application restarts. If deployment fails, keep the maintenance response up while restoring a healthy previous release; disable only after recovery checks pass. The host configuration and static files must be installed before integrating this into automated deployments. Red owns the production activation and rollback checks.
 
