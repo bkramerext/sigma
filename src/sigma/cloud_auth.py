@@ -10,6 +10,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import re
 import secrets
@@ -409,6 +410,68 @@ def _db(cfg: Config) -> sqlite3.Connection:
 def _authorization(cfg: Config, subject: str, email: str) -> str | None:
     with _db(cfg) as db:
         return _authorization_in_db(db, cfg, subject, email)
+
+def _log_local_auth_state(
+    cfg: Config, event: str, *, email: str | None = None, domain: str | None = None
+) -> None:
+    """Trace local grant writes and Google authorization reads, never credentials."""
+    if not cfg.local or not cfg.database:
+        return
+    matched_domain = domain or (email.rsplit("@", 1)[1] if email else None)
+    with _db(cfg) as db:
+        email_grant = (
+            db.execute(
+                "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                (email,),
+            ).fetchone()
+            if email
+            else None
+        )
+        domain_grant = (
+            db.execute(
+                "SELECT role,active,allowance_usd FROM grants WHERE kind='domain' AND value=?",
+                (matched_domain,),
+            ).fetchone()
+            if matched_domain
+            else None
+        )
+        last_domain_action = (
+            db.execute(
+                "SELECT id,action FROM audit WHERE kind='domain' AND value=? "
+                "ORDER BY id DESC LIMIT 1",
+                (matched_domain,),
+            ).fetchone()
+            if matched_domain
+            else None
+        )
+        active_domains = [
+            row["value"]
+            for row in db.execute(
+                "SELECT value FROM grants WHERE kind='domain' AND active=1 ORDER BY value LIMIT 20"
+            )
+        ]
+    def describe(row: sqlite3.Row | None) -> str:
+        if row is None:
+            return "absent"
+        return f"{row['role']}/{row['active']}/{row['allowance_usd']}"
+
+    logging.getLogger("uvicorn.error").info(
+        "SIGMA local-auth event=%s pid=%d storage=%s account=%s domain=%s "
+        "email_grant=%s domain_grant=%s latest_domain_action=%s active_domains=%s",
+        event,
+        os.getpid(),
+        hashlib.sha256(str(cfg.database).encode()).hexdigest()[:12],
+        hashlib.sha256(email.encode()).hexdigest()[:12] if email else "-",
+        matched_domain or "-",
+        describe(email_grant),
+        describe(domain_grant),
+        f"{last_domain_action['id']}:{last_domain_action['action']}"
+        if last_domain_action
+        else "none",
+        ",".join(active_domains),
+    )
+
+
 
 
 def _authorization_in_db(
@@ -1746,6 +1809,7 @@ async def callback(
             auto_domain_member = _materialize_domain_member(db, subject, email)
             if auto_domain_member:
                 role = _authorization_in_db(db, cfg, subject, email)
+    _log_local_auth_state(cfg, f"google_callback_role_{role or 'guest'}", email=email)
     if not role:
         if cfg.local:
             # Local Google identity is independent of invitation membership.
@@ -2708,6 +2772,12 @@ def add_grant(body: GrantRequest, request: Request):
             (actor.email, "grant", body.kind, value, _now()),
         )
         _sync_user_state_in_db(db, cfg)
+    _log_local_auth_state(
+        cfg,
+        f"admin_add_{body.kind}",
+        email=value if body.kind == "email" else None,
+        domain=value if body.kind == "domain" else None,
+    )
     return {
         "kind": body.kind,
         "value": value,
@@ -2836,6 +2906,13 @@ def update_grants(body: GrantUpdatesRequest, request: Request):
                 (actor.email, "update", kind, value, _now()),
             )
         _sync_user_state_in_db(db, cfg)
+    for kind, value, _role, _allowance in normalized_updates:
+        _log_local_auth_state(
+            cfg,
+            f"admin_update_{kind}",
+            email=value if kind == "email" else None,
+            domain=value if kind == "domain" else None,
+        )
     return {"updated": [{"kind": kind, "value": value} for kind, value, _, _ in normalized_updates]}
 
 
@@ -2861,4 +2938,10 @@ def revoke_grant(kind: str, value: str, request: Request):
             (actor.email, "revoke", kind, normalized, _now()),
         )
         _sync_user_state_in_db(db, cfg)
+    _log_local_auth_state(
+        cfg,
+        f"admin_remove_{kind}",
+        email=normalized if kind == "email" else None,
+        domain=normalized if kind == "domain" else None,
+    )
     return {"kind": kind, "value": normalized, "active": False}
