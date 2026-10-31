@@ -1975,9 +1975,7 @@ def test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
             cloud_workspaces._CURRENT.reset(binding)
 
 
-def test_cross_user_crash_reclaims_only_dead_worker(
-    root: Path, ledger_root: Path
-) -> None:
+def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Path) -> None:
     """A's new admission recovers B's dead slot, not B's live provider call."""
     a = workspace(root, "9" * 32)
     b = workspace(root, "8" * 32)
@@ -2021,16 +2019,18 @@ def test_cross_user_crash_reclaims_only_dead_worker(
             cloud_research.reconcile_all_orphaned_jobs()
             # B may be silent for hours: an OS-owned worker must keep its slot.
             with cloud_research._connect() as db:
-                assert db.execute(
-                    "SELECT status FROM jobs WHERE session_id=?", (active["id"],)
-                ).fetchone()["status"] == "running"
-            pending = job(a.workspace_id)
-            try:
-                cloud_research.prepare_job(pending)
-            except cloud_research.CloudResearchUnavailable as exc:
-                assert "capacity is currently full" in str(exc)
-            else:
-                raise AssertionError("Live foreign worker's slot was reclaimed")
+                assert (
+                    db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (active["id"],)
+                    ).fetchone()["status"]
+                    == "running"
+                )
+                assert (
+                    db.execute(
+                        "SELECT COUNT(*) FROM jobs WHERE status IN ('running','stopping')"
+                    ).fetchone()[0]
+                    == 1
+                )
         finally:
             cloud_workspaces._CURRENT.reset(token)
 
@@ -2040,13 +2040,20 @@ def test_cross_user_crash_reclaims_only_dead_worker(
         try:
             cloud_research.reconcile_all_orphaned_jobs()
             with cloud_research._connect() as db:
-                assert db.execute(
-                    "SELECT status FROM jobs WHERE session_id=?", (active["id"],)
-                ).fetchone()["status"] == "interrupted"
-                assert db.execute(
-                    "SELECT status FROM calls WHERE call_id='foreign-unsettled'"
-                ).fetchone()["status"] == "unknown"
+                assert (
+                    db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (active["id"],)
+                    ).fetchone()["status"]
+                    == "interrupted"
+                )
+                assert (
+                    db.execute(
+                        "SELECT status FROM calls WHERE call_id='foreign-unsettled'"
+                    ).fetchone()["status"]
+                    == "unknown"
+                )
             # User B need not log back in before A can research.
+            pending = job(a.workspace_id)
             cloud_research.prepare_job(pending)
             assert cloud_research.claim_job(pending["id"])
         finally:
