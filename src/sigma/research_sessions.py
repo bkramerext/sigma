@@ -4144,6 +4144,12 @@ async def stop_project_sessions(path: str) -> list[str]:
         if final.get("status") not in {"stopped", "completed", "ended", "failed"}:
             await control_session(path, session_id, "stop")
         stopped.append(session_id)
+    # The persisted "stopped" state can precede a foreign worker's actual
+    # exit. Project deletion must fence every session's OS execution owner,
+    # including records that were already stopped before this call.
+    for record in _all(path):
+        with _idle_worker_lock(path, record["id"]):
+            pass
     return stopped
 
 
