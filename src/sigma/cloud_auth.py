@@ -1465,9 +1465,7 @@ def status(request: Request):
                         "admin_email_collision": principal.email
                         in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email},
                         "backend_pid": os.getpid(),
-                        "storage_key": hashlib.sha256(
-                            str(cfg.database).encode()
-                        ).hexdigest()[:12],
+                        "storage_key": hashlib.sha256(str(cfg.database).encode()).hexdigest()[:12],
                     }
                 account = {
                     "identity": {"email": principal.email, "verified": True},
