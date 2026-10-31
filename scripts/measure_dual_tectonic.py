@@ -172,7 +172,11 @@ def main() -> int:
     p.add_argument("--timeout", type=float, default=300)
     p.add_argument("--sample-interval", type=float, default=0.025)
     p.add_argument("--output", type=Path, help="Write JSON results for Red's acceptance record")
-    p.add_argument("--prewarm", action="store_true", help="Fill the package cache sequentially before concurrent measurement")
+    p.add_argument(
+        "--prewarm",
+        action="store_true",
+        help="Fill the package cache sequentially before concurrent measurement",
+    )
     args = p.parse_args()
     if args.timeout <= 0 or not 0.005 <= args.sample_interval <= 1:
         p.error("invalid timeout or sample interval")
