@@ -4547,14 +4547,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     const grantIsCanonical = grant.value === grant.value.trim().toLowerCase().replace(/\.$/, '');
     if (!current || grant.updated_at > current.updated_at || (grant.updated_at === current.updated_at && grantIsCanonical && !currentIsCanonical)) uniqueGrants.set(key, grant);
   });
-  // Keep an explicit email revocation visible when it blocks an active domain.
-  // The server intentionally gives that revocation precedence; silently
-  // ignoring it would reauthorize someone the administrator removed.
-  const activeDomains = [...uniqueGrants.values()].filter(grant => grant.kind === 'domain' && grant.active === 1);
-  const blockedDomainFor = (grant: CloudGrant) => grant.kind === 'email' && grant.active !== 1
-    ? activeDomains.find(domain => grant.value.toLowerCase().split('@')[1] === domain.value.toLowerCase())
-    : undefined;
-  const ordered = [...uniqueGrants.values()].filter(grant => grant.active === 1 || !!blockedDomainFor(grant)).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
+  const ordered = [...uniqueGrants.values()].filter(grant => grant.active === 1).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
   const changed = ordered.filter(grant => {
     const key = `${grant.kind}:${grant.value}`; const draft = drafts[key];
     return grant.active === 1 && draft && (draft.role !== grant.role
@@ -4604,9 +4597,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   }
   async function addInvitation(item: CloudInvitationRequest) {
     try {
-      // An administrator explicitly approving a previously revoked email may
-      // use the matching active domain allowance; never silently remove the
-      // individual revocation on sign-in.
+      // An individual member approval inherits the matching domain allowance.
       const email = item.email.trim().toLowerCase();
       const domain = email.split('@')[1];
       const policy = grants.find(grant =>
@@ -4623,35 +4614,16 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       setMessage('Removed the invitation request for ' + item.email + '.');
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Invitation request could not be removed.'); }
   }
-  async function reauthorizeEmail(grant: CloudGrant, domain: CloudGrant) {
-    try {
-      // An inactive individual grant is an explicit revocation. Only an
-      // administrator action can replace it, even when a domain allows access.
-      await onAdd({ kind: 'email', value: grant.value, role: 'member', allowance_usd: domain.allowance_usd });
-      const pending = invitationRequests.find(item =>
-        item.request_type !== 'reload' && item.email.toLowerCase() === grant.value.toLowerCase()
-      );
-      if (pending) await onUpdateInvitation(pending, 'reviewed');
-      setMessage(`Reauthorized ${grant.value} with ${domain.value}'s domain allowance.`);
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : 'Reauthorization could not be saved.');
-    }
-  }
   const currency = (value: number | null | undefined) => value === null || value === undefined ? '—' : `$${value.toFixed(2)}`;
   const visibleInvitationRequests = invitationRequests.filter(item => {
     const email = item.email.trim().toLowerCase();
     const domain = email.slice(email.lastIndexOf('@') + 1).replace(/\.$/, '');
     if (item.request_type === 'reload') return true;
-    // An explicit revoked email overrides its domain grant. Keep its new
-    // invitation request visible so the administrator can approve it again.
-    const individual = grants.find(grant =>
-      grant.kind === 'email' && grant.value.trim().toLowerCase() === email
-    );
-    if (individual) return individual.active !== 1;
-    return !grants.some(grant =>
-      grant.kind === 'domain' && grant.active === 1
-      && grant.value.trim().toLowerCase().replace(/\.$/, '') === domain
-    );
+    return !grants.some(grant => {
+      if (grant.active !== 1) return false;
+      const value = grant.value.trim().toLowerCase().replace(/\.$/, '');
+      return (grant.kind === 'email' && value === email) || (grant.kind === 'domain' && value === domain);
+    });
   });
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
@@ -4671,15 +4643,14 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
           const isBootstrap = grant.kind === 'email' && grant.value.toLowerCase() === bootstrapAdmin.toLowerCase();
-          const blockedDomain = blockedDomainFor(grant);
           const account = grant.kind === 'email' ? sessions.find(item => item.email.toLowerCase() === grant.value.toLowerCase()) : undefined;
           const reloadable = !!account && grant.active === 1 && grant.role === 'member'
             && !hasDrafts && (account.spending?.reload_eligible ?? (account.spending?.reserved_and_estimated_usd ?? 0) > 0);
           return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
-            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : blockedDomain ? ` · Revoked email overrides ${blockedDomain.value} domain` : ' · Removed'}</small></th>
+            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td className="admin-allowance-cell">{draft.role === 'admin' ? <span>Unlimited</span> : <><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></>}</td>
-            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{blockedDomain && <button type="button" className="admin-text-action" disabled={busy} onClick={() => void reauthorizeEmail(grant, blockedDomain)}>Reauthorize</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
+            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
