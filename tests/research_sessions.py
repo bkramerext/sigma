@@ -833,7 +833,7 @@ async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
                         DeleteProjectRequest(path=str(path), expected_project_id=view.project.id)
                     )
                 except ProjectError as exc:
-                    assert "releasing resources" in str(exc)
+                    assert "releasing resources" in str(exc), str(exc)
                 else:
                     raise AssertionError("Project deletion ignored a foreign worker")
             assert path.exists()
