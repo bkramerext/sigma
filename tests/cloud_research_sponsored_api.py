@@ -642,13 +642,17 @@ print("PASS fresh-process research, Outcome and report recovery")
                     time.sleep(0.01)
                 else:
                     raise AssertionError("fake-provider failure did not reach a terminal session")
-                assert failed_status.json()["status"] == "failed", failed_status.json()
-                assert failed_status.json()["steps"][0]["attempt_status"] == "unknown"
-                assert len(provider_calls) == 11
+                assert failed_status.json()["status"] == "ended", failed_status.json()
+                assert failed_status.json()["steps"][0]["failure_kind"] == "provider_temporary"
+                assert failed_status.json()["steps"][1]["status"] == "completed"
+                assert failed_status.json()["artifacts"]
+                provider_calls_after_failure = len(provider_calls)
+                assert provider_calls_after_failure == 10 + failed_status.json()["calls_used"]
 
-                # Timeouts after transport dispatch are also unknown charges;
-                # the in-flight reservation is held without replay.
+                # A bounded timeout retry is a new charged attempt. The first
+                # attempt stays unknown and reserved; completed turns persist.
                 timeout_next_inference = True
+                provider_calls_before_timeout = len(provider_calls)
                 timeout_start = client.post(
                     "/api/projects/research-sessions/start",
                     json={
@@ -672,9 +676,19 @@ print("PASS fresh-process research, Outcome and report recovery")
                     time.sleep(0.01)
                 else:
                     raise AssertionError("fake-provider timeout did not reach a terminal session")
-                assert timeout_status.json()["status"] == "failed"
+                assert timeout_status.json()["status"] in {"ended", "paused"}, timeout_status.json()
                 assert timeout_status.json()["steps"][0]["attempt_status"] == "unknown"
-                assert len(provider_calls) == 12
+                assert timeout_status.json()["calls_used"] >= 1
+                if len(timeout_status.json()["steps"]) > 1:
+                    retry_step = timeout_status.json()["steps"][1]
+                    assert (
+                        retry_step["status"] == "completed"
+                        or retry_step.get("attempt_status") == "not_dispatched"
+                    )
+                provider_calls_after_timeout = len(provider_calls)
+                assert provider_calls_after_timeout == (
+                    provider_calls_before_timeout + timeout_status.json()["calls_used"]
+                )
                 unknown_budget = client.get("/api/cloud-research/budget").json()
                 assert unknown_budget["unknown_provider_attempts"] == 2
                 assert unknown_budget["reserved_and_estimated_usd"] > 0
@@ -710,7 +724,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                 )
                 assert exhausted_start.status_code == 400, exhausted_start.text
                 assert "global inference-spend ceiling" in exhausted_start.json()["error"]
-                assert len(provider_calls) == 12
+                assert len(provider_calls) == provider_calls_after_timeout
                 # Reject a hopeless start before creating any session record.
                 assert {
                     session["id"]

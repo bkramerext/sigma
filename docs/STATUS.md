@@ -54,6 +54,41 @@ requires a fresh recovery point. The recurring backup timer is still absent;
 exact recovery-drill billing has not been independently queried. No paid
 provider calls or local SIGMA server requests were made.
 
+## Issue #399 — Session Robustness and Recovery (2026-10-31)
+
+Implementation is isolated on `gray/issue-399-session-robustness`; no deployment
+or live provider calls were made. Source inspection found two separate 15-minute
+controls: hosted/local sponsored sessions clamp effective duration to 15 minutes
+even when the saved project setting is 60, and individual provider calls are
+also capped at 15 minutes or the remaining session time. The apparent deadline
+discrepancy is therefore configured versus effective policy, not one shared
+timer. The exact reported Warp Drive session record was not present in this
+checkout, so its saved artifacts and terminal reason could not be audited.
+
+The worker already persisted session/attempt records and converted stale
+running sessions to paused during recovery. The failure was that transient
+provider failures were terminal for a strategy, and terminal scheduler state
+was displayed as successful completion even when strategies had failed or no
+productive conclusion existed. A bounded retry now records each attempt,
+charges it against session limits, and retries a transient error once. Ambiguous
+provider consumption is retained as unknown and is not replayed when budget
+constraints disallow it. Strategy errors remain isolated. Terminal messages now
+distinguish evidence-led early completion, incomplete failure, and other stop
+conditions while reporting preserved findings. The UI names effective and
+configured time ceilings separately.
+
+Adversarial coverage includes retry classification/exhaustion, timeout retry
+accounting, ambiguous spend holds, 60-to-15 clamping, 7/30 incomplete outcomes,
+and legitimate evidence-led early completion. `./sigma test` passed after
+formatting correction; Pyright, Ruff, frontend typecheck/build passed within
+the suite. The optional graph-present sandbox check skipped because its local
+image is unavailable. The isolated real-Chrome paused-session check passed
+desktop/mobile reload, reopen, and guarded resume; terminal outcome fixtures
+also verify truthful early/incomplete summaries and duration disclosure. No
+scheduler rewrite was needed. Remaining limitation: only one automatic retry
+is made per transient provider failure, and ambiguous calls are deliberately
+left for explicit recovery rather than risking duplicate provider work.
+
 ## Production About build SHA correction (2026-10-30)
 
 Production About showed `unknown` because the frontend image is built from a

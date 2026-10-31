@@ -113,6 +113,61 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             json.dumps(variant, separators=(",", ":")), encoding="utf-8"
         )
 
+    early = json.loads(json.dumps(session))
+    early_id = str(uuid4())
+    early.update(
+        {
+            "id": early_id,
+            "session_number": 9,
+            "strategy_title": "Evidence-led early completion",
+            "status": "ended",
+            "calls_used": 7,
+            "call_limit": 30,
+            "cycle": 2,
+            "cycle_limit": 3,
+            "configured_duration_limit_minutes": 60,
+            "duration_limit_minutes": 15,
+            "termination_reason_code": "research_completed_early",
+            "message": (
+                "Research completed early after 7 of 30 available turns. The strategy review "
+                "supported stopping because the bounded derivation was complete. Findings "
+                "remain unverified research results."
+            ),
+            "current_action": "Completed · evidence-led early stop",
+        }
+    )
+    (sessions_path / f"{early_id}.json").write_text(
+        json.dumps(early, separators=(",", ":")), encoding="utf-8"
+    )
+
+    interrupted = json.loads(json.dumps(session))
+    interrupted_id = str(uuid4())
+    saved_count = len(interrupted.get("artifacts", []))
+    interrupted.update(
+        {
+            "id": interrupted_id,
+            "session_number": 10,
+            "strategy_title": "Interrupted provider work",
+            "status": "ended",
+            "calls_used": 7,
+            "call_limit": 30,
+            "cycle": 2,
+            "cycle_limit": 3,
+            "configured_duration_limit_minutes": 60,
+            "duration_limit_minutes": 15,
+            "termination_reason_code": "provider_or_strategy_failure",
+            "message": (
+                "Research stopped early after 7 of 30 available turns (round 2 of 3). "
+                f"Provider response timed out; {saved_count} findings were preserved. "
+                "Research is incomplete. Review the saved attempts before continuing."
+            ),
+            "current_action": "Ended · research incomplete",
+        }
+    )
+    (sessions_path / f"{interrupted_id}.json").write_text(
+        json.dumps(interrupted, separators=(",", ":")), encoding="utf-8"
+    )
+
     api_port, ui_port = free_port(), free_port()
     while api_port == ui_port:
         ui_port = free_port()
@@ -207,6 +262,35 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             for number, guidance in expected_guidance.items():
                 variant = page.locator(".session-row").filter(has_text=f"Session #{number}")
                 expect(variant.locator(".stopped-session-guidance")).to_contain_text(guidance)
+            completed_row = page.locator(f'li[data-session-id="{early_id}"]')
+            interrupted_row = page.locator(f'li[data-session-id="{interrupted_id}"]')
+            completed_row.locator(".session-row-disclosure").click()
+            completed_summary = completed_row.get_by_role(
+                "complementary", name="Session status and next steps"
+            )
+            expect(completed_summary).to_contain_text("completed early after 7 of 30")
+            expect(completed_summary).to_contain_text("bounded derivation was complete")
+            expect(completed_summary).to_contain_text("turn count was an upper limit, not a target")
+            expect(completed_row.locator('button[title^="Resume session"]')).to_have_count(0)
+            interrupted_row.locator(".session-row-disclosure").click()
+            interrupted_summary = interrupted_row.get_by_role(
+                "complementary", name="Session status and next steps"
+            )
+            expect(interrupted_summary).to_contain_text("7 of 30 available turns")
+            expect(interrupted_summary).to_contain_text("2 of 3")
+            expect(interrupted_summary).to_contain_text("Provider response timed out")
+            expect(interrupted_summary).to_contain_text(f"{saved_count} findings were preserved")
+            expect(interrupted_summary).to_contain_text("Research is incomplete")
+            expect(interrupted_row.locator(".session-progress-inline")).to_contain_text(
+                "7/30 agent turns"
+            )
+            interrupted_row.get_by_role("button", name="Advanced Outcome").click()
+            interrupted_row.get_by_text("Provenance", exact=True).click()
+            expect(
+                interrupted_row.locator(".outcome-provenance-group").filter(
+                    has_text="Effective time ceiling"
+                )
+            ).to_contain_text("15 minutes (project setting: 60 minutes)")
             for width in (1440, 390):
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

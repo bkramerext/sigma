@@ -32,6 +32,177 @@ MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 
 
+def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried():
+    assert research_sessions._transient_failure_kind(TimeoutError()) == "timeout"
+    assert research_sessions._transient_failure_kind(httpx.ReadError("stream reset")) == (
+        "transport_interrupted"
+    )
+    assert (
+        research_sessions._transient_failure_kind(
+            research_sessions.ChatGPTProviderRejection(
+                "temporary provider failure",
+                state="unavailable",
+                code=None,
+                http_status=503,
+                streamed=False,
+            )
+        )
+        == "provider_temporary"
+    )
+    rate_limit = research_sessions.ChatGPTProviderRejection(
+        "temporary rate limit",
+        state="limited",
+        code=None,
+        http_status=429,
+        streamed=False,
+    )
+    assert research_sessions._provider_failure_fields(rate_limit)["failure_kind"] == (
+        "provider_rate_limited"
+    )
+    assert research_sessions._transient_failure_kind(rate_limit) == "provider_rate_limited"
+    account_limit = research_sessions.ChatGPTProviderRejection(
+        "plan usage limit",
+        state="limited",
+        code="subscription_sharing_usage_limit_exceeded",
+        http_status=429,
+        streamed=False,
+    )
+    assert research_sessions._transient_failure_kind(account_limit) is None
+    assert (
+        research_sessions._transient_failure_kind(
+            ProjectError(
+                "ChatGPT stream ended without a valid response.completed. No strategy was saved."
+            )
+        )
+        == "stream_incomplete"
+    )
+    assert (
+        research_sessions._transient_failure_kind(
+            research_sessions.ChatGPTProviderRejection(
+                "invalid request",
+                state="error",
+                code=None,
+                http_status=400,
+                streamed=False,
+            )
+        )
+        is None
+    )
+
+
+def test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success():
+    record = {"calls_used": 7, "call_limit": 30, "cycle": 2, "cycle_limit": 3}
+    failed, message = research_sessions._portfolio_termination(
+        record,
+        [
+            {
+                "strategy_title": "Warp Drive",
+                "status": "failed",
+                "last_decision": None,
+                "artifacts": ["saved-finding"],
+            }
+        ],
+    )
+    assert failed == "provider_or_strategy_failure"
+    assert "7 of 30" in message and "round 2 of 3" in message
+    assert "1 findings were preserved" in message and "incomplete" in message
+
+    completed, success_message = research_sessions._portfolio_termination(
+        record,
+        [
+            {
+                "strategy_title": "Converged route",
+                "status": "ended",
+                "last_decision": "stop_productive_conclusion",
+                "reason": "Independent checks agree within the stated scope.",
+            }
+        ],
+    )
+    assert completed == "research_completed_early"
+    assert "7 of 30" in success_message
+    assert "Independent checks agree" in success_message
+
+
+def test_hosted_effective_deadline_is_explicitly_clamped_to_fifteen_minutes():
+    configured = {**research_sessions.DEFAULT_LIMITS, "session_duration_minutes": 60}
+    with patch.object(research_sessions.cloud_workspaces, "enabled", return_value=True):
+        effective = research_sessions._effective_limits(configured)
+    assert configured["session_duration_minutes"] == 60
+    assert effective["session_duration_minutes"] == 15
+
+
+async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
+    results = iter(["retry", "retry", "retry"])
+    with (
+        patch.object(
+            research_sessions,
+            "_portfolio_role_call",
+            new=AsyncMock(side_effect=lambda *args, **kwargs: next(results)),
+        ) as role_call,
+        patch.object(
+            research_sessions,
+            "_read",
+            return_value={"strategy_runs": [{"strategy_id": "strategy", "status": "queued"}]},
+        ),
+        patch.object(research_sessions, "_save"),
+        patch.object(research_sessions, "_event"),
+        patch.object(research_sessions, "_call_timeout_seconds", return_value=60),
+    ):
+        result = await research_sessions._portfolio_role_call_with_recovery(
+            str(uuid4()),
+            "/unused",
+            "strategy",
+            "investigator",
+            1,
+            asyncio.Semaphore(1),
+            asyncio.Lock(),
+        )
+    assert result is False
+    assert role_call.await_count == 3
+
+
+async def test_transient_timeout_retries_as_a_new_accounted_turn(path: Path):
+    view, strategy, credential, config = await setup(path)
+    research_sessions.save_limits(
+        str(path), {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    )
+    attempts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        attempts.append(role)
+        if len(attempts) == 1:
+            raise httpx.ReadTimeout("transient fixture timeout")
+        value = (
+            investigation(1)
+            if role == "research_investigator"
+            else skeptic(1, "stop", "no_progress")
+        )
+        return httpx.Response(200, json=provider_response(value))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert attempts == ["research_investigator"] * 2 + ["research_skeptic"]
+    assert finished["calls_used"] == 3
+    assert [step["status"] for step in finished["steps"]] == ["failed", "completed", "completed"]
+    assert finished["steps"][0]["failure_kind"] == "timeout"
+    assert len(finished["artifacts"]) == 1
+
+
 def test_backend_build_is_pinned_at_backend_start() -> None:
     from sigma.build_info import build_commit
     from sigma.server import _build_sha
@@ -1698,14 +1869,14 @@ async def test_failed_attempt_guides_next_session_with_provenance(path: Path):
         payload = json.loads(request.content)
         requests.append(payload)
         if len(requests) == 1:
-            return httpx.Response(503, json={"error": {"code": "temporary_unavailable"}})
+            return httpx.Response(403, json={"error": {"code": "permission_denied"}})
         context = json.loads(payload["input"])
         role = payload["text"]["format"]["name"]
         if role == "research_investigator":
             assert len(context["prior_session_failures"]) == 1
             failure = context["prior_session_failures"][0]
             assert failure["attempt_id"] in context["prior_session_failure_attempt_ids"]
-            assert failure["failure_kind"] == "provider_error"
+            assert failure["failure_kind"] == "provider_rejected"
             assert "Python" in payload["instructions"]
             assert "Scientific Python is unavailable" in payload["instructions"]
             result = investigation(1)
@@ -2964,7 +3135,13 @@ async def test_malformed_output_and_restart(path: Path):
     retained_view, retained_strategy, retained_credential, retained_config = await setup(
         retained_path
     )
-    outputs = [investigation(1), skeptic(1), investigation(2), httpx.ReadTimeout("")]
+    outputs = [
+        investigation(1),
+        skeptic(1),
+        investigation(2),
+        httpx.ReadTimeout(""),
+        httpx.ReadTimeout(""),
+    ]
 
     async def fail_second_review(request):
         result = outputs.pop(0)
@@ -7365,7 +7542,9 @@ async def test_response_transport_and_parsed_bounds(path: Path):
             credential["identity"],
         )
         failed = await wait_for(oversized_projects, started["id"])
-    assert failed["status"] == "failed" and "8 MB safety bound" in failed["message"]
+    assert failed["status"] == "failed"
+    assert "safe size limit" in failed["message"]
+    assert failed["steps"][0]["failure_kind"] == "response_too_large"
     assert failed["artifacts"] == []
 
     token_limit = 12_000
@@ -8818,6 +8997,9 @@ def main():
     test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_unknown_provider_attempt_keeps_held_session_cost()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
+    test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried()
+    test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
+    test_hosted_effective_deadline_is_explicitly_clamped_to_fifteen_minutes()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
@@ -8825,6 +9007,8 @@ def main():
     test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
+        asyncio.run(test_transient_timeout_retries_as_a_new_accounted_turn(root / "retry.sigma"))
+        asyncio.run(test_portfolio_retry_wrapper_has_a_hard_attempt_bound())
         test_project_concurrency_max_four_and_legacy_read(root)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(
