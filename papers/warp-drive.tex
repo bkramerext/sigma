@@ -3,7 +3,6 @@
 \date{}
 \author{SIGMA AI-assisted research synthesis}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}
 \usepackage[utf8]{inputenc}
 % Preserve Unicode characters in archived research excerpts with pdfLaTeX.
 \DeclareUnicodeCharacter{2013}{--}
@@ -21,6 +20,8 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,booktabs,longtable}
 \usepackage{microtype}
+% Do not require scalable Type 1 fonts for microtype expansion on minimal TeX installations.
+\microtypesetup{expansion=false}
 \usepackage{titlesec}
 \emergencystretch=2em
 \raggedbottom
