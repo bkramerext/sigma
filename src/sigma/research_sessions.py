@@ -4529,9 +4529,7 @@ async def start_session(
             # A project may change during preflight. Do not admit stale research.
             locked_view, locked_guard = _snapshot(view.path)
             if locked_view.project.id != expected_project_id or locked_guard != guard:
-                raise ProjectError(
-                    "Project changed during research preflight; review it and retry"
-                )
+                raise ProjectError("Project changed during research preflight; review it and retry")
             limits = get_limits(view.path)
             limits = _validate_limits(limits)
             if expected_limits is not None and _validate_limits(expected_limits) != limits:
