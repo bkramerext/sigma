@@ -4615,6 +4615,20 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       setMessage('Removed the invitation request for ' + item.email + '.');
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Invitation request could not be removed.'); }
   }
+  async function reauthorizeEmail(grant: CloudGrant, domain: CloudGrant) {
+    try {
+      // An inactive individual grant is an explicit revocation. Only an
+      // administrator action can replace it, even when a domain allows access.
+      await onAdd({ kind: 'email', value: grant.value, role: 'member', allowance_usd: domain.allowance_usd });
+      const pending = invitationRequests.find(item =>
+        item.request_type !== 'reload' && item.email.toLowerCase() === grant.value.toLowerCase()
+      );
+      if (pending) await onUpdateInvitation(pending, 'reviewed');
+      setMessage(`Reauthorized ${grant.value} with ${domain.value}'s domain allowance.`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Reauthorization could not be saved.');
+    }
+  }
   const currency = (value: number | null | undefined) => value === null || value === undefined ? '—' : `$${value.toFixed(2)}`;
   const visibleInvitationRequests = invitationRequests.filter(item => {
     const email = item.email.trim().toLowerCase();
@@ -4652,7 +4666,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
             <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : blockedDomain ? ` · Revoked email overrides ${blockedDomain.value} domain` : ' · Removed'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td className="admin-allowance-cell">{draft.role === 'admin' ? <span>Unlimited</span> : <><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></>}</td>
-            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{blockedDomain && <button type="button" className="admin-text-action" disabled={busy} title="Explicitly restore membership with the domain allowance" onClick={() => void onAdd({ kind: 'email', value: grant.value, role: 'member', allowance_usd: blockedDomain.allowance_usd })}>Reauthorize</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
+            <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{blockedDomain && <button type="button" className="admin-text-action" disabled={busy} onClick={() => void reauthorizeEmail(grant, blockedDomain)}>Reauthorize</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
