@@ -83,7 +83,7 @@ DEFAULT_LIMITS = {
     "max_concurrent_sessions": 1,
     "research_rounds": 2,
     "model_calls": 12,
-    "session_duration_minutes": 30,
+    "session_duration_minutes": 60,
     "output_tokens_per_call": 4000,
     "maximum_estimated_cost_usd": None,
     "maximum_input_tokens_per_session": None,
