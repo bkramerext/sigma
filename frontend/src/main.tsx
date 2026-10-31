@@ -4252,6 +4252,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
         if (cancelled) return;
+        const result = await response.json() as { status?: string };
+        if (result.status === 'approved') { window.location.reload(); return; }
         clearInviteIntent();
         setInvitationRecorded(true);
         window.dispatchEvent(new Event('sigma-invitation-recorded'));
@@ -4340,6 +4342,8 @@ function HomeInvitationAction() {
         headers: { 'Content-Type': 'application/json' }, body: '{}',
       });
       if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
+      const result = await response.json() as { status?: string };
+      if (result.status === 'approved') { window.location.reload(); return; }
       setRecorded(true);
       setConfirmationOpen(true);
       window.dispatchEvent(new Event('sigma-invitation-recorded'));
@@ -4409,6 +4413,8 @@ function InvitationRequestControls({ error, onError, onRecorded, buttonLabel = '
     try {
       const response = await fetch('/api/cloud-auth/invitation-request', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!response.ok) throw await cloudFailure(response, 'Your invitation request could not be sent.');
+      const result = await response.json() as { status?: string };
+      if (result.status === 'approved') { window.location.reload(); return; }
       onRecorded();
     } catch (cause) { onError(errorMessage(cause)); }
     finally { setBusy(false); }
