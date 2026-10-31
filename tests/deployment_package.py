@@ -80,11 +80,11 @@ def main() -> None:
     assert "reverse_proxy frontend:8080" in caddy
     # Issue #360: mutable SPA HTML and public assets revalidate, only
     # fingerprinted Vite build assets are cached immutably.
-    assert 'location / {' in nginx
-    assert 'try_files $uri $uri/ /index.html;' in nginx
+    assert "location / {" in nginx
+    assert "try_files $uri $uri/ /index.html;" in nginx
     assert 'Cache-Control "no-cache, max-age=0, must-revalidate"' in nginx
-    assert 'location ^~ /assets/ {' in nginx
-    assert 'try_files $uri =404;' in nginx
+    assert "location ^~ /assets/ {" in nginx
+    assert "try_files $uri =404;" in nginx
     assert 'Cache-Control "public, max-age=31536000, immutable"' in nginx
     assert nginx.count('add_header X-Content-Type-Options nosniff always;') == 2
     assert nginx.count('add_header Referrer-Policy no-referrer always;') == 2
