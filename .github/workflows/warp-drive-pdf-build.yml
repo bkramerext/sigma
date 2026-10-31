@@ -1,0 +1,39 @@
+name: Regenerate Warp Drive PDF
+on:
+  push:
+    branches: [warpdrivepaper]
+    paths:
+      - .github/workflows/warp-drive-pdf-build.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended
+      - name: Regenerate PDF from committed source
+        run: |
+          mkdir -p /tmp/warp-drive-build
+          pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -output-directory=/tmp/warp-drive-build papers/warp-drive.tex
+          pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -output-directory=/tmp/warp-drive-build papers/warp-drive.tex
+          test -s /tmp/warp-drive-build/warp-drive.pdf
+          cp /tmp/warp-drive-build/warp-drive.pdf papers/warp-drive.pdf
+          pdfinfo papers/warp-drive.pdf | grep '^Pages:'
+      - name: Commit regenerated PDF
+        run: |
+          git config user.name "sigma-pdf-build"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add papers/warp-drive.pdf
+          if ! git diff --cached --quiet; then
+            git commit -m "Regenerate warp-drive PDF from repaired TeX [skip ci]"
+            git push origin HEAD:warpdrivepaper
+          fi
