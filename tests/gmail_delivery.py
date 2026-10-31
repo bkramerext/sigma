@@ -10,7 +10,12 @@ from unittest import TestCase, main
 from unittest.mock import patch
 from urllib.parse import parse_qs
 
-from sigma.gmail_delivery import SEND_ENDPOINT, TOKEN_ENDPOINT, send_admin_notification, send_invitation
+from sigma.gmail_delivery import (
+    SEND_ENDPOINT,
+    TOKEN_ENDPOINT,
+    send_admin_notification,
+    send_invitation,
+)
 
 
 class FakeResponse:
