@@ -1445,6 +1445,30 @@ def status(request: Request):
                         "SELECT status FROM invitation_requests WHERE subject=?",
                         (principal.subject,),
                     ).fetchone()
+                    # Local development only: inspect the actual database
+                    # decisions when a verified Google account remains Guest.
+                    # No cookies, tokens, secrets or raw database paths.
+                    domain = principal.email.rsplit("@", 1)[1]
+                    email_grant = db.execute(
+                        "SELECT role,active FROM grants WHERE kind='email' AND value=?",
+                        (principal.email,),
+                    ).fetchone()
+                    domain_grant = db.execute(
+                        "SELECT role,active FROM grants WHERE kind='domain' AND value=?",
+                        (domain,),
+                    ).fetchone()
+                    local_auth_diagnostic = {
+                        "policy": "remove-deletes-grants",
+                        "email_grant": dict(email_grant) if email_grant else None,
+                        "domain": domain,
+                        "domain_grant": dict(domain_grant) if domain_grant else None,
+                        "admin_email_collision": principal.email
+                        in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email},
+                        "backend_pid": os.getpid(),
+                        "storage_key": hashlib.sha256(
+                            str(cfg.database).encode()
+                        ).hexdigest()[:12],
+                    }
                 account = {
                     "identity": {"email": principal.email, "verified": True},
                     "access": {"status": "uninvited", "role": "guest"},
@@ -1453,6 +1477,7 @@ def status(request: Request):
                     "sponsorship": {"eligible": False, "forced": False},
                     "invitation_welcome_pending": False,
                     "invitation_status": invitation["status"] if invitation else None,
+                    **({"local_auth_diagnostic": local_auth_diagnostic} if cfg.local else {}),
                 }
             else:
                 account = _persist_user_state(cfg, principal)
