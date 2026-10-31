@@ -30,7 +30,7 @@ MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("1000.00")
 LOCAL_PILOT_MONTHLY_SPEND_USD = Decimal("50.00")
 MAX_PROJECT_SESSION_CALLS = 120
-MAX_SESSION_MINUTES = 15
+MAX_PROJECT_SESSION_DURATION_MINUTES = 7 * 24 * 60
 
 
 class CloudResearchUnavailable(RuntimeError):
@@ -299,21 +299,13 @@ def _evaluation_queue_limits() -> tuple[int, int, int, int]:
 
 
 def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
-    """Apply hosted runtime duration while preserving validated project budgets."""
-    result = dict(limits)
-    result["session_duration_minutes"] = min(
-        int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
-    )
-    return result
+    """Sponsorship affects spend allowance, not the user's research duration."""
+    return dict(limits)
 
 
 def local_sponsored_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
-    """Apply local sponsored runtime duration without rewriting project budgets."""
-    result = dict(limits)
-    result["session_duration_minutes"] = min(
-        int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
-    )
-    return result
+    """Preserve the selected project duration for local sponsored research."""
+    return dict(limits)
 
 
 def session_call_ceiling() -> int:
@@ -593,7 +585,7 @@ def prepare_job(record: dict[str, Any]) -> None:
         type(call_limit) is not int
         or not 2 <= call_limit <= call_ceiling
         or type(duration_limit) is not int
-        or not 1 <= duration_limit <= MAX_SESSION_MINUTES
+        or not 1 <= duration_limit <= MAX_PROJECT_SESSION_DURATION_MINUTES
         or (
             maximum_cost is not None
             and (
@@ -605,10 +597,10 @@ def prepare_job(record: dict[str, Any]) -> None:
     ):
         if cloud_workspaces.enabled():
             raise CloudResearchUnavailable(
-                "Hosted sponsored research supports up to 120 calls and 15 minutes; update Project Settings → Limits."
+                "Hosted research duration must follow the project's valid research limits."
             )
         raise CloudResearchUnavailable(
-            "Local sponsored research supports up to 120 calls and 15 minutes; update Project Settings → Limits."
+            "Local research duration must follow the project's valid research limits."
         )
     workspace = _ledger_workspace()
     if workspace is None:
