@@ -3231,11 +3231,20 @@ class CloudAuthTests(TestCase):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
         self.addCleanup(admin_context.__exit__, None, None, None)
-        signed_admin = self.finish(email="admin@example.org", subject="auto-login-admin", client=admin)
-        admin.cookies.set(cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE])
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-login-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
         grant = admin.post(
             "/api/cloud-auth/admin/grants",
-            json={"kind": "domain", "value": "example.org", "role": "member", "allowance_usd": 1.25},
+            json={
+                "kind": "domain",
+                "value": "example.org",
+                "role": "member",
+                "allowance_usd": 1.25,
+            },
             headers={"Origin": ORIGIN},
         )
         self.assertEqual(grant.status_code, 200, grant.text)
@@ -3257,31 +3266,38 @@ class CloudAuthTests(TestCase):
         self.assertEqual((row["role"], row["active"], row["allowance_usd"]), ("member", 1, 1.25))
         self.assertEqual(notice["status"], "reviewed")
         listed = admin.get("/api/cloud-auth/admin/grants").json()
-        self.assertTrue(any(
-            account["email"] == "member@example.org" and account["authorized"]
-            for account in listed["sessions"]
-        ))
-        self.assertFalse(any(
-            req["email"] == "member@example.org"
-            for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
-        ))
+        self.assertTrue(
+            any(
+                account["email"] == "member@example.org" and account["authorized"]
+                for account in listed["sessions"]
+            )
+        )
+        self.assertFalse(
+            any(
+                req["email"] == "member@example.org"
+                for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+            )
+        )
         revoked = admin.delete(
             "/api/cloud-auth/admin/grants/domain/example.org", headers={"Origin": ORIGIN}
         )
         self.assertEqual(revoked.status_code, 200)
         # Revoking the domain policy blocks future automatic invites, but
         # already-materialized individual members remain independently active.
-        self.assertEqual(
-            cloud_auth.resolve_session(member.cookies[cloud_auth.SESSION_COOKIE]).role,
-            "member",
-        )
+        current_member = cloud_auth.resolve_session(member.cookies[cloud_auth.SESSION_COOKIE])
+        assert current_member is not None
+        self.assertEqual(current_member.role, "member")
 
     def test_domain_granted_after_denied_signin_approves_invite_me_immediately(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
         self.addCleanup(admin_context.__exit__, None, None, None)
-        signed_admin = self.finish(email="admin@example.org", subject="auto-request-admin", client=admin)
-        admin.cookies.set(cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE])
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-request-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
         denied = self.finish("later@example.org", "auto-request-member")
         self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
@@ -3302,7 +3318,9 @@ class CloudAuthTests(TestCase):
         notify.assert_called_once()
         self.assertEqual(notify.call_args.kwargs["request_type"], "auto_approved")
         token = approved.cookies[cloud_auth.SESSION_COOKIE]
-        self.assertEqual(cloud_auth.resolve_session(token).email, "later@example.org")
+        active_member = cloud_auth.resolve_session(token)
+        assert active_member is not None
+        self.assertEqual(active_member.email, "later@example.org")
         with cloud_auth._db(cloud_auth.config()) as db:
             saved = db.execute(
                 "SELECT role,active FROM grants WHERE kind='email' AND value='later@example.org'"
@@ -3338,8 +3356,12 @@ class CloudAuthTests(TestCase):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
         self.addCleanup(admin_context.__exit__, None, None, None)
-        signed_admin = self.finish(email="admin@example.org", subject="auto-deny-admin", client=admin)
-        admin.cookies.set(cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE])
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-deny-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
         admin.post(
             "/api/cloud-auth/admin/grants",
             json={"kind": "domain", "value": "example.org", "role": "member"},
