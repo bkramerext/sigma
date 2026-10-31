@@ -1952,9 +1952,12 @@ def test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
             cloud_research.finish_standalone_inference(auxiliary_a)
             cloud_research.finish_standalone_inference(auxiliary_b)
             with cloud_research._connect() as db:
-                assert db.execute(
-                    "SELECT COUNT(*) FROM jobs WHERE job_kind='auxiliary' AND status='terminal'"
-                ).fetchone()[0] == 2
+                assert (
+                    db.execute(
+                        "SELECT COUNT(*) FROM jobs WHERE job_kind='auxiliary' AND status='terminal'"
+                    ).fetchone()[0]
+                    == 2
+                )
         finally:
             cloud_workspaces._CURRENT.reset(binding)
 
@@ -3009,9 +3012,7 @@ def main() -> None:
         test_multiuser_parallel_cloud_worker_admission(root, parallel_ledger)
         auxiliary_ledger = root / "auxiliary-inference-ledger"
         auxiliary_ledger.mkdir(mode=0o700)
-        test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
-            root, auxiliary_ledger
-        )
+        test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(root, auxiliary_ledger)
         pilot_ledger = root / "pilot-capacity-ledger"
         pilot_ledger.mkdir(mode=0o700)
         test_pilot_global_spend_accepts_multiple_users(root, pilot_ledger)
