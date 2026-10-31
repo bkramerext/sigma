@@ -365,6 +365,20 @@ def main():
             )
             assert numeric_limit.status_code == 200
             assert numeric_limit.json()["max_concurrent_sessions"] == "4"
+            unlimited_duration = client.put(
+                limits_url,
+                json={"path": str(path), **changed_limits, "session_duration_minutes": None},
+            )
+            assert unlimited_duration.status_code == 200, unlimited_duration.text
+            assert unlimited_duration.json()["session_duration_minutes"] is None
+            assert client.get(limits_url, params={"path": str(path)}).json()["session_duration_minutes"] is None
+            assert research_sessions.get_limits(str(path))["session_duration_minutes"] is None
+            finite_again = client.put(
+                limits_url,
+                json={"path": str(path), **changed_limits, "session_duration_minutes": 60},
+            )
+            assert finite_again.status_code == 200, finite_again.text
+            assert finite_again.json()["session_duration_minutes"] == 60
             assert (
                 research_sessions.get_limits(str(sibling.path)) == research_sessions.DEFAULT_LIMITS
             )
