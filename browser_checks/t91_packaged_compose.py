@@ -247,8 +247,7 @@ def check_frontend_cache_policy() -> None:
     asset_urls = re.findall(r'(?:src|href)="/assets/([^"]+)"', html.text)
     assert any(name.endswith(".js") for name in asset_urls), "Vite JS bundle not found"
     assert all(
-        re.search(r"-[A-Za-z0-9_-]{6,}[.](?:js|css|woff2?|png|svg)$", name)
-        for name in asset_urls
+        re.search(r"-[A-Za-z0-9_-]{6,}[.](?:js|css|woff2?|png|svg)$", name) for name in asset_urls
     ), asset_urls
     for name in asset_urls:
         asset = httpx.get(BASE_URL + "/assets/" + name, timeout=15)
@@ -279,9 +278,7 @@ def main() -> None:
         )
         raise SystemExit(1)
 
-    MATRIX["ordinary HTML reload revalidates and fingerprinted assets are immutable"] = (
-        "RUNNING"
-    )
+    MATRIX["ordinary HTML reload revalidates and fingerprinted assets are immutable"] = "RUNNING"
     check_frontend_cache_policy()
     MATRIX["ordinary HTML reload revalidates and fingerprinted assets are immutable"] = "PASS"
 
