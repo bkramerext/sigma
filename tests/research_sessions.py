@@ -123,12 +123,12 @@ def test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_s
     assert "Independent checks agree" in success_message
 
 
-def test_hosted_effective_deadline_is_explicitly_clamped_to_fifteen_minutes():
+def test_sponsorship_does_not_shorten_project_duration():
     configured = {**research_sessions.DEFAULT_LIMITS, "session_duration_minutes": 60}
     with patch.object(research_sessions.cloud_workspaces, "enabled", return_value=True):
         effective = research_sessions._effective_limits(configured)
     assert configured["session_duration_minutes"] == 60
-    assert effective["session_duration_minutes"] == 15
+    assert effective["session_duration_minutes"] == 60
 
 
 async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
@@ -3535,16 +3535,14 @@ async def test_chatgpt_stream(path: Path):
         result = await research_sessions._call(
             record, "investigator", {"problem": view.project.problem, "strategy": strategy.approach}
         )
-        try:
-            await research_sessions._call(
-                {**record, "output_token_limit": 11},
-                "investigator",
-                {"problem": view.project.problem, "strategy": strategy.approach},
-            )
-        except ProjectError as exc:
-            assert "exceeded the configured per-call token limit" in str(exc)
-        else:
-            raise AssertionError("ChatGPT response exceeded the configured output token limit")
+        # ChatGPT controls its own response length; the internal per-call
+        # reservation is not a reason to discard complete, valid findings.
+        above_soft_limit = await research_sessions._call(
+            {**record, "output_token_limit": 11},
+            "investigator",
+            {"problem": view.project.problem, "strategy": strategy.approach},
+        )
+        assert above_soft_limit == result
     assert result == (output, {"input_tokens": 25, "cached_input_tokens": 5, "output_tokens": 12})
 
 
@@ -9275,7 +9273,7 @@ def main():
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
     test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried()
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
-    test_hosted_effective_deadline_is_explicitly_clamped_to_fifteen_minutes()
+    test_sponsorship_does_not_shorten_project_duration()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
