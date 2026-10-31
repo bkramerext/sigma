@@ -131,6 +131,33 @@ def test_sponsorship_does_not_shorten_project_duration():
     assert effective["session_duration_minutes"] == 60
 
 
+def test_context_manifest_compaction_preserves_omission_accounting():
+    """Audit pointers can shrink without erasing omitted research evidence."""
+    manifest = {
+        "sources": [
+            {
+                "category": "prior_session_obligation",
+                "source_ids": [str(uuid4()) for _ in range(400)],
+                "reason": "saved source identities",
+                "representation": "bounded",
+                "status": "selected",
+            }
+        ],
+        "omitted_prior_session_obligations": {
+            "count": 80,
+            "obligation_ids": [str(uuid4()) for _ in range(80)],
+            "reason": "saved originals remain available",
+        },
+    }
+    research_sessions._bound_context_manifest(manifest)
+    assert research_sessions._json_bytes(manifest) <= research_sessions.MAX_CONTEXT_MANIFEST_BYTES
+    omitted = manifest["omitted_prior_session_obligations"]
+    assert omitted["count"] == 80
+    assert len(omitted["obligation_ids"]) + omitted["obligation_ids_not_listed_count"] == 80
+    source = manifest["sources"][0]
+    assert len(source["source_ids"]) + source["source_ids_not_listed_count"] == 400
+
+
 async def test_unlimited_duration_completes_without_session_deadline(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = {
@@ -9305,6 +9332,7 @@ def main():
     test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried()
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
+    test_context_manifest_compaction_preserves_omission_accounting()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()
