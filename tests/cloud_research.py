@@ -1029,7 +1029,7 @@ def test_eight_research_users_fill_exactly_thirty_two_admissions(
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
 
-        # Nine distinct users are logged in; only eight have research slots.
+        # Nine independent workspaces exist; only eight have research slots.
         ninth = job(owners[8].workspace_id)
         binding = cloud_workspaces._CURRENT.set(owners[8])
         try:
@@ -3229,9 +3229,7 @@ def main() -> None:
         test_hosted_capacity_defaults_allow_eight_distinct_researchers()
         eight_user_ledger = root / "eight-user-admission-ledger"
         eight_user_ledger.mkdir(mode=0o700)
-        test_eight_research_users_fill_exactly_thirty_two_admissions(
-            root, eight_user_ledger
-        )
+        test_eight_research_users_fill_exactly_thirty_two_admissions(root, eight_user_ledger)
         test_local_limits_remain_unmodified(root)
         test_local_global_spend_default_supports_small_team_pilot()
         monthly_ledger = root / "monthly-global-ledger"
