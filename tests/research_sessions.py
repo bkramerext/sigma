@@ -830,9 +830,7 @@ async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
             with patch.dict("os.environ", {"SIGMA_PROJECTS_ROOT": str(path.parent)}):
                 try:
                     await delete_project_view(
-                        DeleteProjectRequest(
-                            path=str(path), expected_project_id=view.project.id
-                        )
+                        DeleteProjectRequest(path=str(path), expected_project_id=view.project.id)
                     )
                 except ProjectError as exc:
                     assert "releasing resources" in str(exc)
