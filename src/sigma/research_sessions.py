@@ -9159,27 +9159,24 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
     semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
 
     async def run_wave(calls: list[Any]) -> list[Any]:
-        gates = await _acquire_gates()
-        try:
-            results = await asyncio.gather(*calls, return_exceptions=True)
-            failure = next(
-                (result for result in results if isinstance(result, BaseException)), None
-            )
-            if isinstance(failure, asyncio.CancelledError):
-                raise failure
-            if isinstance(failure, ProjectError):
-                raise failure
-            if failure is not None:
-                # A coordination/preflight exception is session-wide. Returning it as
-                # an ordinary branch result leaves that branch queued forever.
-                raise ProjectError(
-                    "Portfolio coordination failed before completing a strategy wave: "
-                    f"{str(failure).strip()[:700]}"
-                ) from failure
-            return results
-        finally:
-            for gate in reversed(gates):
-                gate.release()
+        # Do not hold process-global research/proposal gates across provider I/O.
+        # Each session owns a state lock and a durable per-session worker lock;
+        # hosted admission and funding are bounded atomically by cloud_research.
+        # Python/Sage execution retains its own exclusive gate.
+        results = await asyncio.gather(*calls, return_exceptions=True)
+        failure = next((result for result in results if isinstance(result, BaseException)), None)
+        if isinstance(failure, asyncio.CancelledError):
+            raise failure
+        if isinstance(failure, ProjectError):
+            raise failure
+        if failure is not None:
+            # A coordination/preflight exception is session-wide. Returning it as
+            # an ordinary branch result leaves that branch queued forever.
+            raise ProjectError(
+                "Portfolio coordination failed before completing a strategy wave: "
+                f"{str(failure).strip()[:700]}"
+            ) from failure
+        return results
 
     while True:
         async with state_lock:
