@@ -4634,11 +4634,16 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
     const email = item.email.trim().toLowerCase();
     const domain = email.slice(email.lastIndexOf('@') + 1).replace(/\.$/, '');
     if (item.request_type === 'reload') return true;
-    return !grants.some(grant => {
-      if (grant.active !== 1) return false;
-      const value = grant.value.trim().toLowerCase().replace(/\.$/, '');
-      return (grant.kind === 'email' && value === email) || (grant.kind === 'domain' && value === domain);
-    });
+    // An explicit revoked email overrides its domain grant. Keep its new
+    // invitation request visible so the administrator can approve it again.
+    const individual = grants.find(grant =>
+      grant.kind === 'email' && grant.value.trim().toLowerCase() === email
+    );
+    if (individual) return individual.active !== 1;
+    return !grants.some(grant =>
+      grant.kind === 'domain' && grant.active === 1
+      && grant.value.trim().toLowerCase().replace(/\.$/, '') === domain
+    );
   });
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2>{hasDrafts && <button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save</button>}<button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
