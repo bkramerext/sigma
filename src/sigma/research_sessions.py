@@ -666,6 +666,8 @@ def get_limits(path: str) -> dict[str, Any]:
                 raw = json.loads(data)
                 if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
                     raise ValueError("Invalid limits")
+                # Read old oversized values safely without changing the saved file.
+                raw["max_concurrent_sessions"] = _legacy_project_concurrency(raw)
                 try:
                     limits = _validate_limits(raw)
                 except ProjectError as current_error:
@@ -692,6 +694,8 @@ def get_limits(path: str) -> dict[str, Any]:
         raise ProjectError("Research limits are unreadable") from exc
     if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
         raise ProjectError("Research limits are invalid")
+    # Read old oversized values safely without changing the saved file.
+    raw["max_concurrent_sessions"] = _legacy_project_concurrency(raw)
     try:
         limits = _validate_limits(raw)
     except ProjectError as current_error:
