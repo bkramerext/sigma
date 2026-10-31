@@ -3651,6 +3651,12 @@ class CloudAuthTests(TestCase):
             self.assertEqual(
                 self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
             )
+            # Opening admin settings must not delete this legitimate Guest
+            # session just because an explicit email grant was revoked.
+            self.assertEqual(admin.get("/api/cloud-auth/admin/grants").status_code, 200)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
             # An explicit NEW domain grant supersedes the old revocation.
             granted = admin.post(
                 "/api/cloud-auth/admin/grants",
@@ -3663,6 +3669,9 @@ class CloudAuthTests(TestCase):
                 headers={"Origin": local_origin},
             )
             self.assertEqual(granted.status_code, 200, granted.text)
+            # The admin UI automatically reloads grants after saving. That
+            # must not terminate the previously signed-in Guest session.
+            self.assertEqual(admin.get("/api/cloud-auth/admin/grants").status_code, 200)
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["user"]["role"], "member")
             with cloud_auth._db(cloud_auth.config()) as db:
