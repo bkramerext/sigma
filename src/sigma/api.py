@@ -450,7 +450,9 @@ class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
     research_rounds: int = Field(ge=1, le=5)
     model_calls: int = Field(ge=2, le=120)
-    session_duration_minutes: int = Field(ge=1, le=research_sessions.MAX_SESSION_DURATION_MINUTES)
+    session_duration_minutes: int | None = Field(
+        ge=1, le=research_sessions.MAX_SESSION_DURATION_MINUTES
+    )
     output_tokens_per_call: int = Field(ge=256, le=20000)
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
     maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)

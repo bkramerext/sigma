@@ -210,6 +210,10 @@ def main() -> None:
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert started.status_code == 200, started.text
                 assert started.json()["duration_limit_minutes"] == 60
+                assert started.json()["configured_duration_limit_minutes"] == 60
+                from sigma.build_info import build_commit
+
+                assert started.json()["backend_build_commit"] == build_commit()
                 session_id = started.json()["id"]
 
                 # A new request context sees the saved authoritative status;

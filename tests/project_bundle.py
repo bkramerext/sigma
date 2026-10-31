@@ -458,6 +458,7 @@ def main() -> None:
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "status": "paused",
                 "session_number": 1,
+                "backend_build_commit": "a" * 40,
             }
             _save(created.path, record)
             assert _read(created.path, session_id) == record
@@ -476,6 +477,13 @@ def main() -> None:
                     pass
                 else:
                     raise AssertionError("Invalid session record was saved")
+            assert _read(created.path, session_id) == record
+            try:
+                _save(created.path, dict(record, backend_build_commit="b" * 40))
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Saved session build provenance was overwritten")
             assert _read(created.path, session_id) == record
             try:
                 _save(created.path, dict(record, project_path=str(root / "other.json")))
@@ -498,7 +506,16 @@ def main() -> None:
             imported_session = _read(str(imported_session_path), session_id)
             assert imported_session["project_path"] == str(imported_session_path.resolve())
             assert imported_session["project_id"] == created.project.id
+            assert imported_session["backend_build_commit"] == "a" * 40
             assert read_session_snapshot(str(imported_session_path))[1] == 0
+            # An older exported session without a build stamp remains importable.
+            legacy_bundle = json.loads(export_complete_project(created.path))
+            legacy_session = dict(record)
+            legacy_session.pop("backend_build_commit")
+            legacy_bundle["files"][f"research-sessions/{session_id}.json"] = legacy_session
+            legacy_destination = root / "legacy-session-import.json"
+            import_bundle(legacy_bundle, legacy_destination)
+            assert "backend_build_commit" not in _read(str(legacy_destination), session_id)
             # Reject a bundle whose session filename and embedded ID disagree.
             malformed_bundle = json.loads(export_complete_project(created.path))
             bad_session = dict(record, id=str(uuid4()))

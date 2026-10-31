@@ -801,9 +801,15 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     bounds = {
         "research_rounds": (1, 5),
         "model_calls": (2, 120),
-        "session_duration_minutes": (1, MAX_SESSION_DURATION_MINUTES),
         "output_tokens_per_call": (256, 20000),
     }
+    if "session_duration_minutes" not in result:
+        raise ProjectError("Maximum session duration is required (or explicitly Unlimited)")
+    duration = result["session_duration_minutes"]
+    if duration is not None and (
+        type(duration) is not int or not 1 <= duration <= MAX_SESSION_DURATION_MINUTES
+    ):
+        raise ProjectError("Maximum session duration must be 1 minute–7 days or Unlimited")
     for key, (minimum, maximum) in bounds.items():
         value = result.get(key)
         if type(value) is not int or not minimum <= value <= maximum:
@@ -1386,6 +1392,13 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         latest = artifacts[-1]
         summary = f"Latest result: {latest['claim_or_question']} Skeptic review: {latest['skeptic_response']}"
     caveats = ["Agent-reported evidence is unverified; agreement is not independent verification."]
+    historical_omissions = record.get("prior_session_obligations_omitted", 0)
+    if isinstance(historical_omissions, int) and historical_omissions > 0:
+        caveats.append(
+            f"{historical_omissions} prior-session unresolved obligations were omitted from "
+            "bounded model context. This session cannot certify that it addressed the "
+            "complete historical obligation ledger; saved originals remain available."
+        )
     if objective_review:
         if objective_review.get("status") == "achieved" and not objective_review.get(
             "argument_steps"
@@ -3048,6 +3061,12 @@ def _save(path: str, record: dict[str, Any]) -> None:
         _save_unlocked(path, record)
 
 
+def _assert_session_build_immutable(previous: dict[str, Any], updated: dict[str, Any]) -> None:
+    """A resumed session retains the exact backend build which created it."""
+    if previous.get("backend_build_commit") != updated.get("backend_build_commit"):
+        raise ProjectError("Research session creation build cannot change")
+
+
 def _save_unlocked(path: str, record: dict[str, Any]) -> None:
     if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
@@ -3090,6 +3109,7 @@ def _save_unlocked(path: str, record: dict[str, Any]) -> None:
                     or previous.get("session_number") != record["session_number"]
                 ):
                     raise ProjectError("Research session identity cannot change")
+                _assert_session_build_immutable(previous, record)
             total = sum(
                 len(data)
                 for name, data in members.items()
@@ -3123,7 +3143,17 @@ def _save_unlocked(path: str, record: dict[str, Any]) -> None:
             item.stat().st_size for item in existing if item.is_file() and not item.is_symlink()
         )
         target = directory / f"{record['id']}.json"
-        previous = target.stat().st_size if target.exists() and not target.is_symlink() else 0
+        if target.is_symlink():
+            raise ProjectError("Research session record cannot be a symbolic link")
+        if target.exists():
+            try:
+                prior_record = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeDecodeError) as exc:
+                raise ProjectError("Existing research session record is unreadable") from exc
+            if not isinstance(prior_record, dict):
+                raise ProjectError("Existing research session record is invalid")
+            _assert_session_build_immutable(prior_record, record)
+        previous = target.stat().st_size if target.exists() else 0
         if total - previous + len(encoded) > MAX_TOTAL:
             raise ProjectError(
                 "Research session storage limit reached; session paused without dropping artifacts"
@@ -4779,9 +4809,13 @@ async def start_session(
                 "updated_at": _now(),
                 "started_at": _now(),
                 "deadline_at": (
-                    datetime.now(UTC)
-                    + timedelta(minutes=runtime_limits["session_duration_minutes"])
-                ).isoformat(),
+                    (
+                        datetime.now(UTC)
+                        + timedelta(minutes=runtime_limits["session_duration_minutes"])
+                    ).isoformat()
+                    if runtime_limits["session_duration_minutes"] is not None
+                    else None
+                ),
                 "calls_used": 0,
                 "call_limit": limits["model_calls"],
                 "max_concurrent_sessions": limits["max_concurrent_sessions"],
@@ -4843,28 +4877,9 @@ async def start_session(
                 record["strategy_ids"],
                 diagnostics=cloud_research.billing_enabled(),
             )
-            omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
-            if omitted_by_strategy:
-                blocked = []
-                for selected_strategy_id in record["strategy_ids"]:
-                    omitted_count = omitted_by_strategy.get(selected_strategy_id, 0)
-                    if not omitted_count:
-                        continue
-                    selected_strategy = next(
-                        item
-                        for item in selected_strategies
-                        if item is not None and item.id == selected_strategy_id
-                    )
-                    blocked.append(
-                        f"{selected_strategy.title}: {omitted_count} unresolved prior-session "
-                        "obligations exceed the safe context bound"
-                    )
-                raise ProjectError(
-                    "Research was not started; no provider call was made. "
-                    + "; ".join(blocked)
-                    + ". Saved research is unchanged. Disable the affected strategy or start a "
-                    "new, narrower strategy informed by its saved findings."
-                )
+            # Historical obligations are bounded for provider context, not for
+            # research admission. Omitted IDs/counts remain frozen in the session
+            # and are disclosed to every agent in its context manifest.
             record["session_number"] = _allocate_session_number(view.path, records)
             obligation_source_ids = {
                 artifact_id
@@ -5007,11 +5022,14 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["stopped_duration_seconds"] = (
             float(record.get("stopped_duration_seconds", 0)) + stopped_for.total_seconds()
         )
-        record["deadline_at"] = (
-            datetime.fromisoformat(record["deadline_at"]) + stopped_for
-        ).isoformat()
+        if isinstance(record.get("deadline_at"), str):
+            record["deadline_at"] = (
+                datetime.fromisoformat(record["deadline_at"]) + stopped_for
+            ).isoformat()
         record.pop("stopped_at", None)
-    if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+    if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
+        record["deadline_at"]
+    ) <= datetime.now(UTC):
         record["status"] = "ended"
         record["current_action"] = "Ended · time ceiling"
         record["termination_reason_code"] = "time_limit_reached"
@@ -5893,11 +5911,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         if isinstance(omitted_by_strategy, dict)
         else record.get("prior_session_obligations_omitted", 0)
     )
-    if relevant_omission_count:
-        raise ResearchContextLimitError(
-            "Prior-session unresolved obligations exceeded the frozen context bound. "
-            "No provider call was made; all saved records remain intact. Narrow the strategy or review the omitted obligation IDs."
-        )
+    # A bounded historical snapshot may omit unresolved details. Preserve their
+    # counts and IDs in the context manifest so agents cannot treat the subset
+    # as an exhaustive obligation ledger, but do not prevent research from starting.
     prior_session_failures = record.get("prior_session_failures")
     prior_session_failures_omitted = record.get("prior_session_failures_omitted", 0)
     prior_failure_omitted_attempt_ids = record.get("prior_session_failure_omitted_attempt_ids", [])
@@ -6164,6 +6180,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             }
         )
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+    _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise ResearchContextLimitError(
             "Research context manifest exceeds its storage bound; no provider call was made."
@@ -6179,6 +6196,52 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
 
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _bound_context_manifest(manifest: dict[str, Any]) -> None:
+    """Bound audit pointer lists, never historical obligations or source evidence.
+
+    The frozen model context and saved session retain the obligation snapshot.
+    Counts and not-listed counts distinguish shortened manifest pointers from
+    a claim that missing obligations were resolved or never existed.
+    """
+    if _json_bytes(manifest) <= MAX_CONTEXT_MANIFEST_BYTES:
+        return
+
+    def trim(owner: dict[str, Any], field: str, limit: int) -> None:
+        values = owner.get(field)
+        if not isinstance(values, list) or len(values) <= limit:
+            return
+        removed = len(values) - limit
+        owner[field] = values[:limit]
+        key = f"{field}_not_listed_count"
+        owner[key] = int(owner.get(key, 0)) + removed
+
+    optional_pointers = (
+        ("omitted_prior_session_obligations", "obligation_ids"),
+        ("omitted_prior_session_findings", "source_ids"),
+        ("omitted_prior_failures", "attempt_ids"),
+        ("omitted_obligations", "obligation_ids"),
+        ("omitted_peer_evidence", "artifact_ids"),
+        ("omitted_project_strategies", "strategy_ids"),
+        ("compacted_prior_obligation_references", "obligations"),
+    )
+    for cap in (16, 8, 4, 2, 0):
+        for category, field in optional_pointers:
+            item = manifest.get(category)
+            if isinstance(item, dict):
+                trim(item, field, cap)
+        if _json_bytes(manifest) <= MAX_CONTEXT_MANIFEST_BYTES:
+            return
+
+    # The manifest is an audit index, not the source context itself. Selected
+    # source IDs remain separately available in the frozen model context.
+    for cap in (16, 8, 4, 2, 1):
+        for group in manifest.get("sources", []):
+            if isinstance(group, dict):
+                trim(group, "source_ids", cap)
+        if _json_bytes(manifest) <= MAX_CONTEXT_MANIFEST_BYTES:
+            return
 
 
 def _manifest_source_group(
@@ -7346,6 +7409,7 @@ def _portfolio_context(
         if handoff_group is not None:
             context["context_manifest"]["sources"].append(handoff_group)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+    _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise ResearchContextLimitError(
             "Research context manifest exceeds its storage bound; no provider call was made."
@@ -8184,6 +8248,7 @@ async def _portfolio_role_call(
                 if guidance_group is not None:
                     context["context_manifest"]["sources"].append(guidance_group)
                 context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+                _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                     raise ResearchContextLimitError(
                         "Research context manifest exceeds its storage bound; no provider call was made."
@@ -8269,7 +8334,9 @@ async def _portfolio_role_call(
                 _record_preflight_failure(record, branch, role, "model_configuration", exc)
                 _save(path, record)
                 raise exc
-            if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+            if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
+                record["deadline_at"]
+            ) <= datetime.now(UTC):
                 branch["status"] = "ended"
                 branch["reason"] = "Session duration limit reached before a call was dispatched."
                 branch["current_action"] = "Time limit"
@@ -10622,6 +10689,7 @@ async def _worker(session_id: str, path: str) -> None:
             if guidance_group is not None:
                 context["context_manifest"]["sources"].append(guidance_group)
             context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+            _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                 raise ResearchContextLimitError(
                     "Research context manifest exceeds its storage bound; no provider call was made."
@@ -10642,7 +10710,9 @@ async def _worker(session_id: str, path: str) -> None:
             _save(path, record)
             gates = await _acquire_gates()
             try:
-                if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+                if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
+                    record["deadline_at"]
+                ) <= datetime.now(UTC):
                     record["status"] = "paused"
                     record["message"] = (
                         "Configured session duration reached while waiting for provider access. No new call was made."
