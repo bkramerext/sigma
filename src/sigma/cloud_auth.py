@@ -462,21 +462,21 @@ def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str)
     """
     if not subject or subject.startswith("legacy-denied:"):
         return False
-    if db.execute("SELECT 1 FROM grants WHERE kind='email' AND value=?", (email,)).fetchone():
-        return False
-    domain = email.rsplit("@", 1)[1]
-    allowed = db.execute(
-        "SELECT allowance_usd FROM grants WHERE kind='domain' AND value=? AND role='member' AND active=1",
-        (domain,),
-    ).fetchone()
-    if allowed is None:
-        return False
     now = _now()
-    db.execute(
+    # One conditional INSERT is the admission/approval decision. It checks
+    # the live domain policy and absence of any explicit (including revoked)
+    # email grant under SQLite's writer transaction, so two tabs cannot both
+    # approve or race an administrator's revocation between SELECT and INSERT.
+    inserted = db.execute(
         "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
-        "VALUES('email',?,'member',1,?,?)",
-        (email, now, allowed["allowance_usd"]),
+        "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
+        "WHERE d.kind='domain' AND d.value=? AND d.role='member' AND d.active=1 "
+        "AND NOT EXISTS(SELECT 1 FROM grants AS e WHERE e.kind='email' AND e.value=?) "
+        "ON CONFLICT(kind,value) DO NOTHING",
+        (email, now, email.rsplit("@", 1)[1], email),
     )
+    if inserted.rowcount != 1:
+        return False
     db.execute(
         "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
         "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
