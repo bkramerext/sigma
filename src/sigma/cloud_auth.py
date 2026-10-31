@@ -2282,10 +2282,9 @@ def list_invitation_requests():
             "WHERE status NOT IN ('reviewed','declined') ORDER BY requested_at DESC LIMIT 500"
         ).fetchall()
         grants = db.execute(
-            "SELECT kind,value,active FROM grants WHERE kind IN ('email','domain')"
+            "SELECT kind,value FROM grants WHERE active=1 AND kind IN ('email','domain')"
         ).fetchall()
     active_emails = set()
-    revoked_emails = set()
     active_domains = set()
     for grant in grants:
         try:
@@ -2296,17 +2295,12 @@ def list_invitation_requests():
             )
         except ValueError:
             continue
-        if grant["kind"] == "email":
-            (active_emails if grant["active"] else revoked_emails).add(normalized)
-        elif grant["active"]:
-            active_domains.add(normalized)
+        (active_emails if grant["kind"] == "email" else active_domains).add(normalized)
     requests = []
     for row in rows:
         email = str(row["email"]).strip().casefold()
         domain = email.rsplit("@", 1)[-1].removesuffix(".")
-        if row["request_type"] != "reload" and (
-            email in active_emails or (domain in active_domains and email not in revoked_emails)
-        ):
+        if row["request_type"] != "reload" and (email in active_emails or domain in active_domains):
             continue
         requests.append(dict(row))
     return {"requests": requests}
