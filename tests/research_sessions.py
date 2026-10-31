@@ -458,6 +458,37 @@ async def test_disabled_strategy_never_starts_a_run(path: Path):
     assert research_sessions.list_sessions(str(path)) == []
 
 
+def test_project_concurrency_max_four_and_legacy_read(root: Path) -> None:
+    view = initialize_project(
+        root / "project-concurrency-bounds.sigma", "Bounded project", "Check project limits"
+    )
+    path = view.path
+    original = dict(research_sessions.DEFAULT_LIMITS)
+    assert research_sessions.get_limits(path)["max_concurrent_sessions"] == 1
+    saved = research_sessions.save_limits(path, {**original, "max_concurrent_sessions": 4})
+    assert saved["max_concurrent_sessions"] == 4
+
+    for invalid in (0, 5, "5", -1, "not-a-number"):
+        try:
+            research_sessions.save_limits(
+                path, {**original, "max_concurrent_sessions": invalid}
+            )
+        except ProjectError as exc:
+            assert "between 1 and 4" in str(exc)
+        else:
+            raise AssertionError(f"Project limit {invalid!r} exceeded 1–4 cap")
+
+    # Old projects saved without bounds remain readable and can be brought
+    # into compliance without rewriting their project bundle on mere inspection.
+    legacy = {**original, "max_concurrent_sessions": 17}
+    saved_path = Path(path) / "research-sessions" / "limits.json"
+    saved_path.write_text(json.dumps(legacy), encoding="utf-8")
+    assert research_sessions.get_limits(path)["max_concurrent_sessions"] == 4
+    assert json.loads(saved_path.read_text())["max_concurrent_sessions"] == 17
+    research_sessions.save_limits(path, research_sessions.get_limits(path))
+    assert json.loads(saved_path.read_text())["max_concurrent_sessions"] == 4
+
+
 async def test_project_concurrent_session_limit_is_atomic(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = {**research_sessions.DEFAULT_LIMITS, "max_concurrent_sessions": 2}
@@ -8559,6 +8590,7 @@ def main():
     test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
+        test_project_concurrency_max_four_and_legacy_read(root)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(
             test_project_concurrent_session_limit_is_atomic(root / "concurrency-limit.sigma")
