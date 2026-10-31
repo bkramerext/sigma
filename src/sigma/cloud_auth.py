@@ -2188,7 +2188,7 @@ class FeedbackStatusUpdate(BaseModel):
 
 @router.post("/feedback")
 def submit_feedback(body: FeedbackSubmission, request: Request, response: Response):
-    """Persist visitor feedback without sending it to a model or mail provider."""
+    """Persist visitor feedback first, then notify administrators best-effort."""
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.database:
         raise HTTPException(503, "Feedback is temporarily unavailable.")
