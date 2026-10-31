@@ -3912,7 +3912,43 @@ def test_long_paper_planning_timeout_is_stage_specific() -> None:
     assert observed == [3600, 3600]
 
 
+def test_opt_in_diagram_schema_and_safe_tex_rendering() -> None:
+    unchecked = papers._paper_response_schema(papers.PaperDraft)
+    checked = papers._paper_response_schema(papers.PaperDraft, include_diagrams=True)
+    assert "diagrams" not in unchecked["properties"]
+    assert "diagrams" in checked["properties"]
+    assert "PaperDiagram" not in unchecked.get("$defs", {})
+    figure = papers.PaperDiagram.model_validate(
+        {
+            "caption": "Proposed policy-first routing; not an implemented federation.",
+            "nodes": [
+                {"id": "campus", "label": r"Campus & \input{secret}"},
+                {"id": "policy", "label": "Policy gate"},
+                {"id": "frontier", "label": "Approved frontier API"},
+            ],
+            "edges": [
+                {"source": "campus", "target": "policy", "label": "request"},
+                {"source": "policy", "target": "frontier", "label": "allow only"},
+            ],
+            "boundaries": [
+                {"label": "Proposed campus trust boundary", "node_ids": ["campus", "policy"]}
+            ],
+        }
+    )
+    paper = draft()
+    paper = paper.model_copy(update={"diagrams": [figure]})
+    tex = papers._tex(paper, [], "a" * 64)
+    assert tex.index(r"\usepackage{tikz}") < tex.index(r"\begin{document}")
+    assert r"\input{secret}" not in tex
+    assert r"Campus \&" in tex
+    assert "Proposed campus trust boundary" in tex
+    if shutil.which("tectonic"):
+        pdf = papers._compile_pdf(tex, timeout_seconds=90)
+        assert pdf.startswith(b"%PDF-")
+
+
 def main() -> None:
+    test_opt_in_diagram_schema_and_safe_tex_rendering()
     test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
     test_publication_paragraphs_math_and_bounded_optional_appendix()
     test_summary_only_research_uses_zero_paid_evidence_extraction_calls()

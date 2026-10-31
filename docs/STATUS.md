@@ -8417,3 +8417,14 @@ was not independently captured and remains unverified. No paid provider calls
 were made. See [the issue handoff](../messages/issue_301_green_r4r.txt) for the
 current SHA, exact evidence, screenshots, and limitations. PR remains open and
 unmerged.
+
+
+## Issue #394 sample and #393 optional paper diagrams — initial Blue progress (2026-10-31)
+
+On branch `blue/issue-393-394-sovereign-diagrams` from `main` at `2d0a564c`, the new schema-v8 **Sovereign AI Federation** stock sample is implemented with three active strategies. Its question distinguishes MindRouter's documented on-campus gateway from proposed federation/frontier routing and frames ownership-cost, cost-per-successful-task, fairness, policy and reliability as research questions. The cited MindRouter documentation and PEARC'26 paper were reviewed 2026-10-31. SIGMA sample decode, independent copies and complete project-bundle export passed.
+
+The paper dialog has a default-off, project-persisted **Include diagrams (experimental)** option. The API passes the option only when enabled. Bounded diagram JSON uses allow-listed identifiers, text-only escaped labels, 8-node/12-edge/four-boundary limits and deterministic TikZ layout. The checkbox choice is saved in one-shot/long-paper checkpoints; an incompatible retry requires explicit restart. Invalid references are omitted with a warning, and Tectonic failure retries compilation without diagrams while preserving the same text and evidence appendix. No live or paid provider calls were made.
+
+Targeted `tests/papers.py` passed, including malicious-label escaping, option-specific strict schemas and real local Tectonic compilation. `tests/project_reports.py`, Ruff on changed Python modules, and frontend `npm run typecheck` passed. A real-Chrome browser check is added, but its attempt did not complete: the Samples view remained at “Loading sample projects…” despite the fixture endpoint returning HTTP 200. UI option persistence therefore remains UNVERIFIED in browser. Deterministic sample-copy paper artifacts are under `docs/evaluations/issue_393_394/mock_fixture/`; they explicitly state that they are not independently validated research.
+
+This is an interim engineering checkpoint only. No Investigator/Skeptic research has been run; conventional/diagram paper comparison, fallback/recovery edge cases beyond existing tests, final browser acceptance, full `./sigma test`, PR creation and coordinator review remain outstanding.
