@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import os
 import re
@@ -287,7 +286,7 @@ def _archive_bytes(
 
 
 def list_answers(path: str) -> list[dict[str, Any]]:
-    current = _available_sessions(path)
+    current = _navigation_context(path)
     return sorted(
         (_with_navigation(record, current) for record in _load(path)),
         key=lambda record: record["created_at"],
@@ -295,14 +294,23 @@ def list_answers(path: str) -> list[dict[str, Any]]:
     )
 
 
-def _available_sessions(path: str) -> dict[str, dict[str, Any]]:
+def _navigation_context(path: str) -> dict[str, Any]:
     from sigma.api import export_project_view
 
     data = export_project_view(path)
-    return {str(session.get("id")): session for session in data.get("research_sessions", [])}
+    return {
+        "sessions": {
+            str(session.get("id")): session for session in data.get("research_sessions", [])
+        },
+        "project": data.get("project", {}),
+        "path": str(project_path(path)),
+    }
 
 
-def _with_navigation(record: dict[str, Any], sessions: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _with_navigation(record: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    sessions = context.get("sessions", {})
+    project = context.get("project", {})
+    base_query = {"path": context.get("path", "")}
     frozen_ids = {
         str(row.get("id")) for row in record.get("evidence_snapshot", []) if isinstance(row, dict)
     }
@@ -317,18 +325,123 @@ def _with_navigation(record: dict[str, Any], sessions: dict[str, dict[str, Any]]
             ref_text.split(":")[1] if ref_text.startswith(("session:", "artifact:")) else ""
         )
         session = sessions.get(session_id)
-        if ref_text.startswith("artifact:") and session:
-            artifact_id = ref_text.split(":", 2)[2]
-            item["navigation_available"] = trusted and any(
-                str(artifact.get("id")) == artifact_id for artifact in session.get("artifacts", [])
+        if ref_text.startswith("project:"):
+            item["label"] = f"Project · {project.get('title') or 'Saved project'}"
+            available = (
+                trusted
+                and ref_text
+                == f"project:{record.get('project_id')}"
+                == f"project:{project.get('id')}"
             )
-        else:
-            if ref_text.startswith("current-understanding:"):
-                item["navigation_available"] = trusted and ref_text.split(":", 1)[1] == record.get(
-                    "project_id"
+            if not available:
+                item["navigation_unavailable_reason"] = (
+                    "The cited project information is no longer available."
+                )
+        elif ref_text.startswith("strategy:"):
+            strategy_id = ref_text.split(":", 1)[1]
+            frozen = next(
+                (
+                    row.get("data", {})
+                    for row in record.get("evidence_snapshot", [])
+                    if row.get("id") == ref_text
+                ),
+                {},
+            )
+            strategy = next(
+                (
+                    row
+                    for row in project.get("strategies", [])
+                    if row.get("id") == strategy_id and not row.get("removed_at")
+                ),
+                None,
+            )
+            item["label"] = f"Strategy · {frozen.get('title') or strategy_id[:8]}"
+            available = trusted and strategy is not None
+            if not available:
+                item["navigation_unavailable_reason"] = (
+                    "This strategy is no longer active in the project."
+                )
+        elif ref_text.startswith("artifact:") and session:
+            artifact_id = ref_text.split(":", 2)[2]
+            artifact = next(
+                (a for a in session.get("artifacts", []) if str(a.get("id")) == artifact_id), None
+            )
+            number = item.get("session_number") or session.get("session_number")
+            artifact_label = (
+                artifact.get("sequence", artifact_id[:8]) if artifact else artifact_id[:8]
+            )
+            item["label"] = (
+                f"Session #{number} · Artifact {artifact_label}"
+                if number
+                else f"Research artifact {artifact_label}"
+            )
+            available = trusted and artifact is not None
+            item["navigation_available"] = available
+            if available:
+                item["navigation_url"] = (
+                    f"/project?{urlencode({**base_query, 'reveal_session': session_id, 'reveal_artifact': artifact_id})}"
                 )
             else:
-                item["navigation_available"] = trusted and bool(session)
+                item["navigation_unavailable_reason"] = (
+                    "The cited artifact is no longer available in this session."
+                )
+        elif ref_text.startswith("artifact:"):
+            number = item.get("session_number")
+            artifact_label = ref_text.split(":", 2)[-1][:8]
+            item["label"] = (
+                f"Session #{number} · Artifact {artifact_label}"
+                if number
+                else f"Research artifact {artifact_label}"
+            )
+            item["navigation_unavailable_reason"] = (
+                "The cited research session is no longer available in this project."
+            )
+            available = False
+        elif ref_text.startswith("session:"):
+            number = item.get("session_number") or (session or {}).get("session_number")
+            item["label"] = f"Session #{number}" if number else f"Research session {session_id[:8]}"
+            available = trusted and bool(session)
+            item["navigation_available"] = available
+            if available:
+                item["navigation_url"] = (
+                    f"/project?{urlencode({**base_query, 'reveal_session': session_id})}"
+                )
+            else:
+                item["navigation_unavailable_reason"] = (
+                    "The cited research session is no longer available in this project."
+                )
+        elif ref_text.startswith("current-understanding:"):
+            item["label"] = "Current Understanding"
+            available = trusted and ref_text.split(":", 1)[1] == record.get(
+                "project_id"
+            ) == project.get("id")
+            item["navigation_available"] = available
+            if available:
+                item["navigation_url"] = (
+                    f"/project?{urlencode({**base_query, 'reveal_understanding': '1'})}"
+                )
+            else:
+                item["navigation_unavailable_reason"] = (
+                    "This project’s Current Understanding is unavailable."
+                )
+        else:
+            kind = str(item.get("kind") or "saved evidence")
+            item["label"] = {"agentic_run": "Research run", "agentic_step": "Research step"}.get(
+                kind, kind.replace("_", " ").title()
+            )
+            available = False
+            item["navigation_unavailable_reason"] = (
+                "This evidence type has no direct navigation target."
+            )
+        if "navigation_available" not in item:
+            item["navigation_available"] = available
+        if available and "navigation_url" not in item:
+            target_query = {**base_query}
+            if ref_text.startswith("project:"):
+                target_query["reveal_project"] = "1"
+            elif ref_text.startswith("strategy:"):
+                target_query["reveal_strategy"] = ref_text.split(":", 1)[1]
+            item["navigation_url"] = f"/project?{urlencode(target_query)}"
         sources.append(item)
     result["sources"] = sources
     return result
@@ -575,7 +688,7 @@ def get_answer(path: str, qa_id: str) -> dict[str, Any]:
     record = next((row for row in _load(path) if row.get("qa_id") == qa_id), None)
     if record is None or record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Saved Q/A answer was not found")
-    return _with_navigation(record, _available_sessions(path))
+    return _with_navigation(record, _navigation_context(path))
 
 
 def delete_answer(path: str, qa_id: str) -> None:
@@ -597,56 +710,52 @@ def delete_answer(path: str, qa_id: str) -> None:
     _archive_update(path, remove)
 
 
-def standalone_html(path: str, qa_id: str) -> str:
-    record = get_answer(path, qa_id)
-    title = html.escape(record["question"])
-    answer = html.escape(record["answer"]).replace("\n\n", "</p><p>").replace("\n", "<br>")
-    links = []
-    for row in record.get("sources", []):
-        source_id = row.get("source_id", "")
-        if isinstance(source_id, str) and source_id.startswith("current-understanding:"):
-            href = (
-                f"/project?{urlencode({'path': str(project_path(path)), 'reveal_understanding': '1'})}"
-                if row.get("navigation_available")
-                else ""
-            )
-            label_html = (
-                f'<a href="{html.escape(href, quote=True)}">Current Understanding</a>'
-                if href
-                else "Current Understanding · navigation unavailable"
-            )
-            links.append(f"<li>{label_html} · saved assessment</li>")
-            continue
-        session_id = (
-            source_id.split(":")[1]
-            if isinstance(source_id, str) and source_id.startswith(("session:", "artifact:"))
-            else ""
+def markdown_document(record: dict[str, Any]) -> str:
+    lines = [
+        "# Research Q/A",
+        "",
+        "## Question",
+        "",
+        record["question"],
+        "",
+        "## Answer",
+        "",
+        record["answer"],
+        "",
+        "## Sources",
+        "",
+    ]
+    for source in record.get("sources", []):
+        label = re.sub(
+            r"[\r\n]+", " ", str(source.get("label") or source.get("kind") or "Saved evidence")
         )
-        artifact_id = (
-            source_id.split(":", 2)[2]
-            if isinstance(source_id, str) and source_id.startswith("artifact:")
-            else ""
-        )
-        label = (
-            f"Session #{row.get('session_number')}"
-            if row.get("session_number")
-            else "Saved project evidence"
-        )
-        params = {"path": str(project_path(path)), "reveal_session": session_id}
-        if artifact_id:
-            params["reveal_artifact"] = artifact_id
-        href = (
-            f"/project?{urlencode(params)}"
-            if session_id and row.get("navigation_available")
-            else ""
-        )
-        label_html = (
-            f'<a href="{html.escape(href, quote=True)}">{html.escape(label)}</a>'
-            if href
-            else html.escape(label + (" · navigation unavailable" if session_id else ""))
-        )
-        links.append(
-            f"<li>{label_html} · {html.escape(str(row.get('kind', 'saved evidence')))}</li>"
-        )
-    sources = "".join(links) or "<li>No validated citations were returned.</li>"
-    return f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Research Q/A</title><style>body{{max-width:52rem;margin:2rem auto;padding:0 1rem;font:16px/1.65 system-ui;color:#e4ebf3;background:#171d23}}h1{{font-size:1.5rem}}h2{{font-size:1.05rem;color:#c7a16d}}article{{white-space:normal}}li{{margin:.35rem 0}}a{{color:#e0b387}}.meta{{color:#aab4be;font-size:.9rem;overflow-wrap:anywhere}}@media(max-width:600px){{body{{margin:1rem auto}}}}</style><main><h1>Research Q/A</h1><h2>Question</h2><p>{title}</p><h2>Answer</h2><article><p>{answer}</p></article><h2>Sources</h2><ul>{sources}</ul><p class="meta">{html.escape(record["created_at"])} · {html.escape(record.get("generation", {}).get("model", ""))} · Snapshot {html.escape(record.get("snapshot_sha256", ""))}</p></main></html>'
+        label = re.sub(r"([\\\[\]])", r"\\\1", label)
+        url = source.get("navigation_url")
+        if (
+            source.get("navigation_available")
+            and isinstance(url, str)
+            and url.startswith("/project?")
+        ):
+            lines.append(f"- [{label}]({url})")
+        else:
+            reason = source.get("navigation_unavailable_reason") or "Navigation is unavailable."
+            lines.append(f"- {label} · navigation unavailable: {reason}")
+    if not record.get("sources"):
+        lines.append("- No validated citations were returned.")
+    generation = record.get("generation", {})
+    lines += [
+        "",
+        "## Metadata",
+        "",
+        f"Created: {record['created_at']}",
+        "",
+        f"Model: {generation.get('model', 'Unavailable')}",
+        "",
+        f"Thinking level: {generation.get('reasoning_effort', 'Unavailable')}",
+        "",
+        f"Generation duration: {generation.get('generation_elapsed_seconds', 'Unavailable')} seconds",
+        "",
+        f"Research version: `{record.get('snapshot_sha256', '')}`",
+        "",
+    ]
+    return "\n".join(lines)

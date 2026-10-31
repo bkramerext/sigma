@@ -59,9 +59,16 @@ with sync_playwright() as playwright:
     welcome = page.locator("#invitation-welcome-dialog")
     if welcome.count() and welcome.is_visible():
         welcome.get_by_role("button", name="Let's get started", exact=True).click()
+        expect(welcome).to_be_hidden()
     samples = page.get_by_role("tab", name="Samples", exact=True)
     samples.click()
-    page.locator("button.sample-open").filter(has_text="Maximum Regions Formed by Lines").click()
+    mathematics = page.locator("details.sample-type-group").filter(has_text="Mathematics")
+    mathematics.evaluate(
+        "node => { node.open = true; localStorage.setItem('sigma.home.sampleGroup:mathematical', 'true'); }"
+    )
+    page.locator("button.sample-open:visible").filter(
+        has_text="Maximum Regions Formed by Lines"
+    ).click()
     page.wait_for_url("**/project?*")
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
     page.get_by_role("button", name="Start a new research session", exact=True).click()
@@ -79,6 +86,12 @@ with sync_playwright() as playwright:
     expect(tex).to_be_visible()
     expect(qa_button).to_be_visible()
     assert qa_button.bounding_box()["x"] > tex.bounding_box()["x"]
+    lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
+    assert (
+        qa_button.bounding_box()["height"]
+        == tex.bounding_box()["height"]
+        == lean.bounding_box()["height"]
+    )
     qa_button.click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog).to_contain_text("Ask a question about the research performed in this project")
@@ -170,7 +183,7 @@ with sync_playwright() as playwright:
     card.locator(".saved-paper-expand").click()
     expect(card.locator(".saved-paper-expand")).to_have_attribute("aria-expanded", "true")
     expect(card.locator(".ai-paper-preview")).to_contain_text("The saved research answers")
-    citation = card.locator(".ai-paper-preview a").first
+    citation = card.locator(".ai-paper-preview a").filter(has_text="Session #1").first
     expect(citation).to_be_visible()
     citation_url = citation.get_attribute("href")
     assert "reveal_session=" in citation_url
@@ -182,34 +195,106 @@ with sync_playwright() as playwright:
         "Q/A must not create research sessions"
     )
 
-    copy_button = card.get_by_role("button", name="Copy answer")
+    expect(
+        card.locator(".research-qa-answer-heading").get_by_role("heading", name="Answer")
+    ).to_be_visible()
+    copy_button = card.locator(".research-qa-answer-heading").get_by_role(
+        "button", name="Copy Markdown answer"
+    )
     copy_button.click()
-    expect(card.get_by_role("button", name="Copied answer to clipboard")).to_be_visible(
+    expect(card.get_by_role("button", name="Copied Markdown answer to clipboard")).to_be_visible(
         timeout=3000
     )
     copied = page.evaluate("navigator.clipboard.readText()")
-    assert question in copied and "The saved research answers" in copied and "Session #1" in copied
+    assert copied.startswith("# Research Q/A") and "## Question" in copied and question in copied
+    assert (
+        "## Answer" in copied
+        and "The saved research answers" in copied
+        and "## Sources" in copied
+        and "Session #1" in copied
+    )
+    version = card.locator(".research-qa-version span")
+    expect(version).to_contain_text("Research version:")
+    expect(version).to_have_attribute(
+        "title",
+        "Identifies the research used to generate this answer. If the research changes, the answer still refers to the original version.",
+    )
+    expect(card.locator(".research-qa-technical")).not_to_have_attribute("open", "")
+    card.locator(".research-qa-technical summary").click()
+    fingerprint = saved_answers[0]["snapshot_sha256"]
+    expect(card.locator(".research-qa-technical")).to_contain_text(fingerprint)
+    card.locator(".research-qa-technical").get_by_role(
+        "button", name="Copy research version fingerprint"
+    ).click()
+    assert page.evaluate("navigator.clipboard.readText()") == fingerprint
+    expect(
+        card.locator(".research-qa-technical").get_by_role(
+            "button", name="Copied research version fingerprint to clipboard"
+        )
+    ).to_be_visible()
     page.evaluate(
         "Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:() => Promise.reject(new Error('blocked'))})"
     )
-    card.get_by_role("button", name="Copied answer to clipboard").click()
+    card.locator(".research-qa-answer-heading").get_by_role(
+        "button", name="Copied Markdown answer to clipboard"
+    ).click()
     expect(dialog.get_by_role("alert")).to_contain_text("Clipboard access failed")
 
+    with page.expect_popup() as markdown_popup:
+        card.get_by_role("link", name="Markdown", exact=True).click()
+    markdown_page = markdown_popup.value
+    expect(markdown_page.locator("body")).to_contain_text("## Question")
+    expect(markdown_page.locator("body")).to_contain_text("## Sources")
+    expect(markdown_page.locator("body")).to_contain_text("[Session #1]")
+    markdown_page.screenshot(path=str(OUT / "research-qa-markdown-source.png"), full_page=True)
+    markdown_page.close()
     with page.expect_popup() as popup:
         card.get_by_role("link", name="Open in browser").click()
     browser_page = popup.value
     expect(browser_page.get_by_role("heading", name="Research Q/A")).to_be_visible()
+    expect(browser_page.get_by_role("heading", name="Evidence-based answer")).to_be_visible()
+    expect(browser_page.locator(".katex")).to_be_visible()
+    expect(browser_page.locator("main")).to_contain_text("Generation duration:")
+    forged_link = browser_page.locator("main a").filter(has_text="forged citation")
+    assert forged_link.count() <= 1 and (
+        not forged_link.count() or forged_link.first.get_attribute("href") in {None, ""}
+    )
+    assert browser_page.evaluate("window.__sigmaInjected !== true")
     expect(browser_page.get_by_text(question, exact=True)).to_be_visible()
     citation_links = browser_page.locator("main ul a")
-    expect(citation_links).to_have_count(3)
-    expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_session="))
-    expect(citation_links.nth(1)).to_have_attribute("href", re.compile("reveal_artifact="))
-    expect(citation_links.nth(2)).to_have_text("Current Understanding")
+    expect(citation_links).to_have_count(5)
+    expect(citation_links.nth(0)).to_have_text(re.compile("Project ·"))
+    expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_project=1"))
+    expect(citation_links.nth(1)).to_have_text(re.compile("Strategy ·"))
+    expect(citation_links.nth(1)).to_have_attribute("href", re.compile("reveal_strategy="))
+    expect(citation_links.nth(2)).to_have_attribute("href", re.compile("reveal_session="))
+    expect(citation_links.nth(3)).to_have_attribute("href", re.compile("reveal_artifact="))
+    expect(citation_links.nth(4)).to_have_text("Current Understanding")
     browser_page.screenshot(path=str(OUT / "research-qa-browser-desktop.png"), full_page=True)
     browser_page.set_viewport_size({"width": 390, "height": 844})
     browser_page.screenshot(path=str(OUT / "research-qa-browser-mobile.png"), full_page=True)
     assert browser_page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    artifact_link = citation_links.nth(1)
+    with browser_page.expect_navigation():
+        citation_links.nth(0).click()
+    browser_page.wait_for_function(
+        "new URL(location.href).searchParams.get('reveal_project') === '1'"
+    )
+    expect(browser_page.locator(".project-overview-card")).to_have_class(
+        re.compile("citation-highlight")
+    )
+    browser_page.go_back()
+    browser_page.wait_for_function("new URL(location.href).searchParams.has('qa_browser')")
+    browser_page.locator("main ul a").filter(has_text="Strategy ·").click()
+    browser_page.wait_for_function("new URL(location.href).searchParams.has('reveal_strategy')")
+    strategy_target = browser_page.locator(
+        "#strategy-"
+        + browser_page.evaluate("new URL(location.href).searchParams.get('reveal_strategy')")
+    )
+    expect(strategy_target).to_be_visible()
+    browser_page.go_back()
+    browser_page.wait_for_function("new URL(location.href).searchParams.has('qa_browser')")
+    citation_links = browser_page.locator("main ul a")
+    artifact_link = citation_links.nth(3)
     with browser_page.expect_navigation():
         artifact_link.click()
     browser_page.wait_for_function("new URL(location.href).searchParams.has('reveal_artifact')")
@@ -262,6 +347,6 @@ with sync_playwright() as playwright:
     expect(mobile_dialog.locator(".saved-paper-card")).to_have_count(1)
     assert not errors, errors
     print(
-        "Research Q/A Chrome acceptance passed: recovery UI, archive, completed-session scroll, artifact and Current Understanding navigation, standalone desktop/mobile, clipboard success/failure, removal, and no new research session."
+        "Research Q/A Chrome acceptance passed: recovery, archive actions, Markdown copy/source/rendering and math, safe output, Research version/copy, all five citation types and reveal routes, desktop/mobile layout, clipboard errors, and no new research session."
     )
     browser.close()

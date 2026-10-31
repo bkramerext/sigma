@@ -10,7 +10,7 @@ import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -541,13 +541,21 @@ def research_qa_delete(qa_id: str, path: str):
 
 @app.get("/api/projects/research-qa/{qa_id}/browser")
 def research_qa_browser(qa_id: str, path: str):
+    research_qa.get_answer(path, qa_id)
+    return RedirectResponse(
+        f"/project?{urlencode({'path': path, 'qa_browser': qa_id})}",
+        status_code=303,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/projects/research-qa/{qa_id}/markdown")
+def research_qa_markdown(qa_id: str, path: str):
+    record = research_qa.get_answer(path, qa_id)
     return Response(
-        research_qa.standalone_html(path, qa_id),
-        media_type="text/html; charset=utf-8",
-        headers={
-            "Cache-Control": "no-store",
-            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
-        },
+        research_qa.markdown_document(record),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 

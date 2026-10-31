@@ -6,17 +6,19 @@ progress, `main` advanced with release-note PR #397 only; current `main` at
 `f6578249b6afc709b3976a56689e4ee1ed68b075` was merged into the feature branch
 without force-pushing or incorporating Blue's work. PR #398 is open and
 unmerged. It adds a durable,
-project-scoped Q/A archive over frozen saved research, validated session and
-artifact citations, a safe standalone browser view, and copy controls for Q/A
-and saved TeX text. Q/A does not start research or change research state.
+project-scoped Q/A archive over frozen saved research, type-aware project,
+strategy, session, artifact, and Current Understanding citations, a safe
+standalone Markdown-rendered browser view, and copy controls for Q/A and saved
+TeX text. Q/A does not start research or change research state.
 
 `./sigma test` passed, including Ruff, Pyright, frontend typecheck/build and the
 new deterministic Q/A service tests. Real Chrome checks passed with a local
 deterministic provider fixture for Q/A save/reopen/collapse/expand/remove,
-copy success/failure, session navigation, standalone desktop/mobile layout,
-and no added research session. The saved-paper Chrome check passed for TeX
-human-readable copy success/failure, download payloads, PDF browser view, and
-archive removal. Screenshots are in
+Markdown source and formatted browser equivalence, safe output, research
+version details/copy, all five source types and reveal navigation, clipboard
+success/failure, mobile layout, and no added research session. The saved-paper
+Chrome check passed for TeX human-readable copy success/failure, download
+payloads, PDF browser view, and archive removal. Screenshots are in
 [`docs/evaluations/research_qa/`](evaluations/research_qa/). No paid provider
 calls were made. The optional graph-present Python sandbox scenario skipped
 because the local sandbox image was unavailable. Cross-user authorization and
@@ -8493,3 +8495,27 @@ dispatch. Focused Research Q/A and API security tests, Ruff, Pyright, frontend
 typecheck/build, `./sigma test`, and both real Chrome checks passed. The optional
 graph-present sandbox test remains skipped because its local image is
 unavailable. No paid calls, deployment, or merge.
+
+## PR #398 Research Q/A presentation refinements (2026-10-31)
+
+The saved answer now exposes one canonical Markdown document through the
+Markdown action and clipboard. Open in browser renders that document with the
+existing safe Markdown/math renderer, while citations are activated only when
+their server-generated project path and reveal parameters validate. Citation
+labels distinguish Project, Strategy, Session, Artifact, and Current
+Understanding; removed or missing targets retain their identity and an
+unavailable explanation. Project, active strategy, completed session,
+supporting artifact, and Current Understanding links reveal the corresponding
+workspace location. Answer copy sits immediately beside its heading. The saved
+answer displays a short Research version fingerprint with the requested
+tooltip, and expandable technical details expose and copy the full SHA-256.
+The Q/A project action now matches TeX/Lean button height.
+
+Focused Q/A and API security tests, Ruff, Pyright, frontend typecheck/build,
+`./sigma test`, real Chrome Q/A acceptance, and the saved-paper TeX Chrome
+regression all passed. Chrome confirmed Markdown source/rendering, headings,
+lists and mathematics, citation navigation, clipboard behavior, Research
+version display/copy, safe handling of hostile output, and desktop/mobile
+layout. The TeX browser fixture's removal selector was aligned with its
+existing Confirm label. The optional graph-present sandbox test skipped because
+its local image is unavailable. No paid provider calls, deployment, or merge.

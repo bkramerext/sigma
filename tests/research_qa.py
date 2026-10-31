@@ -218,9 +218,16 @@ def main() -> None:
             assert first["qa_id"] == repeated["qa_id"] and calls == 1
             assert [row["session_number"] for row in first["sources"]] == [1, 2]
             assert len(research_qa.list_answers(str(path))) == 1
-            assert "<script>" not in research_qa.standalone_html(str(path), first["qa_id"])
-            assert "&lt;script&gt;" in research_qa.standalone_html(str(path), first["qa_id"])
-            assert f"reveal_session={s1}" in research_qa.standalone_html(str(path), first["qa_id"])
+            markdown = research_qa.markdown_document(
+                research_qa.get_answer(str(path), first["qa_id"])
+            )
+            assert (
+                "<script>alert(1)</script>" in markdown
+            )  # Rendered by the safe React Markdown renderer.
+            assert f"reveal_session={s1}" in markdown
+            assert (
+                "## Question" in markdown and "## Answer" in markdown and "## Sources" in markdown
+            )
             qa_archive_path = path / "artifacts" / "research-qa" / "records.json"
             archive_bytes = qa_archive_path.read_bytes()
             assert research_qa.archive_available(str(path))
@@ -512,6 +519,97 @@ print("portable Q/A concurrent save/list/remove passed")
                     raise AssertionError("A full archive must fail closed")
             assert provider_calls_at_storage_limit == 0
             assert archive_path.read_bytes() == archive_at_storage_limit
+        qa_project_id = "project-fixture"
+        session_id = "session-fixture"
+        strategy_id = "strategy-fixture"
+        artifact_id = "artifact-fixture"
+        refs = [
+            f"project:{qa_project_id}",
+            f"strategy:{strategy_id}",
+            f"session:{session_id}",
+            f"artifact:{session_id}:{artifact_id}",
+            f"current-understanding:{qa_project_id}",
+        ]
+        evidence = [
+            {"id": refs[0], "kind": "project", "data": {"title": "Prime project"}},
+            {"id": refs[1], "kind": "strategy", "data": {"title": "Modular approach"}},
+            {"id": refs[2], "kind": "session", "data": {"session_number": 8}},
+            {"id": refs[3], "kind": "artifact", "data": {"sequence": 3}},
+            {"id": refs[4], "kind": "current_understanding", "data": {}},
+        ]
+        record = {
+            "qa_id": "1" * 32,
+            "project_id": qa_project_id,
+            "question": "Why?",
+            "answer": "A **short** answer.",
+            "sources": [
+                {
+                    "source_id": ref,
+                    "kind": row["kind"],
+                    "session_number": 8 if row["kind"] in {"session", "artifact"} else None,
+                }
+                for ref, row in zip(refs, evidence, strict=True)
+            ],
+            "evidence_snapshot": evidence,
+            "snapshot_sha256": "a" * 64,
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "generation": {
+                "model": "fixture",
+                "reasoning_effort": "low",
+                "generation_elapsed_seconds": 1,
+            },
+        }
+        context = {
+            "path": "/tmp/project.sigma",
+            "project": {
+                "id": qa_project_id,
+                "title": "Prime project",
+                "strategies": [{"id": strategy_id, "title": "Modular approach"}],
+            },
+            "sessions": {
+                session_id: {
+                    "id": session_id,
+                    "session_number": 8,
+                    "artifacts": [{"id": artifact_id, "sequence": 3}],
+                }
+            },
+        }
+        enriched = research_qa._with_navigation(record, context)
+        labels = [source["label"] for source in enriched["sources"]]
+        assert labels == [
+            "Project · Prime project",
+            "Strategy · Modular approach",
+            "Session #8",
+            "Session #8 · Artifact 3",
+            "Current Understanding",
+        ]
+        assert all(
+            source["navigation_available"] and source["navigation_url"].startswith("/project?")
+            for source in enriched["sources"]
+        )
+        assert "reveal_strategy=strategy-fixture" in enriched["sources"][1]["navigation_url"]
+        assert "reveal_artifact=artifact-fixture" in enriched["sources"][3]["navigation_url"]
+        doc = research_qa.markdown_document(enriched)
+        assert "[Project · Prime project]" in doc and "[Strategy · Modular approach]" in doc
+        assert "Session #unknown" not in doc and "Research version: `" in doc
+        missing = research_qa._with_navigation(
+            record,
+            {
+                "path": "/tmp/project.sigma",
+                "project": {"id": qa_project_id, "title": "Prime project", "strategies": []},
+                "sessions": {},
+            },
+        )
+        assert (
+            missing["sources"][1]["label"] == "Strategy · Modular approach"
+            and not missing["sources"][1]["navigation_available"]
+        )
+        assert (
+            missing["sources"][3]["label"].startswith("Session #8 · Artifact")
+            and not missing["sources"][3]["navigation_available"]
+        )
+        assert missing["sources"][1]["navigation_unavailable_reason"]
+        assert missing["sources"][3]["navigation_unavailable_reason"]
         print(
             "Research Q/A: validated citations, idempotent retry, safe browser rendering, durable save/remove, and no project mutation passed."
         )

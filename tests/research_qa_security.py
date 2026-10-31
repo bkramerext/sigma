@@ -110,9 +110,10 @@ def main() -> None:
                 client.get(f"/api/projects/research-qa/{qa_id}", params={"path": b_path}),
                 client.delete(f"/api/projects/research-qa/{qa_id}", params={"path": b_path}),
                 client.get(f"/api/projects/research-qa/{qa_id}/browser", params={"path": b_path}),
+                client.get(f"/api/projects/research-qa/{qa_id}/markdown", params={"path": b_path}),
                 client.post("/api/projects/research-qa", json=generation),
             ]
-            assert [response.status_code for response in unauthorized] == [401] * 5
+            assert [response.status_code for response in unauthorized] == [401] * 6
 
             with patch.object(research_qa.papers, "_provider_structured", new=provider):
                 cross_user = [
@@ -131,6 +132,11 @@ def main() -> None:
                     ),
                     client.get(
                         f"/api/projects/research-qa/{qa_id}/browser",
+                        headers=user_a,
+                        params={"path": b_path},
+                    ),
+                    client.get(
+                        f"/api/projects/research-qa/{qa_id}/markdown",
                         headers=user_a,
                         params={"path": b_path},
                     ),
@@ -176,14 +182,14 @@ def main() -> None:
                 )
                 assert oversized.status_code == 422
 
-                for operation in ("get", "delete", "browser"):
+                for operation in ("get", "delete", "browser", "markdown"):
                     response = (
                         client.get(
-                            f"/api/projects/research-qa/not-a-valid-id{('/browser' if operation == 'browser' else '')}",
+                            f"/api/projects/research-qa/not-a-valid-id{('/browser' if operation == 'browser' else '/markdown' if operation == 'markdown' else '')}",
                             headers=user_b,
                             params={"path": b_path},
                         )
-                        if operation in {"get", "browser"}
+                        if operation in {"get", "browser", "markdown"}
                         else client.delete(
                             "/api/projects/research-qa/not-a-valid-id",
                             headers=user_b,
@@ -200,6 +206,16 @@ def main() -> None:
             )
             assert owner_view.status_code == 200
             assert owner_view.json()["answer"] == "B private answer"
+            owner_markdown = client.get(
+                f"/api/projects/research-qa/{qa_id}/markdown",
+                headers=user_b,
+                params={"path": b_path},
+            )
+            assert owner_markdown.status_code == 200
+            assert (
+                "B private question" in owner_markdown.text
+                and "B private answer" in owner_markdown.text
+            )
             assert (
                 client.delete(
                     f"/api/projects/research-qa/{qa_id}",

@@ -239,12 +239,16 @@ async def handler(request):
         question = context.get("question", "")
         sources = context.get("sources", [])
         refs = []
-        for kind in ("session", "artifact", "current_understanding"):
-            source = next((item for item in sources if item.get("kind") == kind), None)
+        for kind in ("project", "strategy", "session", "artifact", "current_understanding"):
+            candidates = [item for item in sources if item.get("kind") == kind]
+            source = next(
+                (item for item in candidates if not item.get("data", {}).get("removed_at")),
+                candidates[0] if candidates else None,
+            )
             if source:
                 refs.append(source["id"])
         output = {
-            "answer": f"The saved research answers: {question}. The record is provisional and should be reviewed with its supporting evidence.",
+            "answer": f"## Evidence-based answer\n\nThe saved research answers: {question}. The record is provisional and should be reviewed with its supporting evidence.\n\n- Check the supporting saved session.\n\nThe saved expression is $R(n) = 1 + n(n+1)/2$.\n\n<script>window.__sigmaInjected = true</script>\n\n[forged citation](/project?path=%2Fother-project.sigma&reveal_project=1)",
             "source_refs": refs,
         }
         _qa_control["completed"] = int(_qa_control["completed"]) + 1

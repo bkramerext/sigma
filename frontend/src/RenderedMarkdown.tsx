@@ -249,9 +249,42 @@ export function markdownWithMathDelimiters(body: string): string {
   }).join('\n');
 }
 
-export default function RenderedMarkdown({ body }: { body: string }) {
+export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [] }: { body: string; citationProjectPath?: string; citationUrls?: string[] }) {
+  const allowedCitationUrls = new Set(citationUrls);
+  const urlTransform = (url: string) => {
+    if (url.startsWith('#')) return url;
+    if (!citationProjectPath || !url.startsWith('/project?')) return '';
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const params = parsed.searchParams;
+      const targets = ['reveal_session', 'reveal_artifact', 'reveal_understanding', 'reveal_project', 'reveal_strategy'];
+      const selected = targets.filter(key => params.has(key));
+      const validTarget = selected.length === 1
+        || (selected.length === 2 && selected.includes('reveal_session') && selected.includes('reveal_artifact'));
+      const allowed = new Set(['path', ...targets]);
+      let hasUnexpectedParameter = false;
+      const counts = new Map<string, number>();
+      params.forEach((_value, key) => {
+        if (!allowed.has(key)) hasUnexpectedParameter = true;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      });
+      const identifier = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const validId = (key: string) => identifier.test(params.get(key) ?? '');
+      const validTargetValues = selected.length === 2
+        ? validId('reveal_session') && validId('reveal_artifact')
+        : selected[0] === 'reveal_session' ? validId('reveal_session')
+          : selected[0] === 'reveal_strategy' ? validId('reveal_strategy')
+            : params.get(selected[0] ?? '') === '1';
+      if (parsed.origin !== window.location.origin || parsed.pathname !== '/project'
+        || params.get('path') !== citationProjectPath || !validTarget
+        || hasUnexpectedParameter || !validTargetValues
+        || [...counts.values()].some(count => count !== 1)) return '';
+      const destination = `${parsed.pathname}${parsed.search}`;
+      return allowedCitationUrls.has(destination) ? destination : '';
+    } catch { return ''; }
+  };
   return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath]}
     rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false }]]}
-    urlTransform={url => url.startsWith('#') ? url : ''}
+    urlTransform={urlTransform}
     components={{ img: () => null }}>{markdownWithMathDelimiters(body)}</ReactMarkdown>;
 }

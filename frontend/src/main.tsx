@@ -2587,7 +2587,8 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
 
 type Destination = { root: string; path: string | null; exists: boolean };
 
-type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; sources: { source_id: string; session_number: number | null; kind: string; navigation_available?: boolean }[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
+type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
+type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
 function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; projectId: string; guest: boolean; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -2604,6 +2605,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
   const [expanded, setExpanded] = useState('');
   const [removeId, setRemoveId] = useState('');
   const [copiedId, setCopiedId] = useState('');
+  const [copiedVersionId, setCopiedVersionId] = useState('');
   const [recovery, setRecovery] = useState<{ question: string; id: string } | null>(null);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const requestKey = `sigma.researchQaRequest:${projectId}`;
@@ -2698,7 +2700,17 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
     } catch (cause) { setError(errorMessage(cause)); }
   }
   async function copy(record: ResearchQARecord) {
-    try { await navigator.clipboard.writeText(`Question\n${record.question}\n\nAnswer\n${record.answer}\n\nSources\n${record.sources.map(source => `- ${source.kind} · ${source.session_number ? `Session #${source.session_number}` : 'Saved evidence'}`).join('\n') || '- No validated citations'}`); setCopiedId(record.qa_id); window.setTimeout(() => setCopiedId(current => current === record.qa_id ? '' : current), 1600); }
+    try {
+      const response = await fetch(`/api/projects/research-qa/${encodeURIComponent(record.qa_id)}/markdown?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Could not load the saved Markdown document.');
+      const markdown = await response.text();
+      try { await navigator.clipboard.writeText(markdown); }
+      catch { throw new Error('Clipboard access failed. Check browser clipboard permissions and try again.'); }
+      setCopiedId(record.qa_id); window.setTimeout(() => setCopiedId(current => current === record.qa_id ? '' : current), 1600);
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function copyVersion(record: ResearchQARecord) {
+    try { await navigator.clipboard.writeText(record.snapshot_sha256); setCopiedVersionId(record.qa_id); window.setTimeout(() => setCopiedVersionId(current => current === record.qa_id ? '' : current), 1600); }
     catch { setError('Clipboard access failed. Check browser clipboard permissions and try again.'); }
   }
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog research-qa-dialog" aria-labelledby="research-qa-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }} onKeyDownCapture={event => { if (event.key === 'Escape' && busy) { event.preventDefault(); event.stopPropagation(); } }}>
@@ -2712,9 +2724,9 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
         {confirmRestart && recovery && <div className="saved-paper-confirm research-qa-recovery-confirm" role="group" aria-label="Confirm a fresh Q/A request"><p>No completed answer was found. The previous request may have reached the provider. Starting over sends a fresh request and may incur another charge.</p><button type="button" className="text-view-link" onClick={() => void startOver()}>Confirm Start over</button><button type="button" className="text-view-link" onClick={() => setConfirmRestart(false)}>Cancel</button></div>}
         {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error}</p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
-          <div className="saved-paper-row"><div className="saved-paper-heading"><button type="button" className="saved-paper-expand" aria-expanded={expanded === record.qa_id} aria-controls={`qa-body-${record.qa_id}`} onClick={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)}><DisclosureChevron expanded={expanded === record.qa_id}/><h4>{record.question}</h4></button><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div><div className="saved-paper-actions"><CopyToClipboardButton name="answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)}/><a className="text-view-link" href={`/api/projects/research-qa/${encodeURIComponent(record.qa_id)}/browser?${new URLSearchParams({ path })}`} target="_blank" rel="noopener noreferrer">Open in browser</a></div></div>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><button type="button" className="saved-paper-expand" aria-expanded={expanded === record.qa_id} aria-controls={`qa-body-${record.qa_id}`} onClick={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)}><DisclosureChevron expanded={expanded === record.qa_id}/><h4>{record.question}</h4></button><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div><div className="saved-paper-actions"><a className="text-view-link" href={`/api/projects/research-qa/${encodeURIComponent(record.qa_id)}/markdown?${new URLSearchParams({ path })}`} target="_blank" rel="noopener noreferrer">Markdown</a><a className="text-view-link" href={`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`} target="_blank" rel="noopener noreferrer">Open in browser</a></div></div>
           {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><button type="button" className="text-view-link" onClick={() => setRemoveId('')}>Cancel</button></div>}
-          <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><h3>Answer</h3><div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.answer}/></Suspense></div><h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => { const sessionId = source.source_id.startsWith('session:') ? source.source_id.slice(8) : source.source_id.startsWith('artifact:') ? source.source_id.split(':')[1] : ''; const artifactId = source.source_id.startsWith('artifact:') ? source.source_id.split(':')[2] : ''; const understanding = source.source_id.startsWith('current-understanding:'); const href = source.navigation_available ? understanding ? `/project?${new URLSearchParams({ path, reveal_understanding: '1' })}` : sessionId ? `/project?${new URLSearchParams({ path, reveal_session: sessionId, ...(artifactId ? { reveal_artifact: artifactId } : {}) })}` : '' : ''; const label = understanding ? 'Current Understanding' : source.kind === 'session' ? `Session #${source.session_number}` : `Session #${source.session_number ?? 'unknown'} · ${source.kind}`; return <li key={`${source.source_id}-${index}`}>{href ? <a href={href}>{label}</a> : `${label} · navigation unavailable`}</li>; }) : <li>No validated citations were returned.</li>}</ul><p className="settings-hint">Evidence snapshot {record.snapshot_sha256}</p></article></div>
+          <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3><CopyToClipboardButton name="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)}/></div><div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.answer}/></Suspense></div><h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No validated citations were returned.</li>}</ul><p className="research-qa-version"><span title="Identifies the research used to generate this answer. If the research changes, the answer still refers to the original version."><strong>Research version:</strong> <code>{record.snapshot_sha256.slice(0, 8)}…</code></span></p><details className="research-qa-technical"><summary>Technical details</summary><p>SHA-256: <code>{record.snapshot_sha256}</code></p><CopyToClipboardButton name="research version fingerprint" copied={copiedVersionId === record.qa_id} onCopy={() => void copyVersion(record)}/></details></article></div>
         </article>)}</section>}
       </>}
     </div>
@@ -3872,6 +3884,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [announcement, setAnnouncement] = useState('');
   const [guestAiNotice, setGuestAiNotice] = useState('');
   const [focusStrategy, setFocusStrategy] = useState('');
+  const citationRevealHandled = useRef(false);
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
   const [textEditSignals, setTextEditSignals] = useState<Record<string, number>>({});
@@ -3977,6 +3990,27 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }
     if (id) setFocusStrategy(id);
   }
+  useEffect(() => {
+    if (!view || citationRevealHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const strategyId = params.get('reveal_strategy');
+    if (strategyId && view.project.strategies.some(strategy => strategy.id === strategyId && !strategy.removed_at)) {
+      citationRevealHandled.current = true;
+      showStrategy(strategyId);
+      return;
+    }
+    if (params.get('reveal_project') === '1') {
+      citationRevealHandled.current = true;
+      setProjectExpanded(true);
+      window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const target = document.querySelector<HTMLElement>('.project-overview-card');
+        target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        target?.classList.add('citation-highlight');
+        window.setTimeout(() => target?.classList.remove('citation-highlight'), 2400);
+      }));
+    }
+  }, [view?.project.id, path]);
   function cancel() { setEditing(false); exitMode('new-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }
   function expandStrategies() { setStrategiesExpanded(true); window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true'); }
   const collapseProjectAndStrategies = useCallback(() => {
@@ -4230,6 +4264,31 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   </WorkspaceFrame>;
 }
 
+function ResearchQABrowserPage({ qaId, path }: { qaId: string; path: string }) {
+  const [markdown, setMarkdown] = useState('');
+  const [citationUrls, setCitationUrls] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    document.title = 'Research Q/A · SIGMA';
+    const controller = new AbortController();
+    const query = new URLSearchParams({ path });
+    const url = `/api/projects/research-qa/${encodeURIComponent(qaId)}`;
+    Promise.all([
+      fetch(`${url}/markdown?${query}`, { cache: 'no-store', signal: controller.signal }),
+      fetch(`${url}?${query}`, { cache: 'no-store', signal: controller.signal }),
+    ]).then(async ([markdownResponse, recordResponse]) => {
+      if (!markdownResponse.ok || !recordResponse.ok) throw new Error('This saved Q/A answer is unavailable.');
+      const [document, record] = await Promise.all([markdownResponse.text(), recordResponse.json() as Promise<ResearchQARecord>]);
+      setCitationUrls(record.sources.filter(source => source.navigation_available && source.navigation_url).map(source => source.navigation_url!));
+      setMarkdown(document);
+    }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [qaId, path]);
+  return <main className="workspace-page research-qa-browser-page"><article className="research-qa-browser-card" aria-label="Saved Research Q/A answer">
+    {error ? <p role="alert" className="error">{error}</p> : markdown ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted answer…</p>}><RenderedMarkdown body={markdown} citationProjectPath={path} citationUrls={citationUrls}/></Suspense></div> : <p role="status">Loading saved answer…</p>}
+  </article></main>;
+}
+
 function App() {
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
@@ -4255,6 +4314,8 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
+  const qaBrowser = url.searchParams.get('qa_browser');
+  if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} onOpen={view => {
       setOpenedView(view); setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path));
