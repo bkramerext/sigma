@@ -824,6 +824,21 @@ async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
                 else:
                     raise AssertionError("Live foreign worker ownership was ignored")
             assert research_sessions.get_session(str(path), started["id"])["status"] == "stopped"
+            # Deleting the entire project must also reject a live foreign worker.
+            from sigma.api import DeleteProjectRequest, delete_project_view
+
+            with patch.dict("os.environ", {"SIGMA_PROJECTS_ROOT": str(path.parent)}):
+                try:
+                    await delete_project_view(
+                        DeleteProjectRequest(
+                            path=str(path), expected_project_id=view.project.id
+                        )
+                    )
+                except ProjectError as exc:
+                    assert "releasing resources" in str(exc)
+                else:
+                    raise AssertionError("Project deletion ignored a foreign worker")
+            assert path.exists()
         finally:
             lock_owner.stdin.write(b"x")
             await lock_owner.stdin.drain()
