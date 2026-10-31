@@ -1975,6 +1975,91 @@ def test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Path) -> None:
+    """A's new admission recovers B's dead slot, not B's live provider call."""
+    a = workspace(root, "9" * 32)
+    b = workspace(root, "8" * 32)
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "cross-owner-orphan-fixture",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    with (
+        patch.dict(os.environ, settings, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        token = cloud_workspaces._CURRENT.set(b)
+        try:
+            project = initialize_project(
+                b.path / "foreign-running.sigma", "Foreign session", "Check recovery"
+            )
+            active = job(b.workspace_id)
+            active.update({"project_id": project.project.id, "project_path": project.path})
+            cloud_research.prepare_job(active)
+            assert cloud_research.claim_job(active["id"])
+            cloud_research.reserve_call(active["id"], "foreign-unsettled", 0.03, 50)
+            with cloud_research._connect() as db:
+                db.execute(
+                    "UPDATE jobs SET process_epoch=? WHERE session_id=?",
+                    ("0" * 32, active["id"]),
+                )
+            lock_path = research_sessions._worker_lock_path(project.path, active["id"])
+            worker_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+            fcntl.flock(worker_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+        token = cloud_workspaces._CURRENT.set(a)
+        try:
+            cloud_research.reconcile_all_orphaned_jobs()
+            # B may be silent for hours: an OS-owned worker must keep its slot.
+            with cloud_research._connect() as db:
+                assert (
+                    db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (active["id"],)
+                    ).fetchone()["status"]
+                    == "running"
+                )
+                assert (
+                    db.execute(
+                        "SELECT COUNT(*) FROM jobs WHERE status IN ('running','stopping')"
+                    ).fetchone()[0]
+                    == 1
+                )
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+        fcntl.flock(worker_fd, fcntl.LOCK_UN)
+        os.close(worker_fd)
+        token = cloud_workspaces._CURRENT.set(a)
+        try:
+            cloud_research.reconcile_all_orphaned_jobs()
+            with cloud_research._connect() as db:
+                assert (
+                    db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (active["id"],)
+                    ).fetchone()["status"]
+                    == "interrupted"
+                )
+                assert (
+                    db.execute(
+                        "SELECT status FROM calls WHERE call_id='foreign-unsettled'"
+                    ).fetchone()["status"]
+                    == "unknown"
+                )
+            # User B need not log back in before A can research.
+            pending = job(a.workspace_id)
+            cloud_research.prepare_job(pending)
+            assert cloud_research.claim_job(pending["id"])
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+
 def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
     """Two projects per owner and multiple owners share a bounded global queue."""
     left = workspace(root, "e" * 32)
@@ -3023,6 +3108,9 @@ def main() -> None:
         parallel_ledger = root / "parallel-worker-ledger"
         parallel_ledger.mkdir(mode=0o700)
         test_multiuser_parallel_cloud_worker_admission(root, parallel_ledger)
+        foreign_ledger = root / "cross-owner-recovery-ledger"
+        foreign_ledger.mkdir(mode=0o700)
+        test_cross_user_crash_reclaims_only_dead_worker(root, foreign_ledger)
         auxiliary_ledger = root / "auxiliary-inference-ledger"
         auxiliary_ledger.mkdir(mode=0o700)
         test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(root, auxiliary_ledger)

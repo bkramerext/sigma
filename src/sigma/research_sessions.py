@@ -4510,7 +4510,7 @@ async def start_session(
         raise ProjectError("This strategy is disabled; enable it before starting research")
     if cloud_research.billing_enabled():
         try:
-            cloud_research.reconcile_orphaned_jobs()
+            cloud_research.reconcile_all_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
     # Provider preflight may suspend on remote I/O. Never hold an exclusive
@@ -4800,7 +4800,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         raise ProjectError("Unknown research session action")
     if action == "resume" and cloud_research.billing_enabled():
         try:
-            cloud_research.reconcile_orphaned_jobs()
+            cloud_research.reconcile_all_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
     state_lock = _session_state_lock(session_id)
