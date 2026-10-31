@@ -52,8 +52,19 @@ No merge or deployment was performed. PR #395/Blue changes were not included.
 ## Second review correction addendum
 
 - Recovery `refresh()` now reports failure distinctly from a valid empty archive. `checkRecovery()` and `startOver()` both stop and retract stale confirmation when the saved-answer read fails; no new provider request is sent until a successful read.
-- Failed/interrupted request markers are isolated from the 50 completed-answer limit. Exact markers remain in a separately bounded 1,000-entry ledger; when full, the service fails closed before provider dispatch rather than discarding duplicate-call protection.
-- Regression coverage proves archive read errors in both UI recovery actions result in no additional deterministic provider call; 50 older pending markers do not block a new completed answer; a full marker ledger is bounded and refuses provider dispatch.
-- Review correction implementation commit: `c426ac47` (full SHA is recorded in the commit log and PR head).
+- Failed/interrupted request markers do not consume the 50 completed-answer slots. Exact unresolved request IDs are retained and bounded by the established 30 MB archive limit; at the limit, writes fail closed without replacing saved data. There is no separate 1,000-entry cutoff.
+- Regression coverage proves archive read errors in both UI recovery actions result in no additional deterministic provider call; many older pending markers do not block a new completed answer; storage-limit failure preserves the archive and makes no provider call.
+- Review correction implementation commit: `c426ac47`.
 
 Checks for this correction: focused `tests/research_qa.py` and `tests/research_qa_security.py`, Ruff, Pyright (0 errors/warnings), frontend typecheck/build, full `./sigma test`, and `browser_checks/research_qa.py` in real Chrome all passed. Chrome verified archive failure recovery in both check and restart actions without a repeated fixture call. `./sigma test` skipped only the optional graph-present sandbox check because the local image is unavailable. No paid provider calls were made.
+
+
+## Third review correction addendum
+
+- Portable `.json` archive mutations now use `project_bundle.transform_members()` as the single read/modify/write boundary. Directory-project archives use the existing project write lock. Provider inference remains outside both transactions. The timeout-bounded subprocess regression imports a `.json` project, concurrently generates two answers, lists both, removes one, and verifies the other remains.
+- In-flight API tasks are coalesced only when project ID, connection ID, and exact question match. A concurrent reuse of the same request ID with changed parameters is rejected; matching requests still share one task.
+- Recovery list responses report whether the archive exists. Missing archives cannot be mistaken for a successful empty history; unreadable archives remain errors and their bytes are preserved. The Q/A recovery browser test covers missing and failed archive reads.
+- The 1,000-marker threshold has been removed. Unresolved marker data remains protected by the archive's existing 30 MB byte limit; exceeding that limit fails closed before provider dispatch and leaves the archive intact.
+- Implementation SHA: `10b2b46fa136491d4636b30689a7a909a60a1d15`.
+
+Focused Q/A and security tests, Ruff, Pyright, frontend typecheck/build, full `./sigma test`, and both Q/A and saved-paper real Chrome checks passed. The optional graph-present sandbox check was skipped because its local image is unavailable. No paid provider calls, deployment, or merge were performed.
