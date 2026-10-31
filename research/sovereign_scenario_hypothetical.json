@@ -1,0 +1,218 @@
+{
+  "provenance": "synthetic",
+  "source_notes": "HYPOTHETICAL university scenario, not collected campus measurements. Token rates $2.50/M uncached input and $15/M output were listed for OpenAI GPT-5.4 on 2026-10-31 (https://developers.openai.com/api/docs/models/gpt-5.4). ALL task counts, comparative success rates, GPU costs and service hours, staff time, agent-call amplification, partner contract terms, deployment overhead, budget assumptions, and capacity are invented. Here the charged-attempts metric represents mean billable calls per task; success rates represent final useful-task completion probabilities. Campus and partner task GPU-hour coefficients are synthetic, and queueing, memory fit, latency and compliance are not simulated. No provider calls authorized or performed.",
+  "active_researchers": 120,
+  "routes": {
+    "campus": {
+      "fixed_costs_usd": {
+        "gpu_capex_depreciation": 8333,
+        "gpu_support_replacement_reserve": 1300,
+        "electricity_and_cooling": 1250,
+        "loaded_research_computing_staff": 4200,
+        "storage": 300,
+        "network": 200,
+        "procurement_facilities": 200
+      },
+      "sunk_costs_usd": {
+        "gpu_capex_depreciation": 8333,
+        "loaded_research_computing_staff": 1800
+      },
+      "capacity_units_month": 1600,
+      "capacity_unit_name": "gpu-hour",
+      "input_usd_per_million": 0,
+      "output_usd_per_million": 0,
+      "variable_usd_per_task": 0.1
+    },
+    "partner_campus": {
+      "fixed_costs_usd": {},
+      "sunk_costs_usd": {},
+      "capacity_units_month": 450,
+      "capacity_unit_name": "gpu-hour",
+      "input_usd_per_million": 0,
+      "output_usd_per_million": 0,
+      "variable_usd_per_task": 0,
+      "variable_usd_per_capacity_unit": 5
+    },
+    "approved_frontier": {
+      "fixed_costs_usd": {},
+      "sunk_costs_usd": {},
+      "capacity_tasks_month": 6000,
+      "input_usd_per_million": 2.5,
+      "output_usd_per_million": 15,
+      "variable_usd_per_task": 0.05
+    }
+  },
+  "workloads": [
+    {
+      "name": "open_low_risk",
+      "monthly_tasks": 600,
+      "approved_routes": [
+        "campus",
+        "partner_campus",
+        "approved_frontier"
+      ],
+      "capacity_units_per_task": {
+        "campus": 0.2,
+        "partner_campus": 0.2
+      },
+      "input_tokens_per_attempt": 5000,
+      "output_tokens_per_attempt": 1500,
+      "charged_attempts_per_task": 1.4,
+      "max_charged_attempts_per_task": 3,
+      "task_success_rate": {
+        "campus": 0.82,
+        "partner_campus": 0.85,
+        "approved_frontier": 0.95
+      }
+    },
+    {
+      "name": "open_complex_scientific",
+      "monthly_tasks": 300,
+      "approved_routes": [
+        "campus",
+        "partner_campus",
+        "approved_frontier"
+      ],
+      "capacity_units_per_task": {
+        "campus": 3.5,
+        "partner_campus": 3.5
+      },
+      "input_tokens_per_attempt": 160000,
+      "output_tokens_per_attempt": 70000,
+      "charged_attempts_per_task": 8,
+      "max_charged_attempts_per_task": 12,
+      "task_success_rate": {
+        "campus": 0.4,
+        "partner_campus": 0.65,
+        "approved_frontier": 0.83
+      }
+    },
+    {
+      "name": "restricted_research_student_or_sponsor",
+      "monthly_tasks": 250,
+      "approved_routes": [
+        "campus"
+      ],
+      "capacity_units_per_task": {
+        "campus": 0.8
+      },
+      "input_tokens_per_attempt": 25000,
+      "output_tokens_per_attempt": 8000,
+      "charged_attempts_per_task": 3,
+      "max_charged_attempts_per_task": 5,
+      "task_success_rate": {
+        "campus": 0.7
+      }
+    }
+  ],
+  "plans": [
+    {
+      "name": "campus_local_only",
+      "enabled_routes": [
+        "campus"
+      ],
+      "external_billing_routes": [],
+      "external_spend_cap_usd": 4000,
+      "minimum_served_fraction": 0.95,
+      "fixed_costs_usd": {},
+      "sunk_costs_usd": {},
+      "allocations": {
+        "open_low_risk": {
+          "campus": 1
+        },
+        "open_complex_scientific": {
+          "campus": 1
+        },
+        "restricted_research_student_or_sponsor": {
+          "campus": 1
+        }
+      }
+    },
+    {
+      "name": "frontier_api_only",
+      "enabled_routes": [
+        "approved_frontier"
+      ],
+      "external_billing_routes": [
+        "approved_frontier"
+      ],
+      "external_spend_cap_usd": 4000,
+      "minimum_served_fraction": 0.95,
+      "fixed_costs_usd": {
+        "governance_and_vendor_security": 300
+      },
+      "sunk_costs_usd": {},
+      "allocations": {
+        "open_low_risk": {
+          "approved_frontier": 1
+        },
+        "open_complex_scientific": {
+          "approved_frontier": 1
+        },
+        "restricted_research_student_or_sponsor": {}
+      }
+    },
+    {
+      "name": "campus_plus_approved_frontier",
+      "enabled_routes": [
+        "campus",
+        "approved_frontier"
+      ],
+      "external_billing_routes": [
+        "approved_frontier"
+      ],
+      "external_spend_cap_usd": 4000,
+      "minimum_served_fraction": 0.95,
+      "fixed_costs_usd": {
+        "external_data_contract_and_policy_operations": 900
+      },
+      "sunk_costs_usd": {},
+      "allocations": {
+        "open_low_risk": {
+          "campus": 0.9,
+          "approved_frontier": 0.1
+        },
+        "open_complex_scientific": {
+          "campus": 0.25,
+          "approved_frontier": 0.75
+        },
+        "restricted_research_student_or_sponsor": {
+          "campus": 1
+        }
+      }
+    },
+    {
+      "name": "cross_campus_federation_plus_frontier",
+      "enabled_routes": [
+        "campus",
+        "partner_campus",
+        "approved_frontier"
+      ],
+      "external_billing_routes": [
+        "approved_frontier"
+      ],
+      "external_spend_cap_usd": 4000,
+      "minimum_served_fraction": 0.95,
+      "fixed_costs_usd": {
+        "federation_identity_policy_and_security_operations": 2600,
+        "frontier_vendor_governance": 900
+      },
+      "sunk_costs_usd": {},
+      "allocations": {
+        "open_low_risk": {
+          "campus": 0.7,
+          "partner_campus": 0.25,
+          "approved_frontier": 0.05
+        },
+        "open_complex_scientific": {
+          "campus": 0.2,
+          "partner_campus": 0.3,
+          "approved_frontier": 0.5
+        },
+        "restricted_research_student_or_sponsor": {
+          "campus": 1
+        }
+      }
+    }
+  ]
+}
