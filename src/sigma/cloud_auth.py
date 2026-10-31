@@ -417,39 +417,46 @@ def _log_local_auth_state(
     """Trace local grant writes and Google authorization reads, never credentials."""
     if not cfg.local or not cfg.database:
         return
-    matched_domain = domain or (email.rsplit("@", 1)[1] if email else None)
-    with _db(cfg) as db:
-        email_grant = (
-            db.execute(
-                "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
-                (email,),
-            ).fetchone()
-            if email
-            else None
-        )
-        domain_grant = (
-            db.execute(
-                "SELECT role,active,allowance_usd FROM grants WHERE kind='domain' AND value=?",
-                (matched_domain,),
-            ).fetchone()
-            if matched_domain
-            else None
-        )
-        last_domain_action = (
-            db.execute(
-                "SELECT id,action FROM audit WHERE kind='domain' AND value=? "
-                "ORDER BY id DESC LIMIT 1",
-                (matched_domain,),
-            ).fetchone()
-            if matched_domain
-            else None
-        )
-        active_domains = [
-            row["value"]
-            for row in db.execute(
-                "SELECT value FROM grants WHERE kind='domain' AND active=1 ORDER BY value LIMIT 20"
+    try:
+        matched_domain = domain or (email.rsplit("@", 1)[1] if email else None)
+        with _db(cfg) as db:
+            email_grant = (
+                db.execute(
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                if email
+                else None
             )
-        ]
+            domain_grant = (
+                db.execute(
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='domain' AND value=?",
+                    (matched_domain,),
+                ).fetchone()
+                if matched_domain
+                else None
+            )
+            last_domain_action = (
+                db.execute(
+                    "SELECT id,action FROM audit WHERE kind='domain' AND value=? "
+                    "ORDER BY id DESC LIMIT 1",
+                    (matched_domain,),
+                ).fetchone()
+                if matched_domain
+                else None
+            )
+            active_domains = [
+                row["value"]
+                for row in db.execute(
+                    "SELECT value FROM grants WHERE kind='domain' AND active=1 ORDER BY value LIMIT 20"
+                )
+            ]
+    except (OSError, sqlite3.Error):
+        logging.getLogger("uvicorn.error").warning(
+            "SIGMA local-auth trace unavailable event=%s pid=%d", event, os.getpid()
+        )
+        return
+
     def describe(row: sqlite3.Row | None) -> str:
         if row is None:
             return "absent"
