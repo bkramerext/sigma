@@ -6180,6 +6180,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             }
         )
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+    _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise ResearchContextLimitError(
             "Research context manifest exceeds its storage bound; no provider call was made."
@@ -6195,6 +6196,52 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
 
 def _json_bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _bound_context_manifest(manifest: dict[str, Any]) -> None:
+    """Bound audit pointer lists, never historical obligations or source evidence.
+
+    The frozen model context and saved session retain the obligation snapshot.
+    Counts and not-listed counts distinguish shortened manifest pointers from
+    a claim that missing obligations were resolved or never existed.
+    """
+    if _json_bytes(manifest) <= MAX_CONTEXT_MANIFEST_BYTES:
+        return
+
+    def trim(owner: dict[str, Any], field: str, limit: int) -> None:
+        values = owner.get(field)
+        if not isinstance(values, list) or len(values) <= limit:
+            return
+        removed = len(values) - limit
+        owner[field] = values[:limit]
+        key = f"{field}_not_listed_count"
+        owner[key] = int(owner.get(key, 0)) + removed
+
+    optional_pointers = (
+        ("omitted_prior_session_obligations", "obligation_ids"),
+        ("omitted_prior_session_findings", "source_ids"),
+        ("omitted_prior_failures", "attempt_ids"),
+        ("omitted_obligations", "obligation_ids"),
+        ("omitted_peer_evidence", "artifact_ids"),
+        ("omitted_project_strategies", "strategy_ids"),
+        ("compacted_prior_obligation_references", "obligations"),
+    )
+    for cap in (16, 8, 4, 2, 0):
+        for category, field in optional_pointers:
+            item = manifest.get(category)
+            if isinstance(item, dict):
+                trim(item, field, cap)
+        if _json_bytes(manifest) <= MAX_CONTEXT_MANIFEST_BYTES:
+            return
+
+    # The manifest is an audit index, not the source context itself. Selected
+    # source IDs remain separately available in the frozen model context.
+    for cap in (16, 8, 4, 2, 1):
+        for group in manifest.get("sources", []):
+            if isinstance(group, dict):
+                trim(group, "source_ids", cap)
+        if _json_bytes(manifest) <= MAX_CONTEXT_MANIFEST_BYTES:
+            return
 
 
 def _manifest_source_group(
@@ -7362,6 +7409,7 @@ def _portfolio_context(
         if handoff_group is not None:
             context["context_manifest"]["sources"].append(handoff_group)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+    _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise ResearchContextLimitError(
             "Research context manifest exceeds its storage bound; no provider call was made."
@@ -8200,6 +8248,7 @@ async def _portfolio_role_call(
                 if guidance_group is not None:
                     context["context_manifest"]["sources"].append(guidance_group)
                 context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+                _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                     raise ResearchContextLimitError(
                         "Research context manifest exceeds its storage bound; no provider call was made."
@@ -10640,6 +10689,7 @@ async def _worker(session_id: str, path: str) -> None:
             if guidance_group is not None:
                 context["context_manifest"]["sources"].append(guidance_group)
             context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
+            _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                 raise ResearchContextLimitError(
                     "Research context manifest exceeds its storage bound; no provider call was made."

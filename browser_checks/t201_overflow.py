@@ -38,7 +38,7 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 390, "height": 844})
     for button in (
         page.get_by_role("button", name="Start new Session 2"),
-        page.get_by_role("button", name="Cancel starting a research session"),
+        page.locator('button[title="Cancel starting a research session"]'),
     ):
         box = button.bounding_box()
         assert box is not None, "Research start action must be visible"
