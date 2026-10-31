@@ -58,6 +58,23 @@ No merge or deployment was performed. PR #395/Blue changes were not included.
 
 Checks for this correction: focused `tests/research_qa.py` and `tests/research_qa_security.py`, Ruff, Pyright (0 errors/warnings), frontend typecheck/build, full `./sigma test`, and `browser_checks/research_qa.py` in real Chrome all passed. Chrome verified archive failure recovery in both check and restart actions without a repeated fixture call. `./sigma test` skipped only the optional graph-present sandbox check because the local image is unavailable. No paid provider calls were made.
 
+## Presentation and citation navigation update
+
+- Presentation/citation implementation commit: `fc250801` (`Improve Research Q/A citations and Markdown views`).
+- The Answer heading now has the Markdown Copy control immediately beside it. The top-level actions expose Markdown source and Open in browser. Both use the server's single Markdown document; the browser renders it with SIGMA's existing safe Markdown/math renderer.
+- Rendered Markdown navigation is restricted to the exact, server-generated URLs in the saved record's validated citations. Model-generated HTML remains inert, and model output cannot create arbitrary same-project navigation targets.
+- Source labels and reveal routes now distinguish Project, Strategy, Session, Artifact, and Current Understanding. Missing or removed targets retain their source identity and a navigation-unavailable explanation. Browser acceptance verifies the project section, active strategy, historical session, exact artifact, and Current Understanding routes.
+- The dialog displays a short **Research version** fingerprint with the requested tooltip. Technical details expand to the full SHA-256 and a copy control. The Q/A project action height now matches TeX and Lean.
+- `browser_checks/research_qa.py` was rerun in real Chrome with the deterministic fixture. It passed source/raw Markdown equivalence, formatted headings/lists/math, hostile HTML and forged-link handling, all five citation types, Research version display/copy, recovery/archive behavior, clipboard success/failure, desktop/mobile layout, and no new research session. Screenshots: [Markdown source](../docs/evaluations/research_qa/research-qa-markdown-source.png), [browser desktop](../docs/evaluations/research_qa/research-qa-browser-desktop.png), [browser mobile](../docs/evaluations/research_qa/research-qa-browser-mobile.png), and [dialog mobile](../docs/evaluations/research_qa/research-qa-mobile.png).
+- `browser_checks/t125_saved_paper_library.py` passed in real Chrome for saved TeX downloads, PDF browser view, safe preview, mobile layout, and removal. Its confirmation selector was corrected to match the existing **Confirm** button label; no TeX UI behavior changed.
+- Focused Q/A functional/security tests, Ruff, Pyright, frontend typecheck/build, `./sigma test`, Q/A Chrome, and saved-paper Chrome passed. `./sigma test` skipped only the optional graph-present sandbox test because its local image is unavailable. No paid provider calls, merge, or deployment.
+
+### Acceptance status
+
+- **MET** — Markdown copy/source/browser equivalence, safe citation URL allowlist, type-aware links and labels, Research version UI, Q/A/TeX regression coverage, responsive Chrome checks.
+- **UNMET** — none identified.
+- **UNVERIFIED** — live external provider behavior was not exercised; no paid calls were made. The optional graph-present local sandbox could not run because its image is unavailable.
+
 
 ## Third review correction addendum
 
