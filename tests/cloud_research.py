@@ -2930,9 +2930,8 @@ def main() -> None:
                 cloud_workspaces._CURRENT.reset(token)
 
         # Concurrent owners race for one global execution slot. SQLite's
-        # BEGIN IMMEDIATE transaction must admit exactly one claimant.
-        # Prior tests can exhaust the intentionally tiny token allowance;
-        # the race tests execution slots rather than token exhaustion.
+        # BEGIN IMMEDIATE admission must persist exactly one job; excess
+        # work is rejected before any worker or call can start.
         with (
             patch.dict(
                 os.environ,
@@ -2941,34 +2940,38 @@ def main() -> None:
             ),
             patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
         ):
-            # Clear prior slots to isolate this race while retaining spend history.
             db = cloud_research._connect()
             db.execute("UPDATE jobs SET status='paused'")
             db.close()
             jobs = [job(a.workspace_id), job(b.workspace_id)]
-            for record in jobs:
-                token = cloud_workspaces._CURRENT.set(
-                    a if record["project_id"].endswith("a" * 32) else b
-                )
-                try:
-                    cloud_research.prepare_job(record)
-                finally:
-                    cloud_workspaces._CURRENT.reset(token)
-
             barrier = threading.Barrier(2)
 
-            def claim(record: dict, owner: cloud_workspaces.Workspace) -> bool:
+            def admit(record: dict, owner: cloud_workspaces.Workspace) -> bool:
                 context = cloud_workspaces._CURRENT.set(owner)
                 try:
                     barrier.wait(timeout=5)
-                    return cloud_research.claim_job(record["id"])
+                    try:
+                        cloud_research.prepare_job(record)
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        assert "capacity is currently full" in str(exc)
+                        return False
+                    return True
                 finally:
                     cloud_workspaces._CURRENT.reset(context)
 
             with ThreadPoolExecutor(max_workers=2) as pool:
-                results = [pool.submit(claim, record, owner) for record, owner in zip(jobs, (a, b))]
-                claimed = [future.result(timeout=10) for future in results]
-            assert sorted(claimed) == [False, True], claimed
+                results = [pool.submit(admit, record, owner) for record, owner in zip(jobs, (a, b))]
+                admitted = [future.result(timeout=10) for future in results]
+            assert sorted(admitted) == [False, True], admitted
+            for record, owner, accepted in zip(jobs, (a, b), admitted):
+                token = cloud_workspaces._CURRENT.set(owner)
+                try:
+                    if accepted:
+                        assert cloud_research.claim_job(record["id"])
+                    else:
+                        assert cloud_research.job_status(record["id"]) is None
+                finally:
+                    cloud_workspaces._CURRENT.reset(token)
 
         spend_root = root / "spend-ledger"
         spend_root.mkdir(mode=0o700)
