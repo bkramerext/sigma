@@ -2892,6 +2892,31 @@ def _worker_lock_path(path: str, session_id: str) -> Path:
     return _directory(path) / f"{session_id}.worker.lock"
 
 
+@contextmanager
+def _idle_worker_lock(path: str, session_id: str):
+    """Fence resume/removal against workers still running in another process.
+
+    The existing worker owns this flock for its whole execution, including
+    provider cancellation and cloud-slot release. An unknown owner fails closed.
+    The manager lock must already be held by callers for state transitions.
+    """
+    fd = os.open(
+        _worker_lock_path(path, session_id),
+        os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ProjectError(
+                "Session execution is still releasing resources; try again shortly"
+            ) from exc
+        yield
+    finally:
+        os.close(fd)
+
+
 def _lock(directory: Path):
     fd = os.open(directory / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     return os.fdopen(fd, "r+")
@@ -4051,7 +4076,7 @@ def _remove_terminal_session(
     # Keep the manager -> project-write order used by session admission. The
     # write lock makes evidence deletion atomic with inference's final context
     # check and strategy commit.
-    with _project_manager_lock(path), project_write_lock(path):
+    with _project_manager_lock(path), _idle_worker_lock(path, session_id), project_write_lock(path):
         record = _read(path, session_id)
         if record.get("updated_at") != expected_updated_at:
             raise ProjectError("Session changed; refresh its status before removing it")
@@ -4964,7 +4989,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         _save(record["project_path"], record)
         return _public(record)
     async with state_lock, _manager_lock:
-        with _project_manager_lock(path):
+        with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
@@ -10045,8 +10070,9 @@ async def _worker(session_id: str, path: str) -> None:
         fcntl.flock(worker_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(worker_fd)
-        _tasks.pop(session_id, None)
-        _control.pop(session_id, None)
+        if _tasks.get(session_id) is asyncio.current_task():
+            _tasks.pop(session_id, None)
+            _control.pop(session_id, None)
         return
     try:
         initial = _read(path, session_id)
@@ -10641,7 +10667,8 @@ async def _worker(session_id: str, path: str) -> None:
                 # A failed release leaves the persisted slot held, which is safer
                 # than admitting more inference while accounting is uncertain.
                 pass
-        _tasks.pop(session_id, None)
-        _control.pop(session_id, None)
+        if _tasks.get(session_id) is asyncio.current_task():
+            _tasks.pop(session_id, None)
+            _control.pop(session_id, None)
         fcntl.flock(worker_fd, fcntl.LOCK_UN)
         os.close(worker_fd)
