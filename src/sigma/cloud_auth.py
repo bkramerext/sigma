@@ -454,9 +454,7 @@ def _authorization_in_db(
     return allowed["role"] if allowed and allowed["active"] else None
 
 
-def _materialize_domain_member(
-    db: sqlite3.Connection, subject: str, email: str
-) -> bool:
+def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str) -> bool:
     """Convert an active member-domain policy into an individual member grant.
 
     An explicit email grant (including a revoked grant) always wins. The caller
@@ -464,9 +462,7 @@ def _materialize_domain_member(
     """
     if not subject or subject.startswith("legacy-denied:"):
         return False
-    if db.execute(
-        "SELECT 1 FROM grants WHERE kind='email' AND value=?", (email,)
-    ).fetchone():
+    if db.execute("SELECT 1 FROM grants WHERE kind='email' AND value=?", (email,)).fetchone():
         return False
     domain = email.rsplit("@", 1)[1]
     allowed = db.execute(
@@ -1810,9 +1806,7 @@ async def callback(
     raw = secrets.token_urlsafe(32)
     auto_domain_member = False
     with _db(cfg) as db:
-        auto_domain_member = role == "member" and _materialize_domain_member(
-            db, subject, email
-        )
+        auto_domain_member = role == "member" and _materialize_domain_member(db, subject, email)
         existing_account = db.execute(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
@@ -2068,6 +2062,7 @@ def request_invitation(
     if not cfg.enabled or cfg.error or not cfg.database:
         raise HTTPException(503, "Invitation requests are temporarily unavailable.")
     denied_cookie: str | None = None
+    authenticated: Principal | None = None
     if body.request_type == "reload":
         raw_session = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
         principal = resolve_session(raw_session)
@@ -2103,9 +2098,7 @@ def request_invitation(
     now = _now()
     if body.request_type == "invitation" and identity["subject"]:
         with _db(cfg) as db:
-            auto_approved = _materialize_domain_member(
-                db, identity["subject"], identity["email"]
-            )
+            auto_approved = _materialize_domain_member(db, identity["subject"], identity["email"])
             # A second tab may race after the first has committed the
             # individual grant. Do not reopen a reviewed request as pending.
             prior = db.execute(
@@ -2151,9 +2144,8 @@ def request_invitation(
             return {"status": "approved", "duplicate": duplicate_approval}
         if _authorization(cfg, identity["subject"], identity["email"]):
             raise HTTPException(409, "This Google account is already authorized. Sign in again.")
-    if body.request_type == "invitation" and authenticated is not None:
-        if authenticated.role == "member":
-            raise HTTPException(409, "This Google account is already authorized.")
+    if body.request_type == "invitation" and authenticated is not None and authenticated.role == "member":
+        raise HTTPException(409, "This Google account is already authorized.")
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
         subject = identity["subject"]
