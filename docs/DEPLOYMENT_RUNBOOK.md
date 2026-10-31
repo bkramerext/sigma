@@ -191,3 +191,57 @@ not by itself a current recovery point for this release. The remaining release
 record must include the fresh recovery point and restore evidence, exact image
 labels/IDs, deployment result, and smoke-test outcome. No v0.1.6 tag is
 authorized by this record.
+
+## Authorization record — SIGMA v0.1.7 regular production deployment
+
+On 2026-10-30, the operator authorized Red to deploy the latest merged `main`,
+including the domain-authorization fix in PR #389 and the maintenance-page
+implementation in PR #385. PR #385 merged at
+`31ba6c4aba1ed59d2d7e092f589b882d7f134b30`; its exact-head CI passed, and CI on
+the merge commit passed in [run 41176581580](https://github.com/bkramerext/sigma/actions/runs/41176581580)
+before preparing the v0.1.7 candidate. The product version must be bumped to
+v0.1.7 in the Python project, uv lock, frontend
+package, and npm lock. Red may review and merge the version-bump PR after its
+required CI succeeds. Deploy from the tested merged `main` SHA. No separate
+release tag is part of this deployment.
+
+The operator authorized the routine deployment, maintenance cutover, isolated
+restore drill, and temporary-resource cleanup without further human approval.
+Red owns the recovery and maintenance windows. Verify live billing, quota, and
+least-privilege access; cap incremental recovery-drill resources at $25; retain
+the READY snapshot and remove only the temporary recovery VM and clone disk.
+Preserve identities, projects, research history, papers and accounting. Do not
+make unrelated infrastructure/IAM changes, enable recurring backups, or make
+paid provider calls. Keep production untouched if a required recovery, exact-SHA
+CI, host-preflight, or smoke-test gate fails.
+
+## v0.1.7 pre-deployment restore drill — 2026-10-30
+
+Snapshot `sigma-state-v016-pre-20261030-1122` was READY from source disk
+`sigma-state` (created 2026-10-30 11:22:22 PDT). The production host was on
+`0e51d20341ea5656f971e075b466694393e25d97` when inspected. A temporary
+`e2-standard-2` recovery VM had no external IP and no service account. Its
+30 GB clone disk `sigma-state-restore-red-20261030`, filesystem UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`, was attached read-only and mounted with
+`ro,nosuid,nodev,noexec,norecovery`.
+
+The offline verifier from the candidate checkout passed with the prior verified
+aggregate thresholds:
+
+```sh
+sudo python3 /tmp/verify-state-restore.py /mnt/sigma-restore \
+  --min-workspaces 3 --min-projects 12 --min-artifacts 30 --min-papers 0
+```
+
+Observed: three SQLite integrity checks passed; 3 identities/workspaces map to
+3 distinct directories; 12 projects; 30 research artifacts; zero saved paper
+pairs; 10 terminal historical job rows across two unmapped workspaces; and 17
+accounting call rows with five reserved or unknown outcomes preserved. The
+verifier returned `PASS: all restore checks completed read-only`. The recovery
+snapshot remains retained. Temporary VM/disk cleanup and removal of temporary
+SSH metadata completed 2026-10-30 23:30 PDT. The recovery VM and clone disk are
+absent; only the production VM and its two disks remain. The pre-existing
+project SSH key entry was preserved and the temporary `ubuntu` mapping removed.
+The SSH troubleshooting command briefly enabled
+`networkmanagement.googleapis.com`; it was disabled immediately and verified
+disabled. This deviation made no persistent API or SSH-access change.

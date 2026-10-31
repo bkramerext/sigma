@@ -4,7 +4,7 @@
 
 The detailed configuration and exact provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This runbook is the short operational entry point. Record the deployed commit, tested command, outcome, operator, date and any deviation after performing each operation. No secrets, access tokens or user data in logs, PRs or chat.
 
-The v0.1.5 authorization record and exact-SHA release controls are in
+The current release authorization and exact-SHA release controls are in
 [DEPLOYMENT_RUNBOOK.md](DEPLOYMENT_RUNBOOK.md).
 
 ## Deployment inventory and operator evidence (T127)
@@ -21,8 +21,9 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) 
 | Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | Attached to VM; public DNS and HTTPS routing verified 2026-10-26 |
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
 | Billing account / current spend | Unknown | October 25 console screenshot is historical; current association, available credit, alert delivery and spend not verified |
-| Recovery | `sigma-state-v015-pre-20261030-0506` READY from `sigma-state`; isolated read-only restore verifier passed | Created 2026-10-29 22:06:32 PDT before the v0.1.5 deployment. This is not a post-v0.1.5 recovery point. A fresh application-consistent snapshot and isolated restore verification are required before the next release cutover. Daily backup timer and `/etc/sigma/backup.env` remain absent. |
-| Production release | `83c89f20e19ea87c4a3b4934942d0a78c2019973` (v0.1.5) | On 2026-10-30, host checkout and protected `SIGMA_RELEASE` matched; all containers healthy; image verifier passed; state disk mounted. Public root and frontend bundle returned HTTP 200, with expected About build prefix `83c89f2` in the bundle. The unauthenticated health API returned expected HTTP 401. See [Status](STATUS.md). |
+| Recovery | `sigma-state-v016-pre-20261030-1122` READY from `sigma-state` | Created 2026-10-30 11:22:22 PDT. The isolated read-only restore drill passed 2026-10-30 23:26 PDT: 3 identities/workspaces, 12 projects, 30 artifacts, zero paper pairs, 10 retained terminal jobs across two unmapped workspaces, and 17 accounting rows with five reserved/unknown outcomes. The temporary VM/clone disk were removed 23:30 PDT; snapshot retained. The v0.1.5 snapshot remains historical. Daily backup timer and `/etc/sigma/backup.env` remain absent. |
+| Production release | `0e51d20341ea5656f971e075b466694393e25d97` (v0.1.6) | Read on 2026-10-30 before cutover: host checkout and protected `SIGMA_RELEASE` match; all three containers are healthy; persistent state disk is mounted; documented host preflight passed all 23 checks. Public smoke has not been run for the upcoming deployment. |
+| Maintenance page | PR #385 merged at `31ba6c4aba1ed59d2d7e092f589b882d7f134b30` | The production static files, Caddy routing, and switch are not installed yet. Install and validate them before cutover; verify the maintenance page during deployment and normal application availability after. |
 
 **Change log**
 
