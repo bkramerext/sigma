@@ -10,6 +10,7 @@ import re
 import stat
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict
@@ -89,7 +90,33 @@ PaperStageCallback = Callable[
 CALL_SECONDS = 60 * 60
 PLANNING_CALL_SECONDS = 60 * 60
 MAX_PAPERS = 50
+# The backend is deployed as a single Uvicorn process. Admission is atomic
+# under this short-lived lock; no AI await or TeX compilation holds it.
 _gate = asyncio.Lock()
+_busy_paper_projects: set[str] = set()
+_generating_paper_projects: set[str] = set()
+
+
+@asynccontextmanager
+async def _paper_operation(path: str, *, generating: bool):
+    key = str(project_path(path).resolve())
+    async with _gate:
+        if key in _busy_paper_projects:
+            raise ProjectError("A paper generation is already active for this project")
+        if generating and len(_generating_paper_projects) >= 2:
+            raise ProjectError("Paper generation capacity is full; please try again shortly")
+        _busy_paper_projects.add(key)
+        if generating:
+            _generating_paper_projects.add(key)
+    try:
+        yield
+    finally:
+        async with _gate:
+            _busy_paper_projects.discard(key)
+            if generating:
+                _generating_paper_projects.discard(key)
+
+
 _active_progress: dict[str, dict[str, Any]] = {}
 # Hold strong references to running authoring tasks independently of SSE clients.
 # Losing a browser connection must never cancel an already dispatched AI call.
@@ -1979,11 +2006,7 @@ async def restart_work(
 ) -> dict[str, Any]:
     if not confirmed:
         raise ProjectError("Explicit confirmation is required to restart long-paper work")
-    if _gate.locked():
-        raise ProjectError(
-            "Paper generation is active; cancel or wait before restarting its checkpoint"
-        )
-    async with _gate:
+    async with _paper_operation(path, generating=False):
         return await _restart_work_locked(
             path,
             expected_project_id,
@@ -3805,9 +3828,7 @@ async def _generate_impl(
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
 ) -> dict[str, Any]:
-    if _gate.locked():
-        raise ProjectError("A paper generation is already active; wait or cancel it")
-    async with _gate:
+    async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
         run_id = uuid4().hex
         started_at = _now()
