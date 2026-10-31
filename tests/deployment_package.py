@@ -86,8 +86,8 @@ def main() -> None:
     assert "location ^~ /assets/ {" in nginx
     assert "try_files $uri =404;" in nginx
     assert 'Cache-Control "public, max-age=31536000, immutable"' in nginx
-    assert nginx.count('add_header X-Content-Type-Options nosniff always;') == 2
-    assert nginx.count('add_header Referrer-Policy no-referrer always;') == 2
+    assert nginx.count("add_header X-Content-Type-Options nosniff always;") == 2
+    assert nginx.count("add_header Referrer-Policy no-referrer always;") == 2
     assert "header_up X-Forwarded-Proto {$SIGMA_CADDY_UPSTREAM_SCHEME}" in caddy
     assert "sigma-research.duckdns.org" in host_caddy
     assert "reverse_proxy 127.0.0.1:18080" in host_caddy
