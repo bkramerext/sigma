@@ -677,7 +677,7 @@ def main() -> None:
 
             saved_limits = {
                 **DEFAULT_LIMITS,
-                "max_concurrent_sessions": 10**80,
+                "max_concurrent_sessions": 4,
             }
             save_limits(str(created.path), saved_limits)
             assert {
