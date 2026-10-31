@@ -297,7 +297,7 @@ def main():
                 assert (
                     client.put(limits_url, json={"path": str(path), **invalid}).status_code == 422
                 )
-            for invalid_concurrency in (0, "0", "-1", "1.5", "not-a-number"):
+            for invalid_concurrency in (0, "0", "-1", "1.5", "not-a-number", "5", 5):
                 assert (
                     client.put(
                         limits_url,
@@ -318,14 +318,13 @@ def main():
                     "max_concurrent_sessions": arbitrary_positive,
                 },
             )
-            assert unlimited_range.status_code == 200
-            assert unlimited_range.json()["max_concurrent_sessions"] == arbitrary_positive
+            assert unlimited_range.status_code == 400
             numeric_limit = client.put(
                 limits_url,
-                json={"path": str(path), **changed_limits, "max_concurrent_sessions": 17},
+                json={"path": str(path), **changed_limits, "max_concurrent_sessions": 4},
             )
             assert numeric_limit.status_code == 200
-            assert numeric_limit.json()["max_concurrent_sessions"] == "17"
+            assert numeric_limit.json()["max_concurrent_sessions"] == "4"
             assert (
                 research_sessions.get_limits(str(sibling.path)) == research_sessions.DEFAULT_LIMITS
             )
