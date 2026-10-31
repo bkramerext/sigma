@@ -772,7 +772,6 @@ async def test_stop_one_session_does_not_cancel_sibling_and_resume_keeps_work(pa
         assert first_result["tokens_reserved"] == second_result["tokens_reserved"] == 0
 
 
-
 async def test_foreign_worker_lock_blocks_resume_and_removal(path: Path):
     """Another process's live execution must not be resumed or deleted."""
     view, strategy, credential, config = await setup(path)
