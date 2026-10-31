@@ -22,10 +22,29 @@ SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 def send_invitation(
     email: str, requested_at: int, *, recipient: str, request_type: str = "invitation"
 ) -> None:
-    """Send one invitation notification using the Gmail API and OAuth refresh."""
+    """Preserve the existing single-recipient invitation API."""
+    subject = (
+        "SIGMA sponsorship reload request"
+        if request_type == "reload"
+        else "SIGMA invitation request"
+    )
+    introduction = (
+        "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
+        if request_type == "reload"
+        else "A verified Google account requested SIGMA access.\n\n"
+    )
+    send_admin_notification(
+        subject,
+        introduction + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n",
+        recipients=[recipient],
+    )
+
+
+def send_admin_notification(subject: str, body: str, *, recipients: list[str]) -> None:
+    """Send one privacy-preserving email to verified active administrators."""
     token_file = os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip()
     sender = os.environ.get("SIGMA_INVITATION_GMAIL_SENDER", "").strip().lower()
-    if not token_file or not sender:
+    if not token_file or not sender or not recipients:
         raise RuntimeError("Invitation delivery is not configured.")
     try:
         path = Path(token_file)
@@ -37,7 +56,7 @@ def send_invitation(
         if not all(credentials[k] for k in ("client_id", "client_secret", "refresh_token")):
             raise ValueError("Empty OAuth refresh credentials")
         # Do not accept an arbitrary token endpoint from the credentials file.
-        body = urlencode(
+        data = urlencode(
             {
                 "client_id": credentials["client_id"],
                 "client_secret": credentials["client_secret"],
@@ -47,7 +66,7 @@ def send_invitation(
         ).encode("utf-8")
         request = Request(
             TOKEN_ENDPOINT,
-            data=body,
+            data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
         )
@@ -56,20 +75,13 @@ def send_invitation(
 
         message = EmailMessage()
         message["From"] = sender
-        message["To"] = recipient
-        message["Subject"] = (
-            "SIGMA sponsorship reload request"
-            if request_type == "reload"
-            else "SIGMA invitation request"
-        )
-        message.set_content(
-            (
-                "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
-                if request_type == "reload"
-                else "A verified Google account requested SIGMA access.\n\n"
-            )
-            + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
-        )
+        if len(recipients) == 1:
+            message["To"] = recipients[0]
+        else:
+            message["To"] = sender
+            message["Bcc"] = ", ".join(recipients)
+        message["Subject"] = subject
+        message.set_content(body)
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
         request = Request(
             SEND_ENDPOINT,

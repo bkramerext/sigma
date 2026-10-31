@@ -50,6 +50,7 @@ _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
 _DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _SCHEMA_LOCK = Lock()
 _SCHEMA_READY: set[tuple[str, int, int]] = set()
+# Legacy local sponsorship identity; never used to address notification emails.
 INVITATION_RECIPIENT = "zetacontinuation@gmail.com"
 
 
@@ -376,6 +377,11 @@ def _initialize(path: Path) -> None:
             db.execute(
                 "ALTER TABLE invitation_requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'invitation' CHECK(request_type IN ('invitation','reload'))"
             )
+        feedback_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(feedback_requests)")
+        }
+        if "notification_error" not in feedback_columns:
+            db.execute("ALTER TABLE feedback_requests ADD COLUMN notification_error TEXT")
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
         if "return_to" not in flow_columns:
             db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
@@ -1878,14 +1884,33 @@ def denied_identity(request: Request):
     return response
 
 
-def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "invitation") -> None:
-    """Send via Gmail API when configured, otherwise use the existing SMTP transport."""
-    if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
-        from sigma.gmail_delivery import send_invitation
+def _notification_admin_recipients(cfg: Config) -> list[str]:
+    """Active admin recipients must have a previously verified Google subject.
 
-        send_invitation(
-            email, requested_at, recipient=INVITATION_RECIPIENT, request_type=request_type
+    Resolve from the same authorization logic used for sign-in rather than
+    from the public contact field or an applicant-supplied email.
+    """
+    with _db(cfg) as db:
+        verified = db.execute("SELECT subject,email FROM identities").fetchall()
+        return sorted(
+            {
+                str(row["email"])
+                for row in verified
+                if _authorization_in_db(db, cfg, row["subject"], row["email"]) == "admin"
+            }
         )
+
+
+def _deliver_admin_notice(subject: str, body: str) -> None:
+    """One privacy-preserving multi-recipient notice through existing Gmail/SMTP."""
+    cfg = config()
+    recipients = _notification_admin_recipients(cfg)
+    if not recipients:
+        raise RuntimeError("No verified SIGMA administrator notification recipient is available.")
+    if os.environ.get("SIGMA_INVITATION_GMAIL_TOKEN_FILE", "").strip():
+        from sigma.gmail_delivery import send_admin_notification
+
+        send_admin_notification(subject, body, recipients=recipients)
         return
 
     raw_username = os.environ.get("SIGMA_INVITATION_SMTP_USERNAME", "").strip()
@@ -1905,29 +1930,60 @@ def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "i
         if not host or not 1 <= port <= 65535:
             raise ValueError
         message = EmailMessage()
-        message["Subject"] = (
-            "SIGMA sponsorship reload request"
-            if request_type == "reload"
-            else "SIGMA invitation request"
-        )
+        message["Subject"] = subject
         message["From"] = username
-        message["To"] = INVITATION_RECIPIENT
-        message.set_content(
-            (
-                "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
-                if request_type == "reload"
-                else "A verified Google account requested SIGMA access.\n\n"
-            )
-            + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
-        )
+        message["To"] = username
+        message["Bcc"] = ", ".join(recipients)
+        message.set_content(body)
         with smtplib.SMTP(host, port, timeout=10) as client:
             client.ehlo()
             client.starttls(context=ssl.create_default_context())
             client.ehlo()
             client.login(username, password)
-            client.send_message(message, from_addr=username, to_addrs=[INVITATION_RECIPIENT])
+            refused = client.send_message(message, from_addr=username, to_addrs=recipients)
+            if isinstance(refused, dict) and refused:
+                raise RuntimeError("Some administrator notifications could not be delivered.")
     except (OSError, ValueError, smtplib.SMTPException) as exc:
-        raise RuntimeError("Invitation notification could not be delivered.") from exc
+        raise RuntimeError("Administrator notification could not be delivered.") from exc
+
+
+def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "invitation") -> None:
+    """Notify all verified administrators, preserving existing request semantics."""
+    title = (
+        "SIGMA sponsorship reload request"
+        if request_type == "reload"
+        else "SIGMA invitation request"
+    )
+    introduction = (
+        "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
+        if request_type == "reload"
+        else "A verified Google account requested SIGMA access.\n\n"
+    )
+    _deliver_admin_notice(
+        title,
+        introduction + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n",
+    )
+
+
+def _deliver_feedback(
+    feedback_id: str,
+    message: str,
+    submitted_at: int,
+    *,
+    account_email: str | None,
+    contact_email: str | None,
+) -> None:
+    """Notification content is plain text; contact is explicitly unverified."""
+    _deliver_admin_notice(
+        "New SIGMA feedback",
+        (
+            f"Feedback ID: {feedback_id}\n"
+            f"Submitted at (UTC epoch): {submitted_at}\n"
+            f"Verified account: {account_email or 'None (guest)'}\n"
+            f"Provided contact (unverified): {contact_email or 'None'}\n\n"
+            f"Message:\n{message}\n"
+        ),
+    )
 
 
 class InvitationRequestBody(BaseModel):
@@ -2136,7 +2192,7 @@ class FeedbackStatusUpdate(BaseModel):
 
 @router.post("/feedback")
 def submit_feedback(body: FeedbackSubmission, request: Request, response: Response):
-    """Persist visitor feedback without sending it to a model or mail provider."""
+    """Persist visitor feedback first, then notify administrators best-effort."""
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.database:
         raise HTTPException(503, "Feedback is temporarily unavailable.")
@@ -2210,6 +2266,22 @@ def submit_feedback(body: FeedbackSubmission, request: Request, response: Respon
             **_cookie_options(cfg, FEEDBACK_RATE_COOKIE, max_age=FEEDBACK_RATE_SECONDS),
         )
     response.headers["Cache-Control"] = "no-store"
+    try:
+        _deliver_feedback(
+            feedback_id,
+            message,
+            now,
+            account_email=principal.email if principal else None,
+            contact_email=contact_email,
+        )
+    except RuntimeError:
+        # Feedback is durable even if Gmail/SMTP is missing or temporarily
+        # unavailable. The admin inbox still contains the message.
+        with _db(cfg) as db:
+            db.execute(
+                "UPDATE feedback_requests SET notification_error=? WHERE id=?",
+                ("delivery failed", feedback_id),
+            )
     return {"status": "received", "id": feedback_id}
 
 

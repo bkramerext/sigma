@@ -10,7 +10,12 @@ from unittest import TestCase, main
 from unittest.mock import patch
 from urllib.parse import parse_qs
 
-from sigma.gmail_delivery import SEND_ENDPOINT, TOKEN_ENDPOINT, send_invitation
+from sigma.gmail_delivery import (
+    SEND_ENDPOINT,
+    TOKEN_ENDPOINT,
+    send_admin_notification,
+    send_invitation,
+)
 
 
 class FakeResponse:
@@ -74,6 +79,52 @@ class GmailDeliveryTests(TestCase):
                     "applicant@example.com", 123, recipient=env["SIGMA_INVITATION_GMAIL_SENDER"]
                 )
             self.assertEqual(len(calls), 2)
+
+    def test_multi_admin_feedback_message_keeps_recipient_list_private(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "gmail-token.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "client_id": "id",
+                        "client_secret": "secret",
+                        "refresh_token": "refresh",
+                    }
+                )
+            )
+            recipients = ["admin-a@example.org", "admin-b@example.org"]
+            delivered = []
+
+            def fake_urlopen(request, timeout):
+                if request.full_url == TOKEN_ENDPOINT:
+                    return FakeResponse({"access_token": "access-token"})
+                self.assertEqual(request.full_url, SEND_ENDPOINT)
+                raw = json.loads(request.data)["raw"]
+                email = message_from_bytes(base64.urlsafe_b64decode(raw))
+                delivered.append(email)
+                return FakeResponse({"id": "notice-id"})
+
+            with (
+                patch.dict(
+                    "os.environ",
+                    {
+                        "SIGMA_INVITATION_GMAIL_TOKEN_FILE": str(path),
+                        "SIGMA_INVITATION_GMAIL_SENDER": "sender@example.org",
+                    },
+                ),
+                patch("sigma.gmail_delivery.urlopen", side_effect=fake_urlopen),
+            ):
+                send_admin_notification(
+                    "New SIGMA feedback",
+                    "Guest feedback ID fixture-1: Improve the onboarding text.",
+                    recipients=recipients,
+                )
+            self.assertEqual(len(delivered), 1)
+            msg = delivered[0]
+            self.assertEqual(msg["To"], "sender@example.org")
+            self.assertEqual(msg["Bcc"], ", ".join(recipients))
+            self.assertNotIn(recipients[0], msg["To"])
+            self.assertIn("Improve the onboarding text", msg.get_payload(decode=True).decode())
 
     def test_requires_configuration(self):
         with (
