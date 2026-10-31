@@ -2577,6 +2577,81 @@ def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
         assert not papers._gate.locked()
 
 
+def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
+    """AI latency in one user's paper must not block another project."""
+    with TemporaryDirectory() as temporary:
+        paths = [Path(temporary) / f"paper-{index}.sigma" for index in range(3)]
+        views = [
+            initialize_project(path, f"Paper project {index}", "Independent bounded research")
+            for index, path in enumerate(paths)
+        ]
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        both_started = asyncio.Event()
+        release = asyncio.Event()
+        provider_calls = 0
+
+        async def blocked_provider(context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            if provider_calls == 2:
+                both_started.set()
+            await release.wait()
+            source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
+            return draft(source), "fixture-model"
+
+        async def credentials():
+            return credential
+
+        async def configuration(**_kwargs):
+            return config
+
+        async def check():
+            with (
+                patch.object(papers, "auth_context", new=credentials),
+                patch.object(papers, "configuration", new=configuration),
+                patch.object(papers, "_provider", new=blocked_provider),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                first, second = [
+                    asyncio.create_task(
+                        papers.generate(str(path), credential["identity"], view.project.id)
+                    )
+                    for path, view in zip(paths[:2], views[:2])
+                ]
+                try:
+                    await asyncio.wait_for(both_started.wait(), timeout=2)
+                    assert provider_calls == 2, "Both users should reach AI concurrently"
+                    assert len(papers._generating_paper_projects) == 2
+                    try:
+                        await papers.generate(
+                            str(paths[2]), credential["identity"], views[2].project.id
+                        )
+                    except ProjectError as exc:
+                        assert "capacity is full" in str(exc)
+                    else:
+                        raise AssertionError("Third paper must be rejected before provider I/O")
+                    assert provider_calls == 2
+                finally:
+                    release.set()
+                results = await asyncio.wait_for(
+                    asyncio.gather(first, second), timeout=5
+                )
+                assert len(results) == 2
+                assert len(papers.list_papers(str(paths[0]))) == 1
+                assert len(papers.list_papers(str(paths[1]))) == 1
+                assert papers.list_papers(str(paths[2])) == []
+                assert not papers._busy_paper_projects
+                assert not papers._generating_paper_projects
+
+        asyncio.run(check())
+
+
 def test_fast_long_draft_cancellation_keeps_completed_sections() -> None:
     package, plan = fast_package(section_count=5)
     state = papers._new_work("1" * 64, "fast-fixture", "2" * 64, "fixture-model", "high")
@@ -3661,6 +3736,7 @@ def main() -> None:
     test_fast_checkpoint_resume_replays_only_incomplete_section()
     test_fast_long_draft_cancellation_keeps_completed_sections()
     test_paper_generation_rejects_concurrent_duplicate_request()
+    test_two_paper_generators_run_concurrently_and_third_fails_fast()
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
