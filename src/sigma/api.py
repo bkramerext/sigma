@@ -1515,7 +1515,9 @@ async def delete_project_view(body: DeleteProjectRequest):
 
         forget_recent(body.expected_project_id, str(authorized))
         return {"deleted": True, "project_id": body.expected_project_id}
-    except WorkspaceAccessError:
+    except ProjectError:
+        # Preserve actionable concurrency refusal rather than masking it as
+        # an unexplained project deletion error.
         raise
     except (OSError, RuntimeError, ValueError) as exc:
         raise ProjectError("Project could not be deleted safely") from exc
