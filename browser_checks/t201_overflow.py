@@ -1,4 +1,4 @@
-"""T201 Chromium acceptance with isolated evidence and a fake provider."""
+"""T201 Chromium acceptance: bounded history permits repeatable research."""
 
 import json
 import os
@@ -32,48 +32,24 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(base_url + "/project?path=" + quote(str(path), safe=""))
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
+
     page.get_by_role("button", name="Start a new research session").click()
+    expect(page.locator(".session-start-limits")).to_have_text("1 round · 2 total turns")
+    page.set_viewport_size({"width": 390, "height": 844})
+    for button in (
+        page.get_by_role("button", name="Start new Session 2"),
+        page.get_by_role("button", name="Cancel starting a research session"),
+    ):
+        box = button.bounding_box()
+        assert box is not None, "Research start action must be visible"
+        assert box["x"] >= 0 and box["x"] + box["width"] <= 390, (
+            f"Research start action overflows narrow viewport: {box}"
+        )
+    page.set_viewport_size({"width": 1440, "height": 900})
     page.locator('button[title="Confirm start new Session 2"]').click()
-    alert = page.locator(".sessions-pane [role=alert]")
-    # The user-facing overflow error intentionally omits internal evidence hashes
-    # and individual obligation text. Verify actionable guidance instead; the
-    # saved artifact and absence of provider calls are asserted below.
-    expect(alert).to_contain_text(
-        "unresolved prior-session obligations exceed the safe context bound"
-    )
-    expect(alert).to_contain_text("Saved research is unchanged")
-    expect(alert).to_contain_text("start a new, narrower strategy informed by its saved findings")
-    assert info["omitted"] not in alert.inner_text()
-    assert info["omitted_text"] not in alert.inner_text()
-    expect(page.get_by_role("button", name="Start a new research session")).to_be_visible()
-    assert read_file(path, saved_member) == before
-    assert not calls.exists(), "blocked start must make no provider call"
-    assert "research-sessions/sequence.json" not in read_bundle(path)["files"], (
-        "blocked start reserved a session number"
-    )
-    assert {
-        name
-        for name in read_bundle(path)["files"]
-        if name.startswith("research-sessions/")
-        and name.removeprefix("research-sessions/") not in {"limits.json", "sequence.json"}
-    } == session_files
-    page.get_by_role("button", name="New", exact=True).click()
-    form = page.locator(".strategy-form")
-    expect(form).to_be_visible()
-    form.get_by_label("Title").fill("Narrow follow-up")
-    follow_up = form.get_by_label("Hypothesis / approach")
-    follow_up.fill(f"Investigate the saved finding: {info['omitted_text']}")
-    assert info["omitted_text"] in follow_up.input_value()
-    form.get_by_role("button", name="Save", exact=True).click()
-    expect(form).to_have_count(0)
-    original = page.locator(f'li[data-strategy-id="{info["strategy"]}"]')
-    original.get_by_role("button", name="Disable", exact=True).click()
-    expect(original.get_by_role("button", name="Enable", exact=True)).to_be_visible()
-    page.get_by_role("button", name="Start a new research session").click()
-    page.locator('button[title="Confirm start new Session 2"]').click()
-    child_row = page.locator(".session-row").filter(has_text="Session #2")
-    expect(child_row).to_be_visible(timeout=15000)
-    expect(child_row.locator(".session-status")).to_have_text(
+    row = page.locator(".session-row").filter(has_text="Session #2")
+    expect(row).to_be_visible(timeout=15000)
+    expect(row.locator(".session-status")).to_have_text(
         re.compile("completed|ended"), timeout=30000
     )
     deadline = time.monotonic() + 10
@@ -82,21 +58,44 @@ with sync_playwright() as playwright:
     ):
         time.sleep(0.1)
     assert calls.read_text().splitlines() == ["research_investigator", "research_skeptic"]
-    child_files = [
+    assert read_file(path, saved_member) == before
+
+    new_files = [
         name
         for name in read_bundle(path)["files"]
         if name.startswith("research-sessions/")
         and name.removeprefix("research-sessions/") not in {"limits.json", "sequence.json"}
         and name not in session_files
     ]
-    assert len(child_files) == 1
-    child = json.loads(read_file(path, child_files[0]))
-    assert child["session_number"] == 2 and child["calls_used"] == 2 and child["artifacts"]
-    assert child["strategy_id"] != info["strategy"]
+    assert len(new_files) == 1
+    first = json.loads(read_file(path, new_files[0]))
+    assert first["session_number"] == 2
+    assert first["strategy_id"] == info["strategy"]
+    assert first["calls_used"] == 2 and first["artifacts"]
+    assert first["prior_session_obligations_omitted"] >= 1
+    assert first["prior_session_obligation_omitted_ids_by_strategy"][info["strategy"]]
+    manifest = first["steps"][0]["context_manifest"]
+    assert manifest["omitted_prior_session_obligations"]["count"] >= 1
+    assert info["omitted"] in manifest["omitted_prior_session_obligations"]["obligation_ids"]
+    assert info["omitted_text"] not in str(manifest)
+
+    # The same eligible strategy remains usable, with its durable history intact.
+    page.get_by_role("button", name="Start a new research session").click()
+    page.locator('button[title="Confirm start new Session 3"]').click()
+    second_row = page.locator(".session-row").filter(has_text="Session #3")
+    expect(second_row).to_be_visible(timeout=15000)
+    expect(second_row.locator(".session-status")).to_have_text(
+        re.compile("completed|ended"), timeout=30000
+    )
+    assert calls.read_text().splitlines() == [
+        "research_investigator",
+        "research_skeptic",
+        "research_investigator",
+        "research_skeptic",
+    ]
     assert read_file(path, saved_member) == before
     assert not errors, errors
     page.screenshot(path="/tmp/sigma-t201-recovery.png", full_page=True)
     browser.close()
-print(
-    "PASS local Chromium: overflow details, no session or calls, preserved evidence, fork and disable, fake-provider child progress"
-)
+
+print("PASS T201 Chromium: repeatable bounded research, provenance, narrow start controls and immutable history")
