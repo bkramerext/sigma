@@ -3390,7 +3390,9 @@ class CloudAuthTests(TestCase):
             grant = db.execute(
                 "SELECT role,active FROM grants WHERE kind='email' AND value='new@example.org'"
             ).fetchone()
-        self.assertEqual((row["status"], row["notification_error"]), ("reviewed", "delivery failed"))
+        self.assertEqual(
+            (row["status"], row["notification_error"]), ("reviewed", "delivery failed")
+        )
         self.assertEqual((grant["role"], grant["active"]), ("member", 1))
         revoked = admin.delete(
             "/api/cloud-auth/admin/grants/domain/example.org",
