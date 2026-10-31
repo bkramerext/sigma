@@ -693,6 +693,84 @@ async def test_distinct_portfolio_sessions_dispatch_simultaneously(root: Path):
         assert all(item["tokens_reserved"] == 0 for item in finished)
 
 
+async def test_stop_one_session_does_not_cancel_sibling_and_resume_keeps_work(path: Path):
+    """Stop/Resume must act on the selected session, not another active session."""
+    view, strategy, credential, config = await setup(path)
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "research_rounds": 1,
+        "model_calls": 4,
+        "max_concurrent_sessions": 2,
+    }
+    research_sessions.save_limits(str(path), limits)
+    first_entered = asyncio.Event()
+    second_entered = asyncio.Event()
+    resumed_entered = asyncio.Event()
+    release_second = asyncio.Event()
+    first_id = ""
+    second_id = ""
+    attempts: dict[str, int] = {}
+
+    async def provider(record, role, _context, timeout_seconds=None, step_id=None):
+        del timeout_seconds
+        assert isinstance(step_id, str)
+        session_id = record["id"]
+        if role == "investigator":
+            attempts[session_id] = attempts.get(session_id, 0) + 1
+            if session_id == first_id and attempts[session_id] == 1:
+                first_entered.set()
+                await asyncio.Event().wait()
+                raise AssertionError("Stopped provider must never complete")
+            if session_id == second_id:
+                second_entered.set()
+                await release_second.wait()
+            if session_id == first_id and attempts[session_id] == 2:
+                resumed_entered.set()
+            return investigation(1), {"input_tokens": 120, "output_tokens": 90}
+        return skeptic(1, "stop"), {"input_tokens": 120, "output_tokens": 90}
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=AsyncMock(side_effect=provider)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+    ):
+        first = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        first_id = first["id"]
+        await asyncio.wait_for(first_entered.wait(), 3)
+        second = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        second_id = second["id"]
+        await asyncio.wait_for(second_entered.wait(), 3)
+        assert not research_sessions._tasks[second_id].done()
+
+        stopped = await research_sessions.control_session(str(path), first_id, "stop")
+        assert stopped["status"] == "stopped"
+        assert not research_sessions._tasks[second_id].done()
+        assert research_sessions.get_session(str(path), second_id)["status"] in {
+            "queued",
+            "running",
+        }
+        assert attempts[second_id] == 1
+
+        resumed = await research_sessions.control_session(str(path), first_id, "resume")
+        assert resumed["status"] == "queued"
+        await asyncio.wait_for(resumed_entered.wait(), 3)
+        assert not research_sessions._tasks[second_id].done()
+        release_second.set()
+        first_result, second_result = await asyncio.wait_for(
+            asyncio.gather(wait_for(path, first_id), wait_for(path, second_id)), 8
+        )
+        assert first_result["status"] == second_result["status"] == "ended"
+        assert first_result["id"] == first_id and second_result["id"] == second_id
+        assert len(first_result["artifacts"]) == len(second_result["artifacts"]) == 1
+        assert attempts[first_id] == 2 and attempts[second_id] == 1
+        assert first_result["tokens_reserved"] == second_result["tokens_reserved"] == 0
+
+
 async def test_three_cycles_and_idempotency(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = research_sessions.get_limits(str(path))
@@ -8675,6 +8753,11 @@ def main():
             test_project_concurrent_session_limit_is_atomic(root / "concurrency-limit.sigma")
         )
         asyncio.run(test_distinct_portfolio_sessions_dispatch_simultaneously(root))
+        asyncio.run(
+            test_stop_one_session_does_not_cancel_sibling_and_resume_keeps_work(
+                root / "sibling-stop-resume.sigma"
+            )
+        )
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
         asyncio.run(
             test_legacy_worker_aggregates_usage_and_audits_inputs(root / "legacy-worker.sigma")
