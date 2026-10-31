@@ -25,9 +25,18 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     fail_archive_reads = [0]
+    missing_archive_reads = [0]
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
+        if "/api/projects/research-qa?" in route.request.url and missing_archive_reads[0]:
+            missing_archive_reads[0] -= 1
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='{"answers":[],"archive_available":false}',
+            )
+            return
         if "/api/projects/research-qa?" in route.request.url and fail_archive_reads[0]:
             fail_archive_reads[0] -= 1
             route.fulfill(
@@ -92,6 +101,10 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
     recovery = dialog.get_by_role("group", name="Recover interrupted Q/A request")
+    missing_archive_reads[0] = 1
+    recovery.get_by_role("button", name="Check saved answers").click()
+    expect(dialog.get_by_role("alert")).to_contain_text("archive is missing")
+    expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
     fail_archive_reads[0] = 1
     recovery.get_by_role("button", name="Check saved answers").click()
     expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")

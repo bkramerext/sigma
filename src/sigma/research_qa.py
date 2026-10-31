@@ -8,8 +8,7 @@ import json
 import os
 import re
 import stat
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -31,17 +30,52 @@ from sigma.projects import (
 from sigma.proposals import configuration
 
 MAX_RECORDS = 50
-MAX_PENDING_REQUESTS = 1000
 MAX_RECORD_BYTES = 2_000_000
 MAX_ARCHIVE_BYTES = 30_000_000
 MAX_QUESTION = 4000
 
 
-@contextmanager
-def _archive_transaction(path: str) -> Iterator[None]:
-    """Serialize brief archive read/modify/write transactions across processes."""
+def _archive_update(
+    path: str,
+    update: Callable[
+        [list[dict[str, Any]], list[dict[str, str]]],
+        tuple[list[dict[str, Any]], list[dict[str, str]], Any, bool],
+    ],
+) -> Any:
+    """Atomically read, modify and publish the Q/A archive."""
+    if _is_bundle(path):
+        from sigma.project_bundle import transform_members
+
+        target = project_path(path)
+        member_name = "artifacts/research-qa/records.json"
+        project_id = inspect_project(path).project.id
+        result: list[Any] = []
+
+        def transform(members: dict[str, bytes]) -> dict[str, bytes | None]:
+            records, pending = _decode_archive(path, members.get(member_name), project_id)
+            next_records, next_pending, value, changed = update(records, pending)
+            result.append(value)
+            if not changed:
+                return {}
+            raw = _archive_bytes(project_id, next_records, next_pending)
+            return {member_name: raw}
+
+        try:
+            transform_members(target, transform)
+        except (OSError, ValueError) as exc:
+            if isinstance(exc, ProjectError):
+                raise
+            raise ProjectError("Cannot update Q/A archive") from exc
+        if not result:
+            raise ProjectError("Q/A archive update did not complete")
+        return result[0]
+
     with project_write_lock(path):
-        yield
+        records, pending = _load_archive(path)
+        next_records, next_pending, result, changed = update(records, pending)
+        if changed:
+            _save(path, next_records, next_pending)
+        return result
 
 
 class AnswerDraft(BaseModel):
@@ -84,6 +118,17 @@ def _load(path: str) -> list[dict[str, Any]]:
     return _load_archive(path)[0]
 
 
+def archive_available(path: str) -> bool:
+    target = _archive_path(path)
+    if _is_bundle(path):
+        from sigma.project_bundle import list_files
+
+        return "artifacts/research-qa/records.json" in list_files(target)
+    if target.is_symlink():
+        raise ProjectError("Q/A storage file is unsafe")
+    return target.is_file()
+
+
 def _load_archive(path: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     target = _archive_path(path)
     try:
@@ -91,20 +136,34 @@ def _load_archive(path: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]
             from sigma.project_bundle import list_files
 
             if "artifacts/research-qa/records.json" not in list_files(target):
-                return [], []
-            raw = read_project_artifact(target, "artifacts/research-qa/records.json")
+                raw = None
+            else:
+                raw = read_project_artifact(target, "artifacts/research-qa/records.json")
         else:
-            if target.is_symlink() or not target.is_file():
-                return [], []
-            raw = target.read_bytes()
+            if target.is_symlink():
+                raise ProjectError("Q/A storage file is unsafe")
+            raw = target.read_bytes() if target.exists() else None
+    except FileNotFoundError:
+        raw = None
+    except (OSError, ValueError) as exc:
+        raise ProjectError("Q/A archive is unreadable") from exc
+    return _decode_archive(path, raw)
+
+
+def _decode_archive(
+    path: str, raw: bytes | None, project_id: str | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    if raw is None:
+        return [], []
+    try:
         if len(raw) > MAX_ARCHIVE_BYTES:
             raise ProjectError("Q/A archive exceeds its storage limit")
         value = json.loads(raw)
-    except FileNotFoundError:
-        return [], []
     except (OSError, ValueError) as exc:
+        if isinstance(exc, ProjectError):
+            raise
         raise ProjectError("Q/A archive is unreadable") from exc
-    project_id = inspect_project(path).project.id
+    project_id = project_id or inspect_project(path).project.id
     if (
         not isinstance(value, dict)
         or value.get("schema_version") != 1
@@ -114,13 +173,10 @@ def _load_archive(path: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]
         raise ProjectError("Q/A archive is invalid or belongs to another project")
     records = value["records"]
     pending = value.get("pending_requests", [])
-    if (
-        not isinstance(records, list)
-        or len(records) > MAX_RECORDS
-        or not isinstance(pending, list)
-        or len(pending) > MAX_PENDING_REQUESTS
-    ):
-        raise ProjectError("Q/A archive exceeds a safe answer or request-marker limit")
+    if not isinstance(records, list) or len(records) > MAX_RECORDS or not isinstance(pending, list):
+        raise ProjectError(
+            "Q/A archive exceeds a safe answer limit or has an invalid request ledger"
+        )
     qa_ids: set[str] = set()
     request_ids: set[str] = set()
     for record in records:
@@ -203,16 +259,7 @@ def _save(
     path: str, records: list[dict[str, Any]], pending: list[dict[str, str]] | None = None
 ) -> None:
     project_id = inspect_project(path).project.id
-    raw = _json(
-        {
-            "schema_version": 1,
-            "project_id": project_id,
-            "records": records,
-            "pending_requests": pending or [],
-        }
-    )
-    if len(raw) > MAX_ARCHIVE_BYTES:
-        raise ProjectError("Q/A archive exceeds its storage limit")
+    raw = _archive_bytes(project_id, records, pending or [])
     target = _archive_path(path)
     if _is_bundle(path):
         save_project_artifacts(target, {"artifacts/research-qa/records.json": raw})
@@ -221,6 +268,22 @@ def _save(
 
         staged = _stage(target.parent, raw)
         staged.replace(target)
+
+
+def _archive_bytes(
+    project_id: str, records: list[dict[str, Any]], pending: list[dict[str, str]]
+) -> bytes:
+    raw = _json(
+        {
+            "schema_version": 1,
+            "project_id": project_id,
+            "records": records,
+            "pending_requests": pending,
+        }
+    )
+    if len(raw) > MAX_ARCHIVE_BYTES:
+        raise ProjectError("Q/A archive exceeds its storage limit")
+    return raw
 
 
 def list_answers(path: str) -> list[dict[str, Any]]:
@@ -350,14 +413,13 @@ async def _answer_locked(
     if not re.fullmatch(r"[0-9a-f]{32}", request_id):
         raise ProjectError("Invalid Q/A request identifier")
     question_hash = hashlib.sha256(question.encode()).hexdigest()
-    with _archive_transaction(path):
-        records, pending = _load_archive(path)
-        previous = _request_record(records, request_id, question)
-        if previous:
-            return previous
-        _check_pending_request(pending, request_id, question_hash)
-        if len(records) >= MAX_RECORDS:
-            raise ProjectError("This project has reached the 50 saved Q/A limit")
+    records, pending = _load_archive(path)
+    previous = _request_record(records, request_id, question)
+    if previous:
+        return previous
+    _check_pending_request(pending, request_id, question_hash)
+    if len(records) >= MAX_RECORDS:
+        raise ProjectError("This project has reached the 50 saved Q/A limit")
     package, snapshot_hash = papers._snapshot(path)
     from sigma.research_state import current_understanding
 
@@ -379,20 +441,28 @@ async def _answer_locked(
         raise ProjectError(config["message"])
     source_ids = {_source_id(source) for source in selected}
     started = datetime.now(UTC)
+
     # Persist an idempotency marker before dispatch. If the process exits after
     # provider bytes may have been sent, a retry cannot silently charge twice.
-    with _archive_transaction(path):
-        records, pending = _load_archive(path)
+    def reserve(
+        records: list[dict[str, Any]], pending: list[dict[str, str]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any, bool]:
         previous = _request_record(records, request_id, question)
         if previous:
-            return previous
+            return records, pending, previous, False
         _check_pending_request(pending, request_id, question_hash)
         if len(records) >= MAX_RECORDS:
             raise ProjectError("This project has reached the 50 saved Q/A limit")
-        if len(pending) >= MAX_PENDING_REQUESTS:
-            raise ProjectError("This project has reached the safe pending Q/A request limit")
-        pending.append({"request_id": request_id, "question_sha256": question_hash})
-        _save(path, records, pending)
+        return (
+            records,
+            [*pending, {"request_id": request_id, "question_sha256": question_hash}],
+            None,
+            True,
+        )
+
+    reserved = _archive_update(path, reserve)
+    if reserved is not None:
+        return reserved
     structured, _raw = await papers._provider_structured(
         {"question": question, "sources": selected},
         binding,
@@ -455,19 +525,26 @@ async def _answer_locked(
         record["evidence_snapshot"] = [
             {"id": row.get("id"), "kind": row.get("kind")} for row in selected
         ]
-    with _archive_transaction(path):
-        records, pending = _load_archive(path)
+
+    def save_answer(
+        records: list[dict[str, Any]], pending: list[dict[str, str]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any, bool]:
         previous = _request_record(records, request_id, question)
         if previous:
-            return previous
+            return records, pending, previous, False
         marker = next((item for item in pending if item.get("request_id") == request_id), None)
         if marker is None or marker.get("question_sha256") != question_hash:
             raise ProjectError("Q/A request reservation changed before the answer was saved")
         if len(records) >= MAX_RECORDS:
             raise ProjectError("This project has reached the 50 saved Q/A limit")
-        records.append(record)
-        _save(path, records, [item for item in pending if item.get("request_id") != request_id])
-        return record
+        return (
+            [*records, record],
+            [item for item in pending if item.get("request_id") != request_id],
+            record,
+            True,
+        )
+
+    return _archive_update(path, save_answer)
 
 
 def _request_record(
@@ -504,11 +581,20 @@ def get_answer(path: str, qa_id: str) -> dict[str, Any]:
 def delete_answer(path: str, qa_id: str) -> None:
     if not re.fullmatch(r"[0-9a-f]{32}", qa_id):
         raise ProjectError("Invalid Q/A identifier")
-    with _archive_transaction(path):
-        records, pending = _load_archive(path)
+
+    def remove(
+        records: list[dict[str, Any]], pending: list[dict[str, str]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any, bool]:
         if not any(row.get("qa_id") == qa_id for row in records):
             raise ProjectError("Saved Q/A answer was not found")
-        _save(path, [row for row in records if row.get("qa_id") != qa_id], pending)
+        return (
+            [row for row in records if row.get("qa_id") != qa_id],
+            pending,
+            None,
+            True,
+        )
+
+    _archive_update(path, remove)
 
 
 def standalone_html(path: str, qa_id: str) -> str:

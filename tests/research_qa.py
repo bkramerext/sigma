@@ -57,6 +57,14 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
             except asyncio.CancelledError:
                 pass
             assert key in api._research_qa_tasks
+            conflicting = body.model_copy(update={"question": "A different question"})
+            try:
+                await api.research_qa_answer(conflicting)
+            except ProjectError as exc:
+                assert "different request parameters" in str(exc)
+            else:
+                raise AssertionError("A conflicting in-flight request ID must be rejected")
+            assert calls == 1
             reconnected = asyncio.create_task(api.research_qa_answer(body))
             await asyncio.sleep(0)
             assert calls == 1
@@ -213,6 +221,22 @@ def main() -> None:
             assert "<script>" not in research_qa.standalone_html(str(path), first["qa_id"])
             assert "&lt;script&gt;" in research_qa.standalone_html(str(path), first["qa_id"])
             assert f"reveal_session={s1}" in research_qa.standalone_html(str(path), first["qa_id"])
+            qa_archive_path = path / "artifacts" / "research-qa" / "records.json"
+            archive_bytes = qa_archive_path.read_bytes()
+            assert research_qa.archive_available(str(path))
+            qa_archive_path.unlink()
+            assert not research_qa.archive_available(str(path))
+            assert research_qa.list_answers(str(path)) == []
+            qa_archive_path.write_bytes(archive_bytes)
+            qa_archive_path.write_bytes(b"{unreadable")
+            try:
+                research_qa.list_answers(str(path))
+            except ProjectError as exc:
+                assert "unreadable" in str(exc)
+            else:
+                raise AssertionError("An unreadable archive must not appear empty")
+            assert qa_archive_path.read_bytes() == b"{unreadable"
+            qa_archive_path.write_bytes(archive_bytes)
             child_environment = os.environ.copy()
             child_environment["PYTHONPATH"] = os.pathsep.join(
                 [
@@ -238,6 +262,58 @@ def main() -> None:
             portable = Path(temporary) / "portable.json"
             import_bundle(json.loads(export_complete_project(path)), portable)
             assert research_qa.list_answers(str(portable))[0]["qa_id"] == first["qa_id"]
+            portable_script = r"""
+import asyncio
+import sys
+from sigma import papers, research_qa
+
+project_path, project_id = sys.argv[1:3]
+source_id = "session:11111111-1111-4111-8111-111111111111"
+package = {"project_id": project_id, "sources": [{"id": source_id, "kind": "session", "data": {"session_number": 1, "status": "completed", "outcome": {"label": "supported", "summary": "The saved result supports this limited claim."}}}]}
+papers._snapshot = lambda _path: (package, "e" * 64)
+
+async def auth_context():
+    return {"identity": "portable-test", "mode": "chatgpt"}
+
+async def configuration(**_kwargs):
+    return {"available": True, "model": "mock", "reasoning_effort": "low"}
+
+async def provider(input_value, *_args, **_kwargs):
+    await asyncio.sleep(0.05)
+    return research_qa.AnswerDraft(answer="Portable answer saved.", source_refs=[input_value["sources"][0]["id"]]), "{}"
+
+research_qa.auth_context = auth_context
+research_qa.configuration = configuration
+papers._provider_structured = provider
+before = research_qa.list_answers(project_path)
+
+async def exercise():
+    generated = await asyncio.gather(*[
+        research_qa.answer(project_path, f"Portable concurrent question {index}", project_id, "portable-test", f"{index:032x}")
+        for index in (1, 2)
+    ])
+    listed = research_qa.list_answers(project_path)
+    assert len(listed) == len(before) + 2
+    assert {row["qa_id"] for row in generated}.issubset({row["qa_id"] for row in listed})
+    research_qa.delete_answer(project_path, generated[0]["qa_id"])
+    remaining = research_qa.list_answers(project_path)
+    assert len(remaining) == len(before) + 1
+    assert generated[1]["qa_id"] in {row["qa_id"] for row in remaining}
+
+asyncio.run(exercise())
+print("portable Q/A concurrent save/list/remove passed")
+"""
+            portable_result = subprocess.run(
+                [sys.executable, "-c", portable_script, str(portable), before.project.id],
+                cwd=Path(__file__).resolve().parents[1],
+                env=child_environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            assert portable_result.returncode == 0, portable_result.stderr
+            assert "portable Q/A concurrent save/list/remove passed" in portable_result.stdout
             unsupported = True
             inconclusive = asyncio.run(
                 research_qa.answer(
@@ -406,39 +482,36 @@ def main() -> None:
                 capacity_retry["qa_id"],
             ]
 
-            archive_before_marker_limit = archive_path.read_bytes()
-            records, pending = research_qa._load_archive(str(path))
-            pending.extend(
-                {"request_id": f"{index + 0x1000:032x}", "question_sha256": "0" * 64}
-                for index in range(research_qa.MAX_PENDING_REQUESTS - len(pending))
-            )
-            research_qa._save(str(path), records, pending)
-            provider_calls_at_marker_limit = 0
+            archive_at_storage_limit = archive_path.read_bytes()
+            provider_calls_at_storage_limit = 0
 
             async def provider_must_not_run(*_args, **_kwargs):
-                nonlocal provider_calls_at_marker_limit
-                provider_calls_at_marker_limit += 1
-                raise AssertionError("Provider must not run after marker capacity is reached")
+                nonlocal provider_calls_at_storage_limit
+                provider_calls_at_storage_limit += 1
+                raise AssertionError(
+                    "Provider must not run after the archive size bound is reached"
+                )
 
-            with patch.object(
-                research_qa.papers, "_provider_structured", new=provider_must_not_run
+            with (
+                patch.object(research_qa.papers, "_provider_structured", new=provider_must_not_run),
+                patch.object(research_qa, "MAX_ARCHIVE_BYTES", len(archive_at_storage_limit)),
             ):
                 try:
                     asyncio.run(
                         research_qa.answer(
                             str(path),
-                            "Request after bounded marker ledger is full",
+                            "Request after bounded archive storage is full",
                             before.project.id,
                             credential["identity"],
                             "9" * 32,
                         )
                     )
                 except ProjectError as exc:
-                    assert "safe pending" in str(exc)
+                    assert "storage limit" in str(exc)
                 else:
-                    raise AssertionError("A full marker ledger must fail closed")
-            assert provider_calls_at_marker_limit == 0
-            archive_path.write_bytes(archive_before_marker_limit)
+                    raise AssertionError("A full archive must fail closed")
+            assert provider_calls_at_storage_limit == 0
+            assert archive_path.read_bytes() == archive_at_storage_limit
         print(
             "Research Q/A: validated citations, idempotent retry, safe browser rendering, durable save/remove, and no project mutation passed."
         )

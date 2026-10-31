@@ -102,11 +102,14 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
-_research_qa_tasks: dict[tuple[str, str], asyncio.Task[dict[str, Any]]] = {}
+_research_qa_tasks: dict[
+    tuple[str, str], tuple[tuple[str, str, str], asyncio.Task[dict[str, Any]]]
+] = {}
 
 
 def _cleanup_research_qa_task(key: tuple[str, str], task: asyncio.Task[dict[str, Any]]) -> None:
-    if _research_qa_tasks.get(key) is task:
+    entry = _research_qa_tasks.get(key)
+    if entry is not None and entry[1] is task:
         _research_qa_tasks.pop(key, None)
     if not task.cancelled():
         task.exception()
@@ -487,7 +490,10 @@ class ResearchQARequest(OpenRequest):
 
 @app.get("/api/projects/research-qa")
 def research_qa_list(path: str):
-    return {"answers": research_qa.list_answers(path)}
+    return {
+        "answers": research_qa.list_answers(path),
+        "archive_available": research_qa.archive_available(path),
+    }
 
 
 @app.post("/api/projects/research-qa")
@@ -496,7 +502,11 @@ async def research_qa_answer(body: ResearchQARequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     key = (os.path.realpath(body.path), body.request_id)
-    task = _research_qa_tasks.get(key)
+    fingerprint = (body.expected_project_id, body.expected_binding, body.question)
+    entry = _research_qa_tasks.get(key)
+    if entry is not None and entry[0] != fingerprint:
+        raise ProjectError("Q/A request identifier is in use with different request parameters")
+    task = entry[1] if entry is not None else None
     if task is None:
         task = asyncio.create_task(
             research_qa.answer(
@@ -507,7 +517,7 @@ async def research_qa_answer(body: ResearchQARequest):
                 body.request_id,
             )
         )
-        _research_qa_tasks[key] = task
+        _research_qa_tasks[key] = (fingerprint, task)
         task.add_done_callback(
             lambda completed, task_key=key: _cleanup_research_qa_task(task_key, completed)
         )

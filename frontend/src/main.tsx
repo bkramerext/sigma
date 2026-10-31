@@ -2616,7 +2616,7 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
     void refresh();
     return () => request.current?.abort();
   }, []);
-  async function refresh(): Promise<ResearchQARecord[] | null> {
+  async function refresh(): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
     setLoading(true);
     try {
       const q = new URLSearchParams({ path });
@@ -2627,9 +2627,10 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
       const list = await listResponse.json(); const config = await configResponse.json();
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
       const saved = (list.answers ?? []) as ResearchQARecord[];
+      if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the saved Q/A archive.');
       setAnswers(saved);
       if (configResponse.ok) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
-      return saved;
+      return { answers: saved, archiveAvailable: list.archive_available };
     } catch (cause) { setError(errorMessage(cause)); return null; }
     finally { setLoading(false); }
   }
@@ -2659,7 +2660,11 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
     setConfirmRestart(false);
     const saved = await refresh();
     if (saved === null) return;
-    const completed = saved.find(record => record.request_id === recovery.id);
+    if (!saved.archiveAvailable) {
+      setError('The saved Q/A archive is missing, so SIGMA cannot confirm whether the previous request completed. Restore the project archive before trying again.');
+      return;
+    }
+    const completed = saved.answers.find(record => record.request_id === recovery.id);
     if (completed) {
       window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(completed.qa_id);
       setSuccess('The previous request completed and its saved answer is open.');
@@ -2673,7 +2678,11 @@ function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; 
     setConfirmRestart(false);
     const saved = await refresh();
     if (saved === null) return;
-    const completed = saved.find(record => record.request_id === recovery.id);
+    if (!saved.archiveAvailable) {
+      setError('The saved Q/A archive is missing, so SIGMA cannot confirm whether the previous request completed. Restore the project archive before trying again.');
+      return;
+    }
+    const completed = saved.answers.find(record => record.request_id === recovery.id);
     if (completed) {
       window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(completed.qa_id);
       setConfirmRestart(false); setSuccess('The previous request completed and its saved answer is open.');
