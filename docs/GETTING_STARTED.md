@@ -74,8 +74,12 @@ An account with only `$0.01` remaining may still be unable to start a call:
 the server reserves a conservative, model-specific amount before each provider
 request and never exceeds the member's allowance.
 In sponsored mode, **Project Settings → Limits** controls session duration,
-call, round, and estimated-cost limits. Sponsorship governs money allowance
-only; member and configured global spend ceilings are enforced before each call.
+call, round, and estimated-cost limits. Duration can be set to **Unlimited**;
+this removes the overall session deadline, not the independent call, round,
+spending, concurrent-session, or per-provider-call timeout limits. A session
+keeps its saved limits and build identity even after the project or running
+server is updated. Sponsorship governs money allowance only; member and
+configured global spend ceilings are enforced before each call.
 Hosted deployments retain their own provider setting. The option does not
 enable the hosted forced-sponsored setting. Use `./sigma start` to return to
 normal local mode.
