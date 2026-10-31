@@ -3106,7 +3106,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     setActiveTab(tab);
     try { window.localStorage.setItem('sigma.projectSettingsTab', tab); } catch { /* Keep this dialog usable when storage is unavailable. */ }
   }
-  const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 2, model_calls: 12, session_duration_minutes: 30, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null, maximum_input_tokens_per_session: null, max_concurrent_sessions: '1' }));
+  const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 2, model_calls: 12, session_duration_minutes: 60, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null, maximum_input_tokens_per_session: null, max_concurrent_sessions: '1' }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   const limitValidation = validateLimitDraft(
     limitDraft,
