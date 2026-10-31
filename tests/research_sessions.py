@@ -131,6 +131,62 @@ def test_sponsorship_does_not_shorten_project_duration():
     assert effective["session_duration_minutes"] == 60
 
 
+
+async def test_unlimited_duration_completes_without_session_deadline(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "session_duration_minutes": None,
+        "research_rounds": 1,
+        "model_calls": 2,
+    }
+    research_sessions.save_limits(str(path), limits)
+    assert research_sessions.get_limits(str(path))["session_duration_minutes"] is None
+    with patch.object(research_sessions.cloud_workspaces, "enabled", return_value=True):
+        assert research_sessions._effective_limits(limits)["session_duration_minutes"] is None
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        result = (
+            investigation(1)
+            if payload["text"]["format"]["name"] == "research_investigator"
+            else skeptic(1, "stop", "no_progress")
+        )
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"],
+            expected_limits=limits,
+        )
+        assert started["deadline_at"] is None
+        assert started["configured_duration_limit_minutes"] is None
+        assert started["duration_limit_minutes"] is None
+        assert research_sessions._call_timeout_seconds(started) == research_sessions.CALL_TIMEOUT
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended", finished.get("message")
+    assert finished["deadline_at"] is None
+    assert finished["calls_used"] == 2
+    assert len(finished["artifacts"]) == 1
+    research_sessions.save_limits(
+        str(path), {**limits, "session_duration_minutes": 5}
+    )
+    # New project settings never rewrite a completed session's frozen limits.
+    saved = research_sessions._read(str(path), started["id"])
+    assert saved["deadline_at"] is None
+    assert saved["duration_limit_minutes"] is None
+
+
 async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
     results = iter(["retry", "retry", "retry"])
     with (
@@ -9281,6 +9337,7 @@ def main():
     test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
+        asyncio.run(test_unlimited_duration_completes_without_session_deadline(root / "unlimited.sigma"))
         asyncio.run(test_transient_timeout_retries_as_a_new_accounted_turn(root / "retry.sigma"))
         asyncio.run(
             test_repeated_transient_failures_are_isolated_and_explained(root / "repeat.sigma")
