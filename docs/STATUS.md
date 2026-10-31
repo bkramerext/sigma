@@ -1,36 +1,54 @@
 ## PR #395 — mandatory TeX proofreading stage (2026-10-31)
 
 Added an automatic, bounded TeX proofreading stage between research validation
-and PDF compilation for one-shot and long-form papers. It checkpoints the exact
-authored TeX, partitions the entire source into bounded chunks, gathers static
-and temporary Tectonic diagnostics, and requests strict structured minimal
-patches from the configured model. Conservative semantic signatures reject
-changes to prose, scientific claims, equation tokens, numerical values, units,
-citation/source identifiers, and diagram labels/table contents while allowing
-documented geometry and formatting edits. Completed corrections are reused on
-recovery; an interrupted dispatched call is treated as uncertain and is never
-replayed. Failure preserves authored work and emits an explicit publication
-note. Archived TeX is the exact source compiled to the saved PDF, with
-proofreading hashes, categories, unresolved diagnostics, elapsed time, and
-provider-call accounting in paper provenance. The UI now shows “Proofreading
-TeX” and “Checking and correcting typesetting issues”; its cost disclosure
-identifies proofreading as AI work.
+and PDF compilation for one-shot and long-form papers. A typed stage callback
+keeps progress state values (`active`, `milestone`, `complete`) distinct from
+keyword-only explanatory details. The UI shows “Proofreading TeX” and
+“Checking and correcting typesetting issues”; its cost disclosure identifies
+proofreading as AI work.
 
-Verification on branch `blue/sovereign-ai-federation` included the focused
-`tests/papers.py` suite (real Tectonic compilation plus deterministic local
-provider responses), `./sigma test` (all steps passed, including Ruff,
-format-check, Pyright, frontend typecheck/build, and cloud-research tests), and
-real Chrome `browser_checks/issue328_paper_progress.py` against the isolated
-deterministic provider fixture. The Chrome run verified one-shot progress,
-long-form recovery in a fresh tab, completion and PDF availability; the
-proofreading progress capture was visually inspected at
-`/tmp/sigma-issue328-proofreading-progress.png`. No live or paid provider calls
-were made. The full test command skipped only the optional graph-present local
-execution scenario because the existing Python sandbox image was unavailable.
-The frontend build reported its existing large-chunk advisory. Live model
-proofreading quality, actual provider cost/latency, representative real-paper
-before/after typography, and unresolved diagnostics from real authoring remain
-unverified under the no-paid-calls constraint.
+The pass checkpoints exact authored TeX, covers the full source in bounded
+chunks, collects static and temporary Tectonic diagnostics, and requests strict
+structured minimal patches from the configured model. Conservative semantic
+signatures reject changes to prose, claims, equation tokens, values/units,
+citation/source identifiers, and diagram labels/table contents. Completed
+patches are reused on recovery; an interrupted dispatched request is marked
+uncertain and never replayed. Failure preserves the authored draft and frozen
+evidence. A compiler fallback now occurs only when error diagnostics identify
+TikZ/PGF. It removes only generated diagram figures from the already-corrected
+TeX, retaining accepted math/layout fixes. Provenance records fallback reason,
+removed-diagram count, original/corrected/final hashes, accepted categories,
+unresolved diagnostics, elapsed time, model/effort, and provider-call counts.
+
+The review also caught and fixed an actual three-column table overflow: equal
+`\linewidth/3` columns omitted the inter-column padding. Column widths now
+reserve that padding. Removing unnecessary zero-width TikZ edge-label boxes
+also eliminated small overfull-box warnings in the representative fixture.
+
+Verification on `blue/sovereign-ai-federation` includes the complete
+`tests/papers.py` suite and `./sigma test`: all steps passed, including Ruff
+check/format, Pyright, frontend typecheck/build, cloud integration and the
+paper regressions. The optional graph-present sandbox test skipped because its
+local image was unavailable; the frontend build emitted its large-chunk
+advisory. Real Chrome `browser_checks/issue328_paper_progress.py` passed against
+the isolated deterministic provider fixture, verifying progress/cost
+disclosure, one-shot recovery, long-form fresh-tab recovery, completion and PDF
+availability. The proofreading capture is
+`/tmp/sigma-issue328-proofreading-progress.png`.
+
+Deterministic one-shot fixture (1,519 TeX bytes) made one proofreader call and
+used two real Tectonic compiles in 0.568 s total. The deterministic long-form
+fixture (17,994 TeX bytes, with a mathematical expression, diagram and wrapped
+three-column table) made two bounded proofreader calls and used two compiles in
+0.971 s total. Both archived PDFs compiled with no overfull-box warnings. The
+rendered fixture pages were inspected in Chrome PDF viewer at
+`/tmp/sigma-tex-proofreader-visual/chrome-page2.png` and
+`/tmp/sigma-tex-proofreader-visual/chrome-page3.png`; the equation and table
+rendered legibly and the diagram fit. The fixture retains an underfull-box note
+for the fixed SHA-256 string. These are deterministic engineering fixtures,
+not independently validated research or live-provider proofreading. No live
+or paid provider calls occurred; actual provider latency, cost and correction
+quality remain **UNVERIFIED**.
 
 ## Production deployment — SIGMA v0.1.7 (2026-10-30 PDT)
 

@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 from time import monotonic
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, Protocol, TypedDict
 from uuid import uuid4
 
 import httpx
@@ -95,10 +95,20 @@ class PaperProgressEvent(TypedDict):
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
-PaperStageCallback = Callable[
-    [PaperProgressStage, int | None, int | None, Literal["active", "milestone", "complete"]],
-    Awaitable[None],
-]
+
+
+class PaperStageCallback(Protocol):
+    def __call__(
+        self,
+        stage: PaperProgressStage,
+        current: int | None,
+        total: int | None,
+        state: Literal["active", "milestone", "complete"] = "active",
+        *,
+        detail: str | None = None,
+    ) -> Awaitable[None]: ...
+
+
 # High-thinking paper inference can legitimately take much longer than five minutes.
 # Give each provider request up to one hour; this is a ceiling, not a target.
 # It does not authorize repeating an ambiguous paid provider request.
@@ -2779,7 +2789,14 @@ def _tex(
         return "\n\n".join(prose(chunk) for chunk in _publication_paragraphs(text))
 
     def render_table(table: PaperTable) -> list[str]:
-        column = r"p{\dimexpr\linewidth/" + str(len(table.headers)) + r"\relax}"
+        columns_count = len(table.headers)
+        column = (
+            r"p{\dimexpr(\linewidth-2\tabcolsep*"
+            + str(columns_count - 1)
+            + r")/"
+            + str(columns_count)
+            + r"\relax}"
+        )
         columns = "@{}" + column * len(table.headers) + "@{}"
         header = " & ".join(r"\textbf{" + esc(cell) + "}" for cell in table.headers)
         parts = [
@@ -2960,7 +2977,7 @@ def _tex(
                 parts.append(
                     r"\draw[->,shorten <=3mm,shorten >=3mm] ("
                     + edge.source
-                    + r") -- node[midway,fill=white,draw=none,font=\scriptsize,text width=0pt,minimum height=0pt,inner sep=1pt] {"
+                    + r") -- node[midway,fill=white,draw=none,font=\scriptsize,inner sep=1pt] {"
                     + str(edge_number)
                     + "} ("
                     + edge.target
@@ -4516,6 +4533,58 @@ def _tex_static_diagnostics(tex: str) -> list[str]:
     return list(dict.fromkeys(diagnostics))[:100]
 
 
+def _diagram_compile_failure_is_identified(diagnostics: list[str], error: RuntimeError) -> bool:
+    """Return true only when compiler output connects an error to TikZ/PGF."""
+    output = "\n".join([*diagnostics, str(error)])
+    for line in output.splitlines():
+        if re.search(r"\b(?:error|fatal)\b", line, re.IGNORECASE) and re.search(
+            r"\b(?:tikz|pgf(?:keys|math|plots|fpu|core|basiclayer)?)\b",
+            line,
+            re.IGNORECASE,
+        ):
+            return True
+        if re.search(r"^!", line) and re.search(
+            r"\b(?:tikz|pgf(?:keys|math|plots|fpu|core|basiclayer)?)\b",
+            line,
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def _remove_diagram_figures(tex: str, expected_count: int) -> str:
+    """Remove only generated TikZ figures while preserving all other corrected TeX."""
+    figure_pattern = re.compile(
+        r"\\begin\{figure\}(?:(?!\\begin\{figure\}).)*?"
+        r"\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}.*?\\end\{figure\}\n?",
+        re.DOTALL,
+    )
+    matches = list(figure_pattern.finditer(tex))
+    if (
+        expected_count < 1
+        or len(matches) != expected_count
+        or tex.count(r"\begin{figure}") != expected_count
+        or tex.count(r"\begin{tikzpicture}") != expected_count
+        or tex.count(r"\end{figure}") != expected_count
+        or tex.count(r"\end{tikzpicture}") != expected_count
+    ):
+        raise ProjectError(
+            "The diagnosed diagram fallback could not identify every generated figure safely. The authored draft is preserved."
+        )
+    result = figure_pattern.sub("", tex)
+    result, tikz_package_count = re.subn(r"(?m)^\\usepackage\{tikz\}\n?", "", result)
+    result, tikz_library_count = re.subn(r"(?m)^\\usetikzlibrary\{fit\}\n?", "", result)
+    if tikz_package_count != 1 or tikz_library_count != 1:
+        raise ProjectError(
+            "The diagnosed diagram fallback could not remove the generated TikZ preamble safely. The authored draft is preserved."
+        )
+    if r"\begin{tikzpicture}" in result or r"\usetikzlibrary" in result:
+        raise ProjectError(
+            "The diagnosed diagram fallback left TikZ content behind. The authored draft is preserved."
+        )
+    return result
+
+
 async def _proofread_tex(
     tex: str,
     state: dict[str, Any],
@@ -4524,7 +4593,7 @@ async def _proofread_tex(
     config: dict[str, Any],
     project_id: str,
     project_path_value: str,
-    report: Callable[..., Awaitable[None]],
+    report: PaperStageCallback,
 ) -> tuple[str, dict[str, Any]]:
     """Checkpoint exact authored TeX and bounded, content-preserving patches."""
     checkpoint = state.get("proofreading")
@@ -4658,7 +4727,10 @@ async def _proofread_tex(
             continue
         chunk = initial[start:end]
         await report(
-            "proofreading", index + 1, total, "Checking and correcting typesetting issues."
+            "proofreading",
+            index + 1,
+            total,
+            detail="Checking and correcting typesetting issues.",
         )
         try:
             response: BaseModel | None = None
@@ -4739,7 +4811,13 @@ async def _proofread_tex(
             checkpoint["ai_performed"] = True
             for proposal in proposals:
                 checkpoint["corrections"].append(proposal.category)
-            await report("proofreading", index + 1, total, "Applying mechanical corrections.")
+            await report(
+                "proofreading",
+                index + 1,
+                total,
+                "milestone",
+                detail="Applying mechanical corrections.",
+            )
         except (ProjectError, ValidationError, ValueError, TypeError, OSError) as exc:
             # The provider response may have consumed allowance. Preserve safe earlier patches,
             # skip every remaining AI call, and use the authored text for this and later chunks.
@@ -4760,7 +4838,7 @@ async def _proofread_tex(
         dict.fromkeys([*checkpoint.get("diagnostics", []), *_tex_static_diagnostics(final_tex)])
     )[:100]
     save_checkpoint()
-    await report("proofreading", total, total, "Verifying corrected TeX.")
+    await report("proofreading", total, total, "milestone", detail="Verifying corrected TeX.")
     return final_tex, checkpoint
 
 
@@ -4789,6 +4867,7 @@ async def _generate_impl(
             current: int | None,
             total: int | None,
             state: Literal["active", "milestone", "complete"] = "active",
+            *,
             detail: str | None = None,
         ) -> None:
             now = _now()
@@ -5269,6 +5348,7 @@ async def _generate_impl(
                 MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS if long_form else 1 + MAX_PROOFREAD_CALLS
             )
             compile_diagnostics: list[str] = []
+            diagram_fallback: dict[str, Any] | None = None
             await report("compile", None, None)
             try:
                 pdf = await asyncio.to_thread(
@@ -5279,14 +5359,29 @@ async def _generate_impl(
                     max_pdf_bytes=80_000_000,
                     diagnostics=compile_diagnostics,
                 )
-            except RuntimeError:
-                if not draft.diagrams:
+            except RuntimeError as compile_error:
+                if not draft.diagrams or not _diagram_compile_failure_is_identified(
+                    compile_diagnostics, compile_error
+                ):
                     raise
+                removed_diagram_count = len(draft.diagrams)
+                tex = _remove_diagram_figures(tex, removed_diagram_count)
                 draft = draft.model_copy(update={"diagrams": []})
                 warnings.append(
-                    "The experimental diagram could not be compiled; the saved paper uses the text-only PDF fallback."
+                    "Tectonic reported a TikZ/PGF error in an explanatory diagram; the saved paper uses a text-only PDF fallback."
                 )
-                tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+                diagram_fallback = {
+                    "applied": True,
+                    "removed_diagram_count": removed_diagram_count,
+                    "reason": next(
+                        (
+                            line[:500]
+                            for line in [*compile_diagnostics, *str(compile_error).splitlines()]
+                            if _diagram_compile_failure_is_identified([line], RuntimeError(line))
+                        ),
+                        "Tectonic identified a TikZ/PGF compilation error.",
+                    ),
+                }
                 pdf = await asyncio.to_thread(
                     _compile_pdf,
                     tex,
@@ -5302,6 +5397,7 @@ async def _generate_impl(
         record["draft"] = draft.model_dump()
         record["validation_warnings"] = warnings
         record["generation"]["diagram_count"] = len(draft.diagrams)
+        record["generation"]["diagram_fallback"] = diagram_fallback
         record["generation"]["proofreading"]["unresolved_diagnostics"] = list(
             dict.fromkeys(
                 [
