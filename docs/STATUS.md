@@ -1,3 +1,25 @@
+## T314 — Research Q/A (2026-10-31)
+
+Feature implementation is complete on `green/research-qa`, based on current
+`main` at `2d0a564c731655d4ba7264fab826f96b12c63b96`. It adds a durable,
+project-scoped Q/A archive over frozen saved research, validated session and
+artifact citations, a safe standalone browser view, and copy controls for Q/A
+and saved TeX text. Q/A does not start research or change research state.
+
+`./sigma test` passed, including Ruff, Pyright, frontend typecheck/build and the
+new deterministic Q/A service tests. Real Chrome checks passed with a local
+deterministic provider fixture for Q/A save/reopen/collapse/expand/remove,
+copy success/failure, session navigation, standalone desktop/mobile layout,
+and no added research session. The saved-paper Chrome check passed for TeX
+human-readable copy success/failure, download payloads, PDF browser view, and
+archive removal. Screenshots are in
+[`docs/evaluations/research_qa/`](evaluations/research_qa/). No paid provider
+calls were made. The optional graph-present Python sandbox scenario skipped
+because the local sandbox image was unavailable. Cross-user authorization and
+an actual service restart were not independently browser-tested. Full R4R,
+exact SHA and PR are recorded in
+[`messages/green_research_qa_r4r.md`](../messages/green_research_qa_r4r.md).
+
 ## Production deployment — SIGMA v0.1.7 (2026-10-30 PDT)
 
 Deployed exact merged `main` SHA `802e9b6b7da5829868070f760e17280cd8a927f2`

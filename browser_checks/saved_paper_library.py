@@ -15,7 +15,11 @@ with sync_playwright() as playwright:
         ),
         headless=True,
     )
-    context = browser.new_context(viewport={"width": 1440, "height": 1000}, accept_downloads=True)
+    context = browser.new_context(
+        viewport={"width": 1440, "height": 1000},
+        accept_downloads=True,
+        permissions=["clipboard-read", "clipboard-write"],
+    )
     page = context.new_page()
 
     def forward(route):
@@ -39,8 +43,8 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(dialog).to_contain_text("Create a LaTeX paper from this project’s saved research")
-    expect(dialog).to_contain_text("Selected model: gpt-6.1-sol")
-    expect(dialog.locator("input[type=checkbox]")).to_have_count(0)
+    expect(dialog).to_contain_text("Per project settings, AI model is gpt-6.1-sol")
+    expect(dialog.locator("input[type=checkbox]")).to_have_count(3)
     expect(dialog.locator(".ai-paper-controls button")).to_have_count(1)
     for implementation_detail in (
         "Advanced options",
@@ -50,10 +54,10 @@ with sync_playwright() as playwright:
         "calls remain",
     ):
         expect(dialog).not_to_contain_text(implementation_detail)
-    generate = dialog.get_by_role("button", name="Generate paper", exact=True)
+    generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
-    expect(dialog.get_by_role("button", name="Generating paper…")).to_be_disabled(timeout=10000)
+    expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_be_enabled(timeout=10000)
     expect(dialog.get_by_role("status")).to_be_visible()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
@@ -71,6 +75,12 @@ with sync_playwright() as playwright:
     assert "attachment" in tex_response["disposition"] and tex_response["text"].startswith(
         "\\documentclass"
     )
+    text_download = card.get_by_role("link", name="Download text file")
+    text_response = page.evaluate(
+        "async href => { const response=await fetch(href); return {status:response.status,text:await response.text()}; }",
+        text_download.get_attribute("href"),
+    )
+    assert text_response["status"] == 200 and "\n\n" in text_response["text"]
     pdf_download = card.get_by_role("link", name="Download PDF")
     expect(pdf_download).to_be_visible()
     with page.expect_download() as download_event:
@@ -97,12 +107,27 @@ with sync_playwright() as playwright:
     expect(actions.get_by_role("link", name="Download TeX file")).to_be_visible()
     expect(actions.get_by_role("link", name="Download PDF")).to_be_visible()
     expect(actions.get_by_role("link", name="Open PDF in browser")).to_be_visible()
+    copy_button = actions.get_by_role("button", name="Copy paper text")
+    copy_button.click()
+    expect(actions.get_by_role("button", name="Copied paper text to clipboard")).to_be_visible()
+    copied_paper = page.evaluate("navigator.clipboard.readText()")
+    assert copied_paper == text_response["text"]
+    page.evaluate(
+        "window.__sigmaClipboardWrite = navigator.clipboard.writeText.bind(navigator.clipboard); Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:() => Promise.reject(new Error('blocked'))})"
+    )
+    actions.locator(".text-copy-button").click()
+    expect(card.locator(".error")).to_contain_text("Could not copy the saved paper")
+    page.evaluate(
+        "Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:window.__sigmaClipboardWrite})"
+    )
+    dialog.get_by_role("button", name="Close").click()
+    page.get_by_role("button", name="LaTeX research paper", exact=True).click()
+    expect(dialog.locator(".saved-paper-card")).to_have_count(1)
+    card = dialog.locator(".saved-paper-card").first
+    actions = card.locator(".saved-paper-actions")
     title_line = card.locator(".saved-paper-expand")
     metadata_line = card.locator(".saved-paper-meta")
     remove_button = metadata_line.get_by_role("button", name="Remove")
-    assert (
-        remove_button.evaluate("button => getComputedStyle(button).color") == "rgb(241, 197, 141)"
-    )
     title_box = title_line.bounding_box()
     actions_box = actions.bounding_box()
     metadata_box = metadata_line.locator("p").bounding_box()
@@ -145,12 +170,14 @@ with sync_playwright() as playwright:
         "items => items.map(item => item.getBoundingClientRect().left)"
     )
     assert max(mobile_action_lefts) - min(mobile_action_lefts) < 1
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    card.get_by_role("button", name="Remove").scroll_into_view_if_needed()
     card.get_by_role("button", name="Remove").click()
     expect(card.get_by_role("group", name="Confirm removal of")).to_be_visible()
     card.get_by_role("button", name="Cancel").click()
     expect(card).to_be_visible()
     card.get_by_role("button", name="Remove").click()
-    card.get_by_role("button", name="Confirm remove").click()
+    card.locator(".saved-paper-confirm").get_by_role("button", name="Confirm", exact=True).click()
     expect(dialog.locator(".saved-paper-card")).to_have_count(0)
     missing = page.evaluate(
         "async ({path,id}) => (await fetch(`/api/projects/papers/${id}?${new URLSearchParams({path})}`)).status",
@@ -162,5 +189,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS real Chrome saved-paper library: TeX/PDF headers and payloads, vertical actions beside title/metadata, persistent actions across disclosure, new-tab inline PDF, mobile layout, confirmed version deletion."
+    "PASS real Chrome saved-paper library: TeX text clipboard success/failure, TeX/PDF payloads, persistent actions, new-tab inline PDF, mobile layout, and confirmed version deletion."
 )

@@ -103,6 +103,7 @@ async def handler(request):
         "sigma_long_paper_plan",
         "sigma_long_paper_section",
         "sigma_research_paper",
+        "sigma_research_qa",
     }:
         await asyncio.sleep(min(progress_delay, 5))
     if schema_name in {
@@ -191,6 +192,31 @@ async def handler(request):
                     "The appropriate interpretation is limited by the records currently preserved. Independent samples, suitable controls, and a falsifiable perturbation would be needed before claiming a new mechanism.",
                 ]
             }
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(output)}],
+                    }
+                ],
+            },
+        )
+    if schema_name == "sigma_research_qa":
+        question = context.get("question", "")
+        session_sources = [
+            source["id"]
+            for source in context.get("sources", [])
+            if source.get("kind") in {"session", "artifact"}
+        ]
+        refs = list(dict.fromkeys(session_sources))[:2]
+        output = {
+            "answer": f"The saved research answers: {question}. The record is provisional and should be reviewed with its supporting evidence.",
+            "source_refs": refs,
+        }
         return httpx.Response(
             200,
             json={

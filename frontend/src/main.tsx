@@ -967,7 +967,15 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       ?? (!sessionsLoaded.current && !selectedSessionId.current
         ? nextSessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused') ?? nextSessions[0] ?? null
         : null);
-    if (firstLoad) initialRevealSessionId.current = chosen?.status === 'running' ? chosen.id : null;
+    if (firstLoad) {
+      const requestedReveal = new URLSearchParams(window.location.search).get('reveal_session');
+      initialRevealSessionId.current = requestedReveal && nextSessions.some(item => item.id === requestedReveal)
+        ? requestedReveal : chosen?.status === 'running' ? chosen.id : null;
+      if (requestedReveal && nextSessions.some(item => item.id === requestedReveal)) {
+        setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
+        setExpandedSessionIds(new Set([requestedReveal]));
+      }
+    }
     sessionsLoaded.current = true;
     selectedSessionId.current = chosen?.id ?? '';
     if (firstLoad && chosen) setExpandedSessionIds(current => current.size ? current : new Set([chosen.id]));
@@ -1112,6 +1120,28 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       }
     }));
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reveal_understanding') === '1') {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const understanding = document.querySelector<HTMLElement>('.current-understanding');
+        if (understanding instanceof HTMLDetailsElement) understanding.open = true;
+        if (understanding) { understanding.scrollIntoView({ block: 'center', behavior: 'smooth' }); understanding.classList.add('citation-highlight'); window.setTimeout(() => understanding.classList.remove('citation-highlight'), 2400); }
+      }));
+    }
+    const sessionId = params.get('reveal_session');
+    const artifactId = params.get('reveal_artifact');
+    if (!sessionId || !artifactId || !expandedSessionIds.has(sessionId)) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const artifact = document.getElementById(`research-artifact-${sessionId}-${artifactId}`);
+      if (!artifact) return;
+      const disclosure = artifact.querySelector<HTMLDetailsElement>('details');
+      if (disclosure) disclosure.open = true;
+      artifact.tabIndex = -1; artifact.focus({ preventScroll: true }); artifact.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      artifact.classList.add('citation-highlight'); window.setTimeout(() => artifact.classList.remove('citation-highlight'), 2400);
+    }));
+  }, [expandedSessionIds, sessions]);
 
   async function removeSession(target: ResearchSession) {
     setBusy(true); setError('');
@@ -1407,6 +1437,8 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
   const request = useRef<AbortController | null>(null);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
+  const [copiedPaperId, setCopiedPaperId] = useState('');
+  const [copyError, setCopyError] = useState('');
   const [binding, setBinding] = useState('');
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
@@ -1537,6 +1569,15 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
       if (remaining.length) await openPaper(remaining[0].paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
+  }
+  async function copyPaper(id: string) {
+    setCopyError('');
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}/txt?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Saved paper text could not be loaded.');
+      await navigator.clipboard.writeText(await response.text());
+      setCopiedPaperId(id); window.setTimeout(() => setCopiedPaperId(current => current === id ? '' : current), 1600);
+    } catch { setCopyError('Could not copy the saved paper. Check browser clipboard permissions and try again.'); }
   }
   async function cancelGeneration() {
     if (!binding || (!busy && paperProgress?.status !== 'active')) return;
@@ -1725,7 +1766,7 @@ function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: str
             <button type="button" className="saved-paper-expand" aria-label={`${expandedPaperId === paper.paper_id ? 'Collapse' : 'Expand'} saved paper: ${paper.title}`} title={`${expandedPaperId === paper.paper_id ? 'Collapse' : 'Expand'} saved paper: ${paper.title}`} aria-expanded={expandedPaperId === paper.paper_id} aria-controls={`saved-paper-body-${paper.paper_id}`} onClick={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }}><DisclosureChevron expanded={expandedPaperId === paper.paper_id}/><h4>{paper.title}</h4></button>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {papers.length - index}</p><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
           </div>
-          <div className="saved-paper-actions"><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.txt`}>Download text file</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
+          <div className="saved-paper-actions"><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/>{copyError && <p className="error" role="alert">{copyError}</p>}<a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.txt`}>Download text file</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
         </div>
         {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}><button type="button" className="text-view-link" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></span></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
@@ -2531,6 +2572,88 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
 }
 
 type Destination = { root: string; path: string | null; exists: boolean };
+
+type ResearchQARecord = { qa_id: string; question: string; answer: string; sources: { source_id: string; session_number: number | null; kind: string; navigation_available?: boolean }[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
+
+function ResearchQADialog({ path, projectId, guest, onCancel }: { path: string; projectId: string; guest: boolean; onCancel: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const [question, setQuestion] = useState('');
+  const [answers, setAnswers] = useState<ResearchQARecord[]>([]);
+  const [binding, setBinding] = useState('');
+  const [model, setModel] = useState('');
+  const [effort, setEffort] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [expanded, setExpanded] = useState('');
+  const [removeId, setRemoveId] = useState('');
+  const [copiedId, setCopiedId] = useState('');
+  const requestKey = `sigma.researchQaRequest:${projectId}`;
+  useEffect(() => { dialog.current?.showModal(); void refresh(); return () => request.current?.abort(); }, []);
+  async function refresh() {
+    setLoading(true);
+    try {
+      const q = new URLSearchParams({ path });
+      const [listResponse, configResponse] = await Promise.all([
+        fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' }),
+        fetch(`/api/projects/proposals/config?${q}`, { cache: 'no-store' }),
+      ]);
+      const list = await listResponse.json(); const config = await configResponse.json();
+      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
+      setAnswers(list.answers ?? []);
+      if (configResponse.ok) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setLoading(false); }
+  }
+  async function ask(event: React.FormEvent) {
+    event.preventDefault(); if (!question.trim() || busy || !binding) return;
+    const controller = new AbortController(); request.current = controller; setBusy(true); setError(''); setSuccess('');
+    let requestId: string;
+    try {
+      const previous = JSON.parse(window.localStorage.getItem(requestKey) ?? 'null') as { question?: string; id?: string } | null;
+      requestId = previous?.question === question && previous.id ? previous.id : crypto.randomUUID().replaceAll('-', '');
+    } catch { requestId = crypto.randomUUID().replaceAll('-', ''); }
+    window.localStorage.setItem(requestKey, JSON.stringify({ question, id: requestId }));
+    try {
+      const response = await fetch('/api/projects/research-qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ path, question, expected_project_id: projectId, expected_binding: binding, request_id: requestId }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Research Q/A failed.');
+      window.localStorage.removeItem(requestKey); setQuestion(''); setExpanded(result.qa_id); setSuccess('Answer saved.'); await refresh();
+    } catch (cause) {
+      setError(controller.signal.aborted ? 'Request stopped. Reopen Q/A and check Saved answers before trying again.' : errorMessage(cause));
+      await refresh();
+    } finally { request.current = null; setBusy(false); }
+  }
+  async function remove(id: string) {
+    try {
+      const response = await fetch(`/api/projects/research-qa/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Could not remove answer.');
+      setRemoveId(''); setAnswers(current => current.filter(item => item.qa_id !== id)); setSuccess('Saved answer removed. Research sessions were unchanged.');
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function copy(record: ResearchQARecord) {
+    try { await navigator.clipboard.writeText(`Question\n${record.question}\n\nAnswer\n${record.answer}\n\nSources\n${record.sources.map(source => `- ${source.kind} · ${source.session_number ? `Session #${source.session_number}` : 'Saved evidence'}`).join('\n') || '- No validated citations'}`); setCopiedId(record.qa_id); window.setTimeout(() => setCopiedId(current => current === record.qa_id ? '' : current), 1600); }
+    catch { setError('Clipboard access failed. Check browser clipboard permissions and try again.'); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog research-qa-dialog" aria-labelledby="research-qa-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }} onKeyDownCapture={event => { if (event.key === 'Escape' && busy) { event.preventDefault(); event.stopPropagation(); } }}>
+    <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <div className="settings-body ai-paper-body">
+      {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
+        <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
+        <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
+        <form onSubmit={event => void ask(event)} className="research-qa-form"><label htmlFor="research-qa-question">Question</label><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the saved research…"/><div className="ai-paper-controls">{busy ? <button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></form>
+        {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error}</p>}
+        {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><button type="button" className="saved-paper-expand" aria-expanded={expanded === record.qa_id} aria-controls={`qa-body-${record.qa_id}`} onClick={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)}><DisclosureChevron expanded={expanded === record.qa_id}/><h4>{record.question}</h4></button><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · {record.generation.model} · {record.generation.reasoning_effort} thinking · {record.generation.generation_elapsed_seconds}s</p><button type="button" className="text-view-link" onClick={() => setRemoveId(record.qa_id)}>Remove</button></div></div><div className="saved-paper-actions"><CopyToClipboardButton name="answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)}/><a className="text-view-link" href={`/api/projects/research-qa/${encodeURIComponent(record.qa_id)}/browser?${new URLSearchParams({ path })}`} target="_blank" rel="noopener noreferrer">Open in browser</a></div></div>
+          {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><button type="button" className="text-view-link" onClick={() => setRemoveId('')}>Cancel</button></div>}
+          <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><h3>Answer</h3><div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.answer}/></Suspense></div><h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => { const sessionId = source.source_id.startsWith('session:') ? source.source_id.slice(8) : source.source_id.startsWith('artifact:') ? source.source_id.split(':')[1] : ''; const artifactId = source.source_id.startsWith('artifact:') ? source.source_id.split(':')[2] : ''; const understanding = source.source_id.startsWith('current-understanding:'); const href = source.navigation_available ? understanding ? `/project?${new URLSearchParams({ path, reveal_understanding: '1' })}` : sessionId ? `/project?${new URLSearchParams({ path, reveal_session: sessionId, ...(artifactId ? { reveal_artifact: artifactId } : {}) })}` : '' : ''; const label = understanding ? 'Current Understanding' : source.kind === 'session' ? `Session #${source.session_number}` : `Session #${source.session_number ?? 'unknown'} · ${source.kind}`; return <li key={`${source.source_id}-${index}`}>{href ? <a href={href}>{label}</a> : `${label} · navigation unavailable`}</li>; }) : <li>No validated citations were returned.</li>}</ul><p className="settings-hint">Evidence snapshot {record.snapshot_sha256}</p></article></div>
+        </article>)}</section>}
+      </>}
+    </div>
+  </dialog>;
+}
 
 function ImportProjectDialog({ onOpen, onCancel }: { onOpen: (view: ProjectView) => void; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -3639,6 +3762,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   useEffect(() => {
     if (!view || guest) return;
@@ -3892,6 +4016,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
         <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
       </button>
+      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" title="Ask about saved research" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
       <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
         <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
       </button>
@@ -4015,6 +4140,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />
     )}
+    {qaOpen && <ResearchQADialog path={view.path} projectId={project.id} guest={guest} onCancel={() => { setQaOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-qa-button')?.focus()); }}/ >}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd>{project.difficulty && <><dt>Difficulty</dt><dd>{difficultyLabels[project.difficulty]}</dd></>}<dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>

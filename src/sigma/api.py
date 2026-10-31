@@ -28,6 +28,7 @@ from sigma import (
     papers,
     proposals,
     python_sandbox,
+    research_qa,
     research_sessions,
     session_log,
 )
@@ -101,6 +102,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
+_research_qa_tasks: dict[tuple[str, str], asyncio.Task[dict[str, Any]]] = {}
 # Installed before routes, so FastAPI applies this dependency after the auth
 # middleware has attached its verified principal. Cloud-auth's own public and
 # admin endpoints do not access workspace data.
@@ -465,6 +467,66 @@ class PaperRestartRequest(OpenRequest):
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     confirm_restart: Literal[True]
     long_form: bool = False
+
+
+class ResearchQARequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+    request_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    question: str = Field(min_length=1, max_length=4000)
+
+
+@app.get("/api/projects/research-qa")
+def research_qa_list(path: str):
+    return {"answers": research_qa.list_answers(path)}
+
+
+@app.post("/api/projects/research-qa")
+async def research_qa_answer(body: ResearchQARequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    key = (os.path.realpath(body.path), body.request_id)
+    task = _research_qa_tasks.get(key)
+    if task is None:
+        task = asyncio.create_task(
+            research_qa.answer(
+                body.path,
+                body.question,
+                body.expected_project_id,
+                body.expected_binding,
+                body.request_id,
+            )
+        )
+        _research_qa_tasks[key] = task
+    try:
+        return await asyncio.shield(task)
+    finally:
+        if task.done():
+            _research_qa_tasks.pop(key, None)
+
+
+@app.get("/api/projects/research-qa/{qa_id}")
+def research_qa_get(qa_id: str, path: str):
+    return research_qa.get_answer(path, qa_id)
+
+
+@app.delete("/api/projects/research-qa/{qa_id}")
+def research_qa_delete(qa_id: str, path: str):
+    research_qa.delete_answer(path, qa_id)
+    return {"deleted": qa_id}
+
+
+@app.get("/api/projects/research-qa/{qa_id}/browser")
+def research_qa_browser(qa_id: str, path: str):
+    return Response(
+        research_qa.standalone_html(path, qa_id),
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        },
+    )
 
 
 @app.get("/api/projects/papers")
