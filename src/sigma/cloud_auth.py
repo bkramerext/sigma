@@ -816,10 +816,12 @@ def resolve_session(raw: str | None) -> Principal | None:
         if not row or row["expires_at"] <= _now():
             return None
         role = _authorization_in_db(db, cfg, row["subject"], row["email"])
-        if role == "member" or role is None:
-            # A newly granted domain can supersede an *older* individual
-            # revocation. Materialize under the same writer transaction and
-            # re-check the effective role before granting any member access.
+        if role == "member" or (
+            role is None
+            and row["email"] not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}
+        ):
+            # A newer domain grant can supersede an older revocation, but
+            # never bypass a subject-bound administrator identity.
             _materialize_domain_member(db, row["subject"], row["email"])
             role = _authorization_in_db(db, cfg, row["subject"], row["email"])
         # A verified Google identity remains signed in locally while awaiting
@@ -1721,10 +1723,16 @@ async def callback(
     except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(401, "Google sign-in could not be verified.") from None
     invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
+    auto_domain_member = False
     with _db(cfg) as db:
         role = _authorization_in_db(db, cfg, subject, email)
-        if role is None and _materialize_domain_member(db, subject, email):
-            role = _authorization_in_db(db, cfg, subject, email)
+        if (
+            role is None
+            and email not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}
+        ):
+            auto_domain_member = _materialize_domain_member(db, subject, email)
+            if auto_domain_member:
+                role = _authorization_in_db(db, cfg, subject, email)
     if not role:
         if cfg.local:
             # Local Google identity is independent of invitation membership.
@@ -1827,9 +1835,9 @@ async def callback(
                 # workspace. The original guest copy remains intact until expiry.
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
-    auto_domain_member = False
     with _db(cfg) as db:
-        auto_domain_member = role == "member" and _materialize_domain_member(db, subject, email)
+        if role == "member" and _materialize_domain_member(db, subject, email):
+            auto_domain_member = True
         existing_account = db.execute(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
