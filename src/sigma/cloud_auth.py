@@ -472,8 +472,6 @@ def _log_local_auth_state(
     )
 
 
-
-
 def _authorization_in_db(
     db: sqlite3.Connection, cfg: Config, subject: str, email: str
 ) -> str | None:
@@ -2745,6 +2743,7 @@ def list_grants():
             if grant["allowance_usd"] is not None
             else _configured_default_allowance()
         )
+    _log_local_auth_state(cfg, "admin_grants_loaded")
     return {"grants": grants, "sessions": users, "bootstrap_admin": bootstrap_admin}
 
 
