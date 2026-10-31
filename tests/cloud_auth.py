@@ -1417,7 +1417,8 @@ class CloudAuthTests(TestCase):
         self.assertEqual(saved["notification_error"], "delivery failed")
         self.assertEqual(denied.headers["location"], "/?access=denied")
 
-    def test_invitation_notification_uses_authenticated_sender_and_fixed_recipient(self):
+    def test_invitation_notification_uses_verified_admins_not_fixed_recipient(self):
+        self.finish(email="admin@example.org", subject="verified-notification-admin")
         with (
             patch.dict(
                 os.environ,
@@ -1435,7 +1436,78 @@ class CloudAuthTests(TestCase):
         client.login.assert_called_once_with("sigma-notify@example.org", "fixture-app-password")
         message = client.send_message.call_args.args[0]
         self.assertEqual(message["From"], "sigma-notify@example.org")
-        self.assertEqual(message["To"], "zetacontinuation@gmail.com")
+        self.assertEqual(message["To"], "sigma-notify@example.org")
+        self.assertEqual(message["Bcc"], "admin@example.org")
+        self.assertEqual(client.send_message.call_args.kwargs["to_addrs"], ["admin@example.org"])
+
+    def test_notification_recipient_set_tracks_verified_admin_grants_and_revocation(self):
+        self.finish(email="admin@example.org", subject="notice-bootstrap")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,'admin',1,?)",
+                ("second@example.org", cloud_auth._now()),
+            )
+        self.finish(email="second@example.org", subject="notice-second")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at) VALUES('email',?,'admin',1,?)",
+                ("not-verified@example.org", cloud_auth._now()),
+            )
+        cfg = cloud_auth.config()
+        self.assertEqual(
+            cloud_auth._notification_admin_recipients(cfg),
+            ["admin@example.org", "second@example.org"],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_INVITATION_SMTP_USERNAME": "sigma-notify@example.org",
+                    "SIGMA_INVITATION_SMTP_PASSWORD": "fixture-app-password",
+                },
+            ),
+            patch.object(cloud_auth.smtplib, "SMTP") as smtp_factory,
+        ):
+            cloud_auth._deliver_invitation("applicant@example.org", 123)
+        client = smtp_factory.return_value.__enter__.return_value
+        sent = client.send_message.call_args
+        self.assertEqual(sent.args[0]["To"], "sigma-notify@example.org")
+        self.assertEqual(
+            sent.args[0]["Bcc"], "admin@example.org, second@example.org"
+        )
+        self.assertEqual(
+            sent.kwargs["to_addrs"], ["admin@example.org", "second@example.org"]
+        )
+        with cloud_auth._db(cfg) as db:
+            db.execute(
+                "UPDATE grants SET active=0 WHERE kind='email' AND value=?",
+                ("second@example.org",),
+            )
+        self.assertEqual(
+            cloud_auth._notification_admin_recipients(cfg), ["admin@example.org"]
+        )
+
+    def test_feedback_delivery_failure_does_not_lose_saved_submission(self):
+        self.finish(email="admin@example.org", subject="notice-feedback-admin")
+        with patch.object(
+            cloud_auth, "_deliver_feedback", side_effect=RuntimeError("mail unavailable")
+        ) as send:
+            received = self.client.post(
+                "/api/cloud-auth/feedback",
+                json={"message": "Please make the Session controls more visible."},
+                headers={"Origin": ORIGIN},
+            )
+        self.assertEqual(received.status_code, 200, received.text)
+        self.assertEqual(received.json()["status"], "received")
+        send.assert_called_once()
+        with cloud_auth._db(cloud_auth.config()) as db:
+            row = db.execute(
+                "SELECT message,notification_error,status FROM feedback_requests WHERE id=?",
+                (received.json()["id"],),
+            ).fetchone()
+        self.assertIn("Session controls", row["message"])
+        self.assertEqual(row["notification_error"], "delivery failed")
+        self.assertEqual(row["status"], "new")
 
     def test_invitation_requests_are_rate_limited_per_verified_email(self):
         with patch.object(cloud_auth, "_deliver_invitation"):
