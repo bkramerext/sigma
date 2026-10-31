@@ -944,13 +944,13 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const revealRunningSession = () => {
       const running = sessions.find(item => item.status === 'running');
       if (running) {
-        onRevealNewSession();
+        // Header navigation must not collapse unrelated panes and shift the layout.
         revealSession(running.id, true);
       }
     };
     window.addEventListener('sigma-reveal-running-session', revealRunningSession);
     return () => window.removeEventListener('sigma-reveal-running-session', revealRunningSession);
-  }, [sessions, onRevealNewSession]);
+  }, [sessions]);
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -1098,7 +1098,19 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
       if (row) {
         const heading = row.querySelector<HTMLElement>('.session-row-disclosure');
-        (heading ?? row).scrollIntoView({ block: 'center', behavior: 'smooth' });
+        // Scroll only the workspace reading pane; scrollIntoView can move the
+        // outer viewport horizontally when the session content is wider.
+        const viewport = row.closest<HTMLElement>('.workspace-content');
+        if (viewport) {
+          const target = (heading ?? row).getBoundingClientRect();
+          const frame = viewport.getBoundingClientRect();
+          viewport.scrollTo({
+            top: viewport.scrollTop + target.top - frame.top - (viewport.clientHeight - target.height) / 2,
+            behavior: 'smooth',
+          });
+        } else {
+          (heading ?? row).scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+        }
         row.classList.add('citation-highlight');
         window.setTimeout(() => row.classList.remove('citation-highlight'), 2400);
       }
