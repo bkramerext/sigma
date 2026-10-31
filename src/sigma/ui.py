@@ -171,6 +171,9 @@ def run_ui(
                 child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
+                # This launcher owns its API process. Never let a shell-level
+                # Vite proxy override route browser sign-ins to another backend.
+                child_env["SIGMA_API_TARGET"] = "http://127.0.0.1:8000"
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
