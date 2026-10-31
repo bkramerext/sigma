@@ -4492,6 +4492,9 @@ async def start_session(
             cloud_research.reconcile_orphaned_jobs()
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
+    # Preserve fail-fast validation of saved project limits before contacting the
+    # provider; admission will validate again under the project lock.
+    _validate_limits(get_limits(view.path))
     # Account and model preflight can suspend on network I/O. Never hold
     # blocking project locks (or the shared manager lock) across those awaits:
     # another request acquiring that flock could deadlock the event loop.
@@ -4509,9 +4512,7 @@ async def start_session(
             # semantics before using the saved strategy/model snapshot.
             locked_view, locked_guard = _snapshot(view.path)
             if locked_view.project.id != expected_project_id or locked_guard != guard:
-                raise ProjectError(
-                    "Project changed during research preflight; review it and retry"
-                )
+                raise ProjectError("Project changed during research preflight; review it and retry")
             limits = get_limits(view.path)
             limits = _validate_limits(limits)
             if expected_limits is not None and _validate_limits(expected_limits) != limits:
