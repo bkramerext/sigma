@@ -85,3 +85,23 @@ Checks for this correction: focused `tests/research_qa.py` and `tests/research_q
 - Implementation SHA: `10b2b46fa136491d4636b30689a7a909a60a1d15`.
 
 Focused Q/A and security tests, Ruff, Pyright, frontend typecheck/build, full `./sigma test`, and both Q/A and saved-paper real Chrome checks passed. The optional graph-present sandbox check was skipped because its local image is unavailable. No paid provider calls, deployment, or merge were performed.
+
+## Final saved-title and toolbar corrections
+
+- Implementation commit: `4e555df2201c966f726a6bc2fd00cc2c2898ebd5`.
+- This placement supersedes the earlier presentation note above: the Answer heading no longer carries Copy; Copy follows the saved question title.
+- Q/A Copy now follows the full saved question, on its final wrapped line. The Answer heading no longer has a copy action. TeX Copy now follows the complete paper title; Download text, Download TeX, Download PDF, and Open PDF in browser remain in the existing action column.
+- Saved-title disclosure controls and Copy buttons are separate, keyboard-accessible controls with no nested interactive buttons. Both browser regressions confirm Copy preserves the current expanded/collapsed state and copies the full document/text.
+- The normal and Copied SVGs now share a fixed 28px control and 18px icon box. The confirmation check uses an inset path; Chrome verifies it is within the viewBox and its bounding box does not move during the transition.
+- Q/A toolbar text is now 17px bold, while its 50×34px footprint remains equal to TEX and LEAN. Chrome checked computed type size/weight, equal control heights, and captured the toolbar.
+- `./sigma test` passed, including Ruff, Pyright (0 errors/warnings/information), frontend typecheck/build and deterministic Q/A/TeX regressions. The optional graph-present sandbox check was skipped because its local image is unavailable; Vite reports the existing large-chunk advisory.
+- Real Chrome checks passed with local deterministic fixtures and no paid calls. They verified two-line desktop and mobile Q/A/TeX titles, Copy placement after the final word, immediate Copied-state rendering without clipping/movement, disclosure state, clipboard content/failure, TeX download and PDF actions, and existing Q/A Markdown/browser/citation/Research version behavior.
+- Screenshots: [Q/A title normal](../docs/evaluations/research_qa/research-qa-title-normal.png), [Q/A title Copied](../docs/evaluations/research_qa/research-qa-title-copied.png), [Q/A mobile title](../docs/evaluations/research_qa/research-qa-title-mobile.png), [TeX title normal](../docs/evaluations/research_qa/tex-title-normal.png), [TeX title Copied](../docs/evaluations/research_qa/tex-title-copied.png), [TeX mobile title](../docs/evaluations/research_qa/tex-title-mobile.png), and [toolbar](../docs/evaluations/research_qa/research-qa-toolbar.png).
+
+### Status
+
+- **MET** — Q/A and TeX title copy placement/wrapping; stable copied icon; clipboard payload and disclosure behavior; Q/A toolbar typography and retained footprint; Chrome desktop/mobile acceptance and feature regressions.
+- **UNMET** — none identified.
+- **UNVERIFIED** — live external provider behavior. No paid calls were made. All six GitHub workflows passed on implementation commit `4e555df2201c966f726a6bc2fd00cc2c2898ebd5`; workflow status for the final documentation-only follow-up will be reported with the final PR head.
+
+No merge or deployment was performed. PR #398 remains open for coordinator review and owner smoke testing.

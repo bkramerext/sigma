@@ -8506,8 +8506,8 @@ labels distinguish Project, Strategy, Session, Artifact, and Current
 Understanding; removed or missing targets retain their identity and an
 unavailable explanation. Project, active strategy, completed session,
 supporting artifact, and Current Understanding links reveal the corresponding
-workspace location. Answer copy sits immediately beside its heading. The saved
-answer displays a short Research version fingerprint with the requested
+workspace location. Copy controls now follow the complete saved question or
+paper title. The saved answer displays a short Research version fingerprint with the requested
 tooltip, and expandable technical details expose and copy the full SHA-256.
 The Q/A project action now matches TeX/Lean button height.
 
@@ -8519,3 +8519,23 @@ version display/copy, safe handling of hostile output, and desktop/mobile
 layout. The TeX browser fixture's removal selector was aligned with its
 existing Confirm label. The optional graph-present sandbox test skipped because
 its local image is unavailable. No paid provider calls, deployment, or merge.
+
+### Final saved-title and toolbar corrections
+
+The Q/A Copy control now follows the final word of the saved question title;
+the TeX Copy control follows the final word of each saved paper title. Titles
+wrap naturally, and copy buttons remain separate from the disclosure toggle.
+Copying leaves each row's expanded state unchanged. Normal and Copied icons use
+a stable 28px control footprint and matching SVG dimensions. Chrome checks
+capture both states and verify the icon bounds remain inside the SVG viewBox.
+Q/A button text is 17px bold while retaining the shared 50×34px footprint
+beside TEX and LEAN.
+
+Full `./sigma test`, Ruff, Pyright, frontend typecheck/build, and real Chrome
+Q/A and saved-paper checks passed. Chrome verified multi-line titles,
+final-word icon placement, clipboard contents, unchanged disclosure state,
+immediate Copied-state layout, desktop/mobile layout, and existing Markdown,
+browser, citation, Research version, TeX download, and PDF browser behavior.
+Captured normal/Copied title and toolbar screenshots are in
+[`docs/evaluations/research_qa/`](evaluations/research_qa/). No paid calls,
+merge, or deployment.
