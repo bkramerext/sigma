@@ -463,17 +463,31 @@ def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str)
     if not subject or subject.startswith("legacy-denied:"):
         return False
     now = _now()
-    # One conditional INSERT is the admission/approval decision. It checks
-    # the live domain policy and absence of any explicit (including revoked)
-    # email grant under SQLite's writer transaction, so two tabs cannot both
-    # approve or race an administrator's revocation between SELECT and INSERT.
-    inserted = db.execute(
+    domain = email.rsplit("@", 1)[1]
+    # A NEW domain authorization is an explicit administrator action. It can
+    # supersede an older email revocation, but a revocation made after the
+    # domain grant must still win. Audit IDs express ordering even when both
+    # operations occur in the same second. Rows without a recorded revocation
+    # remain denied rather than guessing their history.
+    restored = db.execute(
+        "UPDATE grants SET role='member',active=1,updated_at=?,"
+        "allowance_usd=(SELECT allowance_usd FROM grants WHERE kind='domain' AND value=?) "
+        "WHERE kind='email' AND value=? AND active=0 "
+        "AND EXISTS(SELECT 1 FROM grants WHERE kind='domain' AND value=? "
+        "AND role='member' AND active=1) "
+        "AND (SELECT MAX(id) FROM audit WHERE kind='domain' AND value=? AND action='grant') "
+        "> (SELECT MAX(id) FROM audit WHERE kind='email' AND value=? AND action='revoke')",
+        (now, domain, email, domain, domain, email),
+    )
+    # For a never-authorized email, the original conditional insertion still
+    # protects against concurrent individual grants or revocations.
+    inserted = restored if restored.rowcount else db.execute(
         "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
         "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
         "WHERE d.kind='domain' AND d.value=? AND d.role='member' AND d.active=1 "
         "AND NOT EXISTS(SELECT 1 FROM grants AS e WHERE e.kind='email' AND e.value=?) "
         "ON CONFLICT(kind,value) DO NOTHING",
-        (email, now, email.rsplit("@", 1)[1], email),
+        (email, now, domain, email),
     )
     if inserted.rowcount != 1:
         return False
@@ -802,11 +816,12 @@ def resolve_session(raw: str | None) -> Principal | None:
         if not row or row["expires_at"] <= _now():
             return None
         role = _authorization_in_db(db, cfg, row["subject"], row["email"])
-        if role == "member":
-            # A verified guest may still have a live session when the admin
-            # adds its domain. Persist the same individual approval as a new
-            # Google callback, including allowance and pending-request cleanup.
+        if role == "member" or role is None:
+            # A newly granted domain can supersede an *older* individual
+            # revocation. Materialize under the same writer transaction and
+            # re-check the effective role before granting any member access.
             _materialize_domain_member(db, row["subject"], row["email"])
+            role = _authorization_in_db(db, cfg, row["subject"], row["email"])
         # A verified Google identity remains signed in locally while awaiting
         # an invitation. This is identity only: middleware keeps guest access
         # on the public sample and invitation paths below.
@@ -1706,7 +1721,10 @@ async def callback(
     except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(401, "Google sign-in could not be verified.") from None
     invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
-    role = _authorization(cfg, subject, email)
+    with _db(cfg) as db:
+        role = _authorization_in_db(db, cfg, subject, email)
+        if role is None and _materialize_domain_member(db, subject, email):
+            role = _authorization_in_db(db, cfg, subject, email)
     if not role:
         if cfg.local:
             # Local Google identity is independent of invitation membership.
