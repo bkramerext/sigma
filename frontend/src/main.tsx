@@ -110,7 +110,7 @@ type StrategyFinding = { strategy_id: string; strategy_title: string; status: st
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; next_step_guidance?: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
 function sessionEstimatedCostLabel(session: ResearchSession): string {
   const cost = session.estimated_cost_usd;
@@ -148,6 +148,8 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
   const evidence = `${action} ${recordedReason}`;
+  if (/clipped|output.token limit/.test(evidence))
+    return { cause: 'The provider response was clipped before a complete research finding was saved.', next: 'Review the output-token and cost limits before resuming. Another provider call can consume allowance.' };
   if (/context|token limit/.test(evidence))
     return { cause: 'This session stopped because its required context exceeded the available context limit. Saved research is preserved.', next: 'Review the saved evidence and context limits before resuming. Resume will remain subject to the backend context guard.' };
   if (/duration|wall.clock/.test(evidence))
@@ -933,12 +935,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
-  const activeSessions = sessions.filter(item => item.status === 'queued' || item.status === 'running');
-  const activeSession = activeSessions[0];
-  const projectSessionLimit = Math.max(1, Number(limits?.max_concurrent_sessions ?? 1));
-  const canStartSession = activeSessions.length < projectSessionLimit;
-  const anyRunningSession = sessions.some(item => item.status === 'running');
-  useEffect(() => { onRunningChange(anyRunningSession); }, [anyRunningSession, onRunningChange]);
+  const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running');
+  useEffect(() => { onRunningChange(activeSession?.status === 'running'); }, [activeSession?.id, activeSession?.status, onRunningChange]);
 
   useEffect(() => {
     const revealRunningSession = () => {
@@ -1138,23 +1136,24 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const play = useCallback(() => {
     if (busy || readError) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    if (!canStartSession || !eligible.length) return;
+    if (activeSession || !eligible.length) return;
     setConfirmStart(false);
     void begin();
-  }, [canStartSession, busy, eligible, readError, path]);
+  }, [activeSession, busy, eligible, readError, path]);
   const stop = useCallback(() => {
-    const running = sessions.find(item => item.status === 'running');
-    if (running && !busy && !readError) void control('stop', running);
-  }, [sessions, busy, readError]);
+    if (activeSession?.status === 'running' && !busy && !readError) void control('stop', activeSession);
+  }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       confirmationSummary: limits ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${Math.min(limits.session_duration_minutes, sponsoredSession ? 15 : limits.session_duration_minutes)} min` : undefined,
-      playDisabled: busy || !!readError || confirmStart || !canStartSession || !eligible.length,
-      stopDisabled: busy || !!readError || !anyRunningSession,
+      playDisabled: busy || !!readError || confirmStart || (activeSession
+        ? true
+        : !eligible.length),
+      stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, limits, onControlsChange, stop, play, playLabel, readError, sessions, sponsoredSession, canStartSession, anyRunningSession]);
+  }, [activeSession, busy, confirmStart, eligible.length, limits, onControlsChange, stop, play, playLabel, readError, sessions, sponsoredSession]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -1186,7 +1185,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title={`Resume session #${item.session_number}`} data-tooltip={`Resume session #${item.session_number}`} disabled={busy || !!readError || !canStartSession} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
+                  {(item.status === 'stopped' || item.status === 'paused' || item.recoverable_clipped_response) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title={`Resume session #${item.session_number}`} data-tooltip={`Resume session #${item.session_number}`} disabled={busy || !!readError || (!!activeSession && activeSession.id !== item.id)} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} title={`Stop Session ${item.session_number}; it can be resumed later`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
                   <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>
