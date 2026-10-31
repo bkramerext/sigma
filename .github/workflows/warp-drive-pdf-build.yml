@@ -1,4 +1,4 @@
-name: Regenerate Warp Drive PDF
+name: Regenerate Warp Drive PDF (one-time)
 on:
   push:
     branches: [warpdrivepaper]
