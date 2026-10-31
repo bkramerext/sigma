@@ -1472,20 +1472,14 @@ class CloudAuthTests(TestCase):
         client = smtp_factory.return_value.__enter__.return_value
         sent = client.send_message.call_args
         self.assertEqual(sent.args[0]["To"], "sigma-notify@example.org")
-        self.assertEqual(
-            sent.args[0]["Bcc"], "admin@example.org, second@example.org"
-        )
-        self.assertEqual(
-            sent.kwargs["to_addrs"], ["admin@example.org", "second@example.org"]
-        )
+        self.assertEqual(sent.args[0]["Bcc"], "admin@example.org, second@example.org")
+        self.assertEqual(sent.kwargs["to_addrs"], ["admin@example.org", "second@example.org"])
         with cloud_auth._db(cfg) as db:
             db.execute(
                 "UPDATE grants SET active=0 WHERE kind='email' AND value=?",
                 ("second@example.org",),
             )
-        self.assertEqual(
-            cloud_auth._notification_admin_recipients(cfg), ["admin@example.org"]
-        )
+        self.assertEqual(cloud_auth._notification_admin_recipients(cfg), ["admin@example.org"])
 
     def test_feedback_delivery_failure_does_not_lose_saved_submission(self):
         self.finish(email="admin@example.org", subject="notice-feedback-admin")
