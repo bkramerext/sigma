@@ -886,10 +886,20 @@
 }
 
 /* Inline session confirmation uses the same understated title-row text actions. */
-.workspace-page .strategy-process-controls:has(.session-start-link) {
-  display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap;
+.workspace-page .project-primary-actions:has(.session-start-link) {
+  min-width: 0; max-width: 100%; flex-wrap: wrap;
 }
-.workspace-page .strategy-process-controls .session-start-limits { color: #aebbc7; font: 11px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
+.workspace-page .strategy-process-controls:has(.session-start-link) {
+  display: inline-flex; align-items: center; flex: 0 1 auto;
+  min-width: 0; max-width: 100%; gap: 8px; flex-wrap: wrap;
+}
+.workspace-page .strategy-process-controls .session-start-limits {
+  flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere;
+  color: #aebbc7; font: 11px/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.workspace-page .strategy-process-controls .session-start-link {
+  flex: 0 0 auto; white-space: nowrap;
+}
 .workspace-page .strategy-process-controls .session-start-link {
   display: inline; width: auto; min-width: 0; min-height: 0;
   margin: 0; padding: 2px 0; border: 0; border-radius: 0;

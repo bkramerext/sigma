@@ -212,6 +212,7 @@ def main() -> None:
                 assert started.json()["duration_limit_minutes"] == 60
                 assert started.json()["configured_duration_limit_minutes"] == 60
                 from sigma.build_info import build_commit
+
                 assert started.json()["backend_build_commit"] == build_commit()
                 session_id = started.json()["id"]
 

@@ -315,7 +315,9 @@ def _decode(raw: Any) -> Project:
     # Optional in all schema versions: existing exported projects must remain readable.
     if "backend_build_commit" in raw:
         commit = raw["backend_build_commit"]
-        if commit is not None and (not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", commit)):
+        if commit is not None and (
+            not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", commit)
+        ):
             raise ProjectError("Invalid project backend build commit")
         fields.add("backend_build_commit")
     if set(raw) != fields:

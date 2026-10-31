@@ -1392,6 +1392,13 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         latest = artifacts[-1]
         summary = f"Latest result: {latest['claim_or_question']} Skeptic review: {latest['skeptic_response']}"
     caveats = ["Agent-reported evidence is unverified; agreement is not independent verification."]
+    historical_omissions = record.get("prior_session_obligations_omitted", 0)
+    if isinstance(historical_omissions, int) and historical_omissions > 0:
+        caveats.append(
+            f"{historical_omissions} prior-session unresolved obligations were omitted from "
+            "bounded model context. This session cannot certify that it addressed the "
+            "complete historical obligation ledger; saved originals remain available."
+        )
     if objective_review:
         if objective_review.get("status") == "achieved" and not objective_review.get(
             "argument_steps"
@@ -4870,28 +4877,9 @@ async def start_session(
                 record["strategy_ids"],
                 diagnostics=cloud_research.billing_enabled(),
             )
-            omitted_by_strategy = record["prior_session_obligation_omitted_by_strategy"]
-            if omitted_by_strategy:
-                blocked = []
-                for selected_strategy_id in record["strategy_ids"]:
-                    omitted_count = omitted_by_strategy.get(selected_strategy_id, 0)
-                    if not omitted_count:
-                        continue
-                    selected_strategy = next(
-                        item
-                        for item in selected_strategies
-                        if item is not None and item.id == selected_strategy_id
-                    )
-                    blocked.append(
-                        f"{selected_strategy.title}: {omitted_count} unresolved prior-session "
-                        "obligations exceed the safe context bound"
-                    )
-                raise ProjectError(
-                    "Research was not started; no provider call was made. "
-                    + "; ".join(blocked)
-                    + ". Saved research is unchanged. Disable the affected strategy or start a "
-                    "new, narrower strategy informed by its saved findings."
-                )
+            # Historical obligations are bounded for provider context, not for
+            # research admission. Omitted IDs/counts remain frozen in the session
+            # and are disclosed to every agent in its context manifest.
             record["session_number"] = _allocate_session_number(view.path, records)
             obligation_source_ids = {
                 artifact_id
@@ -5923,11 +5911,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         if isinstance(omitted_by_strategy, dict)
         else record.get("prior_session_obligations_omitted", 0)
     )
-    if relevant_omission_count:
-        raise ResearchContextLimitError(
-            "Prior-session unresolved obligations exceeded the frozen context bound. "
-            "No provider call was made; all saved records remain intact. Narrow the strategy or review the omitted obligation IDs."
-        )
+    # A bounded historical snapshot may omit unresolved details. Preserve their
+    # counts and IDs in the context manifest so agents cannot treat the subset
+    # as an exhaustive obligation ledger, but do not prevent research from starting.
     prior_session_failures = record.get("prior_session_failures")
     prior_session_failures_omitted = record.get("prior_session_failures_omitted", 0)
     prior_failure_omitted_attempt_ids = record.get("prior_session_failure_omitted_attempt_ids", [])

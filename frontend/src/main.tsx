@@ -1216,7 +1216,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to USD ${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${effectiveDurationMinutes === null ? 'unlimited session duration' : `${effectiveDurationMinutes} min effective time ceiling`}` : undefined,
+      confirmationSummary: limits ? `${limits.research_rounds} rounds · ${limits.model_calls} total turns` : undefined,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
       playDisabled: busy || !!readError || confirmStart || !eligible.length || projectAtCapacity,
@@ -3667,7 +3667,7 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
         {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
-        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} aria-label={`Start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || controls.playDisabled} onClick={guest ? onGuestPlay : controls.play}>
