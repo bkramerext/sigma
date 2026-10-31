@@ -3361,6 +3361,49 @@ class CloudAuthTests(TestCase):
         self.assertEqual(repeated.json(), {"status": "approved", "duplicate": True})
         duplicate_mail.assert_not_called()
 
+    def test_domain_auto_member_survives_email_failure_but_revoked_domain_blocks_new_users(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-failure-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        added = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "domain", "value": "example.org", "role": "member"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(added.status_code, 200)
+        with patch.object(
+            cloud_auth, "_deliver_invitation", side_effect=RuntimeError("mail offline")
+        ):
+            signed = self.finish("new@example.org", "auto-failure-member")
+        self.assertIn(cloud_auth.SESSION_COOKIE, signed.cookies)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            row = db.execute(
+                "SELECT status,notification_error FROM invitation_requests "
+                "WHERE subject='auto-failure-member'"
+            ).fetchone()
+            grant = db.execute(
+                "SELECT role,active FROM grants WHERE kind='email' AND value='new@example.org'"
+            ).fetchone()
+        self.assertEqual((row["status"], row["notification_error"]), ("reviewed", "delivery failed"))
+        self.assertEqual((grant["role"], grant["active"]), ("member", 1))
+        revoked = admin.delete(
+            "/api/cloud-auth/admin/grants/domain/example.org",
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(revoked.status_code, 200)
+        later = self.finish("later@example.org", "auto-failure-new")
+        self.assertIn(cloud_auth.DENIED_COOKIE, later.cookies)
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, later.cookies)
+        existing = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
+        assert existing is not None
+        self.assertEqual(existing.role, "member")
+
     def test_explicit_user_revocation_prevents_domain_auto_member(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
