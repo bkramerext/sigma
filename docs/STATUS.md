@@ -15,8 +15,8 @@ The AI Agent Reliability sample retains its three complementary strategies and e
 - `./sigma test` — passed all checks, including Ruff, Pyright, frontend typecheck, and production build.
 - Focused reruns: `tests/research_sessions.py`, `tests/make_sample.py`, `tests/increment22_budget.py`, project settings, and cloud research/API sponsorship checks — passed.
 - `browser_checks/guest_samples.py` in real Chrome — passed against an isolated backend; no provider call was made.
-- No paid provider calls were made. Six GitHub CI workflows are pending for the pushed PR HEAD.
+- No paid provider calls were made. Six GitHub Actions workflows passed on implementation commit `6629c221341afa6ea7330344ccfb5648af683be0`: Research Outcome browser acceptance, T200 Model availability browser acceptance, T249 integrated project verification, SIGMA verification, T92 Recent Projects browser acceptance, and T201 obligation recovery browser acceptance.
 
 ### Remaining acceptance work
 
-Real Chrome verified the sample catalog and guest/sample lifecycle. A signed-in UI Play/Resume/interruption smoke was not established locally; backend pause/resume, timeout, restart, clipping, and partial-retention behavior is covered by deterministic service tests. Run the manual investigation smoke procedure attached to PR #406 before the next AI Agents research run, and review the six CI results before acceptance.
+Real Chrome verified the sample catalog and guest/sample lifecycle. A signed-in UI Play/Resume/interruption smoke was not established locally; backend pause/resume, timeout, restart, clipping, and partial-retention behavior is covered by deterministic service tests. Run the manual investigation smoke procedure attached to PR #406 before the next AI Agents research run, and the six implementation commit CI results are green; rerun the manual smoke before acceptance.
