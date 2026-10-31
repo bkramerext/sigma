@@ -3887,7 +3887,10 @@ async def test_prior_obligation_overflow_allows_repeatable_bounded_research(path
         first_manifest = finished["steps"][0]["context_manifest"]
         assert first_manifest["omitted_prior_session_obligations"]["count"] == 11
         assert len(first_manifest["omitted_prior_session_obligations"]["obligation_ids"]) == 11
-        assert any("11 prior-session unresolved obligations" in note for note in finished["outcome"]["caveats"])
+        assert any(
+            "11 prior-session unresolved obligations" in note
+            for note in finished["outcome"]["caveats"]
+        )
 
         # The same original strategy must remain runnable after its history
         # grows beyond the context bound; no manual forking or disabling.
@@ -3910,8 +3913,16 @@ async def test_prior_obligation_overflow_allows_repeatable_bounded_research(path
         )
         assert second["prior_session_obligations_omitted"] >= 41
         repeated = await wait_for(path, second["id"])
-        assert repeated["calls_used"] == 2 and repeated["artifacts"]
-        assert repeated["steps"][0]["context_manifest"]["omitted_prior_session_obligations"]["count"] >= 41
+        assert repeated["calls_used"] == 2 and repeated["artifacts"], (
+            repeated.get("status"),
+            repeated.get("message"),
+            repeated.get("termination_reason_code"),
+            repeated.get("steps"),
+        )
+        assert (
+            repeated["steps"][0]["context_manifest"]["omitted_prior_session_obligations"]["count"]
+            >= 41
+        )
         assert (path / "research-sessions" / f"{prior_id}.json").read_bytes() == expanded_bytes
 
     assert len(provider_calls) == 4

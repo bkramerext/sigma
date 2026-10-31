@@ -98,4 +98,6 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-t201-recovery.png", full_page=True)
     browser.close()
 
-print("PASS T201 Chromium: repeatable bounded research, provenance, narrow start controls and immutable history")
+print(
+    "PASS T201 Chromium: repeatable bounded research, provenance, narrow start controls and immutable history"
+)
