@@ -917,6 +917,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
+  const [maxConcurrentSessions, setMaxConcurrentSessions] = useState(1);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
@@ -959,6 +960,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     const nextSessions = data.sessions as ResearchSession[];
     setSessions(nextSessions);
+    // Keep UI admission in sync with the limits snapshot used by the server.
+    setMaxConcurrentSessions(Number(data.max_concurrent_sessions) || 1);
     setCurrentUnderstanding(data.current_understanding?.project_id === projectId ? data.current_understanding as CurrentUnderstanding : null);
     readErrorReported.current = false;
     setReadError('');
@@ -1188,16 +1191,20 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     finally { setBusy(false); }
   }
 
-  const playLabel = 'Start a new research session';
+  const activeSessionCount = sessions.filter(session => session.status === 'queued' || session.status === 'running').length;
+  const projectAtCapacity = activeSessionCount >= maxConcurrentSessions;
+  const playLabel = projectAtCapacity
+    ? `Maximum concurrent sessions reached (${activeSessionCount}/${maxConcurrentSessions})`
+    : 'Start a new research session';
   const requiresSponsoredCost = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
   const play = useCallback(() => {
-    if (busy || readError) return;
+    if (busy || readError || projectAtCapacity) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
     if (!eligible.length) return;
     setConfirmStart(false);
     void begin();
-  }, [busy, eligible, readError, path]);
+  }, [busy, eligible, readError, path, projectAtCapacity]);
   const stop = useCallback(() => {
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
@@ -1208,13 +1215,13 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       confirmationSummary: limits && effectiveDurationMinutes !== null ? `up to ${limits.model_calls} agent turns · ${limits.research_rounds} rounds per strategy · shared across selected strategies · ${limits.maximum_estimated_cost_usd === null ? 'no session cost cap' : `up to $${limits.maximum_estimated_cost_usd.toFixed(2)}`} · ${effectiveDurationMinutes} min effective time ceiling${effectiveDurationMinutes < limits.session_duration_minutes ? ` (project setting: ${limits.session_duration_minutes} min)` : ''}` : undefined,
-      // The backend atomically enforces each project's configured session limit.
-      // A single active session must not unconditionally disable another Play.
-      playDisabled: busy || !!readError || confirmStart || !eligible.length,
+      // Match the backend's queued/running slot count. The server remains
+      // authoritative when another browser starts a session concurrently.
+      playDisabled: busy || !!readError || confirmStart || !eligible.length || projectAtCapacity,
       stopDisabled: busy || !!readError || !runningSession,
       playLabel,
     });
-  }, [busy, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, readError, runningSession, sessions, sponsoredSession]);
+  }, [busy, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -1226,7 +1233,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     revealSession(revealId, true);
   }, [activeSession?.id, onRevealNewSession, sessions.length]);
 
-  const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
+  const runningCount = activeSessionCount;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     <header className="workspace-pane-heading sessions-pane-heading">
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
