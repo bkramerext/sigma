@@ -1291,6 +1291,10 @@ def test_json_project_orphan_recovery(
             os.environ,
             {
                 **limits_env,
+                # This fixture preserves several historical queued rows to
+                # exercise crash recovery, not hosted capacity enforcement.
+                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "4",
+                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "4",
                 "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
                 "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
                 "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
