@@ -108,8 +108,10 @@ def test_orphaned_job_reconciliation(
             os.environ,
             {
                 **limits_env,
-                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
-                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+                # This suite injects several independent historical jobs to
+                # test recovery, not the hosted execution-capacity boundary.
+                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "8",
+                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "32",
                 "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
                 "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
                 "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
