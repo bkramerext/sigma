@@ -3,9 +3,12 @@
 ## Delivery
 
 - Branch: `green/research-qa`
-- Base: `main` at `2d0a564c731655d4ba7264fab826f96b12c63b96`
-- Commit SHA: pending final commit
-- PR: pending push/open
+- Initial base: `main` at `2d0a564c731655d4ba7264fab826f96b12c63b96`
+- Implementation commit: `065e1d0e093b248df78a3a1199b7e7d50637ca4d`
+- Current `main` merged before delivery: `f6578249b6afc709b3976a56689e4ee1ed68b075`
+  (release-note PR #397 only; no Blue work was included)
+- PR: [#398](https://github.com/bkramerext/sigma/pull/398), open and unmerged
+- PR head before final handoff update: `1527f76f39bc267c549cdf7e855165e943da0859`
 - Merge/deploy: not performed
 - Provider cost: no paid provider calls; browser checks used the deterministic
   local provider fixture

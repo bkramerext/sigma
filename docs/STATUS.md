@@ -1,7 +1,11 @@
 ## T314 — Research Q/A (2026-10-31)
 
-Feature implementation is complete on `green/research-qa`, based on current
-`main` at `2d0a564c731655d4ba7264fab826f96b12c63b96`. It adds a durable,
+Feature implementation is complete on `green/research-qa`, initially based on
+`main` at `2d0a564c731655d4ba7264fab826f96b12c63b96`. While the work was in
+progress, `main` advanced with release-note PR #397 only; current `main` at
+`f6578249b6afc709b3976a56689e4ee1ed68b075` was merged into the feature branch
+without force-pushing or incorporating Blue's work. PR #398 is open and
+unmerged. It adds a durable,
 project-scoped Q/A archive over frozen saved research, validated session and
 artifact citations, a safe standalone browser view, and copy controls for Q/A
 and saved TeX text. Q/A does not start research or change research state.
