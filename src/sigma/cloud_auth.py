@@ -1719,10 +1719,7 @@ async def callback(
     auto_domain_member = False
     with _db(cfg) as db:
         role = _authorization_in_db(db, cfg, subject, email)
-        if (
-            role is None
-            and email not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}
-        ):
+        if role is None and email not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}:
             auto_domain_member = _materialize_domain_member(db, subject, email)
             if auto_domain_member:
                 role = _authorization_in_db(db, cfg, subject, email)
