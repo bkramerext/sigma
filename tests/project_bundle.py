@@ -458,6 +458,7 @@ def main() -> None:
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "status": "paused",
                 "session_number": 1,
+                "backend_build_commit": "a" * 40,
             }
             _save(created.path, record)
             assert _read(created.path, session_id) == record
@@ -498,6 +499,7 @@ def main() -> None:
             imported_session = _read(str(imported_session_path), session_id)
             assert imported_session["project_path"] == str(imported_session_path.resolve())
             assert imported_session["project_id"] == created.project.id
+            assert imported_session["backend_build_commit"] == "a" * 40
             assert read_session_snapshot(str(imported_session_path))[1] == 0
             # Reject a bundle whose session filename and embedded ID disagree.
             malformed_bundle = json.loads(export_complete_project(created.path))
