@@ -5315,7 +5315,9 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
     async def handler(request):
         payload = json.loads(request.content)
         context = json.loads(payload["input"])
-        assert all(
+        # Portfolio provider I/O must not own unrelated process-global gates.
+        # Per-session state locks and the session's semaphore enforce the bounds.
+        assert not any(
             gate.locked()
             for gate in (proposals._gate, agentic._gate, text_views._gate, research_sessions._gate)
         )
