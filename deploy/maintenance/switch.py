@@ -8,18 +8,15 @@ import sys
 DIRECTORY = pathlib.Path("/etc/caddy/sigma-maintenance")
 SNIPPET = DIRECTORY / "active.caddy"
 CONFIG = pathlib.Path("/etc/caddy/Caddyfile")
-CONTENT = """handle {
+CONTENT = """@maintenance_image path /__sigma_maintenance/maintainance-page.png
+handle @maintenance_image {
     root * /var/www/sigma-maintenance
     header Cache-Control "no-store, max-age=0"
-    @image path /__sigma_maintenance/maintainance-page.png
-    handle @image {
-        rewrite * /maintainance-page.png
-        file_server
-    }
-    handle {
-        rewrite * /index.html
-        file_server
-    }
+    rewrite * /maintainance-page.png
+    file_server
+}
+handle {
+    error 503
 }
 """
 
