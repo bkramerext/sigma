@@ -17,7 +17,14 @@ from typing import Annotated, Any, Literal, TypedDict
 from uuid import uuid4
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 from sigma import cloud_research, cloud_workspaces
 from sigma.openai_connection import auth_context, cloud_credential
@@ -149,11 +156,33 @@ class PaperClaim(BaseModel):
     reasoning: str = Field(min_length=10, max_length=2400)
 
 
+class PaperTable(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    caption: str = Field(min_length=12, max_length=300)
+    headers: list[str] = Field(min_length=2, max_length=6)
+    rows: list[list[str]] = Field(min_length=1, max_length=16)
+    evidence_refs: list[str] = Field(min_length=1, max_length=20)
+    claim_ids: list[str] = Field(min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def validate_rectangular_rows(self) -> PaperTable:
+        if any(len(row) != len(self.headers) for row in self.rows):
+            raise ValueError("table rows must match the header count")
+        if any(
+            not cell.strip() or len(cell) > 240
+            for row in [self.headers, *self.rows]
+            for cell in row
+        ):
+            raise ValueError("table cells must be nonempty and at most 240 characters")
+        return self
+
+
 class PaperSection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     heading: str = Field(min_length=2, max_length=120)
     paragraphs: list[str] = Field(min_length=1, max_length=80)
     claim_ids: list[str] = Field(max_length=30)
+    tables: list[PaperTable] = Field(default_factory=list, max_length=4)
 
 
 class DiagramNode(BaseModel):
@@ -181,6 +210,8 @@ class PaperDiagram(BaseModel):
     nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
     edges: list[DiagramEdge] = Field(min_length=1, max_length=12)
     boundaries: list[DiagramBoundary] = Field(default_factory=list, max_length=4)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    claim_ids: list[str] = Field(default_factory=list, max_length=30)
 
 
 class PaperDraft(BaseModel):
@@ -253,6 +284,8 @@ class LongPaperPlan(BaseModel):
     conclusions: list[str] = Field(min_length=1, max_length=8)
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
+    # Defaulted for compatibility with plans saved before diagrams were added.
+    diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
 
 
 FAST_MAX_SECTIONS = 8
@@ -267,6 +300,7 @@ class FastLongPaperPlan(LongPaperPlan):
 class LongSectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     paragraphs: list[LongText] = Field(min_length=1, max_length=80)
+    tables: list[PaperTable] = Field(default_factory=list, max_length=4)
 
 
 def _paper_response_schema(
@@ -1401,6 +1435,7 @@ def _evidence_based_long_plan(
         ],
         conclusion_claim_ids=[claims[-1].id],
         validation_warnings=warnings,
+        diagrams=[],
     )
 
 
@@ -1601,8 +1636,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
     value.setdefault("kind", "long_form")
     value.setdefault("one_shot_draft", None)
-    value.setdefault("include_diagrams", False)
-    if type(value["include_diagrams"]) is not bool:
+    if "include_diagrams" in value and type(value["include_diagrams"]) is not bool:
         raise ProjectError("Long-paper diagram selection is invalid")
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
@@ -2134,6 +2168,37 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
             warnings.append(
                 f"The {label} narrative has no linked claim IDs; check it for unsupported factual statements."
             )
+    for section in draft.sections:
+        for table in section.tables:
+            invalid_sources = sorted(set(table.evidence_refs) - source_ids)
+            invalid_claims = sorted(set(table.claim_ids) - claim_ids)
+            if invalid_sources:
+                raise ProjectError(
+                    f"Table in {section.heading} cites unknown evidence IDs: "
+                    f"{', '.join(invalid_sources[:5])}"
+                )
+            if invalid_claims:
+                raise ProjectError(
+                    f"Table in {section.heading} cites unknown claims: "
+                    f"{', '.join(invalid_claims[:5])}"
+                )
+            if not set(table.claim_ids) <= set(section.claim_ids):
+                raise ProjectError(f"Table in {section.heading} cites claims outside its section")
+    for diagram in draft.diagrams:
+        invalid_sources = sorted(set(diagram.evidence_refs) - source_ids)
+        invalid_claims = sorted(set(diagram.claim_ids) - claim_ids)
+        if invalid_sources:
+            raise ProjectError(
+                f"Paper diagram cites unknown evidence IDs: {', '.join(invalid_sources[:5])}"
+            )
+        if invalid_claims:
+            raise ProjectError(
+                f"Paper diagram cites unknown claims: {', '.join(invalid_claims[:5])}"
+            )
+        if not diagram.evidence_refs or not diagram.claim_ids:
+            warnings.append(
+                "A diagram lacks source or claim links; inspect it before relying on the figure."
+            )
     if not any(
         "verification" in item.casefold() or "formal" in item.casefold() for item in warnings
     ):
@@ -2551,6 +2616,38 @@ def _tex(
     def article_paragraph(text: str) -> str:
         return "\n\n".join(prose(chunk) for chunk in _publication_paragraphs(text))
 
+    def render_table(table: PaperTable) -> list[str]:
+        column = r"p{\dimexpr\linewidth/" + str(len(table.headers)) + r"\relax}"
+        columns = "@{}" + column * len(table.headers) + "@{}"
+        header = " & ".join(r"\textbf{" + esc(cell) + "}" for cell in table.headers)
+        parts = [
+            r"\begin{longtable}{" + columns + "}",
+            r"\caption{" + esc(table.caption) + r"}\\",
+            r"\toprule",
+            header + r"\\",
+            r"\midrule",
+            r"\endfirsthead",
+            r"\toprule",
+            header + r"\\",
+            r"\midrule",
+            r"\endhead",
+        ]
+        parts.extend(
+            " & ".join(esc(" ".join(cell.split())) for cell in row) + r"\\" for row in table.rows
+        )
+        parts.extend(
+            [
+                r"\bottomrule",
+                r"\end{longtable}",
+                r"\par\smallskip{\footnotesize Evidence: "
+                + esc(", ".join(table.evidence_refs))
+                + "; claims: "
+                + esc(", ".join(table.claim_ids))
+                + "}",
+            ]
+        )
+        return parts
+
     if math_style:
         investigation_type = "mathematical"
     opening_heading, methods_heading, findings_heading, style_note = _paper_style(
@@ -2729,6 +2826,8 @@ def _tex(
     for section in draft.sections:
         parts.append(r"\section{" + esc(_publication_heading(section.heading)) + "}")
         parts += [article_paragraph(text) + "\n" for text in section.paragraphs]
+        for table in section.tables:
+            parts.extend(render_table(table))
         if include_claim_details and section.claim_ids:
             parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
 
@@ -2890,7 +2989,7 @@ async def _provider(
     config: dict[str, Any],
     project_id: str | None = None,
     project_path_value: str | None = None,
-    include_diagrams: bool = False,
+    include_diagrams: bool = True,
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
@@ -2898,7 +2997,8 @@ async def _provider(
     project_data = project_source.get("data", {})
     instructions = INSTRUCTIONS + "\n\n" + PUBLICATION_INSTRUCTIONS
     if include_diagrams:
-        instructions += """\n\nDIAGRAM REQUEST (experimental): return zero, one or two explanatory diagrams in the diagrams field, only where they clarify saved evidence. Use the bounded node/edge/boundary schema. Label hypothetical architectures explicitly; do not portray proposed federation as an existing MindRouter capability or invent observations. If no useful evidence-supported figure is possible, return an empty list."""
+        instructions += """\n\nDIAGRAMS ARE A STANDARD PART OF THE PAPER: include up to two bounded, evidence-supported figures when they materially clarify the argument (for example, a trust boundary, routing decision, failure path, or supported quantitative relationship). Use only the validated node/edge/boundary schema. Label hypothetical architectures explicitly; do not portray proposed federation as an existing MindRouter capability or invent observations. Omit a figure only when the evidence provides no useful diagram."""
+    instructions += """\n\nTABLES ARE STANDARD WHEN THEY IMPROVE ACADEMIC COMMUNICATION: include compact evidence-linked tables for useful comparisons, assumptions, quantitative results, sensitivity cases, or evidence provenance. Every table must cite saved source references and claim IDs, use only supported values, and be omitted when prose is clearer. Do not create decorative or redundant tables."""
     project_type = (
         project_data.get("investigation_type", "default")
         if isinstance(project_data, dict)
@@ -3222,7 +3322,25 @@ def _repair_paper_references(
                 section.model_copy(update={"evidence_refs": refs, "claim_ids": section_claims})
             )
         else:
-            sections.append(section.model_copy(update={"claim_ids": section_claims}))
+            valid_tables: list[PaperTable] = []
+            for table in section.tables:
+                table_sources = list(
+                    dict.fromkeys(ref for ref in table.evidence_refs if ref in known_evidence)
+                )
+                table_claims = links(table.claim_ids, f"table in {section.heading}")
+                if not table_sources or not table_claims:
+                    diagnostics.append(
+                        f"A table in {section.heading} without valid evidence and claim links was omitted."
+                    )
+                    continue
+                valid_tables.append(
+                    table.model_copy(
+                        update={"evidence_refs": table_sources, "claim_ids": table_claims}
+                    )
+                )
+            sections.append(
+                section.model_copy(update={"claim_ids": section_claims, "tables": valid_tables})
+            )
 
     updated = {
         "claims": claims,
@@ -3232,6 +3350,19 @@ def _repair_paper_references(
         "methods_claim_ids": links(paper.methods_claim_ids, "methods"),
         "conclusion_claim_ids": links(paper.conclusion_claim_ids, "conclusions"),
     }
+    valid_diagrams: list[PaperDiagram] = []
+    for diagram in paper.diagrams:
+        sources = list(dict.fromkeys(ref for ref in diagram.evidence_refs if ref in known_evidence))
+        diagram_claims = links(diagram.claim_ids, "diagram")
+        if not sources or not diagram_claims:
+            diagnostics.append(
+                "A diagram without valid saved-evidence and claim links was omitted."
+            )
+            continue
+        valid_diagrams.append(
+            diagram.model_copy(update={"evidence_refs": sources, "claim_ids": diagram_claims})
+        )
+    updated["diagrams"] = valid_diagrams
     if diagnostics:
         updated["validation_warnings"] = list(
             dict.fromkeys([*paper.validation_warnings, *diagnostics])
@@ -3273,6 +3404,11 @@ def _validate_long_plan_references(plan: LongPaperPlan, indexed_refs: set[str]) 
             )
         if set(section.claim_ids) - claim_ids:
             raise ProjectError(f"Paper outline for {section.heading} cites an unknown claim")
+    for diagram in plan.diagrams:
+        if not diagram.evidence_refs or set(diagram.evidence_refs) - indexed_refs:
+            raise ProjectError("Paper diagram must cite evidence from the frozen research index")
+        if not diagram.claim_ids or set(diagram.claim_ids) - claim_ids:
+            raise ProjectError("Paper diagram must link to claims in the paper outline")
 
 
 def _provider_input_text(input_value: Any, schema_name: str, max_input_bytes: int) -> str:
@@ -3301,7 +3437,7 @@ async def _generate_long_draft(
     project_id: str | None = None,
     project_path_value: str | None = None,
     structured_fast_path: bool = False,
-    include_diagrams: bool = False,
+    include_diagrams: bool = True,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     # Existing paid field-extraction checkpoints remain on their original
@@ -3648,6 +3784,12 @@ that occur in the input. Do not add scientific claims or outside citations."""
         + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
         + (
+            "\n\nDIAGRAMS ARE STANDARD: include up to two bounded evidence-supported diagrams in the diagrams field when they clarify the architecture, trust boundary, decision logic, failure path, or quantitative comparison. Label proposed or hypothetical components clearly. Do not invent values, imply undocumented capabilities, or use figures as a substitute for the evidence-linked argument. Omit diagrams only when the saved evidence supports no useful figure."
+            if include_diagrams
+            else ""
+        )
+        + "\n\nTABLES ARE STANDARD WHEN USEFUL: include compact tables when they materially improve comparison, such as alternatives, assumptions, sensitivity results, or evidence status. Every table must have saved evidence references and claim links, must not introduce unsupported values, and should be omitted when prose is clearer."
+        + (
             "\n\nProduce between 2 and 8 substantial, logically connected sections. "
             "Each section should provide enough space for a detailed argument; "
             "do not split every observation into its own section.\n"
@@ -3771,17 +3913,33 @@ Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical 
 write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
 or document markup."""
     section_instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
+    section_instructions += """\n\nTABLES: When a concise table improves the section's argument, return it in the tables field. Include only values and comparisons supported by the supplied notes. Set evidence_refs to exact source IDs supplied for this section and claim_ids to the section's fixed claim IDs. Prefer useful comparisons, assumption registers, result/sensitivity summaries, and provenance tables; do not add decorative or repetitive tables. Return an empty list if prose communicates the material better."""
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
     original_records = _research_integrity_records(package) if fast_path else []
+
+    def validate_section_tables(section: LongSectionPlan, draft: LongSectionDraft) -> None:
+        allowed_refs = set(section.evidence_refs)
+        allowed_claims = set(section.claim_ids)
+        for table in draft.tables:
+            if set(table.evidence_refs) - allowed_refs:
+                raise ProjectError(
+                    f"A table in {section.heading} cites evidence outside its section outline"
+                )
+            if set(table.claim_ids) - allowed_claims:
+                raise ProjectError(
+                    f"A table in {section.heading} cites claims outside its section outline"
+                )
 
     async def write_section(section_number: int, section: LongSectionPlan) -> PaperSection:
         section_key = str(section_number)
         if section_key in saved_sections:
             section_draft = LongSectionDraft.model_validate(saved_sections[section_key])
+            validate_section_tables(section, section_draft)
             return PaperSection(
                 heading=section.heading,
                 paragraphs=section_draft.paragraphs,
                 claim_ids=section.claim_ids,
+                tables=section_draft.tables,
             )
         if progress and not fast_path:
             await progress("sections", section_number, len(long_plan.sections), "active")
@@ -3832,6 +3990,7 @@ or document markup."""
             legacy=not fast_path,
         )
         section_draft = LongSectionDraft.model_validate(body)
+        validate_section_tables(section, section_draft)
         encoded_section = _json(section_draft.model_dump())
         if len(encoded_section) > 250_000:
             raise ProjectError(
@@ -3851,6 +4010,7 @@ or document markup."""
             heading=section.heading,
             paragraphs=section_draft.paragraphs,
             claim_ids=section.claim_ids,
+            tables=section_draft.tables,
         )
 
     if fast_path:
@@ -3890,6 +4050,7 @@ or document markup."""
                 heading=section.heading,
                 paragraphs=LongSectionDraft.model_validate(saved_sections[str(number)]).paragraphs,
                 claim_ids=section.claim_ids,
+                tables=LongSectionDraft.model_validate(saved_sections[str(number)]).tables,
             )
             for number, section in enumerate(long_plan.sections, start=1)
         ]
@@ -3971,7 +4132,7 @@ async def _generate_impl(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
-    include_diagrams: bool = False,
+    include_diagrams: bool = True,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True):
         project_key = str(project_path(path).resolve())
@@ -4066,19 +4227,24 @@ async def _generate_impl(
             work = checkpoint
         long_form = _paper_long_form(package, force_long_form=force_long_form, existing=checkpoint)
         expected_kind = "long_form" if long_form else "one_shot"
-        compatible = checkpoint is not None and not any(
-            (checkpoint.get(key, False) if key == "include_diagrams" else checkpoint.get(key))
-            != value
-            for key, value in (
-                ("kind", expected_kind),
-                ("snapshot_sha256", snapshot_hash),
-                ("project_id", view.project.id),
-                ("binding_fingerprint", binding_fingerprint),
-                ("model", config["model"]),
-                ("reasoning_effort", config["reasoning_effort"]),
-                ("include_diagrams", include_diagrams),
+
+        compatible = False
+        if checkpoint is not None:
+            compatible = all(
+                (
+                    key == "include_diagrams" and key not in checkpoint
+                )  # Legacy work has no saved diagram preference; never rebill to add figures.
+                or checkpoint.get(key) == value
+                for key, value in (
+                    ("kind", expected_kind),
+                    ("snapshot_sha256", snapshot_hash),
+                    ("project_id", view.project.id),
+                    ("binding_fingerprint", binding_fingerprint),
+                    ("model", config["model"]),
+                    ("reasoning_effort", config["reasoning_effort"]),
+                    ("include_diagrams", include_diagrams),
+                )
             )
-        )
         if checkpoint is not None and not compatible:
             if _can_rebase_explicit_restart(checkpoint, view.project.id):
                 checkpoint = _rebase_explicit_restart(
@@ -4167,19 +4333,14 @@ async def _generate_impl(
                 work["provider_calls_total"] = int(work.get("provider_calls_total", 0)) + 1
                 _save_work(path, work)
                 await report("writing", None, None)
-                if include_diagrams:
-                    draft, model = await _provider(
-                        package,
-                        initial_auth,
-                        config,
-                        view.project.id,
-                        path,
-                        include_diagrams=True,
-                    )
-                else:
-                    draft, model = await _provider(
-                        package, initial_auth, config, view.project.id, path
-                    )
+                draft, model = await _provider(
+                    package,
+                    initial_auth,
+                    config,
+                    view.project.id,
+                    path,
+                    include_diagrams,
+                )
                 # A complete structured author response is valuable paid work.
                 # Save it before any local reference repair, logical checks or
                 # TeX compilation so a recoverable defect cannot trigger
@@ -4447,7 +4608,7 @@ async def generate(
     include_claim_details: bool = False,
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
-    include_diagrams: bool = False,
+    include_diagrams: bool = True,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     key = str(project_path(path).resolve())

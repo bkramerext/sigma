@@ -1,4 +1,4 @@
-"""Real-Chrome acceptance for the experimental paper diagram preference."""
+"""Real-Chrome acceptance for the default-on paper diagram preference."""
 
 import os
 
@@ -50,18 +50,17 @@ with sync_playwright() as playwright:
         raise
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-    option = dialog.get_by_role("checkbox", name="Include diagrams (experimental)")
+    option = dialog.get_by_role("checkbox", name="Include explanatory diagrams")
     expect(option).to_be_visible()
-    expect(option).not_to_be_checked()
-    option.check()
     expect(option).to_be_checked()
+    option.uncheck()
+    expect(option).not_to_be_checked()
     page.reload()
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-    expect(dialog.get_by_role("checkbox", name="Include diagrams (experimental)")).to_be_checked()
-    dialog.get_by_role("checkbox", name="Include diagrams (experimental)").uncheck()
-    expect(
-        dialog.get_by_role("checkbox", name="Include diagrams (experimental)")
-    ).not_to_be_checked()
-    print("PASS diagram option default-off and persistence in real Chrome")
+    option = dialog.get_by_role("checkbox", name="Include explanatory diagrams")
+    expect(option).not_to_be_checked()
+    option.check()
+    expect(dialog.get_by_role("checkbox", name="Include explanatory diagrams")).to_be_checked()
+    print("PASS diagram option default-on and persistence in real Chrome")
     browser.close()

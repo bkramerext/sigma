@@ -1,4 +1,5 @@
 """Offline regression checks for the independent sovereign AI economics model."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -29,30 +30,36 @@ def scenario():
                 "variable_usd_per_task": 0.1,
             },
             "frontier": {
-                "fixed_costs_usd": {}, "sunk_costs_usd": {},
+                "fixed_costs_usd": {},
+                "sunk_costs_usd": {},
                 "capacity_tasks_month": 1000,
                 "input_usd_per_million": 2,
                 "output_usd_per_million": 8,
                 "variable_usd_per_task": 0,
             },
         },
-        "workloads": [{
-            "name": "open", "monthly_tasks": 100,
-            "approved_routes": ["campus", "frontier"],
-            "input_tokens_per_attempt": 1000,
-            "output_tokens_per_attempt": 1000,
-            "charged_attempts_per_task": 2,
-            "task_success_rate": {"campus": 0.5, "frontier": 0.8},
-        }],
-        "plans": [{
-            "name": "hybrid",
-            "enabled_routes": ["campus", "frontier"],
-            "external_billing_routes": ["frontier"],
-            "external_spend_cap_usd": 10,
-            "fixed_costs_usd": {"governance": 20},
-            "sunk_costs_usd": {},
-            "allocations": {"open": {"campus": 0.6, "frontier": 0.3}},
-        }],
+        "workloads": [
+            {
+                "name": "open",
+                "monthly_tasks": 100,
+                "approved_routes": ["campus", "frontier"],
+                "input_tokens_per_attempt": 1000,
+                "output_tokens_per_attempt": 1000,
+                "charged_attempts_per_task": 2,
+                "task_success_rate": {"campus": 0.5, "frontier": 0.8},
+            }
+        ],
+        "plans": [
+            {
+                "name": "hybrid",
+                "enabled_routes": ["campus", "frontier"],
+                "external_billing_routes": ["frontier"],
+                "external_spend_cap_usd": 10,
+                "fixed_costs_usd": {"governance": 20},
+                "sunk_costs_usd": {},
+                "allocations": {"open": {"campus": 0.6, "frontier": 0.3}},
+            }
+        ],
     }
 
 
@@ -140,7 +147,7 @@ class SovereignCostModelTests(unittest.TestCase):
 
     def test_coverage_infeasibility(self):
         data = scenario()
-        data["plans"][0]["minimum_served_fraction"] = .95
+        data["plans"][0]["minimum_served_fraction"] = 0.95
         self.assertFalse(model.evaluate(data)["plans"][0]["feasible"])
 
     def test_duplicate_plan_rejected(self):
@@ -150,16 +157,12 @@ class SovereignCostModelTests(unittest.TestCase):
             model.evaluate(data)
 
     def test_full_synthetic_scenario_is_deterministic(self):
-        data = json.loads(
-            (ROOT / "research" / "sovereign_scenario_hypothetical.json").read_text()
-        )
+        data = json.loads((ROOT / "research" / "sovereign_scenario_hypothetical.json").read_text())
         out = model.evaluate(data)
         plans = {p["name"]: p for p in out["plans"]}
         self.assertTrue(plans["campus_local_only"]["feasible"])
         self.assertFalse(plans["frontier_api_only"]["feasible"])
-        self.assertAlmostEqual(
-            plans["campus_plus_approved_frontier"]["full_monthly_usd"], 19396.69
-        )
+        self.assertAlmostEqual(plans["campus_plus_approved_frontier"]["full_monthly_usd"], 19396.69)
         self.assertAlmostEqual(
             plans["cross_campus_federation_plus_frontier"]["full_monthly_usd"], 22831.47
         )

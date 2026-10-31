@@ -621,6 +621,90 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
 
 
+def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_accounting() -> None:
+    """Diagram compiler recovery reuses the same authored content and snapshot."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "diagram-compile-fallback.sigma"
+        view = initialize_project(path, "Diagram fallback", "Preserve the paper evidence.")
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        package, snapshot_hash = papers._snapshot(str(path))
+        project_ref = next(
+            source["id"] for source in package["sources"] if source["kind"] == "project"
+        )
+        figure = papers.PaperDiagram(
+            caption="Illustrative evidence boundary for the saved research.",
+            nodes=[
+                papers.DiagramNode(id="source", label="Saved source"),
+                papers.DiagramNode(id="claim", label="Claim register"),
+            ],
+            edges=[papers.DiagramEdge(source="source", target="claim", label="supports")],
+            evidence_refs=[project_ref],
+            claim_ids=["C1"],
+        )
+        table = papers.PaperTable(
+            caption="Bounded evidence summary for the saved project.",
+            headers=["Record", "Status"],
+            rows=[["Project question", "Saved"]],
+            evidence_refs=[project_ref],
+            claim_ids=["C1"],
+        )
+        authored = draft(project_ref).model_copy(
+            update={
+                "diagrams": [figure],
+                "sections": [
+                    draft(project_ref).sections[0].model_copy(update={"tables": [table]}),
+                    draft(project_ref).sections[1],
+                ],
+            }
+        )
+        provider_calls = 0
+        compile_tex: list[str] = []
+        real_compile = papers._compile_pdf
+
+        async def fake_provider(_context, *_args):
+            nonlocal provider_calls
+            provider_calls += 1
+            return authored, config["model"]
+
+        def fail_diagram_then_compile(tex: str, **kwargs):
+            compile_tex.append(tex)
+            if len(compile_tex) == 1:
+                raise RuntimeError("diagram engine fixture failure")
+            return real_compile(tex, **kwargs) if shutil.which("tectonic") else b"%PDF-fixture"
+
+        async def run() -> dict[str, Any]:
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=fake_provider),
+                patch.object(papers, "_compile_pdf", new=fail_diagram_then_compile),
+            ):
+                return await papers.generate(str(path), credential["identity"], view.project.id)
+
+        result = asyncio.run(run())
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert provider_calls == 1
+        assert len(compile_tex) == 2
+        assert r"\usepackage{tikz}" in compile_tex[0]
+        assert r"\usepackage{tikz}" not in compile_tex[1]
+        assert r"\begin{longtable}" in compile_tex[0] and r"\begin{longtable}" in compile_tex[1]
+        assert saved["snapshot_sha256"] == snapshot_hash
+        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["draft"]["diagrams"] == []
+        assert saved["draft"]["sections"][0]["tables"]
+        assert any("text-only PDF fallback" in warning for warning in saved["validation_warnings"])
+
+
 def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> None:
     """Extra diagnostics are opt-in; scientific caveats remain in both papers."""
     paper = draft()
@@ -898,11 +982,13 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
                 include_claim_details,
                 include_validation_notes,
                 include_research_excerpts,
+                include_diagrams,
             ):
                 assert include_research_details is False
                 assert include_claim_details is False
                 assert include_validation_notes is False
                 assert include_research_excerpts is False
+                assert include_diagrams is True
                 await progress(
                     {
                         "type": "progress",
@@ -3695,7 +3781,7 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
         calls = 0
         reject = True
 
-        async def provider(context, _account, settings, *_args):
+        async def provider(context, _account, settings, *_args, **_kwargs):
             nonlocal calls
             calls += 1
             if reject:
@@ -3917,6 +4003,14 @@ def test_opt_in_diagram_schema_and_safe_tex_rendering() -> None:
     checked = papers._paper_response_schema(papers.PaperDraft, include_diagrams=True)
     assert "diagrams" not in unchecked["properties"]
     assert "diagrams" in checked["properties"]
+    assert "diagrams" not in papers._paper_response_schema(papers.FastLongPaperPlan)["properties"]
+    assert (
+        "diagrams"
+        in papers._paper_response_schema(papers.FastLongPaperPlan, include_diagrams=True)[
+            "properties"
+        ]
+    )
+    assert "tables" in papers._paper_response_schema(papers.LongSectionDraft)["properties"]
     assert "PaperDiagram" not in unchecked.get("$defs", {})
     figure = papers.PaperDiagram.model_validate(
         {
@@ -3933,22 +4027,149 @@ def test_opt_in_diagram_schema_and_safe_tex_rendering() -> None:
             "boundaries": [
                 {"label": "Proposed campus trust boundary", "node_ids": ["campus", "policy"]}
             ],
+            "evidence_refs": ["project:pid"],
+            "claim_ids": ["C1"],
         }
     )
     paper = draft()
-    paper = paper.model_copy(update={"diagrams": [figure]})
+    table = papers.PaperTable.model_validate(
+        {
+            "caption": "Evidence-bound comparison of local and approved routes.",
+            "headers": ["Route", "Policy", "Evidence"],
+            "rows": [
+                ["Campus local", "Allowed", "Saved project"],
+                ["Frontier", "Approved only", "Saved project"],
+            ],
+            "evidence_refs": ["project:pid"],
+            "claim_ids": ["C1"],
+        }
+    )
+    sections = [
+        paper.sections[0].model_copy(update={"tables": [table]}),
+        paper.sections[1],
+    ]
+    paper = paper.model_copy(update={"diagrams": [figure], "sections": sections})
     tex = papers._tex(paper, [], "a" * 64)
     assert tex.index(r"\usepackage{tikz}") < tex.index(r"\begin{document}")
     assert r"\input{secret}" not in tex
     assert r"Campus \&" in tex
     assert "Proposed campus trust boundary" in tex
+    assert r"\begin{longtable}" in tex
+    assert "Evidence: project:pid; claims: C1" in tex
+    assert papers._validate(paper, {"sources": [{"id": "project:pid", "data": {}}]})
     if shutil.which("tectonic"):
         pdf = papers._compile_pdf(tex, timeout_seconds=90)
         assert pdf.startswith(b"%PDF-")
 
 
+def test_fast_long_draft_emits_evidence_linked_diagrams_and_tables_by_default() -> None:
+    package, plan = fast_package()
+    plan = plan.model_copy(
+        update={
+            "diagrams": [
+                papers.PaperDiagram(
+                    caption="Saved proof candidate and its recorded unresolved check.",
+                    nodes=[
+                        papers.DiagramNode(id="candidate", label="Candidate argument"),
+                        papers.DiagramNode(id="skeptic", label="Skeptic obligation"),
+                    ],
+                    edges=[
+                        papers.DiagramEdge(
+                            source="candidate", target="skeptic", label="requires review"
+                        )
+                    ],
+                    evidence_refs=["session:onp-fixture"],
+                    claim_ids=["C1"],
+                )
+            ]
+        }
+    )
+    state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+    observed: list[tuple[str, bool | None]] = []
+
+    async def provider(input_value, _binding, _config, *, schema_name, **kwargs):
+        observed.append((schema_name, kwargs.get("include_diagrams")))
+        if schema_name == "sigma_long_paper_plan":
+            assert kwargs["include_diagrams"] is True
+            return plan, "fixture-model"
+        return (
+            papers.LongSectionDraft(
+                paragraphs=["The section preserves the source-linked candidate and limitation."],
+                tables=[
+                    papers.PaperTable(
+                        caption="Evidence types represented in this section.",
+                        headers=["Record", "Finding"],
+                        rows=[
+                            ["Investigator", "Candidate construction"],
+                            ["Skeptic", "Open obligation"],
+                        ],
+                        evidence_refs=["session:onp-fixture"],
+                        claim_ids=["C1"],
+                    )
+                ],
+            ),
+            "fixture-model",
+        )
+
+    async def check() -> None:
+        with patch.object(papers, "_provider_structured", new=provider):
+            result, calls, batches = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                state,
+                lambda _state: None,
+                structured_fast_path=True,
+            )
+        assert result.diagrams == plan.diagrams
+        assert all(section.tables for section in result.sections)
+        assert all(
+            set(table.evidence_refs) <= {"session:onp-fixture"} and set(table.claim_ids) == {"C1"}
+            for section in result.sections
+            for table in section.tables
+        )
+        assert calls == 1 + len(result.sections)
+        assert batches == 0
+
+    asyncio.run(check())
+    assert observed[0] == ("sigma_long_paper_plan", True)
+    assert all(name == "sigma_long_paper_section" for name, _ in observed[1:])
+    assert state["plan"]["diagrams"][0]["evidence_refs"] == ["session:onp-fixture"]
+
+    unchecked_state = papers._new_work("b" * 64, "fast-fixture", "c" * 64, "fixture-model", "high")
+    unchecked_calls: list[tuple[str, bool | None]] = []
+
+    async def unchecked_provider(input_value, _binding, _config, *, schema_name, **kwargs):
+        unchecked_calls.append((schema_name, kwargs.get("include_diagrams")))
+        if schema_name == "sigma_long_paper_plan":
+            assert kwargs["include_diagrams"] is False
+            return plan.model_copy(update={"diagrams": []}), "fixture-model"
+        return papers.LongSectionDraft(
+            paragraphs=["Saved prose remains available."]
+        ), "fixture-model"
+
+    async def check_unchecked() -> None:
+        with patch.object(papers, "_provider_structured", new=unchecked_provider):
+            result, calls, _ = await papers._generate_long_draft(
+                package,
+                {"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                {"model": "fixture-model", "reasoning_effort": "high"},
+                unchecked_state,
+                lambda _state: None,
+                structured_fast_path=True,
+                include_diagrams=False,
+            )
+        assert result.diagrams == []
+        assert calls == 1 + len(result.sections)
+
+    asyncio.run(check_unchecked())
+    assert unchecked_calls[0] == ("sigma_long_paper_plan", False)
+
+
 def main() -> None:
     test_opt_in_diagram_schema_and_safe_tex_rendering()
+    test_fast_long_draft_emits_evidence_linked_diagrams_and_tables_by_default()
+    test_diagram_compile_fallback_preserves_evidence_tables_and_provider_accounting()
     test_research_details_toggle_preserves_science_and_opt_in_diagnostics()
     test_publication_paragraphs_math_and_bounded_optional_appendix()
     test_summary_only_research_uses_zero_paid_evidence_extraction_calls()

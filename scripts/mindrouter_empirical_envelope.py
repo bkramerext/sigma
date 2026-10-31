@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 """Derive *conditional* MindRouter energy/TCO break-even bounds from PEARC'26.
 
 Not a measurement of per-model efficiency, research quality, or total cost.
 Published daily power and commercial API equivalents are approximate.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,7 +27,7 @@ API_EQUIVALENT_USD = (4027.0, 11896.0)
 
 def finite_nonnegative(value: Any, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (float, int)):
-        raise ValueError(f"{name} must be numeric")
+        raise TypeError(f"{name} must be numeric")
     result = float(value)
     if not math.isfinite(result) or result < 0:
         raise ValueError(f"{name} must be finite and nonnegative")
@@ -70,9 +70,7 @@ def derive(
         "derived_wh_per_1000_tokens": round(energy * 1000 / (TOKENS / 1000), 4),
         "illustrative_tariff_usd_per_kwh": tariff,
         "illustrative_electricity_cost_usd": round(electricity, 2),
-        "electricity_only_usd_per_million_tokens": round(
-            electricity / TOKENS * 1_000_000, 4
-        ),
+        "electricity_only_usd_per_million_tokens": round(electricity / TOKENS * 1_000_000, 4),
         "published_api_equivalent_usd_range": [low, high],
         "published_api_equivalent_usd_per_million_tokens": [
             round(low / TOKENS * 1_000_000, 4),

@@ -1,0 +1,28 @@
+{
+  "artifact_kind": "independent_offline_analysis_not_SIGMA_research",
+  "created_utc_date": "2026-10-31",
+  "provider_calls": 0,
+  "provider_cost_usd": 0,
+  "compiler": "Tectonic 0.17.0",
+  "evidence_source": "checked-in published-source notes and hypothetical scenario calculations; no saved Investigator/Skeptic session",
+  "paired_versions": {
+    "standard": {
+      "source": "paper-standard.tex",
+      "pdf": "paper-standard.pdf",
+      "pages": 5,
+      "diagram_setting": false,
+      "sha256": "fdf6ead5c943ccd7d3ce4f74b7c7534a5d1f7b95b82d134cc615089dce56fece"
+    },
+    "diagrams": {
+      "source": "paper-diagrams.tex",
+      "pdf": "paper-diagrams.pdf",
+      "pages": 6,
+      "diagram_setting": true,
+      "sha256": "50c75516120d84202b1862aae0ddc7691892713bdb345dd53b47e22d17ce77eb"
+    }
+  },
+  "shared_body": {
+    "source": "paper_body.tex",
+    "sha256": "121491fbc010a34790a3f497dc7f57dfc7e8e0cdb64c3807792b8cb2d6d0481d"
+  }
+}

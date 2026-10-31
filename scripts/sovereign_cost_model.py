@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
 """Offline, assumption-explicit cost/quality analysis for sovereign AI routing.
 
 This calculator is NOT a policy enforcement engine or an empirical result.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,9 +20,7 @@ def number(value: Any, name: str, *, max_value: float | None = None) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ScenarioError(f"{name}: expected a number")
     result = float(value)
-    if not math.isfinite(result) or result < 0 or (
-        max_value is not None and result > max_value
-    ):
+    if not math.isfinite(result) or result < 0 or (max_value is not None and result > max_value):
         raise ScenarioError(f"{name}: nonfinite, negative, or above bound")
     return result
 
@@ -57,9 +55,7 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
     researchers = number(data.get("active_researchers"), "active_researchers")
     if researchers == 0:
         raise ScenarioError("active_researchers must be positive")
-    routes, workloads, plans = (
-        data.get("routes"), data.get("workloads"), data.get("plans")
-    )
+    routes, workloads, plans = (data.get("routes"), data.get("workloads"), data.get("plans"))
     if not isinstance(routes, dict) or not routes:
         raise ScenarioError("nonempty routes object required")
     if not isinstance(workloads, list) or not workloads:
@@ -80,8 +76,7 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(unit, str) or not unit:
             raise ScenarioError("invalid capacity unit name")
         units[route_name] = unit
-        for key in ("input_usd_per_million", "output_usd_per_million",
-                    "variable_usd_per_task"):
+        for key in ("input_usd_per_million", "output_usd_per_million", "variable_usd_per_task"):
             number(route.get(key), f"{route_name}.{key}")
         for key in ("cached_input_usd_per_million", "variable_usd_per_capacity_unit"):
             if key in route:
@@ -94,8 +89,12 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
         name = work["name"]
         if name in by_name:
             raise ScenarioError(f"duplicate workload {name}")
-        for key in ("monthly_tasks", "input_tokens_per_attempt", "output_tokens_per_attempt",
-                    "charged_attempts_per_task"):
+        for key in (
+            "monthly_tasks",
+            "input_tokens_per_attempt",
+            "output_tokens_per_attempt",
+            "charged_attempts_per_task",
+        ):
             number(work.get(key), f"{name}.{key}")
         cached = number(work.get("cached_input_tokens_per_attempt", 0), f"{name}.cached")
         if cached > work["input_tokens_per_attempt"]:
@@ -139,8 +138,9 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
             raise ScenarioError(f"{name}: invalid allocations")
         overhead, sunk_overhead = costs(plan, f"plan.{name}")
         cap = number(plan.get("external_spend_cap_usd"), f"{name}.external_cap")
-        min_coverage = number(plan.get("minimum_served_fraction", 0),
-                              f"{name}.minimum_served_fraction", max_value=1)
+        min_coverage = number(
+            plan.get("minimum_served_fraction", 0), f"{name}.minimum_served_fraction", max_value=1
+        )
         fixed = overhead + sum(fixed_by_route[r][0] for r in enabled)
         sunk = sunk_overhead + sum(fixed_by_route[r][1] for r in enabled)
         usage = {r: 0.0 for r in enabled}
@@ -170,21 +170,23 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
                 cached_tokens = work.get("cached_input_tokens_per_attempt", 0)
                 per_call = (
                     (input_tokens - cached_tokens) * route["input_usd_per_million"]
-                    + cached_tokens * route.get("cached_input_usd_per_million",
-                                                 route["input_usd_per_million"])
+                    + cached_tokens
+                    * route.get("cached_input_usd_per_million", route["input_usd_per_million"])
                     + work["output_tokens_per_attempt"] * route["output_usd_per_million"]
                 ) / 1_000_000
-                extra = (
-                    route["variable_usd_per_task"]
-                    + unit_per * route.get("variable_usd_per_capacity_unit", 0)
+                extra = route["variable_usd_per_task"] + unit_per * route.get(
+                    "variable_usd_per_capacity_unit", 0
                 )
                 charge = routed * (per_call * work["charged_attempts_per_task"] + extra)
                 variable += charge
                 if route_name in external:
                     billed += charge
                     billed_max += routed * (
-                        per_call * work.get("max_charged_attempts_per_task",
-                                            work["charged_attempts_per_task"]) + extra
+                        per_call
+                        * work.get(
+                            "max_charged_attempts_per_task", work["charged_attempts_per_task"]
+                        )
+                        + extra
                     )
 
         for route_name, used in usage.items():
@@ -196,37 +198,36 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
         if billed > cap + 1e-8:
             violations.append(f"external budget: {billed:.2f} USD exceeds {cap:.2f} USD")
         if demand and served / demand + 1e-9 < min_coverage:
-            violations.append(
-                f"coverage: {served/demand:.3f} below minimum {min_coverage:.3f}"
-            )
+            violations.append(f"coverage: {served / demand:.3f} below minimum {min_coverage:.3f}")
         full = fixed + variable
         incremental = full - sunk
-        results.append({
-            "name": name,
-            "feasible": not violations,
-            "constraint_violations": violations,
-            "monthly_demand_tasks": demand,
-            "expected_served_tasks": round(served, 4),
-            "expected_unserved_tasks": round(demand - served, 4),
-            "expected_successful_useful_tasks": round(successful, 4),
-            "full_monthly_usd": round(full, 2),
-            "incremental_monthly_usd": round(incremental, 2),
-            "sunk_monthly_usd": round(sunk, 2),
-            "external_billed_usd": round(billed, 4),
-            "external_max_attempts_usd": round(billed_max, 4),
-            "external_budget_tail_risk": billed_max > cap + 1e-8,
-            "full_usd_per_success": round(full / successful, 4) if successful else None,
-            "incremental_usd_per_success": (
-                round(incremental / successful, 4) if successful else None
-            ),
-            "full_usd_per_active_researcher": round(full / researchers, 4),
-            "route_utilization": {
-                r: round(usage[r] / capacity[r], 4) if capacity[r] else None
-                for r in enabled
-            },
-            "route_capacity_units_used": {r: round(usage[r], 4) for r in enabled},
-            "route_capacity_unit_names": {r: units[r] for r in enabled},
-        })
+        results.append(
+            {
+                "name": name,
+                "feasible": not violations,
+                "constraint_violations": violations,
+                "monthly_demand_tasks": demand,
+                "expected_served_tasks": round(served, 4),
+                "expected_unserved_tasks": round(demand - served, 4),
+                "expected_successful_useful_tasks": round(successful, 4),
+                "full_monthly_usd": round(full, 2),
+                "incremental_monthly_usd": round(incremental, 2),
+                "sunk_monthly_usd": round(sunk, 2),
+                "external_billed_usd": round(billed, 4),
+                "external_max_attempts_usd": round(billed_max, 4),
+                "external_budget_tail_risk": billed_max > cap + 1e-8,
+                "full_usd_per_success": round(full / successful, 4) if successful else None,
+                "incremental_usd_per_success": (
+                    round(incremental / successful, 4) if successful else None
+                ),
+                "full_usd_per_active_researcher": round(full / researchers, 4),
+                "route_utilization": {
+                    r: round(usage[r] / capacity[r], 4) if capacity[r] else None for r in enabled
+                },
+                "route_capacity_units_used": {r: round(usage[r], 4) for r in enabled},
+                "route_capacity_unit_names": {r: units[r] for r in enabled},
+            }
+        )
 
     return {
         "provenance": provenance,

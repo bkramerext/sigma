@@ -113,6 +113,8 @@ def run_tooling(command: str) -> int:
                 "/tmp/sigma-increment15-offline-pairs.json",
             ],
             [*python, "python", "tests/papers.py"],
+            [*python, "python", "tests/sovereign_cost_model.py"],
+            [*python, "python", "tests/mindrouter_empirical_envelope.py"],
             [*python, "python", "tests/text_views.py"],
             [*python, "python", "tests/strategies.py"],
             [*python, "python", "tests/strategy_changes.py"],

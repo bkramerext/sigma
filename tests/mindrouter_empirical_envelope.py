@@ -1,8 +1,8 @@
 """Deterministic checks for source-derived, explicitly conditional MindRouter bounds."""
+
 from __future__ import annotations
 
 import importlib.util
-import math
 import unittest
 from pathlib import Path
 
@@ -70,9 +70,9 @@ class MindRouterEnvelopeTests(unittest.TestCase):
     def test_nonfinite_or_negative_inputs_rejected(self):
         for value in (float("nan"), float("inf"), -1, True):
             with self.subTest(value=value):
-                with self.assertRaises(ValueError):
+                with self.assertRaises((TypeError, ValueError)):
                     model.derive(electricity_usd_per_kwh=value)
-                with self.assertRaises(ValueError):
+                with self.assertRaises((TypeError, ValueError)):
                     model.derive(local_to_api_task_success_ratio=value)
 
 
