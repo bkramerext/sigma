@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -221,13 +222,33 @@ def _sample_papers(identifier: str) -> dict[str, tuple[dict[str, Any], bytes]]:
             or record.get("paper_id") != paper_id
             or record.get("project_id") != _SAMPLE_PROJECT_ID
             or not isinstance(record.get("tex_source"), str)
-            or not pdf.startswith(b"%PDF-")
+            or not record["tex_source"].strip()
             or record.get("pdf_size_bytes") != len(pdf)
             or record.get("pdf_sha256") != hashlib.sha256(pdf).hexdigest()
         ):
             raise ProjectError("Sample paper provenance is invalid.")
+        _validate_pdf_bytes(pdf)
         papers[paper_id] = (record, pdf)
     return papers
+
+
+def _validate_pdf_bytes(pdf: bytes) -> None:
+    """Require a parseable PDF with at least one page, not only a magic header."""
+    if len(pdf) > 12 * 1024 * 1024:
+        raise ProjectError("Sample paper PDF exceeds its safe storage limit.")
+    try:
+        import pypdfium2
+
+        document = pypdfium2.PdfDocument(pdf)
+        try:
+            if len(document) < 1:
+                raise ProjectError("Sample paper PDF contains no pages.")
+        finally:
+            document.close()
+    except ProjectError:
+        raise
+    except (ValueError, RuntimeError, TypeError) as exc:
+        raise ProjectError("Sample paper PDF is invalid or unreadable.") from exc
 
 
 def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any], dict[str, bytes]]:
@@ -403,11 +424,12 @@ def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any], dict[s
                 or paper.get("paper_id") != identifier
                 or paper.get("project_id") != source_id
                 or not isinstance(paper.get("tex_source"), str)
-                or not pdf.startswith(b"%PDF-")
+                or not paper["tex_source"].strip()
                 or paper.get("pdf_size_bytes") != len(pdf)
                 or paper.get("pdf_sha256") != hashlib.sha256(pdf).hexdigest()
             ):
                 raise ProjectError("Exported paper identity, TeX, or PDF provenance is invalid.")
+            _validate_pdf_bytes(pdf)
             clean_paper = _sanitize(paper, source_id)
             clean_papers[f"{identifier}.json"] = (
                 json.dumps(clean_paper, ensure_ascii=False, separators=(",", ":")) + "\n"
@@ -487,14 +509,15 @@ def make_sample(export_file: str | Path, name: str) -> Path:
                 finally:
                     staged.unlink(missing_ok=True)
         return destination
-    except OSError as exc:
-        for filename in (STATE, SAMPLE_EVIDENCE):
-            (destination / filename).unlink(missing_ok=True)
-        try:
-            destination.rmdir()
-        except OSError:
-            pass
-        raise ProjectError(f"Cannot save sample: {exc}") from exc
+    except BaseException as exc:
+        # The destination was exclusively created above for this operation.
+        # Remove the complete partial tree, including a paper directory, so a
+        # failed copy never appears later as a valid catalog sample.
+        if not destination.is_symlink() and destination.parent == SAMPLES:
+            shutil.rmtree(destination, ignore_errors=True)
+        if isinstance(exc, OSError):
+            raise ProjectError(f"Cannot save sample: {exc}") from exc
+        raise
 
 
 def _rebind_history(

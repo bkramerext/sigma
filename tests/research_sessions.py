@@ -3593,7 +3593,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
         "model_calls": 2,
         "session_duration_minutes": 10,
         "output_tokens_per_call": 700,
-        "maximum_estimated_cost_usd": 0.55,
+        "maximum_estimated_cost_usd": 10.0,
         "maximum_input_tokens_per_session": 200_000,
     }
     assert research_sessions.save_limits(str(path), limits) == limits
@@ -3623,7 +3623,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
 
     assert finished["call_limit"] == 2 and finished["cycle_limit"] == 1
     assert finished["duration_limit_minutes"] == 10 and finished["output_token_limit"] == 700
-    assert finished["maximum_estimated_cost_usd"] == 0.55
+    assert finished["maximum_estimated_cost_usd"] == 10.0
     assert finished["cost_status"] == "available" and finished["estimated_cost_usd"] > 0
     assert all(step["token_usage"]["input_tokens"] == 120 for step in finished["steps"])
     for step in finished["steps"]:
@@ -7403,7 +7403,7 @@ async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
         **research_sessions.DEFAULT_LIMITS,
         "model_calls": 6,
         "research_rounds": 3,
-        "maximum_estimated_cost_usd": 1.0,
+        "maximum_estimated_cost_usd": 10.0,
         "maximum_input_tokens_per_session": 600_000,
     }
     dispatches = []

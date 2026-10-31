@@ -13,6 +13,11 @@ from sigma.research_budget import (
     settle_after_response,
     totals,
 )
+from sigma.research_sessions import (
+    MODEL_OUTPUT_LIMITS,
+    TOKEN_PRICES_PER_MILLION,
+    _estimate_cost,
+)
 
 
 def ledger(
@@ -54,6 +59,89 @@ class Increment22BudgetTests(unittest.TestCase):
         self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 7000)
         with self.assertRaisesRegex(BudgetExceeded, "cost limit"):
             reserve_before_dispatch(budget, call_id="call-2", request_body=b"x")
+
+    def test_model_max_output_is_reserved_under_worst_case_pricing(self):
+        self.assertEqual(
+            MODEL_OUTPUT_LIMITS,
+            {
+                "gpt-6-astra": 128_000,
+                "gpt-6-sol": 128_000,
+                "gpt-6.1-sol": 128_000,
+                "gpt-6.1-terra": 128_000,
+                "gpt-6-luna": 128_000,
+            },
+        )
+        model = "gpt-6-astra"
+        output_bound = MODEL_OUTPUT_LIMITS[model]
+        prices = TOKEN_PRICES_PER_MILLION[model]
+        request = b"x" * 4000
+        input_bound = len(request) + 8192
+        worst_case = (
+            input_bound * prices["cache_write"] + output_bound * prices["output"]
+        ) / 1_000_000
+        budget = new_ledger(
+            call_limit=1,
+            input_token_limit=200_000,
+            output_tokens_per_call=4000,
+            cost_limit_usd=worst_case,
+            input_price_per_million=prices["cache_write"],
+            output_price_per_million=prices["output"],
+        )
+        reservation = reserve_before_dispatch(
+            budget,
+            call_id="max-output",
+            request_body=request,
+            output_token_reservation=output_bound,
+        )
+        self.assertEqual(reservation["output_token_reservation"], 128_000)
+        self.assertAlmostEqual(reservation["cost_bound_usd"], worst_case)
+        # Reasoning tokens are part of output usage and are charged once with
+        # the same settled usage; the unused reservation is released.
+        settle_after_response(
+            budget, call_id="max-output", input_tokens=4000, output_tokens=128_000
+        )
+        settled = totals(budget)["cost_usd_used_or_reserved"]
+        actual_cost = (4000 * prices["cache_write"] + 128_000 * prices["output"]) / 1_000_000
+        self.assertAlmostEqual(settled, actual_cost)
+        self.assertLessEqual(settled, worst_case)
+        self.assertEqual(budget["calls"][0]["output_tokens"], 128_000)
+
+        refused = new_ledger(
+            call_limit=1,
+            input_token_limit=200_000,
+            output_tokens_per_call=4000,
+            cost_limit_usd=worst_case - 0.001,
+            input_price_per_million=prices["cache_write"],
+            output_price_per_million=prices["output"],
+        )
+        with self.assertRaisesRegex(BudgetExceeded, "cost limit"):
+            reserve_before_dispatch(
+                refused,
+                call_id="insufficient-cap",
+                request_body=request,
+                output_token_reservation=output_bound,
+            )
+        self.assertEqual(refused["calls"], [])
+
+    def test_long_context_settlement_uses_published_surcharges(self):
+        model = "gpt-6.1-sol"
+        prices = TOKEN_PRICES_PER_MILLION[model]
+        input_tokens = 272_001
+        cached_tokens = 100_000
+        output_tokens = 128_000
+        usage: dict[str, int | None] = {
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached_tokens,
+            "output_tokens": output_tokens,
+        }
+        cost = _estimate_cost(model, usage)
+        assert cost is not None
+        expected = (
+            (input_tokens - cached_tokens) * prices["input"] * 2
+            + cached_tokens * prices["cached_input"] * 2
+            + output_tokens * prices["output"] * 1.5
+        ) / 1_000_000
+        self.assertAlmostEqual(cost, expected)
 
     def test_input_cap_is_checked_before_any_dispatch(self):
         budget = ledger(input_tokens=9191)

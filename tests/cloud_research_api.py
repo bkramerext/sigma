@@ -74,7 +74,7 @@ def main() -> None:
                 cloud_workspaces.reset(workspace_token)
             config = {
                 "available": True,
-                "model": "gpt-6.1-sol",
+                "model": "gpt-6-luna",
                 "reasoning_effort": "high",
             }
             investigator = {
@@ -153,6 +153,32 @@ def main() -> None:
                 assert created.status_code == 201, created.text
                 path = created.json()["path"]
                 project_id = created.json()["project"]["id"]
+                project_document = client.get(
+                    "/api/projects/inspect", params={"path": path}
+                ).json()["project"]
+                settings_keys = (
+                    "title",
+                    "problem",
+                    "investigation_type",
+                    "ai_model",
+                    "reasoning_effort",
+                    "difficulty",
+                    "show_advanced_outcome_details",
+                )
+                expected_project_settings = {key: project_document[key] for key in settings_keys}
+                selected_project_settings = {
+                    **expected_project_settings,
+                    "ai_model": "gpt-6-luna",
+                }
+                model_update = client.post(
+                    "/api/projects/update",
+                    json={
+                        "path": path,
+                        **selected_project_settings,
+                        "expected": expected_project_settings,
+                    },
+                )
+                assert model_update.status_code == 200, model_update.text
                 strategy_response = client.post(
                     "/api/projects/strategies",
                     json={
@@ -318,7 +344,7 @@ def main() -> None:
                 # credential and durable ledger as research sessions.
                 response_body = {
                     "status": "completed",
-                    "model": "gpt-6.1-sol",
+                    "model": "gpt-6-luna",
                     "usage": {
                         "input_tokens": 120,
                         "output_tokens": 40,
@@ -365,7 +391,13 @@ def main() -> None:
                     if request.url.path == "/v1/models":
                         return httpx.Response(
                             200,
-                            json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+                            json={
+                                "object": "list",
+                                "data": [
+                                    {"id": "gpt-6-luna"},
+                                    {"id": "gpt-6.1-sol"},
+                                ],
+                            },
                         )
                     if provider_interrupt:
                         raise httpx.ReadTimeout(
@@ -379,7 +411,7 @@ def main() -> None:
                             200,
                             json={
                                 "status": "completed",
-                                "model": "gpt-6.1-sol",
+                                "model": "gpt-6-luna",
                                 "usage": {},
                                 "output": [{"type": "message", "content": "malformed"}],
                             },
@@ -459,7 +491,7 @@ def main() -> None:
                             200,
                             json={
                                 "status": "completed",
-                                "model": "gpt-6.1-sol",
+                                "model": "gpt-6-luna",
                                 "usage": {
                                     "input_tokens": 180,
                                     "output_tokens": 120,
@@ -481,7 +513,7 @@ def main() -> None:
                             200,
                             json={
                                 "status": "completed",
-                                "model": "gpt-6.1-sol",
+                                "model": "gpt-6-luna",
                                 "usage": {
                                     "input_tokens": 80,
                                     "output_tokens": 20,
@@ -556,7 +588,7 @@ def main() -> None:
                 ).json()
                 response_body = {
                     "status": "completed",
-                    "model": "gpt-6.1-sol",
+                    "model": "gpt-6-luna",
                     "usage": {
                         "input_tokens": 120,
                         "output_tokens": 40,
@@ -644,7 +676,7 @@ def main() -> None:
                         200,
                         json={
                             "status": "completed",
-                            "model": "gpt-6.1-sol",
+                            "model": "gpt-6-luna",
                             "usage": {
                                 "input_tokens": 180,
                                 "output_tokens": 120,
@@ -699,6 +731,20 @@ def main() -> None:
                 assert paper_project.status_code == 201, paper_project.text
                 paper_path = paper_project.json()["path"]
                 paper_project_id = paper_project.json()["project"]["id"]
+                paper_document = client.get(
+                    "/api/projects/inspect", params={"path": paper_path}
+                ).json()["project"]
+                paper_expected = {key: paper_document[key] for key in settings_keys}
+                paper_update = client.post(
+                    "/api/projects/update",
+                    json={
+                        "path": paper_path,
+                        **paper_expected,
+                        "ai_model": "gpt-6-luna",
+                        "expected": paper_expected,
+                    },
+                )
+                assert paper_update.status_code == 200, paper_update.text
                 package, _ = papers._snapshot(paper_path)
                 evidence_ref = package["sources"][0]["id"]
                 # Fast paper preparation reads source IDs directly instead of
@@ -741,7 +787,7 @@ def main() -> None:
                 }
                 response_body = {
                     "status": "completed",
-                    "model": "gpt-6.1-sol",
+                    "model": "gpt-6-luna",
                     "usage": {
                         "input_tokens": 180,
                         "output_tokens": 120,
@@ -855,7 +901,7 @@ def main() -> None:
 
                 response_body = {
                     "status": "completed",
-                    "model": "gpt-6.1-sol",
+                    "model": "gpt-6-luna",
                     "usage": {
                         "input_tokens": 120,
                         "output_tokens": 40,
@@ -1053,7 +1099,7 @@ def main() -> None:
                     (session_id,),
                 )
                 db.execute(
-                    "UPDATE calls SET amount_usd=0.90 WHERE call_id=(SELECT c.call_id FROM calls c JOIN jobs j USING(session_id) WHERE j.session_id=? LIMIT 1)",
+                    "UPDATE calls SET amount_usd=0.999 WHERE call_id=(SELECT c.call_id FROM calls c JOIN jobs j USING(session_id) WHERE j.session_id=? LIMIT 1)",
                     (session_id,),
                 )
                 db.close()

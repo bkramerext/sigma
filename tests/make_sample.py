@@ -1,6 +1,8 @@
 """End-to-end conversion of an exported project into an editable Samples entry."""
 
 import asyncio
+import base64
+import copy
 import hashlib
 import json
 import shutil
@@ -11,6 +13,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import httpx
+import pypdfium2
 from research_sessions import (
     REAL_CLIENT,
     execution_tool_fixture,
@@ -200,7 +203,13 @@ async def main() -> None:
         ):
             source, success_id, failed_id, run_id = await create_source_project(projects_root)
             paper_id = uuid4().hex
-            paper_pdf = b"%PDF-1.4\nfixture reusable paper\n%%EOF\n"
+            tex_fixture = Path("tests/fixtures/sigma-valid-sample-paper.tex").read_text(
+                encoding="utf-8"
+            )
+            paper_pdf = Path("tests/fixtures/sigma-valid-sample-paper.pdf").read_bytes()
+            pdf_document = pypdfium2.PdfDocument(paper_pdf)
+            assert len(pdf_document) == 1
+            pdf_document.close()
             paper_record = {
                 "paper_id": paper_id,
                 "project_id": inspect_project(source).project.id,
@@ -209,7 +218,8 @@ async def main() -> None:
                 "validation_warnings": [],
                 "generation": {"provider_calls": 1},
                 "draft": {"title": "Reusable fixture paper"},
-                "tex_source": r"\\documentclass{article}\\begin{document}Evidence.\\end{document}",
+                "research_session_id": success_id,
+                "tex_source": tex_fixture,
                 "pdf_sha256": hashlib.sha256(paper_pdf).hexdigest(),
                 "pdf_size_bytes": len(paper_pdf),
             }
@@ -228,6 +238,111 @@ async def main() -> None:
             copied_paper = papers.get_paper(paper_copy.path, paper_id)
             assert copied_paper["project_id"] == paper_copy.project.id
             assert copied_paper["pdf_sha256"] == paper_record["pdf_sha256"]
+            assert papers.paper_tex(paper_copy.path, paper_id) == tex_fixture
+            copied_session_ids = {
+                json.loads(item.read_text(encoding="utf-8"))["id"]
+                for item in (Path(paper_copy.path) / "research-sessions").glob("*.json")
+            }
+            assert len(copied_session_ids) == 2
+            assert not copied_session_ids.intersection({success_id, failed_id})
+            assert copied_paper["research_session_id"] in copied_session_ids
+            second_copy = samples.open_sample_project("t30-paper")
+            second_session_ids = {
+                json.loads(item.read_text(encoding="utf-8"))["id"]
+                for item in (Path(second_copy.path) / "research-sessions").glob("*.json")
+            }
+            assert len(second_session_ids) == 2
+            assert copied_session_ids.isdisjoint(second_session_ids)
+
+            # Reject malicious and incomplete bundle members before publishing
+            # anything into the existing sample catalog.
+            complete_bundle_value = json.loads(complete_bundle)
+            catalog_before_rejections = snapshot_tree(catalog)
+
+            def write_bundle(name: str, value: dict) -> Path:
+                target = root / f"{name}.json"
+                target.write_text(json.dumps(value), encoding="utf-8")
+                return target
+
+            def mutate_bundle(mutation) -> dict:
+                changed = copy.deepcopy(complete_bundle_value)
+                mutation(changed["files"])
+                return changed
+
+            incomplete = mutate_bundle(lambda files: files.pop(f"artifacts/papers/{paper_id}.pdf"))
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("incomplete", incomplete), "t30-incomplete"
+                ),
+                "incomplete",
+            )
+            traversal = mutate_bundle(lambda files: files.__setitem__("../escape", "unsafe"))
+            rejects(
+                lambda: samples.make_sample(write_bundle("traversal", traversal), "t30-traversal"),
+                "valid complete",
+            )
+            invalid_pdf = b"%PDF-1.4\nnot a parseable PDF\n%%EOF\n"
+
+            def install_pdf(files: dict, data: bytes) -> None:
+                files[f"artifacts/papers/{paper_id}.pdf"] = {
+                    "$sigma_bundle_encoding": "base64",
+                    "data": base64.b64encode(data).decode("ascii"),
+                }
+                metadata = files[f"artifacts/papers/{paper_id}.json"]
+                metadata["pdf_size_bytes"] = len(data)
+                metadata["pdf_sha256"] = hashlib.sha256(data).hexdigest()
+
+            invalid_pdf_bundle = mutate_bundle(lambda files: install_pdf(files, invalid_pdf))
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("invalid-pdf", invalid_pdf_bundle), "t30-invalid-pdf"
+                ),
+                "PDF is invalid",
+            )
+            wrong_identity = mutate_bundle(
+                lambda files: files[f"artifacts/papers/{paper_id}.json"].__setitem__(
+                    "project_id", "f" * 32
+                )
+            )
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("wrong-owner", wrong_identity), "t30-wrong-owner"
+                ),
+                "provenance",
+            )
+            oversized = mutate_bundle(
+                lambda files: install_pdf(files, b"x" * (12 * 1024 * 1024 + 1))
+            )
+            rejects(
+                lambda: samples.make_sample(write_bundle("oversized", oversized), "t30-oversized"),
+                "safe storage limit",
+            )
+            assert snapshot_tree(catalog) == catalog_before_rejections
+
+            with TemporaryDirectory(prefix="sigma-sample-paper-link-") as outside:
+                target = Path(outside) / "target.json"
+                target.write_text("{}", encoding="utf-8")
+                paper_storage = catalog / "t30-paper" / samples.SAMPLE_PAPERS
+                link = paper_storage / f"{uuid4().hex}.json"
+                link.symlink_to(target)
+                rejects(lambda: samples._sample_papers("t30-paper"), "unsafe")
+                link.unlink()
+            assert snapshot_tree(catalog) == catalog_before_rejections
+
+            real_stage = samples._stage
+
+            def fail_during_paper_copy(directory: Path, contents: bytes) -> Path:
+                if directory.name == samples.SAMPLE_PAPERS:
+                    raise OSError("injected failure during paper copy")
+                return real_stage(directory, contents)
+
+            with patch.object(samples, "_stage", side_effect=fail_during_paper_copy):
+                rejects(
+                    lambda: samples.make_sample(complete_file, "t30-rollback"),
+                    "Cannot save sample",
+                )
+            assert not (catalog / "t30-rollback").exists()
+            assert snapshot_tree(catalog) == catalog_before_rejections
             export = export_project_view(str(source))
             export_file = root / "exported-project.json"
             export_file.write_text(json.dumps(export, ensure_ascii=False), encoding="utf-8")
@@ -367,7 +482,7 @@ async def main() -> None:
 
             opened = samples.open_sample_project("t30-exported")
             assert opened.project.id != export["project"]["id"]
-            assert opened.project.title.endswith("v2")
+            assert opened.project.title.endswith("v3")
             assert len(opened.project.strategies) == 2
             copied_sessions = research_sessions.list_sessions(opened.path)
             assert len(copied_sessions) == 2

@@ -37,8 +37,8 @@ def main(mode: str = "api_key") -> None:
             "SIGMA_CLOUD_SPONSOR_EMAIL": "sponsor@example.test",
             "SIGMA_CLOUD_CHATGPT_AUTH_HOME": str(root / "sponsor"),
             "OPENAI_API_KEY": "local-key-must-not-be-used",
-            "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
-            "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
+            "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+            "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "5.00",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
             "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
             "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
@@ -560,9 +560,9 @@ print("PASS fresh-process research, Outcome and report recovery")
                 )
                 assert budget.status_code == 200, budget.text
                 assert budget.headers["cache-control"] == "no-store"
-                assert budget.json()["allowance_usd"] == 0.25
+                assert budget.json()["allowance_usd"] == 5.0
                 assert budget.json()["estimated_usage_usd"] > 0
-                assert budget.json()["remaining_usd"] < 2.0
+                assert budget.json()["remaining_usd"] < 5.0
                 client.headers.update(
                     {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
                 )
@@ -701,7 +701,7 @@ print("PASS fresh-process research, Outcome and report recovery")
                 )
                 db = cloud_research._connect()
                 db.execute(
-                    "UPDATE calls SET amount_usd=0.25 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    "UPDATE calls SET amount_usd=5.00 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
                     (session_id,),
                 )
                 db.close()

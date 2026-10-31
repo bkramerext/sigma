@@ -200,9 +200,14 @@ def main() -> None:
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(
                     settings.get_by_text(
-                        "Hosted research may apply service-side caps to saved session limits."
+                        "Hosted sponsorship is governed by account allowance; the saved project duration applies."
                     )
                 ).to_be_visible()
+                duration = settings.get_by_label("Maximum session duration", exact=True)
+                expect(duration).to_have_value("1")
+                expect(
+                    settings.get_by_label("Maximum session duration unit", exact=True)
+                ).to_have_value("hours")
                 calls = settings.get_by_label("Maximum agent turns", exact=True)
                 expect(calls).to_have_value("12")
                 calls.fill("12")
@@ -222,7 +227,9 @@ def main() -> None:
                 assert saved["model_calls"] == 12, saved
                 assert saved["maximum_estimated_cost_usd"] is None, saved
                 page.reload(wait_until="networkidle")
-                page.get_by_role("button", name="Project settings", exact=True).click()
+                settings_button = page.get_by_role("button", name="Project settings", exact=True)
+                settings_button.focus()
+                settings_button.press("Enter")
                 settings = page.get_by_role("dialog", name="Project Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(settings.get_by_label("Maximum agent turns", exact=True)).to_have_value("12")
@@ -242,7 +249,9 @@ def main() -> None:
                 )
                 assert saved["maximum_estimated_cost_usd"] == 0.5, saved
                 page.reload(wait_until="networkidle")
-                page.get_by_role("button", name="Project settings", exact=True).click()
+                settings_button = page.get_by_role("button", name="Project settings", exact=True)
+                settings_button.focus()
+                settings_button.press("Enter")
                 settings = page.get_by_role("dialog", name="Project Settings")
                 settings.get_by_role("tab", name="Limits", exact=True).click()
                 expect(
