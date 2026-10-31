@@ -2874,9 +2874,10 @@ def main() -> None:
                     assert worker_snapshot["events"][-1]["kind"] == "interrupted"
                     assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
 
-                    # A queued job that never claims capacity must terminate
-                    # with its strategy branches ended, not left "queued" in
-                    # the saved playback after the session deadline.
+                    # A legacy queued job that cannot claim a running slot
+                    # is paused immediately, without waiting for its deadline.
+                    # This is recovery behavior; new capacity-full requests
+                    # are refused before a session is created.
                     expiry_project = initialize_project(
                         a.path / "queue-expiry.sigma", "Queue expiry", "Check expiry"
                     )
@@ -2921,10 +2922,10 @@ def main() -> None:
                             is False
                         )
                     played = research_sessions._read(expiry_project.path, expired["id"])
-                    assert played["status"] == "ended"
-                    assert played["strategy_runs"][0]["status"] == "ended"
-                    assert played["events"][-1]["kind"] == "queue.expired"
-                    assert cloud_research.job_status(expired["id"]) == "terminal"
+                    assert played["status"] == "paused"
+                    assert played["strategy_runs"][0]["status"] == "paused"
+                    assert played["events"][-1]["kind"] == "interrupted"
+                    assert cloud_research.job_status(expired["id"]) == "paused"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
