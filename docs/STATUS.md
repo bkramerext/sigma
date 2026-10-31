@@ -8419,7 +8419,7 @@ current SHA, exact evidence, screenshots, and limitations. PR remains open and
 unmerged.
 
 
-## Issue #394 sample and #393 optional paper diagrams — initial Blue progress (2026-10-31)
+## Issue #394 sample and #393 optional paper diagrams — first-branch checkpoint (2026-10-31)
 
 On branch `blue/issue-393-394-sovereign-diagrams` from `main` at `2d0a564c`, the new schema-v8 **Sovereign AI Federation** stock sample is implemented with three active strategies. Its question distinguishes MindRouter's documented on-campus gateway from proposed federation/frontier routing and frames ownership-cost, cost-per-successful-task, fairness, policy and reliability as research questions. The cited MindRouter documentation and PEARC'26 paper were reviewed 2026-10-31. SIGMA sample decode, independent copies and complete project-bundle export passed.
 
@@ -8428,3 +8428,11 @@ The paper dialog has a default-off, project-persisted **Include diagrams (experi
 Targeted `tests/papers.py` passed, including malicious-label escaping, option-specific strict schemas and real local Tectonic compilation. `tests/project_reports.py`, Ruff on changed Python modules, and frontend `npm run typecheck` passed. A real-Chrome browser check is added, but its attempt did not complete: the Samples view remained at “Loading sample projects…” despite the fixture endpoint returning HTTP 200. UI option persistence therefore remains UNVERIFIED in browser. Deterministic sample-copy paper artifacts are under `docs/evaluations/issue_393_394/mock_fixture/`; they explicitly state that they are not independently validated research.
 
 This is an interim engineering checkpoint only. No Investigator/Skeptic research has been run; conventional/diagram paper comparison, fallback/recovery edge cases beyond existing tests, final browser acceptance, full `./sigma test`, PR creation and coordinator review remain outstanding.
+
+## Canonical experiment branch migration and Phase 1 fixture pair (2026-10-31)
+
+The Round 11 sample/diagram implementation was cherry-picked, not duplicated, onto canonical `blue/sovereign-ai-federation` (PR #395): code commit `b22d5d57`, artifact-manifest commit `9a736b39`. After migration, `uv run --locked ruff check src/sigma/papers.py src/sigma/api.py tests/papers.py browser_checks/issue393_diagram_option.py`, `uv run --locked python tests/papers.py`, `uv run --locked python tests/project_reports.py`, and frontend `npm run typecheck` passed. The sample was independently copied and exported as the SIGMA project bundle.
+
+The synthetic fixture now has a no-diagram control (`paper-text-only.tex/.pdf`) and a diagram version (`paper.tex/.pdf`) built from the same frozen sample-project snapshot and mock draft. The shared snapshot SHA-256 is `3dcae814d22543d99e4be11f89c0123f8a29d9c7958ca5147f48b7a187c2142e`; exact file hashes are in `docs/evaluations/issue_393_394/mock_fixture/manifest.json`. Both PDFs compile locally with Tectonic. The 3-page diagram paper was rasterized for inspection; page 2's labels, arrows, edge legend, boundary and caption are readable. These are renderer fixtures only, not saved substantive research.
+
+Real-Chrome acceptance initially failed because the test fixture correctly rejected the Vite origin on port 5194. Starting its existing origin-normalization hook with `SIGMA_PAPER_PROGRESS_FIXTURE_ORIGIN=http://127.0.0.1:5194` fixed the fixture setup. `browser_checks/issue393_diagram_option.py` then passed: opening the sample, the paper-dialog option defaulting off, and its project-local preference persisting across reload. No provider request was made. Real Investigator/Skeptic research and live research-paper comparison remain unauthorized and unperformed.

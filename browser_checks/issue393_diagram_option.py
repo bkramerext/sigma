@@ -15,15 +15,39 @@ with sync_playwright() as playwright:
     )
     context = browser.new_context(viewport={"width": 1440, "height": 1000})
     page = context.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on(
+        "response",
+        lambda response: (
+            print(f"API {response.status} {response.url}")
+            if "/api/projects/samples/open" in response.url
+            else None
+        ),
+    )
     page.goto(origin + "/")
     samples = page.get_by_role("tab", name="Samples", exact=True)
     if samples.get_attribute("aria-selected") != "true":
         samples.click()
-    page.locator("details.sample-type-group").filter(has_text="Computer Science").locator("summary").click(timeout=10_000)
+    page.locator("details.sample-type-group").filter(has_text="Computer Science").locator(
+        "summary"
+    ).click(timeout=10_000)
     button = page.get_by_role("button", name="Open Sovereign AI Federation", exact=True)
     expect(button).to_be_visible(timeout=10_000)
     button.click()
-    page.wait_for_url("**/project?*")
+    try:
+        page.wait_for_url("**/project?*", timeout=10_000)
+    except Exception:
+        page.screenshot(path="/tmp/sigma-issue393-open-failure.png", full_page=True)
+        print(
+            "sample-open diagnostic",
+            page.url,
+            "alerts",
+            page.locator('[role="alert"]').all_text_contents(),
+            "page errors",
+            errors,
+        )
+        raise
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     option = dialog.get_by_role("checkbox", name="Include diagrams (experimental)")
