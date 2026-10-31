@@ -4604,7 +4604,15 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   }
   async function addInvitation(item: CloudInvitationRequest) {
     try {
-      await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: null });
+      // An administrator explicitly approving a previously revoked email may
+      // use the matching active domain allowance; never silently remove the
+      // individual revocation on sign-in.
+      const email = item.email.trim().toLowerCase();
+      const domain = email.split('@')[1];
+      const policy = grants.find(grant =>
+        grant.kind === 'domain' && grant.active === 1 && grant.value.toLowerCase() === domain
+      );
+      await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: policy?.allowance_usd ?? null });
       await onUpdateInvitation(item, 'reviewed');
       setMessage(`Added ${item.email} as an authorized member.`);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
