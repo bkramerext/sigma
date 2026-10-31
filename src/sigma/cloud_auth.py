@@ -1943,20 +1943,29 @@ def denied_identity(request: Request):
 
 
 def _notification_admin_recipients(cfg: Config) -> list[str]:
-    """Active admin recipients must have a previously verified Google subject.
+    """Derive active administrators from verified identities and admin grants.
 
-    Resolve from the same authorization logic used for sign-in rather than
-    from the public contact field or an applicant-supplied email.
+    Explicit active administrator email grants are themselves operator
+    authorization; they can receive mail before their first Google sign-in.
+    Never trust an applicant-supplied address.
     """
     with _db(cfg) as db:
         verified = db.execute("SELECT subject,email FROM identities").fetchall()
-        return sorted(
-            {
-                str(row["email"])
-                for row in verified
-                if _authorization_in_db(db, cfg, row["subject"], row["email"]) == "admin"
-            }
+        recipients = {
+            str(row["email"])
+            for row in verified
+            if _authorization_in_db(db, cfg, row["subject"], row["email"]) == "admin"
+        }
+        # An admin grant is an explicit administrator-approved mailbox even
+        # before its first Google sign-in; excluding it would silently miss
+        # a newly added administrator's notifications.
+        recipients.update(
+            str(row["value"])
+            for row in db.execute(
+                "SELECT value FROM grants WHERE kind='email' AND role='admin' AND active=1"
+            )
         )
+        return sorted(recipients)
 
 
 def _deliver_admin_notice(subject: str, body: str) -> None:
