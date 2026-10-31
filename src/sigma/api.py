@@ -808,6 +808,7 @@ async def research_sessions_view(path: str):
     project = inspect_project(path).project
     return {
         "sessions": sessions,
+        "max_concurrent_sessions": research_sessions.get_limits(path)["max_concurrent_sessions"],
         "current_understanding": build_current_understanding(project.id, sessions),
     }
 
