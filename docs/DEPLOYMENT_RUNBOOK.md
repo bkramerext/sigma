@@ -245,3 +245,9 @@ project SSH key entry was preserved and the temporary `ubuntu` mapping removed.
 The SSH troubleshooting command briefly enabled
 `networkmanagement.googleapis.com`; it was disabled immediately and verified
 disabled. This deviation made no persistent API or SSH-access change.
+
+The active host Caddy is version 2.6.2. Its `caddy validate` check passed on the
+candidate maintenance Caddyfile after using the version-compatible unqualified
+`handle_errors` form. Validation warned that the maintenance import glob has no
+matching files while the host snippet directory is still absent; installation
+will create that directory and final validation will be repeated before reload.
