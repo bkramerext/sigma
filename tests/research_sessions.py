@@ -502,6 +502,73 @@ async def test_project_concurrent_session_limit_is_atomic(path: Path):
             research_sessions._tasks.pop(item["id"], None)
 
 
+async def test_distinct_portfolio_sessions_dispatch_simultaneously(root: Path):
+    """Different projects and two sessions in one project must overlap provider I/O."""
+    for same_project in (False, True):
+        scenario = "same-project" if same_project else "distinct-projects"
+        left = root / f"{scenario}-a.sigma"
+        right = left if same_project else root / f"{scenario}-b.sigma"
+        first_view, first_strategy, credential, config = await setup(left)
+        if same_project:
+            second_view, second_strategy = first_view, first_strategy
+        else:
+            second_view, second_strategy, _, _ = await setup(right)
+
+        limits = {
+            **research_sessions.DEFAULT_LIMITS,
+            "research_rounds": 1,
+            "model_calls": 2,
+            "max_concurrent_sessions": 2 if same_project else 1,
+        }
+        research_sessions.save_limits(str(left), limits)
+        if not same_project:
+            research_sessions.save_limits(str(right), limits)
+        running: set[str] = set()
+        both_running = asyncio.Event()
+
+        async def provider(record, role, context, timeout_seconds=None, step_id=None):
+            del context, timeout_seconds
+            assert isinstance(step_id, str)
+            if role == "investigator":
+                running.add(record["id"])
+                if len(running) == 2:
+                    both_running.set()
+                # Serializing all portfolios would deadlock or time out here.
+                await asyncio.wait_for(both_running.wait(), timeout=3)
+                return investigation(1), {"input_tokens": 120, "output_tokens": 90}
+            return skeptic(1, "stop"), {"input_tokens": 120, "output_tokens": 90}
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "_call", new=AsyncMock(side_effect=provider)),
+            patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        ):
+            first, second = await asyncio.gather(
+                research_sessions.start_session(
+                    str(left), first_strategy.id, str(uuid4()),
+                    first_view.project.id, credential["identity"]
+                ),
+                research_sessions.start_session(
+                    str(right), second_strategy.id, str(uuid4()),
+                    second_view.project.id, credential["identity"]
+                ),
+            )
+            assert first["id"] != second["id"]
+            finished = await asyncio.wait_for(
+                asyncio.gather(
+                    wait_for(left, first["id"]),
+                    wait_for(right, second["id"]),
+                ),
+                timeout=8,
+            )
+
+        assert len(running) == 2
+        assert all(item["status"] == "ended" for item in finished)
+        assert all(item["calls_used"] == 2 and len(item["artifacts"]) == 1 for item in finished)
+        assert all(item["tokens_reserved"] == 0 for item in finished)
+
+
 async def test_three_cycles_and_idempotency(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = research_sessions.get_limits(str(path))
@@ -8477,6 +8544,7 @@ def main():
         asyncio.run(
             test_project_concurrent_session_limit_is_atomic(root / "concurrency-limit.sigma")
         )
+        asyncio.run(test_distinct_portfolio_sessions_dispatch_simultaneously(root))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
         asyncio.run(
             test_legacy_worker_aggregates_usage_and_audits_inputs(root / "legacy-worker.sigma")
