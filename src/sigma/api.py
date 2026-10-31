@@ -452,6 +452,7 @@ class PaperGenerateRequest(OpenRequest):
     include_claim_details: bool = False
     include_validation_notes: bool = False
     include_research_excerpts: bool = False
+    # Keep the request name for compatibility; this selects both visual types.
     include_diagrams: bool = True
 
 

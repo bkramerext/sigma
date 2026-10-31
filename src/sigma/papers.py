@@ -303,10 +303,23 @@ class LongSectionDraft(BaseModel):
     tables: list[PaperTable] = Field(default_factory=list, max_length=4)
 
 
+def _without_optional_visuals(draft: PaperDraft) -> PaperDraft:
+    """Remove both generated visual types when the combined preference is off."""
+    return draft.model_copy(
+        update={
+            "diagrams": [],
+            "sections": [section.model_copy(update={"tables": []}) for section in draft.sections],
+        }
+    )
+
+
 def _paper_response_schema(
     model: type[BaseModel], *, include_diagrams: bool = False
 ) -> dict[str, Any]:
     """Turn Pydantic validation schemas into valid strict provider schemas.
+
+    The compatibility-named `include_diagrams` preference gates both diagrams
+    and tables in every paper-output schema.
 
     Pydantic omits defaulted properties from `required`, but Responses strict
     structured output requires every declared object property to be required.
@@ -314,11 +327,34 @@ def _paper_response_schema(
     wire schema. Nested objects and definitions follow the same contract.
     """
     schema = model.model_json_schema()
-    if not include_diagrams and model in {PaperDraft, LongPaperPlan, FastLongPaperPlan}:
-        schema.get("properties", {}).pop("diagrams", None)
-        schema["required"] = [item for item in schema.get("required", []) if item != "diagrams"]
+    if not include_diagrams:
+
+        def omit_visual_properties(node: Any) -> None:
+            if isinstance(node, dict):
+                properties = node.get("properties")
+                if isinstance(properties, dict):
+                    properties.pop("diagrams", None)
+                    properties.pop("tables", None)
+                    required = node.get("required")
+                    if isinstance(required, list):
+                        node["required"] = [
+                            name for name in required if name not in {"diagrams", "tables"}
+                        ]
+                for value in node.values():
+                    omit_visual_properties(value)
+            elif isinstance(node, list):
+                for value in node:
+                    omit_visual_properties(value)
+
+        omit_visual_properties(schema)
         definitions = schema.get("$defs", {})
-        for name in ("PaperDiagram", "DiagramNode", "DiagramEdge", "DiagramBoundary"):
+        for name in (
+            "PaperDiagram",
+            "DiagramNode",
+            "DiagramEdge",
+            "DiagramBoundary",
+            "PaperTable",
+        ):
             definitions.pop(name, None)
 
     def normalize(node: Any) -> None:
@@ -403,6 +439,10 @@ incomplete or unverified, say so plainly while still explaining the supported pr
 clearly and economically; identify the precise gap once rather than repeating the same caveat
 at the end of every section. A mathematical paper is a sequence of definitions, results, and
 justifications, not a verbose narration of the research process."""
+
+VISUAL_AUTHORING_INSTRUCTIONS = """VISUALS: Actively consider both explanatory diagrams and informative tables, and include each when it materially strengthens the paper. Use the supplied diagrams field and section tables fields. Diagrams can clarify architecture, trust boundaries, decision flows, or evidence-supported mechanisms. Tables can compare alternatives, report source-backed quantitative results, expose assumptions, or summarize sensitivity analyses. Ground every visual in saved evidence and link it to the appropriate source references and claim IDs. Label proposals and hypothetical calculations clearly. Do not add decorative or trivial diagrams, repetitive tables, duplicate prose, fabricated measurements, or unsupported conclusions. A visual is optional when the evidence does not justify it."""
+
+SECTION_TABLE_INSTRUCTIONS = """TABLES: Actively consider an informative table when it materially strengthens this section, such as a source-backed comparison, quantitative result, assumptions register, or sensitivity summary. Use only the supplied evidence notes, cite exact source IDs, and use only this section's fixed claim IDs. Avoid decorative or trivial tables, repeated information, fabricated measurements, or unsupported conclusions. Return an empty tables list when evidence does not justify a table."""
 
 _MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-\s])")
 _SAFE_MATH_COMMANDS = {
@@ -644,6 +684,7 @@ def _publication_paragraphs(source: str) -> list[str]:
     Explicit paragraph boundaries win. For legacy one-block AI prose, split
     only at complete sentence boundaries; never truncate or paraphrase.
     """
+
     result: list[str] = []
     for block in re.split(r"\n\s*\n", source.strip()):
         if not block.strip():
@@ -2997,8 +3038,7 @@ async def _provider(
     project_data = project_source.get("data", {})
     instructions = INSTRUCTIONS + "\n\n" + PUBLICATION_INSTRUCTIONS
     if include_diagrams:
-        instructions += """\n\nDIAGRAMS ARE A STANDARD PART OF THE PAPER: include up to two bounded, evidence-supported figures when they materially clarify the argument (for example, a trust boundary, routing decision, failure path, or supported quantitative relationship). Use only the validated node/edge/boundary schema. Label hypothetical architectures explicitly; do not portray proposed federation as an existing MindRouter capability or invent observations. Omit a figure only when the evidence provides no useful diagram."""
-    instructions += """\n\nTABLES ARE STANDARD WHEN THEY IMPROVE ACADEMIC COMMUNICATION: include compact evidence-linked tables for useful comparisons, assumptions, quantitative results, sensitivity cases, or evidence provenance. Every table must cite saved source references and claim IDs, use only supported values, and be omitted when prose is clearer. Do not create decorative or redundant tables."""
+        instructions += "\n\n" + VISUAL_AUTHORING_INSTRUCTIONS
     project_type = (
         project_data.get("investigation_type", "default")
         if isinstance(project_data, dict)
@@ -3523,7 +3563,10 @@ async def _generate_long_draft(
                     max_input_bytes=max_input_bytes,
                     project_id=project_id,
                     project_path_value=project_path_value,
-                    include_diagrams=(include_diagrams and schema_name == "sigma_long_paper_plan"),
+                    include_diagrams=(
+                        include_diagrams
+                        and schema_name in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+                    ),
                 )
             except PaperConnectionFailure:
                 if attempt_number == maximum:
@@ -3783,12 +3826,7 @@ that occur in the input. Do not add scientific claims or outside citations."""
         + PUBLICATION_INSTRUCTIONS
         + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
-        + (
-            "\n\nDIAGRAMS ARE STANDARD: include up to two bounded evidence-supported diagrams in the diagrams field when they clarify the architecture, trust boundary, decision logic, failure path, or quantitative comparison. Label proposed or hypothetical components clearly. Do not invent values, imply undocumented capabilities, or use figures as a substitute for the evidence-linked argument. Omit diagrams only when the saved evidence supports no useful figure."
-            if include_diagrams
-            else ""
-        )
-        + "\n\nTABLES ARE STANDARD WHEN USEFUL: include compact tables when they materially improve comparison, such as alternatives, assumptions, sensitivity results, or evidence status. Every table must have saved evidence references and claim links, must not introduce unsupported values, and should be omitted when prose is clearer."
+        + ("\n\n" + VISUAL_AUTHORING_INSTRUCTIONS if include_diagrams else "")
         + (
             "\n\nProduce between 2 and 8 substantial, logically connected sections. "
             "Each section should provide enough space for a detailed argument; "
@@ -3913,7 +3951,8 @@ Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical 
 write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
 or document markup."""
     section_instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
-    section_instructions += """\n\nTABLES: When a concise table improves the section's argument, return it in the tables field. Include only values and comparisons supported by the supplied notes. Set evidence_refs to exact source IDs supplied for this section and claim_ids to the section's fixed claim IDs. Prefer useful comparisons, assumption registers, result/sensitivity summaries, and provenance tables; do not add decorative or repetitive tables. Return an empty list if prose communicates the material better."""
+    if include_diagrams:
+        section_instructions += "\n\n" + SECTION_TABLE_INSTRUCTIONS
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
     original_records = _research_integrity_records(package) if fast_path else []
 
@@ -3939,7 +3978,7 @@ or document markup."""
                 heading=section.heading,
                 paragraphs=section_draft.paragraphs,
                 claim_ids=section.claim_ids,
-                tables=section_draft.tables,
+                tables=section_draft.tables if include_diagrams else [],
             )
         if progress and not fast_path:
             await progress("sections", section_number, len(long_plan.sections), "active")
@@ -4010,7 +4049,7 @@ or document markup."""
             heading=section.heading,
             paragraphs=section_draft.paragraphs,
             claim_ids=section.claim_ids,
-            tables=section_draft.tables,
+            tables=section_draft.tables if include_diagrams else [],
         )
 
     if fast_path:
@@ -4050,7 +4089,11 @@ or document markup."""
                 heading=section.heading,
                 paragraphs=LongSectionDraft.model_validate(saved_sections[str(number)]).paragraphs,
                 claim_ids=section.claim_ids,
-                tables=LongSectionDraft.model_validate(saved_sections[str(number)]).tables,
+                tables=(
+                    LongSectionDraft.model_validate(saved_sections[str(number)]).tables
+                    if include_diagrams
+                    else []
+                ),
             )
             for number, section in enumerate(long_plan.sections, start=1)
         ]
@@ -4231,10 +4274,7 @@ async def _generate_impl(
         compatible = False
         if checkpoint is not None:
             compatible = all(
-                (
-                    key == "include_diagrams" and key not in checkpoint
-                )  # Legacy work has no saved diagram preference; never rebill to add figures.
-                or checkpoint.get(key) == value
+                checkpoint.get(key) == value
                 for key, value in (
                     ("kind", expected_kind),
                     ("snapshot_sha256", snapshot_hash),
@@ -4242,7 +4282,6 @@ async def _generate_impl(
                     ("binding_fingerprint", binding_fingerprint),
                     ("model", config["model"]),
                     ("reasoning_effort", config["reasoning_effort"]),
-                    ("include_diagrams", include_diagrams),
                 )
             )
         if checkpoint is not None and not compatible:
@@ -4262,6 +4301,12 @@ async def _generate_impl(
                 raise ProjectError(
                     "A paper checkpoint exists for different evidence, authoring mode, or provider settings. Review preflight and explicitly restart it to preserve prior attempt accounting."
                 )
+        if checkpoint is not None and work.get("include_diagrams") != include_diagrams:
+            # The combined diagrams-and-tables preference changes only what is
+            # included in the final rendering and any unfinished authoring.
+            # Keep completed one-shot drafts, plans, and section tables intact.
+            work["include_diagrams"] = include_diagrams
+            _save_work(path, work)
         # Preserve the decision to recover an interrupted planning call before
         # report() replaces the old stage with this run's progress. A second
         # interruption must not silently dispatch the ambiguous paid call again.
@@ -4394,6 +4439,8 @@ async def _generate_impl(
         )
         if material_omissions:
             draft = _apply_omission_limits(draft, material_omissions)
+        if not include_diagrams:
+            draft = _without_optional_visuals(draft)
         draft = PaperDraft.model_validate(
             _repair_paper_references(draft, {item["id"] for item in package["sources"]})
         )
@@ -4468,6 +4515,7 @@ async def _generate_impl(
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
                 "include_diagrams": include_diagrams,
+                "include_diagrams_and_tables": include_diagrams,
                 "diagram_count": len(draft.diagrams),
                 "evidence_batch_limit": MAX_EVIDENCE_BATCHES if long_form else 0,
                 "evidence_batch_count": evidence_batch_count,
