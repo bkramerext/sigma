@@ -1,4 +1,5 @@
 """Unit tests for host-side maintenance switch; no host services required."""
+
 import importlib.util
 import pathlib
 import subprocess
@@ -7,6 +8,7 @@ from unittest.mock import patch
 
 MODULE = pathlib.Path(__file__).resolve().parents[1] / "deploy/maintenance/switch.py"
 spec = importlib.util.spec_from_file_location("maintenance_switch", MODULE)
+assert spec is not None and spec.loader is not None
 switch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(switch)
 
