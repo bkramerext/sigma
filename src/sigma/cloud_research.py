@@ -1171,6 +1171,11 @@ def reconcile_all_orphaned_jobs() -> None:
     current = _ledger_workspace()
     if current is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
+    if not cloud_workspaces.enabled():
+        # Local sponsored operation is not partitioned into cloud workspace
+        # directories. Preserve its original single-workspace recovery path.
+        reconcile_orphaned_jobs()
+        return
     try:
         parent = current.path.parent.resolve(strict=True)
         with _connect() as db:
