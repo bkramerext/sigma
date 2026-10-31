@@ -2735,13 +2735,13 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
         asyncio.run(check())
 
 
-
 def test_eight_research_sessions_overlap_two_paper_generators() -> None:
     """Cross-feature smoke: 8 live mock research calls + 2 paper model calls."""
     from contextvars import ContextVar
     from uuid import uuid4
 
     import research_sessions as research_fixture
+
     from sigma import research_sessions
     from sigma.projects import create_strategy
 
@@ -2783,12 +2783,8 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
             if len(research_ids) == 8:
                 research_ready.set()
             await release.wait()
-            return research_fixture.investigation(1), {
-                "input_tokens": 120, "output_tokens": 90
-            }
-        return research_fixture.skeptic(1, "stop"), {
-            "input_tokens": 120, "output_tokens": 90
-        }
+            return research_fixture.investigation(1), {"input_tokens": 120, "output_tokens": 90}
+        return research_fixture.skeptic(1, "stop"), {"input_tokens": 120, "output_tokens": 90}
 
     async def paper_provider(context, *_args):
         nonlocal paper_count
@@ -2841,8 +2837,10 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-mock"),
         ):
             starts = await asyncio.gather(
-                *(start_research(i, path, view, strategy)
-                  for i, (path, view, strategy) in enumerate(research_projects))
+                *(
+                    start_research(i, path, view, strategy)
+                    for i, (path, view, strategy) in enumerate(research_projects)
+                )
             )
             paper_tasks = []
             try:
@@ -2861,9 +2859,12 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
             await asyncio.wait_for(asyncio.gather(*paper_tasks), 15)
             finished = await asyncio.wait_for(
                 asyncio.gather(
-                    *(research_fixture.wait_for(path, row["id"])
-                      for (path, _, _), row in zip(research_projects, starts))
-                ), 15
+                    *(
+                        research_fixture.wait_for(path, row["id"])
+                        for (path, _, _), row in zip(research_projects, starts)
+                    )
+                ),
+                15,
             )
             assert all(row["status"] == "ended" for row in finished)
             assert all(row["tokens_reserved"] == 0 for row in finished)
@@ -2872,7 +2873,6 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
 
     with TemporaryDirectory() as temporary:
         asyncio.run(check(Path(temporary)))
-
 
 
 def test_fast_long_draft_cancellation_keeps_completed_sections() -> None:
