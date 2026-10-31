@@ -9,20 +9,20 @@
     "standard": {
       "source": "paper-standard.tex",
       "pdf": "paper-standard.pdf",
-      "pages": 5,
+      "pages": 6,
       "diagram_setting": false,
-      "sha256": "fdf6ead5c943ccd7d3ce4f74b7c7534a5d1f7b95b82d134cc615089dce56fece"
+      "sha256": "b128dcdca1bee31945500f37efa02f81079156cfc192d72ce57ecec6ace8b9ed"
     },
     "diagrams": {
       "source": "paper-diagrams.tex",
       "pdf": "paper-diagrams.pdf",
-      "pages": 6,
+      "pages": 7,
       "diagram_setting": true,
-      "sha256": "50c75516120d84202b1862aae0ddc7691892713bdb345dd53b47e22d17ce77eb"
+      "sha256": "a9e0e8ce1bb20183d765813dd52f1fc937909a93f4e6a772982a529539a2fe47"
     }
   },
   "shared_body": {
     "source": "paper_body.tex",
-    "sha256": "121491fbc010a34790a3f497dc7f57dfc7e8e0cdb64c3807792b8cb2d6d0481d"
+    "sha256": "9ff8c7c5a453b6bb06d1b48b1c79fdb05974fc9041ac38094e79e8e3114929f8"
   }
 }

@@ -127,16 +127,16 @@ At a \$2,000 cap, D improves the modeled expected-success bound by 32.14 over C,
 \draw[->,thick] (15,760) -- (15,1020) node[above]{Expected useful successes};
 \foreach \x/\label in {16/16,18/18,20/20,22/22,24/24} {\draw (\x,760) -- (\x,755) node[below]{\label};}
 \foreach \y/\label in {800/800,850/850,900/900,950/950,1000/1000} {\draw (15,\y) -- (14.8,\y) node[left]{\label};}
-\draw[very thick,blue!75!black] (15.898,787) -- (16.798,787) -- (18.721,936.63) -- (20.262,994);
-\draw[very thick,orange!85!black] (21.579,828.57) -- (23.558,968.77) -- (22.862,994);
+
+
 \foreach \x/\y in {15.898/787,16.798/787,18.721/936.63,20.262/994} {\fill[blue!75!black] (\x,\y) circle (3pt);}
 \foreach \x/\y in {21.579/828.57,23.558/968.77,22.862/994} {\fill[orange!85!black] (\x,\y) circle (3pt);}
 \node[blue!75!black,anchor=south west] at (18.8,905) {Campus + approved frontier};
 \node[orange!80!black,anchor=north west] at (21.3,850) {Federation + frontier};
-\node[align=left,fill=white,draw=blue!75!black] at (18.0,1000) {Campus local: 787 / USD 15.90k};
-\node[align=left,fill=white,draw=orange!85!black] at (22.9,1007) {Both reach 994 at USD 4k cap};
+
+
 \end{tikzpicture}
-\caption{Synthetic optimized cost/quality points at \$0, \$2,000 and \$4,000 monthly frontier caps. Values are expected successes from invented probabilities, not benchmark results. Lines connect cap settings and are not measured Pareto frontiers.}
+\caption{Synthetic optimized cost/quality points at \$0, \$2,000 and \$4,000 monthly frontier caps. Blue marks campus-only and hybrid alternatives; orange marks federation. Values are expected successes from invented probabilities, not benchmark results. Points are scenario outcomes, not a measured Pareto frontier.}
 \label{fig:frontier}
 \end{figure}
 \fi
@@ -149,22 +149,22 @@ Sovereignty is likewise a control boundary, not a Boolean feature of a gateway. 
 \ifShowDiagrams
 \begin{figure}[ht]
 \centering
-\begin{tikzpicture}[node distance=0.7cm and 0.95cm,>=Latex,
- box/.style={draw,rounded corners,align=center,text width=2.7cm,minimum height=0.9cm,fill=campus},
- ext/.style={draw,rounded corners,align=center,text width=2.7cm,minimum height=0.9cm,fill=external},
- deny/.style={draw,rounded corners,align=center,text width=2.5cm,minimum height=0.8cm,fill=risk}]
-\node[box] (task) {Research task + data classification};
-\node[box,right=of task] (gate) {Home-campus policy gate\\identity, purpose, destination};
-\node[box,right=of gate] (local) {Home-campus GPU\\default approved route};
-\node[ext,above right=0.65cm and 0.8cm of gate] (api) {Frontier API\\only with explicit approval};
-\node[ext,below right=0.65cm and 0.8cm of gate] (partner) {Partner campus\\separate approval + contract};
-\node[deny,below=of task] (deny) {Ambiguous or denied\\stay local / reject};
+\begin{tikzpicture}[>=Latex,
+ box/.style={draw,rounded corners,align=center,text width=2.2cm,minimum height=0.9cm,fill=campus},
+ ext/.style={draw,rounded corners,align=center,text width=2.2cm,minimum height=0.9cm,fill=external},
+ deny/.style={draw,rounded corners,align=center,text width=2.1cm,minimum height=0.8cm,fill=risk}]
+\node[box] (task) at (0,0) {Research task + data classification};
+\node[box] (gate) at (3.5,0) {Home-campus policy gate\\identity, purpose, destination};
+\node[box] (local) at (7,0) {Home-campus GPU\\default approved route};
+\node[ext] (api) at (7,2.4) {Frontier API\\only with explicit approval};
+\node[ext] (partner) at (7,-2.4) {Partner campus\\separate approval + contract};
+\node[deny] (deny) at (0,-2.4) {Ambiguous or denied\\stay local / reject};
 \draw[->,thick] (task) -- (gate);
-\draw[->,thick] (gate) -- node[above,align=center,font=\scriptsize]{eligible local} (local);
-\draw[->,thick] (gate) -- node[above,sloped,font=\scriptsize]{approved destination only} (api);
-\draw[->,thick] (gate) -- node[below,sloped,font=\scriptsize]{approved partner only} (partner);
+\draw[->,thick] (gate) -- node[above,font=\scriptsize,fill=white,inner sep=1pt]{eligible local} (local);
+\draw[->,thick] (gate.north) -- (gate.north |- api.west) -- node[above,font=\scriptsize,fill=white,inner sep=1pt]{approved API} (api.west);
+\draw[->,thick] (gate.south) -- (gate.south |- partner.west) -- node[below,font=\scriptsize,fill=white,inner sep=1pt]{approved partner} (partner.west);
 \draw[->,thick,dashed] (task) -- (deny);
-\node[draw,dashed,rounded corners,fit=(task)(gate)(local)(deny),inner sep=0.25cm,label=above:{Home institution boundary}] {};
+\node[draw,dashed,rounded corners,fit=(task)(gate)(local)(deny),inner sep=0.3cm,label=above:{Home institution boundary}] {};
 \node[draw,dashed,rounded corners,fit=(api),inner sep=0.2cm,label=above:{Commercial boundary}] {};
 \node[draw,dashed,rounded corners,fit=(partner),inner sep=0.2cm,label=below:{Partner institution boundary}] {};
 \end{tikzpicture}
