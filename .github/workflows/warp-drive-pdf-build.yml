@@ -35,5 +35,7 @@ jobs:
           git add papers/warp-drive.pdf
           if ! git diff --cached --quiet; then
             git commit -m "Regenerate warp-drive PDF from repaired TeX [skip ci]"
+            git fetch origin warpdrivepaper
+            git rebase origin/warpdrivepaper
             git push origin HEAD:warpdrivepaper
           fi
