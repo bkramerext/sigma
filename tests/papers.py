@@ -2639,9 +2639,7 @@ def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
                     assert provider_calls == 2
                 finally:
                     release.set()
-                results = await asyncio.wait_for(
-                    asyncio.gather(first, second), timeout=5
-                )
+                results = await asyncio.wait_for(asyncio.gather(first, second), timeout=5)
                 assert len(results) == 2
                 assert len(papers.list_papers(str(paths[0]))) == 1
                 assert len(papers.list_papers(str(paths[1]))) == 1
