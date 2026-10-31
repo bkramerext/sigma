@@ -490,7 +490,8 @@ def _materialize_domain_member(
         "INSERT INTO invitation_requests(subject,email,requested_at,status,request_type) "
         "VALUES(?,?,?,'reviewed','invitation') "
         "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,status='reviewed',"
-        "request_type='invitation',notification_started_at=NULL,notification_error=NULL",
+        "request_type='invitation',notification_started_at=NULL,notification_error=NULL "
+        "WHERE invitation_requests.request_type='invitation'",
         (subject, email, now),
     )
     db.execute(
