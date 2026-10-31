@@ -123,12 +123,12 @@ def test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_s
     assert "Independent checks agree" in success_message
 
 
-def test_hosted_effective_deadline_is_explicitly_clamped_to_fifteen_minutes():
+def test_sponsorship_does_not_shorten_project_duration():
     configured = {**research_sessions.DEFAULT_LIMITS, "session_duration_minutes": 60}
     with patch.object(research_sessions.cloud_workspaces, "enabled", return_value=True):
         effective = research_sessions._effective_limits(configured)
     assert configured["session_duration_minutes"] == 60
-    assert effective["session_duration_minutes"] == 15
+    assert effective["session_duration_minutes"] == 60
 
 
 async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
@@ -393,7 +393,7 @@ async def test_expired_deadline_preserves_sibling_partial_artifacts(path: Path):
         if role == "research_skeptic":
             record = research_sessions._read(str(path), holder["id"])
             record["configured_duration_limit_minutes"] = 60
-            record["duration_limit_minutes"] = 15
+            record["duration_limit_minutes"] = 60
             record["deadline_at"] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
             research_sessions._save(str(path), record)
             output = skeptic(1, "stop", "no_progress")
@@ -438,8 +438,7 @@ async def test_expired_deadline_preserves_sibling_partial_artifacts(path: Path):
     assert branches[saved_strategy_id]["status"] == "ended"
     assert branches[second.id if saved_strategy_id == first.id else first.id]["status"] == "ended"
     assert finished["termination_reason_code"] == "time_limit_reached"
-    assert "effective time ceiling of 15 minutes" in finished["message"]
-    assert "project setting: 60 minutes" in finished["message"]
+    assert "effective time ceiling of 60 minutes" in finished["message"]
     assert "1 finding was preserved" in finished["message"]
     assert "incomplete" in finished["message"]
 
@@ -1310,7 +1309,7 @@ async def test_three_cycles_and_idempotency(path: Path):
     async def handler(request):
         payload = json.loads(request.content)
         assert payload["model"] == MODEL and payload["store"] is False
-        assert payload["max_output_tokens"] == 4000
+        assert payload["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}
         if payload["text"]["format"]["name"] == "research_skeptic":
@@ -1349,7 +1348,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert started["backend_build_commit"] == "a" * 40
         assert started["call_limit"] == 6
         assert started["cycle_limit"] == 3
-        assert started["duration_limit_minutes"] == 30
+        assert started["duration_limit_minutes"] == 60
         assert started["output_token_limit"] == 4000
         finished = await wait_for(path, started["id"])
         duplicate = await research_sessions.start_session(
@@ -3535,16 +3534,14 @@ async def test_chatgpt_stream(path: Path):
         result = await research_sessions._call(
             record, "investigator", {"problem": view.project.problem, "strategy": strategy.approach}
         )
-        try:
-            await research_sessions._call(
-                {**record, "output_token_limit": 11},
-                "investigator",
-                {"problem": view.project.problem, "strategy": strategy.approach},
-            )
-        except ProjectError as exc:
-            assert "exceeded the configured per-call token limit" in str(exc)
-        else:
-            raise AssertionError("ChatGPT response exceeded the configured output token limit")
+        # ChatGPT controls its own response length; the internal per-call
+        # reservation is not a reason to discard complete, valid findings.
+        above_soft_limit = await research_sessions._call(
+            {**record, "output_token_limit": 11},
+            "investigator",
+            {"problem": view.project.problem, "strategy": strategy.approach},
+        )
+        assert above_soft_limit == result
     assert result == (output, {"input_tokens": 25, "cached_input_tokens": 5, "output_tokens": 12})
 
 
@@ -3596,7 +3593,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
         "model_calls": 2,
         "session_duration_minutes": 10,
         "output_tokens_per_call": 700,
-        "maximum_estimated_cost_usd": 0.55,
+        "maximum_estimated_cost_usd": 10.0,
         "maximum_input_tokens_per_session": 200_000,
     }
     assert research_sessions.save_limits(str(path), limits) == limits
@@ -3604,7 +3601,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
 
     async def handler(request):
         payload = json.loads(request.content)
-        assert payload["max_output_tokens"] == 700
+        assert payload["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -3626,7 +3623,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
 
     assert finished["call_limit"] == 2 and finished["cycle_limit"] == 1
     assert finished["duration_limit_minutes"] == 10 and finished["output_token_limit"] == 700
-    assert finished["maximum_estimated_cost_usd"] == 0.55
+    assert finished["maximum_estimated_cost_usd"] == 10.0
     assert finished["cost_status"] == "available" and finished["estimated_cost_usd"] > 0
     assert all(step["token_usage"]["input_tokens"] == 120 for step in finished["steps"])
     for step in finished["steps"]:
@@ -7406,7 +7403,7 @@ async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
         **research_sessions.DEFAULT_LIMITS,
         "model_calls": 6,
         "research_rounds": 3,
-        "maximum_estimated_cost_usd": 1.0,
+        "maximum_estimated_cost_usd": 10.0,
         "maximum_input_tokens_per_session": 600_000,
     }
     dispatches = []
@@ -9260,7 +9257,7 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
         assert "$0.0605" in message
         assert "$0.0500" in message
         assert "No provider call was dispatched" in message
-        assert "Project Settings" in message
+        assert "session cost allowance" in message
     else:
         raise AssertionError("A $0.05 session cap funded a $0.0605 provider reserve")
     assert ledger["calls"] == []
@@ -9275,7 +9272,7 @@ def main():
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
     test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried()
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
-    test_hosted_effective_deadline_is_explicitly_clamped_to_fifteen_minutes()
+    test_sponsorship_does_not_shorten_project_duration()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_sponsored_portfolio_serializes_allowance_reservations()
     test_epistemic_presentation_is_conservative_and_read_only()

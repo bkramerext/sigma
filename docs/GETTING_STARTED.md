@@ -73,10 +73,9 @@ plan. To roll back local service-key routing, unset
 An account with only `$0.01` remaining may still be unable to start a call:
 the server reserves a conservative, model-specific amount before each provider
 request and never exceeds the member's allowance.
-In sponsored mode, **Project Settings → Limits** controls the session call,
-round, and estimated-cost limits. Sponsored sessions remain capped at 15 minutes.
-The member's remaining account allowance and configured global spend ceiling
-are enforced separately before each call.
+In sponsored mode, **Project Settings → Limits** controls session duration,
+call, round, and estimated-cost limits. Sponsorship governs money allowance
+only; member and configured global spend ceilings are enforced before each call.
 Hosted deployments retain their own provider setting. The option does not
 enable the hosted forced-sponsored setting. Use `./sigma start` to return to
 normal local mode.
@@ -134,6 +133,12 @@ Review the **Outcome** and its conclusion alongside detailed findings, objection
 ## Reports and exports
 
 Use the workspace's **Report / Export** actions to create a complete, importable project file or readable text/HTML reports. The project file contains the project and its saved research history, evidence, and artifacts in one JSON bundle; use **Import Project** to restore it. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots. The dialog shows provider-use bounds before you start; progress, cancellation, and resumable checkpoints are available. A paper preserves the exported Outcome and underlying research records, including any saved reasoning and optional conclusion. Review its omission warnings, objections, limitations, and verification status before relying on it. When material evidence is omitted, the paper marks conclusions provisional and does not leave affected claims established. Missing Outcome conclusions are not invented. Reports communicate findings, not independent verification.
+
+To turn completed work into a reusable catalog sample, pass a complete Project
+file bundle to `./sigma make_sample bundle.json --name my-sample`. The sample
+keeps validated paper metadata, TeX, PDF bytes, research evidence, and
+provenance. Project Audit JSON is a review view and contains no binary paper
+files; converting that audit alone cannot restore PDFs.
 
 ## Optional computational experiments
 

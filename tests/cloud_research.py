@@ -144,7 +144,7 @@ def test_orphaned_job_reconciliation(
             }
             model_config = {
                 "available": True,
-                "model": "gpt-6.1-sol",
+                "model": "gpt-6-luna",
                 "reasoning_effort": "high",
             }
             idempotency_key = str(uuid4())
@@ -989,6 +989,94 @@ def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_model_max_output_reserves_member_and_global_allowance(
+    root: Path, ledger_root: Path
+) -> None:
+    """A completed maximum provider response cannot outrun either spend ceiling."""
+    owner = workspace(root, "a" * 32, "max-output@example.test")
+    model = "gpt-6-astra"
+    call_context = {"execution_tools": []}
+    record_for_cost = {
+        "model": model,
+        "mode": "api_key",
+        "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    worst_case = research_sessions._reserve_cost(record_for_cost, call_context, "investigator")
+    assert worst_case is not None and worst_case > 6.4
+    allowance = worst_case + 0.10
+    global_ceiling = worst_case + 10.0
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": f"{global_ceiling:.6f}",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": f"{allowance:.6f}",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch("sigma.cloud_auth.effective_spending_allowance", return_value=allowance),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            candidate = job(owner.workspace_id)
+            cloud_research.prepare_job(candidate)
+            assert cloud_research.claim_job(candidate["id"])
+            cloud_research.reserve_call(
+                candidate["id"], "model-max-output", worst_case, 128_000 + 32_768
+            )
+            # Provider-reported output includes reasoning tokens. Settlement
+            # releases the pre-dispatch hold and records actual cost exactly once.
+            actual = research_sessions._estimate_cost(
+                model,
+                {"input_tokens": 1000, "cached_input_tokens": 0, "output_tokens": 128_000},
+            )
+            assert actual is not None and actual < worst_case
+            cloud_research.settle_call(
+                candidate["id"],
+                "model-max-output",
+                input_tokens=1000,
+                output_tokens=128_000,
+                estimated_cost_usd=actual,
+            )
+            summary = cloud_research.snapshot()
+            assert abs(summary["reserved_and_estimated_usd"] - actual) < 1e-8, summary
+            assert abs(summary["remaining_usd"] - (allowance - actual)) < 1e-8, summary
+            try:
+                cloud_research.reserve_call(
+                    candidate["id"], "beyond-member-allowance", worst_case, 160_768
+                )
+                raise AssertionError("The member allowance admitted another max call")
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "allowance" in str(exc), str(exc)
+            # Keep member headroom ample while tightening only the global cap.
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": f"{actual + 0.01:.6f}",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": f"{global_ceiling:.6f}",
+                    },
+                ),
+                patch.object(
+                    cloud_research,
+                    "_effective_user_spend_ceiling_decimal",
+                    return_value=Decimal(str(global_ceiling)),
+                ),
+            ):
+                try:
+                    cloud_research.reserve_call(
+                        candidate["id"], "beyond-global-ceiling", worst_case, 160_768
+                    )
+                    raise AssertionError("The global spending ceiling admitted another max call")
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "global spend ceiling" in str(exc), str(exc)
+            final = cloud_research.snapshot()
+            assert abs(final["reserved_and_estimated_usd"] - actual) < 1e-8, final
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_eight_research_users_fill_exactly_thirty_two_admissions(
     root: Path, ledger_root: Path
 ) -> None:
@@ -1089,7 +1177,7 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         )
         assert sponsored["maximum_estimated_cost_usd"] == user_cost_limit
         assert sponsored["model_calls"] == 30 and sponsored["research_rounds"] == 1
-        assert sponsored["session_duration_minutes"] == cloud_research.MAX_SESSION_MINUTES
+        assert sponsored["session_duration_minutes"] == 30
     project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
     limits = {
         **research_sessions.DEFAULT_LIMITS,
@@ -1134,7 +1222,7 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
         assert research_sessions.get_limits(project.path) == hosted_duration
         assert (
             cloud_research.evaluation_session_limits(hosted_duration)["session_duration_minutes"]
-            == 15
+            == 60
         )
     with (
         patch.object(cloud_workspaces, "enabled", return_value=False),
@@ -1484,7 +1572,7 @@ def test_json_project_session_playback(
             }
             configuration = {
                 "available": True,
-                "model": "gpt-6.1-sol",
+                "model": "gpt-6-luna",
                 "reasoning_effort": "high",
             }
             outputs = research_outputs()
@@ -1595,7 +1683,7 @@ def test_failed_session_releases_project_slot(
             }
             model_config = {
                 "available": True,
-                "model": "gpt-6.1-sol",
+                "model": "gpt-6-luna",
                 "reasoning_effort": "high",
             }
 
@@ -2399,7 +2487,7 @@ def main() -> None:
                     "model_calls": 2,
                     "session_duration_minutes": 5,
                     "output_tokens_per_call": 256,
-                    "maximum_estimated_cost_usd": 0.25,
+                    "maximum_estimated_cost_usd": 5.0,
                     "maximum_input_tokens_per_session": 600_000,
                 }
                 research_sessions.save_limits(live_view.path, session_limits)
@@ -2411,7 +2499,10 @@ def main() -> None:
                 }
                 model_config = {
                     "available": True,
-                    "model": "gpt-6.1-sol",
+                    # Use the lowest-priced supported model for generic cloud
+                    # recovery fixtures; the dedicated max-output test below
+                    # exercises the Astra worst-case reservation explicitly.
+                    "model": "gpt-6-luna",
                     "reasoning_effort": "high",
                 }
                 outputs = research_outputs()
@@ -2429,6 +2520,19 @@ def main() -> None:
                 async def run_research() -> dict:
                     key = str(uuid4())
                     with (
+                        patch.dict(
+                            os.environ,
+                            {
+                                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                                "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                            },
+                            clear=False,
+                        ),
+                        patch(
+                            "sigma.cloud_auth.effective_spending_allowance",
+                            return_value=10.0,
+                        ),
                         patch.object(
                             research_sessions,
                             "auth_context",
@@ -2495,7 +2599,15 @@ def main() -> None:
                         )
                         return current
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     integrated = asyncio.run(run_research())
                 assert integrated["status"] == "ended"
                 assert len(integrated["artifacts"]) == 1
@@ -2589,7 +2701,15 @@ def main() -> None:
                         after = cloud_research.snapshot()
                         assert after["held_usd"] == before["held_usd"], (before, after)
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     asyncio.run(run_clipped_call())
 
                 async def run_invalid_response() -> None:
@@ -2662,7 +2782,15 @@ def main() -> None:
                             assert call["output_tokens"] == 30
                         assert cloud_research.snapshot()["held_usd"] == before["held_usd"]
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     asyncio.run(run_invalid_response())
 
                 async def run_rejected_call() -> None:
@@ -2728,7 +2856,15 @@ def main() -> None:
                             == (before["user_reserved_or_observed_tokens"])
                         )
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     asyncio.run(run_rejected_call())
 
                 async def run_aggregate_token_denial() -> None:
@@ -2785,7 +2921,15 @@ def main() -> None:
                         after = cloud_research.snapshot()
                         assert after["held_usd"] == before["held_usd"]
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     asyncio.run(run_aggregate_token_denial())
 
                 async def run_ambiguous_failure() -> None:
@@ -2847,7 +2991,15 @@ def main() -> None:
                         db.close()
                         assert persisted == "unknown"
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     asyncio.run(run_ambiguous_failure())
 
                 async def run_cancelled_call() -> None:
@@ -2910,7 +3062,15 @@ def main() -> None:
                         db.close()
                         assert persisted == "unknown"
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     asyncio.run(run_cancelled_call())
 
                 view = initialize_project(
@@ -2941,13 +3101,29 @@ def main() -> None:
                     }
                 )
                 research_sessions._tasks.pop(interrupted["id"], None)
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     cloud_research.prepare_job(interrupted)
                 assert cloud_research.claim_job(interrupted["id"])
                 interrupted["status"] = "running"
                 research_sessions._save(view.path, interrupted)
                 attempt_id = interrupted["steps"][0]["id"]
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     cloud_research.reserve_call(interrupted["id"], attempt_id, 0.1, 20)
                 recovered = research_sessions._recover(interrupted)
                 assert recovered["status"] == "paused"
@@ -2963,7 +3139,15 @@ def main() -> None:
                 db.close()
                 assert status == "interrupted" and attempt_status == "unknown"
 
-                with patch.dict(os.environ, {"SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000"}):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "10.00",
+                        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "10.00",
+                    },
+                    clear=False,
+                ):
                     # Crash after cloud claim but before the queued session is
                     # published as running: the ledger is "running", its saved
                     # record is "queued", and no worker owns the advisory lock.
@@ -3226,6 +3410,9 @@ def main() -> None:
         test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             root, allowance_ledger
         )
+        max_output_ledger = root / "max-output-ledger"
+        max_output_ledger.mkdir(mode=0o700)
+        test_model_max_output_reserves_member_and_global_allowance(root, max_output_ledger)
         test_hosted_capacity_defaults_allow_eight_distinct_researchers()
         eight_user_ledger = root / "eight-user-admission-ledger"
         eight_user_ledger.mkdir(mode=0o700)

@@ -56,7 +56,11 @@ def _call_bounds(ledger: dict[str, Any]) -> tuple[int, int, float, int]:
 
 
 def reserve_before_dispatch(
-    ledger: dict[str, Any], *, call_id: str, request_body: bytes
+    ledger: dict[str, Any],
+    *,
+    call_id: str,
+    request_body: bytes,
+    output_token_reservation: int | None = None,
 ) -> dict[str, Any]:
     """Reserve usage/cost before dispatch; request bytes conservatively bound input tokens."""
     if ledger.get("version") != LEDGER_VERSION:
@@ -68,8 +72,14 @@ def reserve_before_dispatch(
     if any(item.get("call_id") == call_id for item in ledger["calls"]):
         raise BudgetExceeded("Research call ID has already been reserved")
     input_token_bound = len(request_body) + INPUT_TOKEN_OVERHEAD_PER_CALL
-    output_reservation = int(ledger["output_tokens_per_call"])
-    used_input, used_output, used_cost, calls = _call_bounds(ledger)
+    output_reservation = (
+        int(ledger["output_tokens_per_call"])
+        if output_token_reservation is None
+        else output_token_reservation
+    )
+    if type(output_reservation) is not int or output_reservation < 1:
+        raise BudgetExceeded("Research output reservation must be a positive whole number")
+    used_input, _used_output, used_cost, calls = _call_bounds(ledger)
     if calls + 1 > int(ledger["call_limit"]):
         raise BudgetExceeded("Research arm call limit would be exceeded")
     if used_input + input_token_bound > int(ledger["input_token_limit"]):
@@ -81,11 +91,9 @@ def reserve_before_dispatch(
             "Research arm reserved cost limit would be exceeded: "
             f"the next call needs a conservative ${call_cost_bound:.4f} reservation, "
             f"but only ${remaining:.4f} remains of the project session cap. "
-            "No provider call was dispatched. Increase the session cost limit "
-            "or lower its output-token limit in Project Settings → Limits."
+            "No provider call was dispatched. Increase the session cost allowance "
+            "or wait until more account allowance is available."
         )
-    if used_output + output_reservation > int(ledger["call_limit"]) * output_reservation:
-        raise BudgetExceeded("Research arm cumulative output-token limit would be exceeded")
     cost = call_cost_bound
     reservation = {
         "call_id": call_id,
@@ -112,11 +120,14 @@ def settle_after_response(
         or input_tokens < 0
         or output_tokens < 0
         or input_tokens > item["input_token_bound"]
-        or output_tokens > item["output_token_reservation"]
     ):
         item["status"] = "unknown"
-        ledger["blocked_reason"] = "Provider usage exceeded or failed its reserved bound"
+        ledger["blocked_reason"] = "Provider input usage exceeded or failed its reserved bound"
         raise BudgetExceeded(ledger["blocked_reason"])
+    # Output reservation is a pre-dispatch estimate for affordability, not a
+    # response validity ceiling. A completed response is chargeable and must
+    # be recorded even when actual output exceeds the estimate; its exact cost
+    # then prevents subsequent calls from exceeding the session budget.
     item.update(
         {
             "status": "settled",

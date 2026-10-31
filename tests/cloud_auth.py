@@ -4573,7 +4573,7 @@ class CloudAuthTests(TestCase):
                     self.assertEqual(request.url.path, "/v1/models")
                     return httpx.Response(
                         200,
-                        json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+                        json={"object": "list", "data": [{"id": "gpt-6-luna"}]},
                     )
 
                 real_client = httpx.AsyncClient
@@ -4598,6 +4598,29 @@ class CloudAuthTests(TestCase):
                     self.assertEqual(created.status_code, 201, created.text)
                     path = created.json()["path"]
                     project_id = created.json()["project"]["id"]
+                    project_document = member.get(
+                        "/api/projects/inspect", params={"path": path}
+                    ).json()["project"]
+                    settings_keys = (
+                        "title",
+                        "problem",
+                        "investigation_type",
+                        "ai_model",
+                        "reasoning_effort",
+                        "difficulty",
+                        "show_advanced_outcome_details",
+                    )
+                    expected_settings = {key: project_document[key] for key in settings_keys}
+                    model_update = member.post(
+                        "/api/projects/update",
+                        json={
+                            "path": path,
+                            **expected_settings,
+                            "ai_model": "gpt-6-luna",
+                            "expected": expected_settings,
+                        },
+                    )
+                    self.assertEqual(model_update.status_code, 200, model_update.text)
                     strategy = member.post(
                         "/api/projects/strategies",
                         json={
