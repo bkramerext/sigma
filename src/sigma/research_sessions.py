@@ -801,9 +801,13 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     bounds = {
         "research_rounds": (1, 5),
         "model_calls": (2, 120),
-        "session_duration_minutes": (1, MAX_SESSION_DURATION_MINUTES),
         "output_tokens_per_call": (256, 20000),
     }
+    duration = result.get("session_duration_minutes")
+    if duration is not None and (
+        type(duration) is not int or not 1 <= duration <= MAX_SESSION_DURATION_MINUTES
+    ):
+        raise ProjectError("Maximum session duration must be 1 minute–7 days or Unlimited")
     for key, (minimum, maximum) in bounds.items():
         value = result.get(key)
         if type(value) is not int or not minimum <= value <= maximum:
@@ -4779,9 +4783,13 @@ async def start_session(
                 "updated_at": _now(),
                 "started_at": _now(),
                 "deadline_at": (
-                    datetime.now(UTC)
-                    + timedelta(minutes=runtime_limits["session_duration_minutes"])
-                ).isoformat(),
+                    (
+                        datetime.now(UTC)
+                        + timedelta(minutes=runtime_limits["session_duration_minutes"])
+                    ).isoformat()
+                    if runtime_limits["session_duration_minutes"] is not None
+                    else None
+                ),
                 "calls_used": 0,
                 "call_limit": limits["model_calls"],
                 "max_concurrent_sessions": limits["max_concurrent_sessions"],
@@ -5007,11 +5015,14 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["stopped_duration_seconds"] = (
             float(record.get("stopped_duration_seconds", 0)) + stopped_for.total_seconds()
         )
-        record["deadline_at"] = (
-            datetime.fromisoformat(record["deadline_at"]) + stopped_for
-        ).isoformat()
+        if isinstance(record.get("deadline_at"), str):
+            record["deadline_at"] = (
+                datetime.fromisoformat(record["deadline_at"]) + stopped_for
+            ).isoformat()
         record.pop("stopped_at", None)
-    if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+    if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
+        record["deadline_at"]
+    ) <= datetime.now(UTC):
         record["status"] = "ended"
         record["current_action"] = "Ended · time ceiling"
         record["termination_reason_code"] = "time_limit_reached"
@@ -8269,7 +8280,9 @@ async def _portfolio_role_call(
                 _record_preflight_failure(record, branch, role, "model_configuration", exc)
                 _save(path, record)
                 raise exc
-            if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+            if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
+                record["deadline_at"]
+            ) <= datetime.now(UTC):
                 branch["status"] = "ended"
                 branch["reason"] = "Session duration limit reached before a call was dispatched."
                 branch["current_action"] = "Time limit"
@@ -10642,7 +10655,9 @@ async def _worker(session_id: str, path: str) -> None:
             _save(path, record)
             gates = await _acquire_gates()
             try:
-                if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+                if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
+                    record["deadline_at"]
+                ) <= datetime.now(UTC):
                     record["status"] = "paused"
                     record["message"] = (
                         "Configured session duration reached while waiting for provider access. No new call was made."
