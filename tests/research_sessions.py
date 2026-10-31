@@ -480,7 +480,12 @@ def test_project_concurrency_max_four_and_legacy_read(root: Path) -> None:
 
     # Old projects saved without bounds remain readable and can be brought
     # into compliance without rewriting their project bundle on mere inspection.
-    legacy = {**original, "max_concurrent_sessions": 17}
+    legacy = {
+        **original,
+        "research_rounds": 5,
+        "model_calls": 120,
+        "max_concurrent_sessions": 17,
+    }
     saved_path = Path(path) / "research-sessions" / "limits.json"
     saved_path.write_text(json.dumps(legacy), encoding="utf-8")
     assert research_sessions.get_limits(path)["max_concurrent_sessions"] == 4
