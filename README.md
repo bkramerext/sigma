@@ -91,3 +91,5 @@ Docker and the sandbox image are **not required** for the basic local UI. See [P
 - [Software Factory](docs/SOFTWARE_FACTORY.md) and [WOLF](WOLF.md) — human-directed development process
 
 Run `./sigma --help` for commands or `./sigma test` for local checks.
+
+Release notes: [v0.1.6 Initial Preview and v0.1.7 Reliability and Access Improvements](docs/RELEASE_NOTES.md).
