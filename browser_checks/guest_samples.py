@@ -403,7 +403,7 @@ def exercise(ui_url: str, root: Path) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible()
         expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
-        expect(page.get_by_role("button", name="Start new session #1")).to_be_visible(timeout=15000)
+        expect(page.get_by_role("button", name="Start new Session 1")).to_be_visible(timeout=15000)
         assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
         resumed_mutations = len(mutation_requests)
         page.locator(".session-start-link").filter(has_text="Cancel").click()
