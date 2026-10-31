@@ -49,9 +49,14 @@ smallest safe recovery path. Resume only after the owner reviews any new scope.
 3. Use a fresh application-consistent state-disk snapshot and verify it by
    restoring a clone on an isolated host with no public ingress and no
    production service account or credentials. Establish the recovery
-   verifier's aggregate thresholds before the drill. Record the approved
-   maintenance window, required IAM, project quota/billing review, cost ceiling,
-   recovery owner, and cleanup approval before creating temporary resources.
+   verifier's aggregate thresholds before the drill. Red records the selected
+   maintenance window, required IAM, project quota/billing review, $25 maximum
+   incremental cost, recovery owner, and temporary-resource cleanup plan before
+   creating resources. A production deployment assignment authorizes these
+   routine, bounded release steps without another human approval. Use no public
+   ingress or production service account for recovery resources; retain the
+   recovery snapshot. If billing, quota, IAM, or the $25 ceiling cannot be
+   verified, stop and report the specific gate.
 4. Run the documented host preflight with the explicit repository argument:
    `sudo /usr/local/libexec/sigma/gce_preflight.py --json --repository /opt/sigma/current`.
    Run the sandbox runtime check only as an approved exercise because it starts
@@ -63,6 +68,21 @@ smallest safe recovery path. Resume only after the owner reviews any new scope.
    public HTTPS, authentication, and persistence without paid provider calls.
 6. Record the actual cutover SHA, image IDs, downtime, health evidence, recovery
    point, and operator outcome in `OPERATION_RUNBOOK.md` and `STATUS.md`.
+
+## Routine-release autonomy
+
+An explicit assignment to deploy the current `main` authorizes the ordinary
+steps in this runbook. Red owns the maintenance window, exact-SHA CI and image
+checks, isolated restore drill, guarded deployment, smoke tests, temporary
+recovery VM/disk cleanup, and release records. Do not pause for an additional
+human approval when all gates pass. For each recovery drill, use the existing
+READY snapshot where possible, retain it, and keep incremental GCP resource
+costs at or below $25. Verify live billing, required quota, and least-privilege
+access before creating temporary resources. If a gate fails, a resource would
+exceed the ceiling, or a destructive/data-changing action is needed, keep
+production untouched and report the blocker. This standing routine-release
+authorization does not include unrelated infrastructure or IAM changes,
+recurring backup setup, paid inference, or production data restoration.
 
 ## Schema 10 recovery rule
 

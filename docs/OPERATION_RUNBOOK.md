@@ -283,7 +283,15 @@ restore the 14-point retention invariant.
 
 1. Confirm candidate full Git SHA, reviewed PR, verified tests/browser evidence, and known migrations. Ensure backup/restore point is current.
 2. From a repository checkout with the candidate commit available, build release images using `python3 /path/to/checkout/deploy/release_image.py build /path/to/checkout FULL_40_CHAR_SHA`. This exports the requested commit from Git, so dirty files and the checkout's current HEAD are not build inputs. The command fails if the exact commit cannot be resolved. Inspect the generated `sigma-backend:SHA` and `sigma-frontend:SHA` image labels before proceeding. If the sandbox image source changed, rebuild the rootless Python/Sage images.
-3. Announce maintenance; stop production via `sudo systemctl stop sigma.service` before a consistent data snapshot (see next section).
+3. Before a disruptive release, use the host-Caddy maintenance switch in
+   [the maintenance setup](../deploy/maintenance/README.md). Verify the branded
+   page is served with HTTP 503 and its image with HTTP 200. The guarded release
+   helper enables maintenance before stopping SIGMA and disables it only after
+   replacement health checks pass. For a manual cutover, keep it enabled until
+   the candidate or restored previous release passes health checks; then disable
+   it and verify the normal app is public again. Stop production through
+   `sudo systemctl stop sigma.service` only for the documented snapshot or
+   deployment sequence.
 4. Update `SIGMA_RELEASE` in protected `/etc/sigma/deploy.env` to that same full SHA. Do not change state volume mapping or delete Compose volumes.
 5. Run preflight; start via `sudo systemctl start sigma.service`. Startup verifies both image source labels and uses Compose `--no-build`; it records the source commit, actual running container IDs, immutable image IDs and any repository digests in `/var/lib/sigma/releases/SHA.json`. Verify that record and the running containers, then verify auth, existing users, project/session persistence, bounded research, exports and HTTPS.
 6. If verification fails, use rollback below. Record SHA, downtime, tests and outcome.
@@ -373,6 +381,17 @@ ceiling and current billed amount were not established. The one-time snapshot
 and read-only restore check have passed; temporary VM/disk cleanup remains.
 Review IAM, billing, quotas, maintenance window and expected data thresholds
 before enabling recurring backup configuration.
+
+For an explicitly assigned routine production release, Red is the recovery
+owner and may create the isolated recovery VM and clone disk without another
+human approval. Use an existing READY snapshot where possible, verify live
+billing, least-privilege access and quota first, and cap incremental temporary
+resource cost at $25. Record the actual maintenance window and verifier
+thresholds before the drill. Remove only the temporary VM and clone disk after
+preserving evidence; retain the recovery snapshot. If a gate fails or expected
+cost exceeds $25, leave production untouched and report the blocker. This
+routine-release scope does not authorize recurring backup changes, IAM
+broadening, production data restoration, or paid inference.
 
 The installed `sigma-backup.timer` runs at 10:17 UTC daily with `Persistent=true`
 (about 02:17 or 03:17 in Oregon, depending on daylight saving time).

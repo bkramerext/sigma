@@ -209,6 +209,9 @@ class Deployment:
         candidate_started = False
         candidate_checkout_changed = False
         release_pin_changed = False
+        maintenance_enabled = False
+        # Optional until Red installs the host Caddy maintenance configuration.
+        maintenance_switch = Path("/usr/local/libexec/sigma/maintenance-switch.py")
         try:
             # Load candidate deployment tooling before invoking the candidate
             # image builder. The current builder may not know the candidate's
@@ -227,6 +230,9 @@ class Deployment:
                     sha,
                 ],
             )
+            if not initial and maintenance_switch.is_file():
+                _call(self.runner, ["python3", str(maintenance_switch), "on"])
+                maintenance_enabled = True
             if not initial:
                 _call(self.runner, ["systemctl", "stop", "sigma.service"])
                 service_stopped = True
@@ -236,6 +242,9 @@ class Deployment:
             service_stopped = False
             candidate_started = True
             self.verify_health(sha)
+            if maintenance_enabled:
+                _call(self.runner, ["python3", str(maintenance_switch), "off"])
+                maintenance_enabled = False
             if initial:
                 _call(self.runner, ["systemctl", "enable", "sigma.service"])
         except DeployFailure as failure:
@@ -268,9 +277,12 @@ class Deployment:
                     _call(self.runner, ["systemctl", "restart", "sigma.service"])
                 if not initial and service_recovery_needed:
                     self.verify_health(previous)
+                if maintenance_enabled:
+                    _call(self.runner, ["python3", str(maintenance_switch), "off"])
+                    maintenance_enabled = False
             except (DeployFailure, OSError) as recovery_error:
                 raise DeployFailure(
-                    f"{failure}; automatic recovery also failed; keep ingress closed and inspect systemd journal"
+                    f"{failure}; automatic recovery also failed; maintenance may remain active; inspect systemd journal"
                 ) from recovery_error
             raise DeployFailure(
                 f"{failure}; prior code and release pin restored and service restart attempted"
