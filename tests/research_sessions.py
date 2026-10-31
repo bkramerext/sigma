@@ -290,6 +290,88 @@ async def test_last_affordable_provider_failure_names_failure_and_exhaustion(pat
     assert finished["artifacts"] == []
 
 
+async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(path, "Second route", "Check another derivation.").project.strategies[
+        -1
+    ]
+    limits = research_sessions.get_limits(str(path))
+    limits.update({"research_rounds": 3, "model_calls": 6})
+    limits = research_sessions.save_limits(str(path), limits)
+    calls = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        strategy_id = context["strategy"]["id"]
+        cycle = context["cycle"]
+        role = payload["text"]["format"]["name"]
+        calls.append((strategy_id, role, cycle))
+        if strategy_id == first.id and role == "research_skeptic":
+            terminal_review = skeptic(1, "stop", "no_progress")
+            terminal_review["remaining_obligations"] = []
+            terminal_review["next_question"] = ""
+            terminal_review["objections"] = []
+            terminal_review["unresolved_objections"] = []
+            return httpx.Response(200, json=provider_response(terminal_review))
+        if strategy_id == first.id:
+            result = investigation(cycle)
+            result["open_obligations"] = []
+            return httpx.Response(200, json=provider_response(result))
+        if strategy_id == second.id and role == "research_skeptic" and cycle == 2:
+            raise httpx.ReadTimeout("final shared turn timed out")
+        if strategy_id == second.id and role == "research_skeptic":
+            return httpx.Response(200, json=provider_response(skeptic(1)))
+        return httpx.Response(200, json=provider_response(investigation(cycle)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == len(calls) == 6, (
+        finished["calls_used"],
+        calls,
+        finished["message"],
+        branches,
+    )
+    assert calls[-1] == (second.id, "research_skeptic", 2), (calls, finished["message"], branches)
+    assert branches[first.id]["status"] == "ended"
+    assert branches[first.id]["artifacts"]
+    assert branches[second.id]["status"] == "failed"
+    assert branches[second.id]["termination_reason_code"] == "timeout"
+    assert [step["status"] for step in finished["steps"]].count("failed") == 1
+    assert finished["steps"][-1]["failure_kind"] == "timeout"
+    assert finished["termination_reason_code"] == "provider_or_strategy_failure"
+    assert len(finished["artifacts"]) == 2
+    assert "Second route: provider response timed out" in finished["message"]
+    assert "final available turn" in finished["message"]
+    assert "no further agent turn remained for recovery" in finished["message"]
+    assert "2 findings were preserved" in finished["message"]
+    assert "incomplete" in finished["message"]
+    assert "Completed" not in finished["message"]
+    assert finished["events"][-1]["kind"] == "portfolio.terminated"
+
+
 async def test_expired_deadline_preserves_sibling_partial_artifacts(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -9209,6 +9291,11 @@ def main():
         asyncio.run(
             test_last_affordable_provider_failure_names_failure_and_exhaustion(
                 root / "last-turn.sigma"
+            )
+        )
+        asyncio.run(
+            test_last_shared_turn_failure_survives_terminal_sibling_finalization(
+                root / "last-shared-turn-multistrategy.sigma"
             )
         )
         asyncio.run(

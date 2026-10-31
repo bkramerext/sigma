@@ -93,6 +93,23 @@ needed. Remaining limitation: only one automatic retry is made per transient
 provider failure; ambiguous calls are deliberately left for explicit recovery
 to avoid duplicating provider work.
 
+PR #400 review follow-up covers the multi-strategy final shared-turn case: a
+terminal sibling can no longer hide another strategy's failed provider attempt.
+The final session explanation preserves that failure, says no recovery turn
+remained, and reports the saved findings as incomplete. A provider account
+limit by itself retains its specific limit explanation; when it follows a
+separate failure, both are described. A deterministic scheduler regression
+checks the serialized final state, branch outcomes, failure event, and
+artifacts. Review-supplied, non-sensitive session-export details confirmed the
+terminal-state scenario; the export itself was not available in this checkout.
+After the correction, `./sigma test` passed all configured steps, including
+research-session scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck and production build. The optional graph-present sandbox
+case skipped because its local image is unavailable. The real-Chrome T95
+stopped-session guidance, reload/reopen, guarded resume and responsive checks
+also passed. No UI was changed, and no deployment or live provider call was
+made.
+
 ## Production About build SHA correction (2026-10-30)
 
 Production About showed `unknown` because the frontend image is built from a

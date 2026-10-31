@@ -8268,9 +8268,8 @@ async def _portfolio_role_call(
                     branch["current_action"] = "Budget limit"
                     record["status"] = "ended"
                     record["current_action"] = "Ended · hard budget limit"
-                    record["termination_reason_code"] = "budget_limit_reached"
                     record["terminal_reason"] = str(exc)
-                    record["message"] = (
+                    budget_message = (
                         f"Session stopped at round {record.get('cycle', 0)} of {record.get('cycle_limit', 0)}, "
                         f"after {record.get('calls_used', 0)}/{record.get('call_limit', 0)} agent turns "
                         f"because the hard token/cost budget refused another provider call. Research is incomplete. {exc}"
@@ -8280,6 +8279,16 @@ async def _portfolio_role_call(
                             else ""
                         )
                     )
+                    if any(item.get("status") == "failed" for item in record["strategy_runs"]):
+                        record["termination_reason_code"], record["message"] = (
+                            _portfolio_termination(record, record["strategy_runs"])
+                        )
+                        record["message"] += (
+                            " A hard token/cost budget also refused another provider call."
+                        )
+                    else:
+                        record["termination_reason_code"] = "budget_limit_reached"
+                        record["message"] = budget_message
                     record["outcome"] = _outcome(record)
                     record["strategy_assessments"] = _strategy_assessments(record)
                     record["portfolio_decision"] = _portfolio_decision(record)
@@ -9709,11 +9718,26 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     if branch.get("current_action") == "Budget exhausted"
                     and str(branch.get("reason") or "").startswith("Deferred:")
                 ]
-                if record["status"] == "failed":
+                failed_branches = [branch for branch in runs if branch.get("status") == "failed"]
+                if record.get("provider_usage_limited") is True and not any(
+                    step.get("status") == "failed"
+                    and step.get("failure_kind")
+                    not in {"provider_limited", "provider_rate_limited"}
+                    for step in record.get("steps", [])
+                ):
+                    # Keep the established account-limit explanation when it is
+                    # the only failure; a genuine earlier provider failure still
+                    # needs to remain visible alongside this stopping condition.
+                    failed_branches = []
+                if failed_branches:
                     record["termination_reason_code"], record["message"] = _portfolio_termination(
                         record, runs
                     )
-                    if len(runs) == 1 and record.get("assessment_error"):
+                    if (
+                        record["status"] == "failed"
+                        and len(runs) == 1
+                        and record.get("assessment_error")
+                    ):
                         record["assessment_error"] = record["message"]
                 elif incomplete_branches:
                     record["termination_reason_code"] = "provider_response_incomplete"
@@ -9737,7 +9761,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     )
                 if record.get("provider_usage_limited") is True:
                     record["current_action"] = "Provider usage limit"
-                    record["message"] = (
+                    usage_limit_message = (
                         "ChatGPT rejected a request because its plan or app usage limit was reached. "
                         + (
                             "This was not a SIGMA sponsored-dollar allowance denial. "
@@ -9751,8 +9775,18 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                         "No further strategy calls were dispatched. SIGMA released the rejected call's "
                         "spend reservation; no automatic retry or billing fallback occurred."
                     )
+                    if failed_branches:
+                        record["message"] += (
+                            " The provider account usage limit also prevented further recovery; "
+                            "no billing fallback occurred."
+                        )
+                    else:
+                        record["message"] = usage_limit_message
                 elif limit_message := _portfolio_limit_message(record, runs):
-                    record["message"] = limit_message
+                    if failed_branches:
+                        record["message"] += " Additional budget detail: " + limit_message
+                    else:
+                        record["message"] = limit_message
                     record["terminal_reason"] = "; ".join(
                         f"{branch.get('strategy_title', 'Strategy')}: {branch.get('reason')}"
                         for branch in runs
