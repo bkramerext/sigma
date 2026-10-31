@@ -2141,9 +2141,15 @@ def request_invitation(
                     )
             return {"status": "approved", "duplicate": False}
     if body.request_type == "invitation" and authenticated is not None:
-        # Already authorized members with individual grants have nothing to
-        # request; retain the existing no-duplicate semantics.
         if authenticated.role == "member":
+            with _db(cfg) as db:
+                prior = db.execute(
+                    "SELECT 1 FROM audit WHERE action='domain_auto_member' AND kind='email' "
+                    "AND value=? LIMIT 1",
+                    (authenticated.email,),
+                ).fetchone()
+            if prior:
+                return {"status": "approved", "duplicate": True}
             raise HTTPException(409, "This Google account is already authorized.")
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
