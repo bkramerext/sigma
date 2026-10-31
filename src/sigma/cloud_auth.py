@@ -2153,7 +2153,11 @@ def request_invitation(
             return {"status": "approved", "duplicate": duplicate_approval}
         if _authorization(cfg, identity["subject"], identity["email"]):
             raise HTTPException(409, "This Google account is already authorized. Sign in again.")
-    if body.request_type == "invitation" and authenticated is not None and authenticated.role == "member":
+    if (
+        body.request_type == "invitation"
+        and authenticated is not None
+        and authenticated.role == "member"
+    ):
         raise HTTPException(409, "This Google account is already authorized.")
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
