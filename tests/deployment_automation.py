@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -137,8 +138,16 @@ def main() -> None:
             return subprocess.CompletedProcess(argv, 0, "", "")
 
         failing = module.Deployment(repo, env_file, root / "preflight.py", failing_start, False)
+        real_is_file = Path.is_file
+
+        def installed_switch(path: Path) -> bool:
+            if path == Path("/usr/local/libexec/sigma/maintenance-switch.py"):
+                return True
+            return real_is_file(path)
+
         try:
-            failing.deploy(NEW, True, True)
+            with patch.object(Path, "is_file", installed_switch):
+                failing.deploy(NEW, True, True)
         except module.DeployFailure as error:
             diagnostic = str(error)
             assert "restored" in diagnostic
@@ -148,6 +157,25 @@ def main() -> None:
         assert env_file.read_bytes() == original
         assert (state / "auth.sqlite").read_bytes() == b"preserve-me"
         assert start_attempts == 2  # candidate failed, previous release restarted
+        switch_calls = [
+            (index, argv[-1])
+            for index, argv in enumerate(calls)
+            if argv[:2] == ["python3", "/usr/local/libexec/sigma/maintenance-switch.py"]
+        ]
+        assert [mode for _, mode in switch_calls] == ["on", "off"]
+        switch_on_index, switch_off_index = (index for index, _ in switch_calls)
+        first_stop_index = next(
+            index
+            for index, argv in enumerate(calls)
+            if argv[:3] == ["systemctl", "stop", "sigma.service"]
+        )
+        last_health_index = max(
+            index
+            for index, argv in enumerate(calls)
+            if argv[:3] == ["docker", "inspect", "--format"] and "Health.Status" in argv[3]
+        )
+        assert switch_on_index < first_stop_index
+        assert last_health_index < switch_off_index
         assert sum(argv[0] == "install" for argv in calls) >= 4
         assert (root / "preflight.py").read_text(encoding="utf-8") == checker_source.read_text(
             encoding="utf-8"
