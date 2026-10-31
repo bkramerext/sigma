@@ -508,6 +508,14 @@ def main() -> None:
             assert imported_session["project_id"] == created.project.id
             assert imported_session["backend_build_commit"] == "a" * 40
             assert read_session_snapshot(str(imported_session_path))[1] == 0
+            # An older exported session without a build stamp remains importable.
+            legacy_bundle = json.loads(export_complete_project(created.path))
+            legacy_session = dict(record)
+            legacy_session.pop("backend_build_commit")
+            legacy_bundle["files"][f"research-sessions/{session_id}.json"] = legacy_session
+            legacy_destination = root / "legacy-session-import.json"
+            import_bundle(legacy_bundle, legacy_destination)
+            assert "backend_build_commit" not in _read(str(legacy_destination), session_id)
             # Reject a bundle whose session filename and embedded ID disagree.
             malformed_bundle = json.loads(export_complete_project(created.path))
             bad_session = dict(record, id=str(uuid4()))
