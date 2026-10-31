@@ -386,6 +386,8 @@ def _initialize(path: Path) -> None:
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
         if "return_to" not in flow_columns:
             db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
+        # Remove legacy inactive grants. Audit and usage history are separate.
+        db.execute("DELETE FROM grants WHERE active=0")
     if not existed:
         path.chmod(0o600)
 
@@ -445,8 +447,8 @@ def _authorization_in_db(
     explicit = db.execute(
         "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
     ).fetchone()
-    if explicit:
-        return explicit["role"] if explicit["active"] else None
+    if explicit and explicit["active"]:
+        return explicit["role"]
     domain = email.rsplit("@", 1)[1]
     allowed = db.execute(
         "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
@@ -455,33 +457,24 @@ def _authorization_in_db(
 
 
 def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str) -> bool:
-    """Convert an active member-domain policy into an individual member grant.
+    """Materialize a verified domain member as an individual authorization.
 
-    An explicit email grant (including a revoked grant) always wins. The caller
-    must have verified the Google subject and email; neither comes from a form.
+    Only active individual grants take precedence. Remove is not a ban.
     """
     if not subject or subject.startswith("legacy-denied:"):
         return False
     now = _now()
     domain = email.rsplit("@", 1)[1]
-    # A NEW domain authorization is an explicit administrator action. It can
-    # supersede an older email revocation, but a revocation made after the
-    # domain grant must still win. Audit IDs express ordering even when both
-    # operations occur in the same second. Rows without a recorded revocation
-    # remain denied rather than guessing their history.
-    restored = db.execute(
-        "UPDATE grants SET role='member',active=1,updated_at=?,"
-        "allowance_usd=(SELECT allowance_usd FROM grants WHERE kind='domain' AND value=?) "
-        "WHERE kind='email' AND value=? AND active=0 "
+    # Prior versions left an inactive email tombstone on Remove. Clear it
+    # only if this email currently qualifies for active domain membership.
+    # Keep audit and historical usage untouched.
+    db.execute(
+        "DELETE FROM grants WHERE kind='email' AND value=? AND active=0 "
         "AND EXISTS(SELECT 1 FROM grants WHERE kind='domain' AND value=? "
-        "AND role='member' AND active=1) "
-        "AND (SELECT MAX(id) FROM audit WHERE kind='domain' AND value=? AND action='grant') "
-        "> (SELECT MAX(id) FROM audit WHERE kind='email' AND value=? AND action='revoke')",
-        (now, domain, email, domain, domain, email),
+        "AND role='member' AND active=1)",
+        (email, domain),
     )
-    # For a never-authorized email, the original conditional insertion still
-    # protects against concurrent individual grants or revocations.
-    inserted = restored if restored.rowcount else db.execute(
+    inserted = db.execute(
         "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
         "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
         "WHERE d.kind='domain' AND d.value=? AND d.role='member' AND d.active=1 "
@@ -2846,14 +2839,7 @@ def revoke_grant(kind: str, value: str, request: Request):
         raise HTTPException(409, "The configured administrator cannot be revoked here.")
     actor: Principal = request.state.cloud_principal
     with _db(cfg) as db:
-        row = db.execute(
-            "SELECT role FROM grants WHERE kind=? AND value=?", (kind, normalized)
-        ).fetchone()
-        role = row["role"] if row else "member"
-        db.execute(
-            "INSERT INTO grants(kind,value,role,active,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(kind,value) DO UPDATE SET active=0,updated_at=excluded.updated_at",
-            (kind, normalized, role, 0, _now()),
-        )
+        db.execute("DELETE FROM grants WHERE kind=? AND value=?", (kind, normalized))
         if kind == "email":
             db.execute("DELETE FROM sessions WHERE email=?", (normalized,))
         db.execute(
