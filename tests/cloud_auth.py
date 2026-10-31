@@ -3738,7 +3738,9 @@ class CloudAuthTests(TestCase):
             admin_login = self.finish(
                 email="admin@example.org", subject="repeat-domain-admin", client=admin
             )
-            admin.cookies.set(cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE])
+            admin.cookies.set(
+                cloud_auth.SESSION_COOKIE, admin_login.cookies[cloud_auth.SESSION_COOKIE]
+            )
             for cycle in range(3):
                 granted = admin.post(
                     "/api/cloud-auth/admin/grants",
