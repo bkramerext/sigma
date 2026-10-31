@@ -989,6 +989,81 @@ def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_eight_research_users_fill_exactly_thirty_two_admissions(
+    root: Path, ledger_root: Path
+) -> None:
+    """Exercise the real SQLite admission limits, not just arithmetic defaults."""
+    owners = [workspace(root / "eight-users", f"{index:032x}") for index in range(1, 10)]
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "eight-user-admission-fixture",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "4",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "32",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    with (
+        patch.dict(os.environ, settings, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        admitted: list[dict[str, Any]] = []
+        for owner in owners[:8]:
+            binding = cloud_workspaces._CURRENT.set(owner)
+            try:
+                for index in range(4):
+                    record = job(owner.workspace_id)
+                    record["project_id"] = f"{owner.workspace_id}-project-{index}"
+                    cloud_research.prepare_job(record)
+                    assert cloud_research.job_status(record["id"]) == "queued"
+                    admitted.append(record)
+                rejected = job(owner.workspace_id)
+                try:
+                    cloud_research.prepare_job(rejected)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "capacity is currently full" in str(exc)
+                else:
+                    raise AssertionError("A fifth session bypassed the four-per-user cap")
+                assert cloud_research.job_status(rejected["id"]) is None
+            finally:
+                cloud_workspaces._CURRENT.reset(binding)
+
+        # Nine distinct users are logged in; only eight have research slots.
+        ninth = job(owners[8].workspace_id)
+        binding = cloud_workspaces._CURRENT.set(owners[8])
+        try:
+            try:
+                cloud_research.prepare_job(ninth)
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "capacity is currently full" in str(exc)
+            else:
+                raise AssertionError("The global 32-slot cap was bypassed")
+            assert cloud_research.job_status(ninth["id"]) is None
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+        with cloud_research._connect() as db:
+            assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 32
+            assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
+            counts = db.execute(
+                "SELECT workspace_id, COUNT(*) AS n FROM jobs GROUP BY workspace_id"
+            ).fetchall()
+            assert len(counts) == 8 and all(row["n"] == 4 for row in counts)
+
+        binding = cloud_workspaces._CURRENT.set(owners[0])
+        try:
+            assert cloud_research.claim_job(admitted[0]["id"])
+            cloud_research.release_job(admitted[0]["id"], paused=True)
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+        binding = cloud_workspaces._CURRENT.set(owners[8])
+        try:
+            cloud_research.prepare_job(ninth)
+            assert cloud_research.claim_job(ninth["id"])
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_hosted_capacity_defaults_allow_eight_distinct_researchers() -> None:
     # Eight users must fit comfortably within the hosted global execution limit;
     # a separate per-user fairness cap prevents any one user taking all slots.
@@ -3152,6 +3227,11 @@ def main() -> None:
             root, allowance_ledger
         )
         test_hosted_capacity_defaults_allow_eight_distinct_researchers()
+        eight_user_ledger = root / "eight-user-admission-ledger"
+        eight_user_ledger.mkdir(mode=0o700)
+        test_eight_research_users_fill_exactly_thirty_two_admissions(
+            root, eight_user_ledger
+        )
         test_local_limits_remain_unmodified(root)
         test_local_global_spend_default_supports_small_team_pilot()
         monthly_ledger = root / "monthly-global-ledger"
