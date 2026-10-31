@@ -9164,9 +9164,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         # hosted admission and funding are bounded atomically by cloud_research.
         # Python/Sage execution retains its own exclusive gate.
         results = await asyncio.gather(*calls, return_exceptions=True)
-        failure = next(
-            (result for result in results if isinstance(result, BaseException)), None
-        )
+        failure = next((result for result in results if isinstance(result, BaseException)), None)
         if isinstance(failure, asyncio.CancelledError):
             raise failure
         if isinstance(failure, ProjectError):
