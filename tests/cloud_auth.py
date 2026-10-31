@@ -3616,6 +3616,131 @@ class CloudAuthTests(TestCase):
         assert existing is not None
         self.assertEqual(existing.role, "member")
 
+    def test_new_domain_grant_supersedes_older_revocation_but_not_later_revoke(self):
+        """The newest explicit admin admission decision wins in local Google auth."""
+        local_origin = "http://127.0.0.1:5173"
+        email = "nontrivialzeero@gmail.com"
+        subject = "previously-revoked-domain-user"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            signed_admin = self.finish(
+                email="admin@example.org", subject="domain-policy-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", signed_admin.cookies["sigma_session"])
+            old_grant = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": email, "role": "member"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(old_grant.status_code, 200, old_grant.text)
+            revoked = admin.delete(
+                "/api/cloud-auth/admin/grants/email/" + email,
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(revoked.status_code, 200, revoked.text)
+            guest = self.finish(email, subject)
+            self.assertEqual(guest.status_code, 303)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            # An explicit NEW domain grant supersedes the old revocation.
+            granted = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "domain",
+                    "value": "gmail.com",
+                    "role": "member",
+                    "allowance_usd": 10,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(granted.status_code, 200, granted.text)
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["user"]["role"], "member")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                restored = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants "
+                    "WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                approvals = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (email,),
+                ).fetchone()[0]
+            self.assertEqual(tuple(restored), ("member", 1, 10))
+            self.assertEqual(approvals, 1)
+
+            # Revoking the individual account AFTER the domain was granted
+            # remains effective, including on another verified Google login.
+            denied = admin.delete(
+                "/api/cloud-auth/admin/grants/email/" + email,
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(denied.status_code, 200, denied.text)
+            fresh = self.finish(email, subject)
+            self.assertEqual(fresh.status_code, 303, fresh.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                final_grant = db.execute(
+                    "SELECT active FROM grants WHERE kind='email' AND value=?", (email,)
+                ).fetchone()
+            self.assertEqual(final_grant["active"], 0)
+
+    def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
+        """The callback must materialize a new domain approval before Guest fallback."""
+        local_origin = "http://127.0.0.1:5173"
+        email = "previous-invite@gmail.com"
+        subject = "fresh-previous-invite-sub"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            admin_login = self.finish(
+                email="admin@example.org", subject="fresh-policy-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            for method, url, payload in (
+                ("POST", "/api/cloud-auth/admin/grants", {"kind": "email", "value": email, "role": "member"}),
+                ("DELETE", "/api/cloud-auth/admin/grants/email/" + email, None),
+                ("POST", "/api/cloud-auth/admin/grants", {"kind": "domain", "value": "gmail.com", "role": "member", "allowance_usd": 10}),
+            ):
+                result = admin.request(
+                    method, url, json=payload, headers={"Origin": local_origin}
+                )
+                self.assertEqual(result.status_code, 200, result.text)
+            signed = self.finish(email, subject)
+            self.assertEqual(signed.status_code, 303, signed.text)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                grant = db.execute(
+                    "SELECT active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                audit = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (email,),
+                ).fetchone()[0]
+            self.assertEqual(tuple(grant), (1, 10))
+            self.assertEqual(audit, 1)
+
     def test_explicit_user_revocation_prevents_domain_auto_member(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
