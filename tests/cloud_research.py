@@ -1910,6 +1910,55 @@ def test_issue289_global_funding_pause_can_resume(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
+    root: Path, ledger_root: Path
+) -> None:
+    """Small AI calls remain available when every research worker slot is occupied."""
+    owner = workspace(root, "a" * 32)
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "auxiliary-fixture-key",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "1",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    with (
+        patch.dict(os.environ, settings, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            view = initialize_project(
+                owner.path / "auxiliary.sigma", "Auxiliary inference", "Check capacity isolation"
+            )
+            research = job(owner.workspace_id)
+            cloud_research.prepare_job(research)
+            assert cloud_research.claim_job(research["id"])
+            auxiliary_a = cloud_research.begin_standalone_inference(view.project.id, view.path)
+            auxiliary_b = cloud_research.begin_standalone_inference(view.project.id, view.path)
+            with cloud_research._connect() as db:
+                rows = db.execute(
+                    "SELECT job_kind,status FROM jobs WHERE status='running'"
+                ).fetchall()
+                assert [row["job_kind"] for row in rows].count("research") == 1
+                assert [row["job_kind"] for row in rows].count("auxiliary") == 2
+            cloud_research.reserve_call(auxiliary_a, "short-call-fixture", 0.01, 200)
+            cloud_research.mark_call_not_dispatched(auxiliary_a, "short-call-fixture")
+            cloud_research.finish_standalone_inference(auxiliary_a)
+            cloud_research.finish_standalone_inference(auxiliary_b)
+            with cloud_research._connect() as db:
+                assert db.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE job_kind='auxiliary' AND status='terminal'"
+                ).fetchone()[0] == 2
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
     """Two projects per owner and multiple owners share a bounded global queue."""
     left = workspace(root, "e" * 32)
@@ -2958,6 +3007,11 @@ def main() -> None:
         parallel_ledger = root / "parallel-worker-ledger"
         parallel_ledger.mkdir(mode=0o700)
         test_multiuser_parallel_cloud_worker_admission(root, parallel_ledger)
+        auxiliary_ledger = root / "auxiliary-inference-ledger"
+        auxiliary_ledger.mkdir(mode=0o700)
+        test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(
+            root, auxiliary_ledger
+        )
         pilot_ledger = root / "pilot-capacity-ledger"
         pilot_ledger.mkdir(mode=0o700)
         test_pilot_global_spend_accepts_multiple_users(root, pilot_ledger)
