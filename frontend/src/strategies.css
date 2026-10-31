@@ -1091,6 +1091,11 @@
   border-radius: 5px;
   background: #09141e;
 }
+/* Make the active research card easier to spot without changing its layout. */
+.workspace-page .session-row:has(.session-status.session-running) {
+  background: #112331;
+  border-color: #466071;
+}
 .workspace-page .session-row-heading { padding: 14px 16px; }
 .workspace-page .session-row-content { padding: 0 16px 16px 40px; border: 0; }
 @media (max-width: 600px) {
