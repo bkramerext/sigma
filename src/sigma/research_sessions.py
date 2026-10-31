@@ -3054,6 +3054,12 @@ def _save(path: str, record: dict[str, Any]) -> None:
         _save_unlocked(path, record)
 
 
+def _assert_session_build_immutable(previous: dict[str, Any], updated: dict[str, Any]) -> None:
+    """A resumed session retains the exact backend build which created it."""
+    if previous.get("backend_build_commit") != updated.get("backend_build_commit"):
+        raise ProjectError("Research session creation build cannot change")
+
+
 def _save_unlocked(path: str, record: dict[str, Any]) -> None:
     if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
@@ -3096,6 +3102,7 @@ def _save_unlocked(path: str, record: dict[str, Any]) -> None:
                     or previous.get("session_number") != record["session_number"]
                 ):
                     raise ProjectError("Research session identity cannot change")
+                _assert_session_build_immutable(previous, record)
             total = sum(
                 len(data)
                 for name, data in members.items()
@@ -3129,7 +3136,17 @@ def _save_unlocked(path: str, record: dict[str, Any]) -> None:
             item.stat().st_size for item in existing if item.is_file() and not item.is_symlink()
         )
         target = directory / f"{record['id']}.json"
-        previous = target.stat().st_size if target.exists() and not target.is_symlink() else 0
+        if target.is_symlink():
+            raise ProjectError("Research session record cannot be a symbolic link")
+        if target.exists():
+            try:
+                prior_record = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeDecodeError) as exc:
+                raise ProjectError("Existing research session record is unreadable") from exc
+            if not isinstance(prior_record, dict):
+                raise ProjectError("Existing research session record is invalid")
+            _assert_session_build_immutable(prior_record, record)
+        previous = target.stat().st_size if target.exists() else 0
         if total - previous + len(encoded) > MAX_TOTAL:
             raise ProjectError(
                 "Research session storage limit reached; session paused without dropping artifacts"
