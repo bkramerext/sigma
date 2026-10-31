@@ -185,6 +185,14 @@ async def test_unlimited_duration_completes_without_session_deadline(path: Path)
     saved = research_sessions._read(str(path), started["id"])
     assert saved["deadline_at"] is None
     assert saved["duration_limit_minutes"] is None
+    try:
+        research_sessions._save(
+            str(path), {**saved, "backend_build_commit": "f" * 40}
+        )
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("A saved directory session accepted a different source commit")
 
 
 async def test_portfolio_retry_wrapper_has_a_hard_attempt_bound():
