@@ -289,8 +289,8 @@ def _evaluation_queue_limits() -> tuple[int, int, int, int]:
     Project-specific session admission is enforced separately and atomically.
     Raising these limits does not bypass provider spend or per-user allowances.
     """
-    per_user_running = _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 2)
-    global_running = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 4)
+    per_user_running = _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 4)
+    global_running = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 32)
     per_user_queued = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 4)
     global_queued = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_QUEUED", 16)
     return per_user_running, global_running, per_user_queued, global_queued

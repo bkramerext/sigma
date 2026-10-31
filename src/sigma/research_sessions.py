@@ -666,6 +666,8 @@ def get_limits(path: str) -> dict[str, Any]:
                 raw = json.loads(data)
                 if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
                     raise ValueError("Invalid limits")
+                # Read old oversized values safely without changing the saved file.
+                raw["max_concurrent_sessions"] = _legacy_project_concurrency(raw)
                 try:
                     limits = _validate_limits(raw)
                 except ProjectError as current_error:
@@ -692,6 +694,8 @@ def get_limits(path: str) -> dict[str, Any]:
         raise ProjectError("Research limits are unreadable") from exc
     if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
         raise ProjectError("Research limits are invalid")
+    # Read old oversized values safely without changing the saved file.
+    raw["max_concurrent_sessions"] = _legacy_project_concurrency(raw)
     try:
         limits = _validate_limits(raw)
     except ProjectError as current_error:
@@ -703,6 +707,19 @@ def get_limits(path: str) -> dict[str, Any]:
             except ProjectError:
                 raise current_error
     return limits
+
+
+def _legacy_project_concurrency(raw: dict[str, Any]) -> int:
+    """Clamp old saved project limits without rewriting or losing legacy files."""
+    value = raw.get("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
+    if isinstance(value, str) and value.isdecimal():
+        try:
+            value = int(value)
+        except ValueError as exc:
+            raise ProjectError("Research limits are invalid") from exc
+    if type(value) is not int or value < 1:
+        raise ProjectError("Research limits are invalid")
+    return min(value, 4)
 
 
 def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -723,7 +740,9 @@ def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ProjectError("Research limits are invalid")
     result = dict(raw)
-    result.setdefault("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
+    # Old project files may hold an earlier, unbounded concurrency setting.
+    # Keep the project readable without permitting more than four sessions.
+    result["max_concurrent_sessions"] = _legacy_project_concurrency(result)
     return result
 
 
@@ -745,14 +764,16 @@ def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ProjectError("Research limits are invalid")
     result = dict(raw)
-    result.setdefault("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
+    # Old project files may hold an earlier, unbounded concurrency setting.
+    # Keep the project readable without permitting more than four sessions.
+    result["max_concurrent_sessions"] = _legacy_project_concurrency(result)
     return result
 
 
 def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     result = dict(raw)
-    # This is intentionally unbounded: Python integers and the wire representation
-    # accept every positive decimal integer the caller can provide.
+    # Bound per-project admission independently of the hosted per-user/global caps.
+    # The prior unbounded limit is recognized only when reading legacy files.
     concurrency = result.get("max_concurrent_sessions", DEFAULT_LIMITS["max_concurrent_sessions"])
     if isinstance(concurrency, str) and concurrency.isdecimal():
         try:
@@ -761,8 +782,8 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError(
                 "Maximum concurrent sessions must be a positive whole number"
             ) from exc
-    if type(concurrency) is not int or concurrency < 1:
-        raise ProjectError("Maximum concurrent sessions must be a positive whole number")
+    if type(concurrency) is not int or not 1 <= concurrency <= 4:
+        raise ProjectError("Maximum concurrent sessions must be between 1 and 4")
     result["max_concurrent_sessions"] = concurrency
     bounds = {
         "research_rounds": (1, 5),

@@ -987,6 +987,19 @@ def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_hosted_capacity_defaults_allow_eight_distinct_researchers() -> None:
+    # Eight users must fit comfortably within the hosted global execution limit;
+    # a separate per-user fairness cap prevents any one user taking all slots.
+    with patch.dict(os.environ, {}, clear=True):
+        per_user, global_slots, per_user_queue, global_queue = (
+            cloud_research._evaluation_queue_limits()
+        )
+        assert per_user == 4
+        assert global_slots == 32
+        assert per_user * 8 == global_slots
+        assert per_user_queue == 4 and global_queue == 16
+
+
 def test_local_limits_remain_unmodified(root: Path) -> None:
     for user_cost_limit in (None, 0.01, 1.0):
         sponsored = cloud_research.evaluation_session_limits(
@@ -2969,6 +2982,7 @@ def main() -> None:
         test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             root, allowance_ledger
         )
+        test_hosted_capacity_defaults_allow_eight_distinct_researchers()
         test_local_limits_remain_unmodified(root)
         test_local_global_spend_default_supports_small_team_pilot()
         monthly_ledger = root / "monthly-global-ledger"
