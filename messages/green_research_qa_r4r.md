@@ -107,3 +107,19 @@ Focused Q/A and security tests, Ruff, Pyright, frontend typecheck/build, full `.
 - **UNVERIFIED** — live external provider behavior. No paid calls were made. All six GitHub workflows passed on implementation commit `4e555df2201c966f726a6bc2fd00cc2c2898ebd5`; workflow status for the final documentation-only follow-up will be reported with the final PR head.
 
 No merge or deployment was performed. PR #398 remains open for coordinator review and owner smoke testing.
+
+## PR #398 integration with current main and retired STATUS file
+
+- Integrated `origin/main` at `e14b6e93e2fc648c23c51dfc4b058301c796a1c2` into the existing `green/research-qa` branch. Integration commit: `8b4dde9a881c2099b3b12f3902016392e7a88671`.
+- Resolved the provider fixture conflict by retaining Blue's typed TeX failure controls and Green's deterministic Q/A delay/failure controls. Resolved the `./sigma test` list conflict by including both the Research Q/A security/functional tests and the new sovereign-cost and MindRouter tests. Kept Blue's TeX/PDF renderer, proofreading/review and diagrams option alongside Green's Q/A, citation, clipboard, and saved-title behavior.
+- Deleted `docs/STATUS.md` as requested. Removed its active read/write references from `AGENTS.md`, `docs/SOFTWARE_FACTORY.md`, Getting Started, the Backlog, project-lifecycle spec, deployment/readiness guidance, active research-coordination draft, and active T277 instructions. Historical evaluation and message records retain their historical citations; no code, test, or CI dependency on the removed file was found.
+- `./sigma test` passed on the integrated source, including Ruff, Pyright (0 errors/warnings/information), frontend typecheck/build, `tests/papers.py`, and Research Q/A functional/security tests. The only optional skip was the graph-present sandbox check because the local image is unavailable. The frontend build reports the existing >500KB chunk advisory.
+- Focused local tests passed: `tests/papers.py`, `tests/research_qa.py`, and `tests/research_qa_security.py`. Ruff format/check passed on the affected browser checks and fixture.
+- Real Chrome passed with deterministic local fixtures: Research Q/A acceptance; saved-paper TeX/PDF library (including title wrapping/Copy, TeX/PDF download and PDF browser view); issue #328 paper progress/cancellation/retry/reconnect/PDF flow; and issue #393 diagrams option default/persistence. These checks cover the Q/A citations/Markdown/Research version and mobile layout as well as Blue's added paper review/progress and diagrams controls. No paid provider calls were made.
+- PR #398 remains open and unmerged; nothing was deployed. Hosted CI for the integrated PR head is reported separately after the push.
+
+### Integration status
+
+- **MET** — Green Q/A and Blue TeX/PDF functionality coexist; current `main` is merged; retired status-file instructions are removed from active guidance; full, focused, and Chrome checks passed.
+- **UNMET** — none identified.
+- **UNVERIFIED** — hosted CI at the final pushed head until GitHub Actions completes; live external provider behavior was not tested.
