@@ -57,14 +57,16 @@ Google authentication is **not required** for ordinary local use. To exercise th
 - Authorized JavaScript origin: `http://127.0.0.1:5173`
 - Authorized redirect URI: `http://127.0.0.1:5173/api/cloud-auth/callback`
 
-Put `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` in the ignored `.env` (or the server environment), then start with an explicitly configured administrator contact:
+Put `GOOGLE_OIDC_CLIENT_ID` (the Google OAuth application's identifier) and `GOOGLE_OIDC_CLIENT_SECRET` (its server-side credential) in the checkout-root `.env` or the server environment. **Each Git checkout/worktree needs its own `.env`**: Git ignores this file, so it will not follow you into a new checkout. If another local checkout already has working credentials, copy its `.env` to this checkout and restrict access with `chmod 600 .env`. Never commit or share the secrets. Exported shell variables take precedence over `.env`, even when exported as empty strings.
+
+Set your administrator contact in `.env` or export it, then launch SIGMA:
 
 ```sh
 export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
-./sigma start --navigate --signin
+./sigma start --navigate
 ```
 
-Sign in with the Google account matching `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to establish the local administrator. Other users require membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth`; keep OAuth secrets out of version control. Use a separate browser profile when testing multiple accounts.
+Use the **Google Sign In** pill to choose a real Google account. **Do not pass `--signin` for this test**: that option now supplies a local administrator identity without performing Google OAuth. Sign in with the account matching `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to establish the local administrator; other accounts require membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth`. Use separate browser profiles when testing multiple accounts.
 
 This is a **local authentication test**, not a hosted deployment. For hosted configuration and administrator operations, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). For a provider-free UI simulation of membership, allowances, and errors, see [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md). Mock identities are not real Google accounts and mock research is not AI inference.
 
