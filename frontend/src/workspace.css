@@ -327,7 +327,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   box-sizing: border-box; width: 34px; min-width: 34px; height: 34px; min-height: 34px;
   margin-right: 10px; padding: 0; border: 1px solid transparent; border-radius: 6px;
 }
-.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 600 13px/1 Inter, sans-serif; letter-spacing: .02em; }
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 700 17px/1 Inter, sans-serif; letter-spacing: .02em; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .project-primary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 1px 0 10px 32px; }
@@ -343,7 +343,6 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .research-qa-form textarea:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
-.research-qa-answer-heading { display: flex; align-items: center; gap: 8px; }
 .research-qa-answer-heading h3 { margin: 0; }
 .research-qa-version { display: inline-flex; align-items: center; gap: 6px; color: var(--workspace-muted, #b9aa98); font-size: 12px; }
 .research-qa-version span { cursor: help; }

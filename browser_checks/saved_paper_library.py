@@ -35,7 +35,7 @@ with sync_playwright() as playwright:
     context.route("**/api/**", forward)
     page.goto(ui + "/")
     created = page.evaluate(
-        "async () => { const response = await fetch('/api/projects/create', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Paper library ' + crypto.randomUUID(),problem:'Describe the saved research question without inventing results.',investigation_type:'mathematical',difficulty:'easy'})}); return {status:response.status,body:await response.json()}; }"
+        "async () => { const response = await fetch('/api/projects/create', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Maximum Regions Formed by Lines ' + crypto.randomUUID(),problem:'What is the maximum number of regions formed by lines?',investigation_type:'mathematical',difficulty:'easy'})}); return {status:response.status,body:await response.json()}; }"
     )
     assert created["status"] == 201, created
     path = created["body"]["path"]
@@ -107,15 +107,45 @@ with sync_playwright() as playwright:
     expect(actions.get_by_role("link", name="Download TeX file")).to_be_visible()
     expect(actions.get_by_role("link", name="Download PDF")).to_be_visible()
     expect(actions.get_by_role("link", name="Open PDF in browser")).to_be_visible()
-    copy_button = actions.get_by_role("button", name="Copy paper text")
+    title_line = card.locator(".saved-paper-title-line")
+    title = title_line.locator(".saved-paper-title")
+    expect(title_line.locator("button button")).to_have_count(0)
+    expect(title).to_have_text(
+        "The Maximum Number of Regions Formed by Lines: An Evidence-Bound Mathematical Framework with Explicit Construction and Unverified Claims"
+    )
+    title_rects = title.evaluate(
+        "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
+    )
+    assert len(title_rects) >= 2, title_rects
+    title_line.screenshot(path="docs/evaluations/research_qa/tex-title-normal.png")
+    copy_button = title_line.get_by_role("button", name="Copy paper text")
+    expanded_before_copy = card.locator(".saved-paper-expand").get_attribute("aria-expanded")
+    normal_copy_box = copy_button.bounding_box()
+    normal_icon_box = copy_button.locator("svg").bounding_box()
     copy_button.click()
-    expect(actions.get_by_role("button", name="Copied paper text to clipboard")).to_be_visible()
+    copied_button = title_line.get_by_role("button", name="Copied paper text to clipboard")
+    expect(copied_button).to_be_visible()
     copied_paper = page.evaluate("navigator.clipboard.readText()")
     assert copied_paper == text_response["text"]
+    copied_box = copied_button.bounding_box()
+    assert copied_box and copied_box["x"] >= title_rects[-1]["right"] - 1
+    assert copied_box == normal_copy_box
+    assert copied_button.locator("svg").bounding_box() == normal_icon_box
+    assert (
+        card.locator(".saved-paper-expand").get_attribute("aria-expanded") == expanded_before_copy
+    )
+    assert (
+        abs(
+            (copied_box["y"] + copied_box["height"] / 2)
+            - (title_rects[-1]["y"] + title_rects[-1]["height"] / 2)
+        )
+        < 14
+    )
+    title_line.screenshot(path="docs/evaluations/research_qa/tex-title-copied.png")
     page.evaluate(
         "window.__sigmaClipboardWrite = navigator.clipboard.writeText.bind(navigator.clipboard); Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:() => Promise.reject(new Error('blocked'))})"
     )
-    actions.locator(".text-copy-button").click()
+    title_line.locator(".text-copy-button").click()
     expect(card.locator(".error")).to_contain_text("Could not copy the saved paper")
     page.evaluate(
         "Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:window.__sigmaClipboardWrite})"
@@ -125,7 +155,6 @@ with sync_playwright() as playwright:
     expect(dialog.locator(".saved-paper-card")).to_have_count(1)
     card = dialog.locator(".saved-paper-card").first
     actions = card.locator(".saved-paper-actions")
-    title_line = card.locator(".saved-paper-expand")
     metadata_line = card.locator(".saved-paper-meta")
     remove_button = metadata_line.get_by_role("button", name="Remove")
     title_box = title_line.bounding_box()
@@ -166,6 +195,12 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     expect(actions).to_be_visible()
+    expect(title).to_be_visible()
+    mobile_title_rects = title.evaluate(
+        "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
+    )
+    assert len(mobile_title_rects) >= 2, mobile_title_rects
+    title_line.screenshot(path="docs/evaluations/research_qa/tex-title-mobile.png")
     mobile_action_lefts = actions.locator("a").evaluate_all(
         "items => items.map(item => item.getBoundingClientRect().left)"
     )

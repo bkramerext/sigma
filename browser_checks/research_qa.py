@@ -86,12 +86,23 @@ with sync_playwright() as playwright:
     expect(tex).to_be_visible()
     expect(qa_button).to_be_visible()
     assert qa_button.bounding_box()["x"] > tex.bounding_box()["x"]
+    assert (
+        page.evaluate("el => parseFloat(getComputedStyle(el).fontSize)", qa_button.element_handle())
+        >= 16
+    )
+    assert page.evaluate("el => getComputedStyle(el).fontWeight", qa_button.element_handle()) in (
+        "600",
+        "700",
+        "800",
+        "900",
+    )
     lean = page.get_by_role("button", name="Generate Lean proof (coming soon)", exact=True)
     assert (
         qa_button.bounding_box()["height"]
         == tex.bounding_box()["height"]
         == lean.bounding_box()["height"]
     )
+    page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
     qa_button.click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog).to_contain_text("Ask a question about the research performed in this project")
@@ -103,7 +114,7 @@ with sync_playwright() as playwright:
     page.evaluate(
         "async () => fetch('/api/__fixture/qa-control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delay_seconds:2})})"
     )
-    question = "What did the saved research conclude?"
+    question = "Can this saved research be used to explain the relationship between the investigators’ evidence, the skeptic’s objections, and the unresolved conclusions in this project?"
     dialog.get_by_label("Question").fill(question)
     dialog.get_by_role("button", name="Ask", exact=True).click()
     dialog.get_by_role("button", name="Cancel", exact=True).click()
@@ -141,7 +152,7 @@ with sync_playwright() as playwright:
     )
     assert state_after_cancel["started"] == state_before["started"] + 1
 
-    failed_question = "Retry the same question after the confirmed failure?"
+    failed_question = "After the repeated provider failure, can the saved research still support a useful answer about the investigators’ evidence and the skeptic’s unresolved objections?"
     page.evaluate(
         "async () => fetch('/api/__fixture/qa-control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fail_next:1})})"
     )
@@ -177,10 +188,55 @@ with sync_playwright() as playwright:
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=30000)
     question = failed_question
-    expect(card.locator(".saved-paper-expand")).to_contain_text(question)
-    card.locator(".saved-paper-expand").click()
-    expect(card.locator(".saved-paper-expand")).to_have_attribute("aria-expanded", "false")
-    card.locator(".saved-paper-expand").click()
+    title_line = card.locator(".saved-paper-title-line")
+    expect(title_line.locator(".saved-paper-title")).to_have_text(question)
+    expect(title_line.locator(".saved-paper-title")).to_have_count(1)
+    expect(title_line.locator("button button")).to_have_count(0)
+    expanded_before_copy = card.locator(".saved-paper-expand").get_attribute("aria-expanded")
+    title_rects = title_line.locator(".saved-paper-title").evaluate(
+        "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
+    )
+    assert len(title_rects) >= 2, title_rects
+    title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
+    normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
+    normal_copy_box = normal_copy_button.bounding_box()
+    normal_icon_box = normal_copy_button.locator("svg").bounding_box()
+    normal_icon_bounds = normal_copy_button.locator("svg").evaluate(
+        "svg => { const b=svg.getBBox(); return {x:b.x,y:b.y,right:b.x+b.width,bottom:b.y+b.height,overflow:getComputedStyle(svg).overflow}; }"
+    )
+    assert normal_icon_bounds["x"] >= 0 and normal_icon_bounds["y"] >= 0
+    assert normal_icon_bounds["right"] <= 24 and normal_icon_bounds["bottom"] <= 24
+    assert normal_icon_bounds["overflow"] == "visible"
+    title_line.get_by_role("button", name="Copy Markdown answer").click()
+    expect(card.get_by_role("button", name="Copied Markdown answer to clipboard")).to_be_visible(
+        timeout=3000
+    )
+    copied_icon_box = title_line.get_by_role(
+        "button", name="Copied Markdown answer to clipboard"
+    ).bounding_box()
+    last_title_rect = title_rects[-1]
+    assert copied_icon_box and copied_icon_box["x"] >= last_title_rect["right"] - 1
+    assert normal_copy_box and normal_icon_box
+    assert copied_icon_box == normal_copy_box
+    assert (
+        title_line.get_by_role("button", name="Copied Markdown answer to clipboard")
+        .locator("svg")
+        .bounding_box()
+        == normal_icon_box
+    )
+    assert (
+        abs(
+            (copied_icon_box["y"] + copied_icon_box["height"] / 2)
+            - (last_title_rect["y"] + last_title_rect["height"] / 2)
+        )
+        < 14
+    )
+    expect(card.locator(".saved-paper-expand")).to_have_attribute(
+        "aria-expanded", expanded_before_copy
+    )
+    title_line.screenshot(path=str(OUT / "research-qa-title-copied.png"))
+    if expanded_before_copy != "true":
+        card.locator(".saved-paper-expand").click()
     expect(card.locator(".saved-paper-expand")).to_have_attribute("aria-expanded", "true")
     expect(card.locator(".ai-paper-preview")).to_contain_text("The saved research answers")
     citation = card.locator(".ai-paper-preview a").filter(has_text="Session #1").first
@@ -198,13 +254,6 @@ with sync_playwright() as playwright:
     expect(
         card.locator(".research-qa-answer-heading").get_by_role("heading", name="Answer")
     ).to_be_visible()
-    copy_button = card.locator(".research-qa-answer-heading").get_by_role(
-        "button", name="Copy Markdown answer"
-    )
-    copy_button.click()
-    expect(card.get_by_role("button", name="Copied Markdown answer to clipboard")).to_be_visible(
-        timeout=3000
-    )
     copied = page.evaluate("navigator.clipboard.readText()")
     assert copied.startswith("# Research Q/A") and "## Question" in copied and question in copied
     assert (
@@ -235,9 +284,7 @@ with sync_playwright() as playwright:
     page.evaluate(
         "Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:() => Promise.reject(new Error('blocked'))})"
     )
-    card.locator(".research-qa-answer-heading").get_by_role(
-        "button", name="Copied Markdown answer to clipboard"
-    ).click()
+    title_line.get_by_role("button", name="Copied Markdown answer to clipboard").click()
     expect(dialog.get_by_role("alert")).to_contain_text("Clipboard access failed")
 
     with page.expect_popup() as markdown_popup:
@@ -339,6 +386,14 @@ with sync_playwright() as playwright:
     page.screenshot(path=str(OUT / "research-qa-mobile.png"), full_page=True)
     mobile_dialog = page.get_by_role("dialog", name="Research Q/A")
     assert mobile_dialog.bounding_box()["width"] <= 390
+    mobile_title = mobile_dialog.locator(".saved-paper-card").first.locator(
+        ".saved-paper-title-line"
+    )
+    mobile_title_rects = mobile_title.locator(".saved-paper-title").evaluate(
+        "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
+    )
+    assert len(mobile_title_rects) >= 2, mobile_title_rects
+    mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile.png"))
     remove = mobile_dialog.locator(".saved-paper-card").first.get_by_role(
         "button", name="Remove", exact=True
     )

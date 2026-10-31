@@ -282,7 +282,7 @@ async def handler(request):
         if max_regions:
             evidence = artifact_refs[:4] or [project_source["id"]]
             paper = {
-                "title": "The Maximum Number of Regions Formed by Lines",
+                "title": "The Maximum Number of Regions Formed by Lines: An Evidence-Bound Mathematical Framework with Explicit Construction and Unverified Claims",
                 "abstract": r"We study the maximum number $R(n)$ of regions cut out in the plane by $n$ distinct lines. Inserting lines one at a time gives an upper bound of $k$ new regions at step $k$. The family $L_j:y=jx+j^2$ attains this bound at every step, since the intersections on each new line are distinct. Together with the empty arrangement, this yields the candidate formula $R(n)=1+n(n+1)/2$. The complete argument is present in the saved research record, but has not been independently verified.",
                 "abstract_claim_ids": ["C1", "C2", "C3"],
                 "problem_framing": [
