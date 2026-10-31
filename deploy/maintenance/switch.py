@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 """Toggle the host Caddy maintenance snippet; requires root and installed host config."""
+
 import os
 import pathlib
 import subprocess
@@ -26,6 +26,7 @@ CONTENT = """handle {
 def run(*args):
     subprocess.run(args, check=True)
 
+
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ("on", "off"):
         raise SystemExit("usage: switch.py on|off")
@@ -35,7 +36,10 @@ def main():
         raise SystemExit("host maintenance directory not installed")
     before = SNIPPET.read_bytes() if SNIPPET.exists() else None
     if sys.argv[1] == "on":
-        if not all(pathlib.Path("/var/www/sigma-maintenance", name).is_file() for name in ("index.html", "maintainance-page.png")):
+        if not all(
+            pathlib.Path("/var/www/sigma-maintenance", name).is_file()
+            for name in ("index.html", "maintainance-page.png")
+        ):
             raise SystemExit("maintenance page not installed")
         SNIPPET.write_text(CONTENT)
     else:
@@ -52,6 +56,7 @@ def main():
         run("systemctl", "reload", "caddy")
         raise
     print("SIGMA maintenance:", sys.argv[1])
+
 
 if __name__ == "__main__":
     main()
