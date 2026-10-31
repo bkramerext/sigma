@@ -1,3 +1,162 @@
+## PR #395 — Issue #401 publication-quality correction and bounded PDF checks (2026-10-31)
+
+The renderer now preserves validated inline math in table captions, headers, and
+cells; lays out prose columns with content-aware widths and ragged-right text;
+uses landscape pages for dense four-to-six-column comparisons; repeats longtable
+headers; and renders complete long captions with an incomplete-ending guard.
+Unicode dashes, quotation marks, and ellipses are converted through safe TeX
+markers so their commands do not become printable text. Source UUIDs in prose
+and visual evidence notes are replaced with stable reader labels; the exact
+source-reference map remains in the archived generation metadata.
+
+Diagram layout now separates graph nodes, compact numbered edge badges, and
+transparent fitted boundaries. DAG ranks use wrapped-label heights and reject
+cyclic, overly wide, crowded, or crossing graphs into a complete readable
+node/edge/boundary list. Diagrams are attached to the section with the most
+overlapping claim IDs. The fallback keeps all graph semantics and evidence.
+
+The PDF check now also detects severe same-baseline text-glyph overlap that
+remains inside page margins. A real Tectonic negative control compiles two
+different labels into one overlapping line and confirms PDFium flags it for
+manual layout review, while the math, table, and diagram fixtures remain clear.
+The check avoids broad intersection thresholds because kerning, ligatures, and
+math can create legitimate partial box intersections. It does not detect text
+obscured by non-text graphics, every crossing edge, or all internally
+unreadable tables. These geometry checks are defect detectors, not proof of
+visual quality; publication signoff still requires inspection of rendered
+pages.
+
+After TeX proofreading, SIGMA now compiles and checks the actual PDF with
+Tectonic diagnostics and PDFium per-character page-bound checks. The UI shows
+`Compiling PDF` and `Checking PDF · pass N of 3`, plus the explicit statement
+that TeX is authoritative and PDFs are not edited. If a check detects a
+correctable horizontal/vertical overflow, SIGMA changes only TeX layout
+settings and compiles again. It stops after a clean check or after at most
+three PDF checks; remaining warnings after pass 3, or a warning with no safe
+deterministic TeX repair, produce a visible `Needs review` status and preserve
+the exact TeX/PDF pair with pass diagnostics. This does not
+rerun the AI proofreader or research author. A diagram-specific Tectonic/PGF
+error retains the existing semantics-preserving TeX fallback.
+
+Deterministic Tectonic fixtures exercise mathematical cells (Maximum Regions),
+the six-node/five-edge/one-boundary Tadpoles graph, an eight-node ONP relationship
+fallback, a readable DAG rendering, and a multi-page five-column ONP table.
+PDFium extracts text, checks every glyph box against the page bounds, renders
+actual pages, and verifies math values, dash glyphs, complete graph
+labels/edges/boundaries, readable evidence labels, and repeated table headers.
+An additional overprint control compiles `OVERLAP CONTROL` with an obscuring
+`\llap{OBSCURED CONTROL}` on the same baseline; PDFium reports substantial
+glyph overlap and the generation path preserves the TeX/PDF while marking
+publication `Needs review`. It does not guess a semantic correction.
+The deterministic pass regression forces pass 1 and 2 line-layout warnings,
+confirms TeX-only repairs stop after a clean pass 2, and confirms unresolved
+warnings stop after pass 3 with a review status. One-shot and long-form flows
+still use exactly one AI proofreading call per bounded source chunk. These are
+engineering fixtures, not fresh research or evidence about live provider
+quality.
+
+Focused `tests/papers.py` passed, including actual Tectonic compilation and
+PDFium text extraction, bounds checks, and raster rendering. The one-shot
+three-pass path performed four Tectonic compiles (one proofreading diagnostic
+compile plus three PDF passes); long-form stopped cleanly after two PDF passes
+and performed three total compiles. Deterministic provider-call assertions
+passed; no live or paid AI calls occurred. Full `./sigma test`, full Ruff,
+Pyright, frontend typecheck/build, and real Chrome against the deterministic
+provider fixture passed. Chrome covered cancel/retry, visible PDF-check pass
+and TeX-authority progress, long-form recovery in a fresh tab, and saved PDF
+availability. Its pass assertion uses captured UI progress history because a
+fast fixture can finish before a later DOM poll. Screenshot capture is
+conditional on the progress still being on screen. The local browser check
+completed successfully; the fixture project/PDFs are temporary and do not
+constitute research results. No AI/provider charges were incurred. GitHub
+workflows on the pushed final SHA remain pending.
+
+Coordinator follow-up feedback at `7f3cac0c27318b0aaca84c4ec925c3d9f8357864`
+identified that page-edge bounds alone miss internal text overlap. This
+follow-up preserves the rendering changes and adds the overprint detector and
+negative control above. Focused `tests/papers.py` passes: four representative
+real PDFs have no overlap/bounds warnings, and the overprint negative control
+is flagged. The one-shot and long-form deterministic end-to-end Tectonic paths
+took 1.166 s and 1.180 s respectively in this run. `./sigma test` passes on
+the follow-up working tree, including the 14 sovereign-cost and 8 MindRouter
+envelope tests, Ruff, formatting, Pyright, frontend typecheck/build, and paper
+tests. No live/paid calls occurred. Rendered checks here use deterministic
+engineering fixtures; the original uploaded ONP and Tadpoles PDFs are not
+regression inputs in this worktree. Overall visual acceptance therefore
+remains **UNMET** pending manual inspection of generated publication PDFs.
+
+## PR #395 — mandatory TeX proofreading stage (2026-10-31)
+
+Added an automatic, bounded TeX proofreading stage between research validation
+and PDF compilation for one-shot and long-form papers. A typed stage callback
+keeps progress state values (`active`, `milestone`, `complete`) distinct from
+keyword-only explanatory details. The UI shows “Proofreading TeX” and
+“Checking and correcting typesetting issues”; its cost disclosure identifies
+proofreading as AI work.
+
+The pass checkpoints exact authored TeX, covers the full source in bounded
+chunks, collects static and temporary Tectonic diagnostics, and requests strict
+structured minimal patches from the configured model. Conservative semantic
+signatures reject changes to prose, claims, equation tokens, values/units,
+citation/source identifiers, and diagram labels/table contents. Completed
+patches are reused on recovery; an interrupted dispatched request is marked
+uncertain and never replayed. Failure preserves the authored draft and frozen
+evidence. A compiler fallback now occurs only when error diagnostics identify
+TikZ/PGF. It removes only generated diagram figures from the already-corrected
+TeX, retaining accepted math/layout fixes. Provenance records fallback reason,
+removed-diagram count, original/corrected/final hashes, accepted categories,
+unresolved diagnostics, elapsed time, model/effort, and provider-call counts.
+
+The review also caught and fixed an actual three-column table overflow: equal
+`\linewidth/3` columns omitted the inter-column padding. Column widths now
+reserve that padding. Removing unnecessary zero-width TikZ edge-label boxes
+also eliminated small overfull-box warnings in the representative fixture.
+
+Verification on `blue/sovereign-ai-federation` includes the complete
+`tests/papers.py` suite and `./sigma test`: all steps passed, including Ruff
+check/format, Pyright, frontend typecheck/build, cloud integration and the
+paper regressions. The optional graph-present sandbox test skipped because its
+local image was unavailable; the frontend build emitted its large-chunk
+advisory. Real Chrome `browser_checks/issue328_paper_progress.py` passed against
+the isolated deterministic provider fixture, verifying progress/cost
+disclosure, one-shot recovery, long-form fresh-tab recovery, completion and PDF
+availability. The proofreading capture is
+`/tmp/sigma-issue328-proofreading-progress.png`.
+
+Deterministic one-shot fixture (1,519 TeX bytes) made one proofreader call and
+used two real Tectonic compiles in 0.568 s total. The deterministic long-form
+fixture (17,994 TeX bytes, with a mathematical expression, diagram and wrapped
+three-column table) made two bounded proofreader calls and used two compiles in
+0.971 s total. Both archived PDFs compiled with no overfull-box warnings. The
+rendered fixture pages were inspected in Chrome PDF viewer at
+`/tmp/sigma-tex-proofreader-visual/chrome-page2.png` and
+`/tmp/sigma-tex-proofreader-visual/chrome-page3.png`; the equation and table
+rendered legibly and the diagram fit. The fixture retains an underfull-box note
+for the fixed SHA-256 string. These are deterministic engineering fixtures,
+not independently validated research or live-provider proofreading. No live
+or paid provider calls occurred; actual provider latency, cost and correction
+quality remain **UNVERIFIED**.
+
+## PR #395 proofreading call-accounting correction (2026-10-31)
+
+Checkpointed TeX proofreader counts are now per rendering. Calls from replaced
+renderings are transferred once into a separate cumulative prior-render total;
+new proofreading checkpoints start at zero. Preflight and archived generation
+provenance include both totals. A version marker preserves correct accounting
+when resuming checkpoints created by the earlier implementation, which mixed
+the prior-render total into the current checkpoint count.
+
+The deterministic regression changes visual and research-detail options across
+three TeX renderings, forces two recoverable compilation failures, and confirms
+the one authored draft is reused. Two proofreader calls per rendering are
+reported as six total (four prior-render, two final-render); preflight after the
+second rendering reports five calls including the single author call. No live
+or paid provider call was made. `tests/papers.py` and `./sigma test` passed,
+including Ruff check/format, Pyright, frontend typecheck/build, and all
+configured integration suites. The optional graph-present sandbox scenario
+skipped because the local image is unavailable; frontend build retains the
+existing large-chunk advisory.
+
 ## Production deployment — SIGMA v0.1.7 (2026-10-30 PDT)
 
 Deployed exact merged `main` SHA `802e9b6b7da5829868070f760e17280cd8a927f2`
@@ -8473,3 +8632,38 @@ was not independently captured and remains unverified. No paid provider calls
 were made. See [the issue handoff](../messages/issue_301_green_r4r.txt) for the
 current SHA, exact evidence, screenshots, and limitations. PR remains open and
 unmerged.
+
+
+## Issue #394 sample and #393 optional paper diagrams — first-branch checkpoint (2026-10-31)
+
+On branch `blue/issue-393-394-sovereign-diagrams` from `main` at `2d0a564c`, the new schema-v8 **Sovereign AI Federation** stock sample is implemented with three active strategies. Its question distinguishes MindRouter's documented on-campus gateway from proposed federation/frontier routing and frames ownership-cost, cost-per-successful-task, fairness, policy and reliability as research questions. The cited MindRouter documentation and PEARC'26 paper were reviewed 2026-10-31. SIGMA sample decode, independent copies and complete project-bundle export passed.
+
+The paper dialog has a default-off, project-persisted **Include diagrams (experimental)** option. The API passes the option only when enabled. Bounded diagram JSON uses allow-listed identifiers, text-only escaped labels, 8-node/12-edge/four-boundary limits and deterministic TikZ layout. The checkbox choice is saved in one-shot/long-paper checkpoints; an incompatible retry requires explicit restart. Invalid references are omitted with a warning, and Tectonic failure retries compilation without diagrams while preserving the same text and evidence appendix. No live or paid provider calls were made.
+
+Targeted `tests/papers.py` passed, including malicious-label escaping, option-specific strict schemas and real local Tectonic compilation. `tests/project_reports.py`, Ruff on changed Python modules, and frontend `npm run typecheck` passed. A real-Chrome browser check is added, but its attempt did not complete: the Samples view remained at “Loading sample projects…” despite the fixture endpoint returning HTTP 200. UI option persistence therefore remains UNVERIFIED in browser. Deterministic sample-copy paper artifacts are under `docs/evaluations/issue_393_394/mock_fixture/`; they explicitly state that they are not independently validated research.
+
+This is an interim engineering checkpoint only. No Investigator/Skeptic research has been run; conventional/diagram paper comparison, fallback/recovery edge cases beyond existing tests, final browser acceptance, full `./sigma test`, PR creation and coordinator review remain outstanding.
+
+## Canonical experiment branch migration and Phase 1 fixture pair (2026-10-31)
+
+The Round 11 sample/diagram implementation was cherry-picked, not duplicated, onto canonical `blue/sovereign-ai-federation` (PR #395): code commit `b22d5d57`, artifact-manifest commit `9a736b39`. After migration, `uv run --locked ruff check src/sigma/papers.py src/sigma/api.py tests/papers.py browser_checks/issue393_diagram_option.py`, `uv run --locked python tests/papers.py`, `uv run --locked python tests/project_reports.py`, and frontend `npm run typecheck` passed. The sample was independently copied and exported as the SIGMA project bundle.
+
+The synthetic fixture now has a no-diagram control (`paper-text-only.tex/.pdf`) and a diagram version (`paper.tex/.pdf`) built from the same frozen sample-project snapshot and mock draft. The shared snapshot SHA-256 is `3dcae814d22543d99e4be11f89c0123f8a29d9c7958ca5147f48b7a187c2142e`; exact file hashes are in `docs/evaluations/issue_393_394/mock_fixture/manifest.json`. Both PDFs compile locally with Tectonic. The 3-page diagram paper was rasterized for inspection; page 2's labels, arrows, edge legend, boundary and caption are readable. These are renderer fixtures only, not saved substantive research.
+
+Real-Chrome acceptance initially failed because the test fixture correctly rejected the Vite origin on port 5194. Starting its existing origin-normalization hook with `SIGMA_PAPER_PROGRESS_FIXTURE_ORIGIN=http://127.0.0.1:5194` fixed the fixture setup. `browser_checks/issue393_diagram_option.py` then passed: opening the sample, the paper-dialog option defaulting off, and its project-local preference persisting across reload. No provider request was made. Real Investigator/Skeptic research and live research-paper comparison remain unauthorized and unperformed.
+
+## PR #395 OUT #2 corrections (2026-10-31)
+
+The long-form plan now includes the checked diagram field and strict evidence/claim validation, and local fallback returns a valid no-diagram plan. Diagram generation is the standard default and remains user-disableable; paper prompts request explanatory figures and evidence-backed tables where those improve comparison or communicate architecture, while discouraging decorative/redundant items. Tables are validated, persisted with long-form checkpoints, referenced to evidence, and rendered as TeX longtables. Old checkpoints without an explicit diagram preference remain resumable. Table and diagram provenance is frozen with the same evidence snapshot across the conventional and diagram versions.
+
+Regression coverage exercises mocked checked and unchecked long-form generation, source/claim validation, tables and diagram output, checkpoint continuation, compatibility with old checkpoint preferences, frozen-source preservation, and compiler-fallback behavior without an extra provider call. Ruff, Pyright, frontend typecheck, and `./sigma test` passed. The full command included the 14 cost-model and 8 MindRouter envelope tests. Real Chrome confirmed the checkbox defaults on and its on/off choice persists. The local provider fixture was used only for browser interaction; there were zero paid/live provider calls.
+
+An offline, independent source-grounded analysis and paired PDFs are under `docs/evaluations/issue_393_394/independent_analysis/`. They compare four alternatives, include cost-per-useful-completion thresholds and fixed-allocation/LP cases, counterexamples, competing hypotheses, trust/policy analysis, and a proposed pilot. Both PDFs share `paper_body.tex`; the standard version is six pages and the version with two explanatory diagrams is seven. They were built by Tectonic 0.17.0. The calculations explicitly distinguish the published MindRouter report from derived arithmetic and wholly hypothetical scenario parameters. This is not saved SIGMA Investigator/Skeptic research and does not meet the final evidence requirement; real, source-preserving SIGMA research remains a critical unmet milestone.
+
+The canonical PR branch is still Draft; no merge or deployment was performed. CI for the new commit is pending/not yet observed. See the per-file digests and artifact provenance in the independent-analysis manifest and `messages/in_message_2.md`.
+
+## PR #395 combined diagrams-and-tables preference correction
+
+The single project-persisted checkbox is labeled **Include diagrams and tables** and remains on by default for new projects; the existing local-storage key is retained so prior per-project choices survive reloads. The existing API/checkpoint boolean is kept for compatibility but now controls both optional visual types. With the option off, one-shot and long-form strict provider schemas omit diagrams and tables, and authoring prompts do not request either. With it on, the one-shot and long-form planning prompts actively encourage both where evidence supports them, and section-writing calls enable evidence-linked tables. Unsupported or empty visuals remain optional.
+
+Completed papers and checkpoints no longer become incompatible solely because this preference changed. Existing authored figures/tables stay in checkpoint data for recovery, while unchecked output omits both during final rendering. Regression coverage checks one-shot schemas and prompts, checked/unchecked long planning and section schemas, completed one-shot draft reuse after a preference change without another provider call, long-form partial-section recovery with saved tables, and preservation of mathematical text output. Real-Chrome acceptance uses the exact combined label and verifies default checked plus preference persistence. No live or paid provider calls were used.

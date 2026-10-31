@@ -38,8 +38,21 @@ with sync_playwright() as playwright:
     page.goto(UI_ORIGIN + "/project?path=" + quote(path, safe=""))
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(dialog).to_contain_text(
+        "TeX proofreading uses this model; PDF compilation does not use AI."
+    )
     generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
+    page.evaluate(
+        """() => {
+          window.__sigmaProgressHistory = [];
+          const observer = new MutationObserver(() => {
+            const status = document.querySelector('.ai-paper-progress');
+            if (status) window.__sigmaProgressHistory.push(status.innerText);
+          });
+          observer.observe(document.body, {subtree: true, childList: true, characterData: true});
+        }"""
+    )
     expect(generate).to_have_css("text-decoration-line", "underline")
     expect(dialog.get_by_role("button", name="Close", exact=True)).to_have_css(
         "text-decoration-line", "underline"
@@ -65,10 +78,27 @@ with sync_playwright() as playwright:
     expect(generate).to_be_enabled(timeout=10000)
     generate.click()
     expect(status).to_contain_text("Writing the paper", timeout=10000)
+    expect(status).to_contain_text("Proofreading TeX", timeout=30_000)
+    expect(status).to_contain_text("Checking and correcting typesetting issues.")
+    expect(status).to_contain_text("Waiting for the AI response.")
+    page.screenshot(path="/tmp/sigma-issue328-proofreading-progress.png", full_page=True)
+    page.wait_for_function(
+        "() => window.__sigmaProgressHistory.some(text => text.includes('Checking PDF · pass 1 of 3'))",
+        timeout=60_000,
+    )
+    progress_history = page.evaluate("() => window.__sigmaProgressHistory.join('\\n')")
+    assert "TeX is authoritative and PDFs are not edited." in progress_history, progress_history
+    if status.count() and "Checking PDF · pass 1 of 3" in (status.inner_text() or ""):
+        page.screenshot(path="/tmp/sigma-issue401-pdf-check-progress.png", full_page=True)
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
-    expect(dialog.get_by_role("status")).to_contain_text("Paper saved in Saved versions.")
+    expect(dialog.locator(".ai-paper-status:not(.ai-paper-progress)")).to_contain_text(
+        "Paper saved in Saved versions."
+    )
     expect(card.get_by_role("link", name="Download PDF")).to_be_visible()
+    progress_history = page.evaluate("() => window.__sigmaProgressHistory.join('\\n')")
+    assert "Checking PDF" in progress_history, progress_history
+    assert "TeX is authoritative and PDFs are not edited" in progress_history, progress_history
 
     page.goto(UI_ORIGIN + "/")
     created = page.evaluate(
@@ -136,5 +166,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS T328 real Chrome: one-shot progress/cancel/retry, active long-form progress recovery in a fresh tab, and detached completion with a saved PDF; provider calls were served by the local deterministic fixture."
+    "PASS T328 real Chrome: one-shot progress/cancel/retry, visible PDF-check status with TeX authority, active long-form progress recovery in a fresh tab, and detached completion with a saved PDF; provider calls were served by the local deterministic fixture."
 )

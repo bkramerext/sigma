@@ -1,0 +1,198 @@
+\title{When Does University AI Federation Pay?\\\large A Source-Grounded Cost, Quality, Fairness, and Sovereignty Analysis}
+\author{Independent technical analysis\\\small Offline synthesis of published evidence and explicitly hypothetical models}
+\date{31 October 2026}
+\maketitle
+\begin{center}\small\textbf{Evidence status:} no SIGMA Investigator/Skeptic session, campus workload trace, paired model-quality benchmark, or deployment experiment is represented here.\end{center}
+
+\begin{abstract}
+Universities can serve AI workloads on campus, through approved commercial APIs, or across cooperating institutions. The technical and economic question is not whether federation can add capacity, but whether its measured scientific utility exceeds its additional governance, security, and operating burden relative to a well-tuned single-campus hybrid. This offline study combines (i) a published University of Idaho MindRouter deployment and its reported 17-day energy and API-price comparison, (ii) source-derived break-even inequalities, and (iii) a reproducible but entirely hypothetical university cost scenario with fixed-allocation accounting and a continuous routing optimization. The published case reports 872,997,430 processed tokens and approximately 275 kWh/day under normal operation; it does not report a quality-matched frontier comparison or full institutional total cost of ownership (TCO). At an illustrative electricity tariff of \$0.12/kWh, the implied 17-day electricity cost is \$561. If local and API tasks had equal useful-completion probability, the allowable non-electric local cost would be \$3,466--\$11,335 over that window, but this interval is a threshold, not a TCO estimate. In the synthetic case, an optimized federation raises expected task successes over the hybrid by 32.14 at a \$2,000 monthly frontier cap, at \$4,837 additional monthly cost; at a \$4,000 cap it adds no modeled successes and costs \$2,600 more. Those results inherit invented success rates, task mix, capacity and overhead assumptions. We identify counterexamples to API-only coverage and to the inference that long-run fair service implies short-request latency guarantees. The evidence supports a falsifiable 90-day paired pilot design, not an operational recommendation to federate. A strict route policy, hard per-call spend reservation, and task-level quality and tail-latency measurement are prerequisites for any decision.
+\end{abstract}
+
+\section{Question, contribution, and scope}
+A university may want useful AI for routine coding, long-context research and agentic workflows while protecting student, patient, sponsor-controlled and unpublished data. Local GPU inference can keep data within institutional control, but requires capital, power, facilities, staffing, maintenance and model-quality evaluation. Commercial APIs provide another route, but incur per-token charges and require explicit contractual approval for each class of data. A partner-campus pool adds possible capacity and resilience while introducing another identity domain, policy authority, network, contract, audit path and failure mode.
+
+We ask: \emph{Under what measured task mix, quality, utilization, price, policy and operational conditions does cross-campus inference improve useful research service enough to justify those additional costs and trust boundaries, compared with an optimized campus-plus-approved-frontier service?} Four alternatives are compared: (A) campus-local only; (B) frontier API only; (C) campus service plus separately approved frontier access; and (D) C plus approved partner-campus inference. API-only is included as an explicit counterexample because it can be inexpensive for permitted work while infeasible for restricted tasks.
+
+This paper is an independently prepared analysis of published sources and checked-in calculations. It is not a SIGMA-generated paper, a saved multi-agent research run, a campus cost survey, or a benchmark. Every scenario workload, success rate, capacity, university cost, and partner price below is hypothetical unless explicitly identified as reported by a cited primary source. No inference provider was called and no institution or user data was used.
+
+\section{Evidence and method}
+The primary deployment baseline is Sheneman's PEARC '26 description of MindRouter. The paper reports an on-campus, open-source inference gateway, protocol translation, WDRR fair-share scheduling, quota and access controls, audit logging, GPU telemetry, and a University of Idaho production deployment on 13 GPU nodes with 40 GPUs and 64 open-weight models \cite{sheneman2026}. Its reported March 2026 17-day observation is 872,997,430 tokens; the article gives approximately 275 kWh/day during normal operation and \$4,027--\$11,896 of estimated commercial API-equivalent spend for the workload mix \cite[Sec.~4]{sheneman2026}. These are author-reported deployment quantities and price estimates, not independently metered electricity for exactly the same 17 days, an invoice, or a matched task-quality experiment. The MindRouter documentation describes its scheduler and campus gateway; neither source documents cross-university federation or automatic commercial-frontier routing \cite{mindrouterdocs}.
+
+We use two computational views. The source-derived envelope converts the reported normal daily energy into a 17-day energy quantity and asks what maximum non-electric cost would preserve equal cost per useful task under an explicitly hypothetical local-to-API success ratio. The second model reads \url{research/sovereign_scenario_hypothetical.json}. It reports fully loaded monthly cost, separately tagged sunk cost, projected API charges, expected useful task successes, and feasibility under route allowlists and capacity constraints. The fixed allocations are evaluated by the standard-library cost model. A SciPy linear program separately maximizes expected successes under a full-coverage constraint and minimizes cost subject to an expected-success floor. It allows fractional tasks and models no queues, latency, outage, correlated error, or uncertainty; its outputs are upper bounds under the declared assumptions, not executable routing choices.
+
+We distinguish four evidence classes throughout: (1) published deployment quantities; (2) calculations derived from those quantities; (3) illustrative inputs and outputs from the synthetic scenario; and (4) proposed measurements. A published commercial-equivalent price is not a quality-equivalent result. Expected successes computed from assumed route success probabilities are not observed successful research outcomes.
+
+\section{A decision model that includes useful quality}
+Let $x_{wr}$ be monthly tasks of workload class $w$ sent to approved route $r$, $d_w$ the demand, $q_{wr}$ the probability of a rubric-defined useful completion, $c_{wr}$ the variable cost per task, $g_{wr}$ the required capacity units, and $K_r$ the route capacity. A planning model can maximize $\sum_{w,r} q_{wr}x_{wr}$ subject to demand conservation, capacity, budget and route-approval constraints. A separate cost-minimization problem can require a floor $\sum q_{wr}x_{wr}\geq Q$. Neither objective alone is a universal preference: the university must value quality, latency, availability, privacy, workload completion and operational effort.
+
+For a credible TCO comparison, monthly full cost should include amortized GPU capital and replacement, electricity and cooling, storage, network, procurement and facilities, support contracts, staffing, idle capacity and utilization. API cost should include uncached and cached input, output, tools, embeddings, repeated agent calls, retries, egress, residency premiums and commitments. Distinguish costs already paid from avoidable costs without deleting depreciation or replacement from a long-run ownership view. Report both cost per active researcher and cost per successful useful task; the latter is undefined as a meaningful efficiency result when a plan cannot serve the required workload mix.
+
+\begin{table}[ht]
+\centering\small
+\caption{Decision quantities and the evidence needed to estimate them.}
+\begin{tabularx}{\linewidth}{p{0.19\linewidth}p{0.32\linewidth}X}
+\toprule
+Quantity & Role in comparison & Required evidence \\
+\midrule
+Useful completion $q_{wr}$ & Quality-adjusted numerator & Blinded paired scoring, rubric, serious-error rate, uncertainty interval \\
+Full monthly cost & Ownership and operating burden & Depreciation/replacement, power/PUE, staff, support, storage, egress, governance \\
+Route eligibility & Feasibility and sovereignty & Approved data class, destination, retention, derived-data policy and contract \\
+Service and latency & Researcher experience and fairness & Throughput, p95/p99 TTFT and completion, queue and starvation by group \\
+Failure and budget & Safety under disruption & WAN/provider outage, ambiguous timeout charges, hard reservations, retry/cancel behavior \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{What the published MindRouter evidence does and does not show}
+MindRouter is a useful baseline because it addresses real campus inference problems rather than assuming universities begin from a blank slate. Its published architecture combines protocol normalization, heterogeneous on-campus backends, institutional access controls, fair-share scheduling and operational observability. The paper reports production use and estimates commercial equivalents for its token workload. Those contributions motivate measuring local service directly and demonstrate a working campus-hosted gateway, not the economic superiority of local models on equal-quality research tasks.
+
+The key denominator remains unresolved. The paper's commercial-dollar interval is based on token pricing; it does not provide a blinded, task-matched comparison of useful completion rates between local models and commercial frontier models. Nor does it report a complete cost ledger for GPU capital, staffing, procurement, support, idle capacity and future replacement. In particular, multiplying the approximate daily energy by 17 gives 4,675 kWh; at an assumed \$0.12/kWh, that is \$561 of electricity. It is not total local cost. A reader cannot infer savings or cost per useful task by comparing the API-equivalent range to campus energy alone.
+
+The documented WDRR scheduler is a campus-level resource-sharing mechanism. Its reported operational fairness does not imply a formal tail-latency guarantee. The VTC work defines service fairness in token-cost terms and proves a tight factor-two bound on service difference between continuously backlogged clients under its assumptions \cite{sheng2024}. DLPM studies fairness versus prefix locality within an inference service and D$^2$LPM extends scheduling across workers \cite{cao2025}. These are relevant scheduling results, but a distributed GPU scheduler is not a federation of separately governed universities. It does not settle cross-campus identity, data rights, contracts, partner withdrawal, audit or cost settlement.
+
+\section{Source-derived energy and price envelope}
+Let $P\in[\$4{,}027,\$11{,}896]$ be the source's estimated commercial API-equivalent spend for the reported period, $E=4{,}675$ kWh the derived energy quantity, $t=\$0.12$/kWh an illustrative tariff, $H$ all non-electric campus costs over the same period, and $r$ the local useful-success probability divided by the API useful-success probability on matched tasks. Under identical demand and token accounting, local inference is no more expensive per useful completion only if
+\[
+H \leq rP - Et = rP - \$561.
+\]
+The equation is a break-even threshold, not an estimate of $H$ or $r$. Table~\ref{tab:break-even} shows that lowering local task quality shrinks the affordable hardware, staffing and facility envelope. At the low API-price endpoint, if $r<561/4027\approx0.139$, electricity alone exceeds the hypothetical quality-adjusted API comparator. No source supplies the task-level $r$ needed to choose among these cases.
+
+\begin{table}[ht]
+\centering\small
+\caption{Maximum non-electric local cost compatible with equal cost per useful task. Every row uses a hypothetical $0.12$/kWh tariff and a hypothetical quality ratio.}
+\label{tab:break-even}
+\begin{tabular}{lrrr}
+\toprule
+Local/API success ratio $r$ & Low API proxy & High API proxy & Interpretation \\
+\midrule
+1.00 & \$3,466 & \$11,335 & Equal quality assumed \\
+0.75 & \$2,459 & \$8,361 & Local success 25\% lower assumed \\
+0.50 & \$1,453 & \$5,387 & Local success half assumed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This bound is useful precisely because it limits a claim: energy and token volume alone cannot establish full TCO savings or equivalent research quality. The 2026-10-31 GPT-5.4 model page lists \$2.50 per million uncached input tokens, \$0.25 per million cached input tokens and \$15 per million output tokens; it states a 10\% regional-processing uplift and special pricing for prompts above 272,000 input tokens \cite{gpt54}. The scenario below uses the uncached standard input/output rates as a dated public price input. It does not model residency uplift, cached tokens, tool fees, negotiated academic terms, or a call that crosses the high-context threshold. Price visibility does not authorize sending data to that service.
+
+\section{A synthetic four-alternative cost case}
+The case represents 120 active researchers and 1,150 monthly tasks: 600 low-risk tasks, 300 complex scientific tasks and 250 restricted student, sponsor or research tasks. The restricted class can run only on its home-campus route. The campus has 1,600 available GPU-hours and \$15,783 in fixed monthly full-cost assumptions, including \$8,333 depreciation, \$1,300 replacement/support reserve, \$1,250 energy/cooling, \$4,200 loaded staff and smaller storage, network and facilities components. Of the fixed cost, \$10,133 is tagged as sunk for the incremental accounting view. These amounts are all invented, not a university budget. The partner has 450 assumed GPU-hours at \$5/hour plus a synthetic \$2,600 monthly federation operations/governance overhead. The frontier cap is modeled at \$4,000 per month.
+
+The case assigns synthetic useful-completion probabilities: local/frontier/partner rates are 0.82/0.95/0.85 for low-risk tasks and 0.40/0.83/0.65 for complex tasks; restricted local tasks are assigned 0.70. Complex tasks assume 160,000 input tokens, 70,000 output tokens and eight average billable model calls; low-risk tasks assume 5,000/1,500 tokens and 1.4 calls. All probabilities, calls, capacity coefficients, demand and costs are chosen scenario parameters. They are not MindRouter measurements or estimates of GPT-5.4 quality.
+
+\begin{table}[ht]
+\centering\small
+\caption{Fixed-allocation base case at the synthetic \$4,000/month frontier cap. Expected successes are calculated from assumed route probabilities; they are not observed.}
+\begin{tabularx}{\linewidth}{p{0.21\linewidth}r r r r X}
+\toprule
+Architecture & Feasible & Served & Expected useful & Full \$/month & \$/useful success \\
+\midrule
+A. Campus local & Yes & 1,150 & 787.00 & \$15,898 & \$20.20 \\
+B. Frontier only & No & 900 & 819.00 & \$3,854 & \$4.71* \\
+C. Campus + approved frontier & Yes & 1,150 & 891.55 & \$19,397 & \$21.76 \\
+D. Federation + frontier & Yes & 1,150 & 882.40 & \$22,831 & \$25.87 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+\smallskip\textit{*API-only's apparent unit cost omits the fact that 250 restricted tasks are unserved; it violates the case's 95\% coverage constraint and is not an eligible full-service alternative.}
+
+In this frozen allocation, C adds 104.55 expected successes over campus-only for \$3,498.69 additional full monthly cost, a modeled \$33.46 per incremental expected success. D spends \$3,434.78 more than C while yielding 9.15 fewer expected successes. D's lower projected API bill (\$1,750 versus \$2,627) is more than offset by partner compute and governance overhead. This is a counterexample to the claim that federation is automatically cheaper or more effective; it is not evidence that federation is universally dominated. The fixed allocations are not independently optimized, and resilience, sovereignty, tail latency and withdrawal risk are not valued in this table.
+
+The route allowance is a hard feasibility constraint in the model, but API billing is a forecast, not a runtime control. For example, the federation's average projected bill can sit below the \$4,000 cap while its maximum-attempt exposure exceeds it. A production router needs an atomic spend reservation before every external call, a policy-approved upper-bound accounting rule, reconciliation of ambiguous timeouts, and no silent retries that can breach the cap.
+
+\section{Optimization changes the comparison, not the evidence quality}
+To avoid comparing only fixed allocations, we solved each architecture's routing decisions independently using the same scenario. The LP enforces full coverage, route capacities and external spend cap while maximizing expected successes. It is a continuous relaxation, so fractional task counts make it optimistic for indivisible jobs. Its quality parameters remain invented. A second objective minimizes total cost subject to at least 900 expected successes. These are two distinct views, not a single objective that jointly optimizes cost per success.
+
+\begin{table}[ht]
+\centering\small
+\caption{Optimized synthetic expected-success upper bounds and full monthly costs by frontier cap. Frontier-only is infeasible because the restricted tasks have no approved external route.}
+\label{tab:frontier}
+\begin{tabular}{lrrr}
+\toprule
+Frontier cap & A: campus only & C: hybrid & D: federation \\
+\midrule
+\$0 & 787 / \$15,898 & 787 / \$16,798 & 828.57 / \$21,578.57 \\
+\$2,000 & 787 / \$15,898 & 936.63 / \$18,721.34 & 968.77 / \$23,558.49 \\
+\$4,000 & 787 / \$15,898 & 994 / \$20,262.40 & 994 / \$22,862.40 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At a \$2,000 cap, D improves the modeled expected-success bound by 32.14 over C, but costs \$4,837.14 more per month, approximately \$150.49 for each incremental expected success. That may be worthwhile only if a prospective evaluation shows sufficient scientific value, time saved or access benefit. At \$4,000, both C and D reach the same 994-success bound; the optimizer leaves partner capacity unused, and D's extra fixed governance cost remains \$2,600. At a 900-success floor, the minimum-cost hybrid costs \$17,737.52/month versus \$20,337.52 for D, both with a \$1,007.66 modeled frontier bill. Thus the partner route's incremental value is scenario-dependent, and the alternative must be re-optimized before any conclusion.
+
+\ifShowDiagrams
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=0.38cm,y=0.018cm,>=Latex]
+\draw[->,thick] (14.6,760) -- (25.5,760) node[right]{Full monthly cost (thousands USD)};
+\draw[->,thick] (15,760) -- (15,1020) node[above]{Expected useful successes};
+\foreach \x/\label in {16/16,18/18,20/20,22/22,24/24} {\draw (\x,760) -- (\x,755) node[below]{\label};}
+\foreach \y/\label in {800/800,850/850,900/900,950/950,1000/1000} {\draw (15,\y) -- (14.8,\y) node[left]{\label};}
+
+
+\foreach \x/\y in {15.898/787,16.798/787,18.721/936.63,20.262/994} {\fill[blue!75!black] (\x,\y) circle (3pt);}
+\foreach \x/\y in {21.579/828.57,23.558/968.77,22.862/994} {\fill[orange!85!black] (\x,\y) circle (3pt);}
+\node[blue!75!black,anchor=south west] at (18.8,905) {Campus + approved frontier};
+\node[orange!80!black,anchor=north west] at (21.3,850) {Federation + frontier};
+
+
+\end{tikzpicture}
+\caption{Synthetic optimized cost/quality points at \$0, \$2,000 and \$4,000 monthly frontier caps. Blue marks campus-only and hybrid alternatives; orange marks federation. Values are expected successes from invented probabilities, not benchmark results. Points are scenario outcomes, not a measured Pareto frontier.}
+\label{fig:frontier}
+\end{figure}
+\fi
+
+\section{Fairness, sovereignty, and failure cases}
+Fairness must be specified at the level of the quantity that matters. Equal request counts do not equal equal GPU service when prompt lengths, output lengths, batching and cache behavior differ. MindRouter documents weighted deficits, burst credits and heavy-user deprioritization. VTC's service-gap result is valuable but is not a universal interactive latency SLO. A simple counterexample shows why: if a request already admitted to an engine occupies a non-preemptible prefill stage for $T$ seconds, a short compliant request arriving $\epsilon$ seconds later waits at least $T-\epsilon$, even if it is first in all later fair-queue decisions. A scheduler can compensate with later service and preserve long-run fairness while the short request has arbitrarily poor time-to-first-token as $T$ grows. This conditional construction is not a claim that MindRouter's engine always runs an uninterruptible prefill.
+
+Sovereignty is likewise a control boundary, not a Boolean feature of a gateway. The task, prompts, outputs, tool payloads, embeddings, caches, telemetry and logs may have different restrictions. Approval should be attached to the dataset and destination, with each university retaining control of identity, retention, audit and policy. Unclear classification must fail closed. A route cannot become allowable because a peer has unused GPUs, an external model scores better, a retry times out, or a local queue is long. A partner link also cannot silently become the fallback for a cloud or campus failure.
+
+\ifShowDiagrams
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=Latex,
+ box/.style={draw,rounded corners,align=center,text width=2.2cm,minimum height=0.9cm,fill=campus},
+ ext/.style={draw,rounded corners,align=center,text width=2.2cm,minimum height=0.9cm,fill=external},
+ deny/.style={draw,rounded corners,align=center,text width=2.1cm,minimum height=0.8cm,fill=risk}]
+\node[box] (task) at (0,0) {Research task + data classification};
+\node[box] (gate) at (3.5,0) {Home-campus policy gate\\identity, purpose, destination};
+\node[box] (local) at (7,0) {Home-campus GPU\\default approved route};
+\node[ext] (api) at (7,2.4) {Frontier API\\only with explicit approval};
+\node[ext] (partner) at (7,-2.4) {Partner campus\\separate approval + contract};
+\node[deny] (deny) at (0,-2.4) {Ambiguous or denied\\stay local / reject};
+\draw[->,thick] (task) -- (gate);
+\draw[->,thick] (gate) -- node[above,font=\scriptsize,fill=white,inner sep=1pt]{eligible local} (local);
+\draw[->,thick] (gate.north) -- (gate.north |- api.west) -- node[above,font=\scriptsize,fill=white,inner sep=1pt]{approved API} (api.west);
+\draw[->,thick] (gate.south) -- (gate.south |- partner.west) -- node[below,font=\scriptsize,fill=white,inner sep=1pt]{approved partner} (partner.west);
+\draw[->,thick,dashed] (task) -- (deny);
+\node[draw,dashed,rounded corners,fit=(task)(gate)(local)(deny),inner sep=0.3cm,label=above:{Home institution boundary}] {};
+\node[draw,dashed,rounded corners,fit=(api),inner sep=0.2cm,label=above:{Commercial boundary}] {};
+\node[draw,dashed,rounded corners,fit=(partner),inner sep=0.2cm,label=below:{Partner institution boundary}] {};
+\end{tikzpicture}
+\caption{Proposed fail-closed routing policy for a future study. The external and partner paths are hypotheses to test, not MindRouter capabilities or a deployed federation. Derived data inherit the approved destination rules.}
+\label{fig:policy}
+\end{figure}
+\fi
+
+\section{Falsifiable hypotheses and prospective pilot}
+Four hypotheses make the decision measurable. H1: on unrestricted complex tasks, frontier augmentation raises blinded useful-completion probability enough to offset its full billed call amplification compared with campus-local inference. H2: under a constrained frontier budget and available approved partner capacity, D improves coverage or a declared quality/latency target over an optimized C after partner and governance costs. H3: when partner capacity is unreliable, overhead is high, or policy cannot authorize data movement, C weakly dominates D in feasible task coverage and full cost. H4: service-share compliance alone does not guarantee acceptable p95/p99 interactive latency under long-prefill bursts, cache asymmetry or agentic batch contention.
+
+A 90-day pilot should be preregistered and locally approved. Days 1--30 collect on-campus workload distributions, task classes, energy, queueing and cost while shadow-evaluating route eligibility; use no cross-boundary data. Days 31--60 run blinded paired quality evaluations on consented, de-identified or synthetic tasks, freeze model versions, score serious errors and latency, and conduct failure drills. Days 61--90 compare optimized C and D only for explicitly approved low-risk classes under a capped, audited pilot. Use paired time windows or randomized task assignment, stratify by department and workload, and report denominators, exclusions and uncertainty. Do not move protected inputs or derivatives to obtain a benchmark.
+
+Stop immediately for any data-policy escape, unreserved or unattributed charge, unauthorized retry, failed revocation, or materially unexplained route. Stop or redesign if the pilot fails its preregistered minimum useful-quality threshold, p99 latency SLO, fairness bound, availability target, or full-cost ceiling. The threshold values must be selected with campus research computing, faculty, security, procurement and affected users before outcomes are observed; this analysis cannot choose them from synthetic probabilities.
+
+\section{Limitations and decision}
+The strongest quantitative statements here are conditional. The 17-day energy arithmetic uses a reported normal daily energy figure that the source does not state was metered across exactly the token-observation period. The estimated API-price interval is not an invoice or equal-quality test. GPT-5.4's public price page is a dated input, not proof of institutional eligibility or future prices. The economic scenario uses fabricated workloads, task success probabilities, route capacity, staff and capital values; its optimizer assumes additivity, fractional tasks, perfect classification inputs and no queueing. Neither model assigns monetary value to resilience, sovereignty or academic error severity. The scheduler counterexample is a mathematical possibility under its stated non-preemption condition, not a measurement of a deployed system.
+
+Consequently, the evidence does not justify a claim that federation is cheaper, more sovereign in practice, or scientifically better. It does show how to falsify an overly broad cost claim: report quality-adjusted useful completions, fully loaded cost, service tails and policy-compliant coverage against an optimized single-campus hybrid. The rational baseline is a campus gateway with local control and separately approved frontier access; federation must demonstrate incremental value that survives its added trust boundary, operations and failure costs. This is a research agenda and a conditional result, not a purchasing recommendation.
+
+\begin{thebibliography}{9}
+\bibitem{sheneman2026} L. Sheneman. 2026. \emph{MindRouter: Open-Source LLM Inference Gateway for Institutional AI Sovereignty}. Proceedings of PEARC '26. DOI: \href{https://doi.org/10.1145/3785462.3815861}{10.1145/3785462.3815861}. Author-hosted paper: \url{https://ai4ra.uidaho.edu/wp-content/uploads/2026/04/Sheneman_MindRouter_PEARC26_Short_Paper.pdf}.
+\bibitem{mindrouterdocs} MindRouter. 2026. \emph{Documentation: Scheduling and Fair Share}. Accessed 31 October 2026. \url{https://www.mindrouter.ai/documentation.html}.
+\bibitem{gpt54} OpenAI. 2026. \emph{GPT-5.4 model and API pricing documentation}. Accessed 31 October 2026. \url{https://developers.openai.com/api/docs/models/gpt-5.4}.
+\bibitem{sheng2024} Y. Sheng, S. Cao, D. Li, B. Zhu, Z. Li, D. Zhuo, J. E. Gonzalez, and I. Stoica. 2024. Fairness in Serving Large Language Models. In \emph{18th USENIX Symposium on Operating Systems Design and Implementation (OSDI '24)}, 965--980. \url{https://www.usenix.org/conference/osdi24/presentation/sheng}.
+\bibitem{cao2025} S. Cao et al. 2025. Locality-aware Fair Scheduling in LLM Serving. arXiv:2501.14312. \url{https://arxiv.org/abs/2501.14312}.
+\bibitem{shreedhar1995} A. Shreedhar and G. Varghese. 1995. Efficient Fair Queuing Using Deficit Round-Robin. \emph{IEEE/ACM Transactions on Networking} 3(3), 375--385. DOI: \href{https://doi.org/10.1109/90.392383}{10.1109/90.392383}.
+\end{thebibliography}
+
+\section*{Reproducibility and provenance}
+The checked-in scenario, deterministic calculators, and regression suites accompany this assignment. Solver results were reproduced with SciPy 1.17.0 in a transient environment; SciPy was not added to the SIGMA dependency lock. These artifacts contain no live task outcomes or saved SIGMA investigation sessions. The conventional and diagram variants load the same body; only the two evidence diagrams are conditionally included.

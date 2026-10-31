@@ -914,6 +914,7 @@ def _compile_pdf(
     max_source_bytes: int = 2_000_000,
     timeout_seconds: int = 45,
     max_pdf_bytes: int = 20_000_000,
+    diagnostics: list[str] | None = None,
 ) -> bytes:
     executable = shutil.which(os.environ.get("SIGMA_TECTONIC", "tectonic"))
     if not executable:
@@ -969,10 +970,23 @@ def _compile_pdf(
                 remaining = max(1, timeout_seconds - (time.monotonic() - started))
                 result = run_compiler(isolated_cache, remaining)
         except subprocess.TimeoutExpired as exc:
+            if diagnostics is not None:
+                diagnostics.append(f"Tectonic timed out after {timeout_seconds} seconds")
             raise RuntimeError(
                 f"PDF compilation exceeded {timeout_seconds} seconds. No file was downloaded."
             ) from exc
         pdf_path = os.path.join(directory, "report.pdf")
+        if diagnostics is not None:
+            compiler_output = result.stdout.decode("utf-8", "replace")
+            diagnostics.extend(
+                line.strip()[:500]
+                for line in compiler_output.splitlines()
+                if re.search(
+                    r"(?:Overfull|Underfull) \\[hv]box|^warning:|^error:", line, re.IGNORECASE
+                )
+            )
+            if result.returncode != 0:
+                diagnostics.append(f"Tectonic exited with status {result.returncode}")
         if result.returncode != 0 or not os.path.isfile(pdf_path):
             detail = result.stdout.decode("utf-8", "replace")[-1200:]
             raise RuntimeError(

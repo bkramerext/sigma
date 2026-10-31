@@ -407,3 +407,22 @@ uv run --with playwright python browser_checks/t125_saved_paper_library.py
 ```
 
 The isolated real-Chrome check covers per-version text/PDF downloads, inline PDF opening, collapsed safe HTML preview, visible removal confirmation, project-scoped deletion, and mobile layout using saved fixtures. It does not author a new paper or make provider calls.
+
+## #393 default-on paper diagrams and tables
+
+Start a fixture API and Vite on isolated ports. The fixture-origin setting is
+required because the backend normally trusts the default local UI origin:
+
+```sh
+SIGMA_PAPER_PROGRESS_FIXTURE_ORIGIN=http://127.0.0.1:5194 \
+  uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8015
+SIGMA_API_TARGET=http://127.0.0.1:8015 \
+  npm --prefix frontend run dev -- --host 127.0.0.1 --port 5194 --strictPort
+SIGMA_DIAGRAM_UI_ORIGIN=http://127.0.0.1:5194 \
+  uv run --with playwright --no-sync python browser_checks/issue393_diagram_option.py
+```
+
+Real Chrome opens the stock Sovereign AI Federation sample, checks that the
+combined “Include diagrams and tables” option starts checked, and confirms the
+user can turn it off and back on with the project-local preference surviving
+reload. It makes no paper-generation or provider request.

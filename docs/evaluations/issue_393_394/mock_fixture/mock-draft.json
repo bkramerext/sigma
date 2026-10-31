@@ -1,0 +1,115 @@
+{
+  "title": "A Fixture Study of Policy-First Campus AI Routing",
+  "abstract": "This deterministic engineering fixture uses the sample project objective to exercise SIGMA paper rendering. It contains no independently conducted investigation, workload measurement, university policy finding, or provider-price analysis. The figure is an illustrative proposal and does not describe an implemented MindRouter federation.",
+  "abstract_claim_ids": [
+    "C1"
+  ],
+  "problem_framing": [
+    "Universities may compare campus-local, approved frontier, hybrid and cooperative service models under sovereignty and budget constraints. This restates the sample question and is not an empirical finding."
+  ],
+  "problem_framing_claim_ids": [
+    "C1"
+  ],
+  "methods": [
+    "A mocked author response was validated and compiled by SIGMA with Tectonic. No live provider was contacted."
+  ],
+  "methods_claim_ids": [
+    "C1"
+  ],
+  "claims": [
+    {
+      "id": "C1",
+      "statement": "The saved project contains a research objective.",
+      "status": "established",
+      "evidence_refs": [
+        "project:dc98d234-4b89-43e5-962f-aa0182ce9562"
+      ],
+      "reasoning": "The objective is explicitly present in the project snapshot."
+    }
+  ],
+  "sections": [
+    {
+      "heading": "Fixture scope",
+      "paragraphs": [
+        "This fixture tests a safe policy-first routing illustration; it makes no empirical claims about cost, performance, governance or federation."
+      ],
+      "claim_ids": [
+        "C1"
+      ]
+    },
+    {
+      "heading": "Interpretation",
+      "paragraphs": [
+        "The policy gate precedes any proposed external route. This diagram is a rendering test, not an architecture evaluation."
+      ],
+      "claim_ids": [
+        "C1"
+      ]
+    }
+  ],
+  "limitations": [
+    "No Investigator/Skeptic research session or external sources were saved.",
+    "The architecture is illustrative and unmeasured."
+  ],
+  "open_obligations": [
+    "Conduct and save substantive research before evaluating campus costs, quality or governance."
+  ],
+  "conclusions": [
+    "This fixture verifies diagram rendering only; it does not answer the research question."
+  ],
+  "conclusion_claim_ids": [
+    "C1"
+  ],
+  "validation_warnings": [
+    "No external references were supplied."
+  ],
+  "diagrams": [
+    {
+      "caption": "Illustrative proposal only: campus policy gates any approved external route. This is not an implemented MindRouter federation.",
+      "nodes": [
+        {
+          "id": "researcher",
+          "label": "Researcher task"
+        },
+        {
+          "id": "campus",
+          "label": "Campus gateway and policy check"
+        },
+        {
+          "id": "local",
+          "label": "Campus GPU pool"
+        },
+        {
+          "id": "frontier",
+          "label": "Approved frontier API"
+        }
+      ],
+      "edges": [
+        {
+          "source": "researcher",
+          "target": "campus",
+          "label": "request"
+        },
+        {
+          "source": "campus",
+          "target": "local",
+          "label": "local eligible"
+        },
+        {
+          "source": "campus",
+          "target": "frontier",
+          "label": "approved only"
+        }
+      ],
+      "boundaries": [
+        {
+          "label": "Campus domain",
+          "node_ids": [
+            "campus",
+            "local"
+          ]
+        }
+      ]
+    }
+  ]
+}

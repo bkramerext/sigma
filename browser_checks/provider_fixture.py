@@ -6,6 +6,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from tempfile import mkdtemp
+from typing import TypedDict
 
 import httpx
 
@@ -22,10 +23,16 @@ from sigma.api import app
 # projects are immutable repository source data that the UI must still list.
 samples.SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 
+
 # Mutable controls are exposed only by this isolated deterministic fixture.
 # They let browser acceptance exercise recovery states without contacting a
 # provider endpoint or spending an account allowance.
-_paper_failures: dict[str, dict[str, int]] = {}
+class PaperFailure(TypedDict):
+    mode: str
+    count: int
+
+
+_paper_failures: dict[str, PaperFailure] = {}
 _real_provider_structured = papers._provider_structured
 
 
@@ -36,7 +43,12 @@ def set_paper_failure(body: dict[str, object]):
     count = body.get("count")
     if (
         not isinstance(schema_name, str)
-        or schema_name not in {"sigma_long_paper_plan", "sigma_long_paper_section"}
+        or schema_name
+        not in {
+            "sigma_long_paper_plan",
+            "sigma_long_paper_section",
+            "sigma_tex_proofread_patches",
+        }
         or mode not in {"pre_dispatch", "provider_error"}
         or type(count) is not int
         or not 0 <= count <= 3
@@ -102,6 +114,7 @@ async def handler(request):
         "sigma_paper_evidence_reduction",
         "sigma_long_paper_plan",
         "sigma_long_paper_section",
+        "sigma_tex_proofread_patches",
         "sigma_research_paper",
     }:
         await asyncio.sleep(min(progress_delay, 5))
@@ -110,8 +123,11 @@ async def handler(request):
         "sigma_paper_evidence_reduction",
         "sigma_long_paper_plan",
         "sigma_long_paper_section",
+        "sigma_tex_proofread_patches",
     }:
-        if schema_name in {"sigma_paper_evidence_batch", "sigma_paper_evidence_reduction"}:
+        if schema_name == "sigma_tex_proofread_patches":
+            output = {"corrections": []}
+        elif schema_name in {"sigma_paper_evidence_batch", "sigma_paper_evidence_reduction"}:
             if schema_name == "sigma_paper_evidence_batch":
                 refs = list(dict.fromkeys(field["source_ref"] for field in context["fields"]))[:3]
             else:

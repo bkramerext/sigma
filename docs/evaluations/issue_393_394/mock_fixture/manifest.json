@@ -1,0 +1,19 @@
+{
+  "artifact_class": "deterministic synthetic engineering fixture; not independently validated research",
+  "project_id": "dc98d234-4b89-43e5-962f-aa0182ce9562",
+  "snapshot_sha256": "3dcae814d22543d99e4be11f89c0123f8a29d9c7958ca5147f48b7a187c2142e",
+  "provider_calls": 0,
+  "provider_cost_usd": 0,
+  "compiler": "local SIGMA Tectonic path",
+  "code_commit_sha": "9a736b39",
+  "paired_versions_share_snapshot": true,
+  "files": {
+    "paper.tex": "988af049a8825d3d4977460bb7b26973f32ccdd6e174cf7caadad0dee6d1be29",
+    "paper.pdf": "5273daee6643150ec9f6e35737e8f260826217a3c1b47574aec742a3cac5195c",
+    "paper-text-only.tex": "e8bc7a99a7f9c4de2e6d126bfe5d4219826487d08a13c7cbe87a1e65b5a95809",
+    "paper-text-only.pdf": "d8b2d653721414af683598259495dc093f24c14ff729e21a5750a7f3a1d6b8f8",
+    "fixture-project-export.json": "332655672808cad51e55b4fb351fa5e04238ebf6d29a52be50e8f2ea8cf373fd",
+    "research-snapshot.json": "affdf20f11b0bf8c8981fb3760040d8b6e1c00bf97e0bb78ae8068d957270008",
+    "mock-draft.json": "0456e5e3de326838f805ab7e0351318680ee610e6a8708d290d5f70aca70749b"
+  }
+}
