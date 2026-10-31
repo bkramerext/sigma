@@ -1951,13 +1951,13 @@ def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "i
         else "SIGMA invitation request"
     )
     introduction = (
-        "A signed-in SIGMA member requested a sponsored allowance reload.\\n\\n"
+        "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
         if request_type == "reload"
-        else "A verified Google account requested SIGMA access.\\n\\n"
+        else "A verified Google account requested SIGMA access.\n\n"
     )
     _deliver_admin_notice(
         title,
-        introduction + f"Account: {email}\\nRequested at (UTC epoch): {requested_at}\\n",
+        introduction + f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n",
     )
 
 
@@ -1973,11 +1973,11 @@ def _deliver_feedback(
     _deliver_admin_notice(
         "New SIGMA feedback",
         (
-            f"Feedback ID: {feedback_id}\\n"
-            f"Submitted at (UTC epoch): {submitted_at}\\n"
-            f"Verified account: {account_email or 'None (guest)'}\\n"
-            f"Provided contact (unverified): {contact_email or 'None'}\\n\\n"
-            f"Message:\\n{message}\\n"
+            f"Feedback ID: {feedback_id}\n"
+            f"Submitted at (UTC epoch): {submitted_at}\n"
+            f"Verified account: {account_email or 'None (guest)'}\n"
+            f"Provided contact (unverified): {contact_email or 'None'}\n\n"
+            f"Message:\n{message}\n"
         ),
     )
 
