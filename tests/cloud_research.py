@@ -1910,6 +1910,76 @@ def test_issue289_global_funding_pause_can_resume(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
+    """Two projects per owner and multiple owners share a bounded global queue."""
+    left = workspace(root, "e" * 32)
+    right = workspace(root, "f" * 32)
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "multi-session-fixture-key",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "3",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "4",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    entries = [
+        (left, job(left.workspace_id)),
+        (left, job(left.workspace_id)),
+        (right, job(right.workspace_id)),
+        (right, job(right.workspace_id)),
+    ]
+    with (
+        patch.dict(os.environ, settings, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        for owner, record in entries:
+            token = cloud_workspaces._CURRENT.set(owner)
+            try:
+                cloud_research.prepare_job(record)
+            finally:
+                cloud_workspaces._CURRENT.reset(token)
+
+        for owner, record in entries[:3]:
+            token = cloud_workspaces._CURRENT.set(owner)
+            try:
+                assert cloud_research.claim_job(record["id"])
+            finally:
+                cloud_workspaces._CURRENT.reset(token)
+
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            assert not cloud_research.claim_job(entries[3][1]["id"])
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+        token = cloud_workspaces._CURRENT.set(left)
+        try:
+            # Releasing one finished job admits the next queued owner safely.
+            cloud_research.release_job(entries[0][1]["id"], paused=True)
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            assert cloud_research.claim_job(entries[3][1]["id"])
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
+        with cloud_research._connect() as db:
+            counts = db.execute(
+                "SELECT workspace_id,COUNT(*) AS count FROM jobs "
+                "WHERE status='running' GROUP BY workspace_id"
+            ).fetchall()
+            assert {row["workspace_id"]: row["count"] for row in counts} == {
+                left.workspace_id: 1,
+                right.workspace_id: 2,
+            }
+
+
 def test_hosted_deployment_forwards_global_spend_window() -> None:
     compose = (Path(__file__).resolve().parents[1] / "deploy" / "compose.yaml").read_text(
         encoding="utf-8"
@@ -2885,6 +2955,9 @@ def main() -> None:
         reload_ledger = root / "allowance-reload-ledger"
         reload_ledger.mkdir(mode=0o700)
         test_admin_allowance_reload_preserves_provider_spend(root, reload_ledger)
+        parallel_ledger = root / "parallel-worker-ledger"
+        parallel_ledger.mkdir(mode=0o700)
+        test_multiuser_parallel_cloud_worker_admission(root, parallel_ledger)
         pilot_ledger = root / "pilot-capacity-ledger"
         pilot_ledger.mkdir(mode=0o700)
         test_pilot_global_spend_accepts_multiple_users(root, pilot_ledger)
