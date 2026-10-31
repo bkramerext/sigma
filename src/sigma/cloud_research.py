@@ -359,6 +359,7 @@ def _connect() -> sqlite3.Connection:
                 project_relpath TEXT NOT NULL DEFAULT '',
                 process_epoch TEXT NOT NULL DEFAULT '',
                 session_slot INTEGER NOT NULL DEFAULT 0,
+                job_kind TEXT NOT NULL DEFAULT 'research',
                 UNIQUE(workspace_id, idempotency_key)
             );
             CREATE INDEX IF NOT EXISTS jobs_workspace_status ON jobs(workspace_id, status);
@@ -393,6 +394,8 @@ def _connect() -> sqlite3.Connection:
             db.execute("ALTER TABLE jobs ADD COLUMN process_epoch TEXT NOT NULL DEFAULT ''")
         if "session_slot" not in columns:
             db.execute("ALTER TABLE jobs ADD COLUMN session_slot INTEGER NOT NULL DEFAULT 0")
+        if "job_kind" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'research'")
         os.chmod(path, 0o600)
         return db
     except (OSError, sqlite3.Error) as exc:
@@ -546,6 +549,7 @@ def prepare_job(record: dict[str, Any]) -> None:
     owner = _workspace_id()
     from sigma.cloud_sponsor import inference_provider
 
+    auxiliary = record.get("job_kind") == "auxiliary"
     provider = inference_provider()
     if record.get("mode") != provider or provider not in {"api_key", "chatgpt"}:
         raise CloudResearchUnavailable(
@@ -675,7 +679,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     total = db.execute(
                         "SELECT COUNT(*) FROM jobs WHERE status='queued'"
                     ).fetchone()[0]
-                    if per_user >= per_user_queue or total >= global_queue:
+                    if not auxiliary and (per_user >= per_user_queue or total >= global_queue):
                         raise CloudResearchUnavailable(
                             "Research queue is full; retry when capacity is available."
                         )
@@ -704,13 +708,13 @@ def prepare_job(record: dict[str, Any]) -> None:
             total_queued = db.execute("SELECT COUNT(*) FROM jobs WHERE status='queued'").fetchone()[
                 0
             ]
-            if user_queued >= per_user_queue or total_queued >= global_queue:
+            if not auxiliary and (user_queued >= per_user_queue or total_queued >= global_queue):
                 raise CloudResearchUnavailable(
                     "Research queue is full; retry when capacity is available."
                 )
             # Jobs are initially queued. Claiming uses an atomic running-slot test.
             db.execute(
-                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot,job_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     record["id"],
                     owner,
@@ -722,6 +726,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                     project_relpath,
                     _PROCESS_EPOCH,
                     session_slot,
+                    "auxiliary" if auxiliary else "research",
                 ),
             )
     except sqlite3.Error as exc:
@@ -744,15 +749,16 @@ def claim_job(session_id: str) -> bool:
             # running slots under the exclusive per-session worker lock.
             if job["status"] != "queued":
                 return False
-            user_running = db.execute(
-                "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status IN ('running','stopping')",
-                (owner,),
-            ).fetchone()[0]
-            global_running = db.execute(
-                "SELECT COUNT(*) FROM jobs WHERE status IN ('running','stopping')"
-            ).fetchone()[0]
-            if user_running >= user_limit or global_running >= global_limit:
-                return False
+            if job["job_kind"] != "auxiliary":
+                user_running = db.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND job_kind='research' AND status IN ('running','stopping')",
+                    (owner,),
+                ).fetchone()[0]
+                global_running = db.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE job_kind='research' AND status IN ('running','stopping')"
+                ).fetchone()[0]
+                if user_running >= user_limit or global_running >= global_limit:
+                    return False
             db.execute(
                 "UPDATE jobs SET status='running',updated_at=? WHERE session_id=?",
                 (_now(), session_id),
@@ -780,6 +786,7 @@ def begin_standalone_inference(project_id: str, project_path: str) -> str:
             "cost_status": "available",
             "call_limit": 2,
             "duration_limit_minutes": 1,
+            "job_kind": "auxiliary",
         }
     )
     if not claim_job(session_id):
