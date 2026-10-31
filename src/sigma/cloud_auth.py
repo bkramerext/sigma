@@ -50,6 +50,8 @@ _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
 _DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _SCHEMA_LOCK = Lock()
 _SCHEMA_READY: set[tuple[str, int, int]] = set()
+# Legacy local sponsorship identity; never used to address notification emails.
+INVITATION_RECIPIENT = "zetacontinuation@gmail.com"
 
 
 @dataclass(frozen=True)
@@ -375,7 +377,9 @@ def _initialize(path: Path) -> None:
             db.execute(
                 "ALTER TABLE invitation_requests ADD COLUMN request_type TEXT NOT NULL DEFAULT 'invitation' CHECK(request_type IN ('invitation','reload'))"
             )
-        feedback_columns = {row["name"] for row in db.execute("PRAGMA table_info(feedback_requests)")}
+        feedback_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(feedback_requests)")
+        }
         if "notification_error" not in feedback_columns:
             db.execute("ALTER TABLE feedback_requests ADD COLUMN notification_error TEXT")
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
