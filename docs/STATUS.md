@@ -54,6 +54,62 @@ requires a fresh recovery point. The recurring backup timer is still absent;
 exact recovery-drill billing has not been independently queried. No paid
 provider calls or local SIGMA server requests were made.
 
+## Issue #399 — Session Robustness and Recovery (2026-10-31)
+
+Implementation is isolated on `gray/issue-399-session-robustness`; no deployment
+or live provider calls were made. Source inspection found two separate 15-minute
+controls: hosted/local sponsored sessions clamp effective duration to 15 minutes
+even when the saved project setting is 60, and individual provider calls are
+also capped at 15 minutes or the remaining session time. The apparent deadline
+discrepancy is therefore configured versus effective policy, not one shared
+timer. The exact reported Warp Drive session record was not present in this
+checkout, so its saved artifacts and terminal reason could not be audited.
+
+The worker already persisted session/attempt records and converted stale
+running sessions to paused during recovery. The failure was that transient
+provider failures were terminal for a strategy, and terminal scheduler state
+was displayed as successful completion even when strategies had failed or no
+productive conclusion existed. A bounded retry now records each attempt,
+charges it against session limits, and retries a transient error once. Ambiguous
+provider consumption is retained as unknown and is not replayed when budget
+constraints disallow it. Strategy errors remain isolated. Terminal messages now
+distinguish evidence-led early completion, incomplete failure, and other stop
+conditions while reporting preserved findings. The UI names effective and
+configured time ceilings separately.
+
+Adversarial scheduler coverage includes transient retry success and exhaustion,
+failure on the final available turn with both the provider failure and turn
+exhaustion preserved in the saved session message, deadline expiry with another
+strategy's finding retained, rate-limit Retry-After/minimum backoff, and a
+genuine evidence-backed early stop. Budget/round exhaustion uses incomplete
+termination wording and a termination event; no budget path labels itself
+Completed. `./sigma test` passed in full, including Pyright, Ruff, frontend
+typecheck, and production build. The optional graph-present sandbox check
+skipped because its local image is unavailable. The isolated real-Chrome check
+passed reload/reopen/guarded resume, desktop/mobile layout, early/incomplete
+outcomes, and the effective 15-minute versus configured 60-minute disclosure
+for both start and expired-time result surfaces. No scheduler rewrite was
+needed. Remaining limitation: only one automatic retry is made per transient
+provider failure; ambiguous calls are deliberately left for explicit recovery
+to avoid duplicating provider work.
+
+PR #400 review follow-up covers the multi-strategy final shared-turn case: a
+terminal sibling can no longer hide another strategy's failed provider attempt.
+The final session explanation preserves that failure, says no recovery turn
+remained, and reports the saved findings as incomplete. A provider account
+limit by itself retains its specific limit explanation; when it follows a
+separate failure, both are described. A deterministic scheduler regression
+checks the serialized final state, branch outcomes, failure event, and
+artifacts. Review-supplied, non-sensitive session-export details confirmed the
+terminal-state scenario; the export itself was not available in this checkout.
+After the correction, `./sigma test` passed all configured steps, including
+research-session scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck and production build. The optional graph-present sandbox
+case skipped because its local image is unavailable. The real-Chrome T95
+stopped-session guidance, reload/reopen, guarded resume and responsive checks
+also passed. No UI was changed, and no deployment or live provider call was
+made.
+
 ## Production About build SHA correction (2026-10-30)
 
 Production About showed `unknown` because the frontend image is built from a
