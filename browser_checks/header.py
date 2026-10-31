@@ -502,8 +502,14 @@ with sync_playwright() as playwright:
         # At the maximum heartbeat scale (1.32x), the 3px outer shadow must
         # still fit inside the frame instead of being cut off at the title edge.
         pulse_radius = geometry["pulse"]["width"] * 1.32 / 2 + 3
-        assert geometry["pulse"]["center"] + pulse_radius <= geometry["frame"]["right"] + 0.5, (width, geometry)
-        assert geometry["pulse"]["center"] - pulse_radius >= geometry["frame"]["left"] - 0.5, (width, geometry)
+        assert geometry["pulse"]["center"] + pulse_radius <= geometry["frame"]["right"] + 0.5, (
+            width,
+            geometry,
+        )
+        assert geometry["pulse"]["center"] - pulse_radius >= geometry["frame"]["left"] - 0.5, (
+            width,
+            geometry,
+        )
 
     close.evaluate("e => e.disabled = true")
     expect(close).to_be_disabled()
