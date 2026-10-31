@@ -3385,7 +3385,9 @@ class CloudAuthTests(TestCase):
             # failing manual scenario. The subsequent callback is a NEW login.
             guest = self.finish(applicant_email, applicant_subject)
             self.assertEqual(guest.status_code, 303)
-            self.assertEqual(self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
             with patch.object(cloud_auth, "_deliver_invitation"):
                 requested = self.client.post(
                     "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
@@ -3417,11 +3419,13 @@ class CloudAuthTests(TestCase):
             self.assertIn("sigma_session", signed.cookies)
             notice.assert_called_once()
             self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
-            self.assertEqual(self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
+            )
             with cloud_auth._db(cloud_auth.config()) as db:
                 individual = db.execute(
-                    "SELECT role,active,allowance_usd FROM grants "
-                    "WHERE kind='email' AND value=?", (applicant_email,)
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (applicant_email,),
                 ).fetchone()
                 invitation = db.execute(
                     "SELECT status FROM invitation_requests WHERE subject=?",
@@ -3435,10 +3439,12 @@ class CloudAuthTests(TestCase):
             self.assertEqual(invitation["status"], "reviewed")
             self.assertEqual(audit_count, 1)
             listed = admin.get("/api/cloud-auth/admin/grants").json()
-            self.assertTrue(any(
-                item["email"] == applicant_email and item["authorized"]
-                for item in listed["sessions"]
-            ))
+            self.assertTrue(
+                any(
+                    item["email"] == applicant_email and item["authorized"]
+                    for item in listed["sessions"]
+                )
+            )
 
     def test_domain_approved_google_login_materializes_individual_member(self):
         admin_context = TestClient(app)
