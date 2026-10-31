@@ -3318,6 +3318,19 @@ class CloudAuthTests(TestCase):
             ).fetchone()
         self.assertEqual((saved["role"], saved["active"]), ("member", 1))
         self.assertEqual(notice["status"], "reviewed")
+        # A parallel tab that still carries the original denied identity
+        # receives the existing approval; it must not re-open the request.
+        second_context = TestClient(app)
+        second = second_context.__enter__()
+        self.addCleanup(second_context.__exit__, None, None, None)
+        second.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(cloud_auth, "_deliver_invitation") as race_mail:
+            race_result = second.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(race_result.status_code, 200, race_result.text)
+        self.assertEqual(race_result.json(), {"status": "approved", "duplicate": True})
+        race_mail.assert_not_called()
         self.client.cookies.set(cloud_auth.SESSION_COOKIE, token)
         with patch.object(cloud_auth, "_deliver_invitation") as duplicate_mail:
             repeated = self.client.post(
