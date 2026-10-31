@@ -324,8 +324,8 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .project-pane-actions .project-lean-button:disabled { color: #a0aab2; cursor: not-allowed; opacity: 1; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { width: 50px; min-width: 50px; margin-left: 0; }
 .workspace-page .project-pane-actions .text-view-icon.project-latex-button {
-  box-sizing: border-box; width: 34px; min-width: 34px; height: 34px; min-height: 34px;
-  margin-right: 10px; padding: 0; border: 1px solid transparent; border-radius: 6px;
+  box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px;
+  margin-right: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 6px;
 }
 .workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 700 17px/1 Inter, sans-serif; letter-spacing: .02em; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
@@ -335,8 +335,6 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .project-primary-actions .project-pane-actions { gap: 6px; }
 .workspace-page .project-primary-actions .project-pane-actions .project-latex-button,
 .workspace-page .project-primary-actions .project-pane-actions .project-lean-button { margin-right: 0; }
-.workspace-page .project-primary-actions .project-pane-actions .project-latex-button { margin-right: 10px; }
-.workspace-page .project-primary-actions .project-pane-actions .project-latex-button { margin-right: 0; }
 .workspace-page .research-qa-form { display: grid; gap: 8px; margin-top: 14px; }
 .workspace-page .research-qa-form label { color: #e4ebf3; font-size: 13px; }
 .workspace-page .research-qa-form textarea { box-sizing: border-box; width: 100%; min-height: 100px; resize: vertical; padding: 10px 12px; border: 1px solid #46525d; border-radius: 7px; background: #171d23; color: #e4ebf3; font: inherit; line-height: 1.5; }
