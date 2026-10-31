@@ -452,6 +452,59 @@ with sync_playwright() as playwright:
             assert controls_box["y"] > close_box["y"]
         page.screenshot(path=f"/tmp/sigma-a13-header-{width}.png", full_page=True)
 
+    # Recreate the running-title presentation with a deliberately long title.
+    # The animated pulse must stay inside its allocated frame, while the text
+    # truncates instead of enlarging the header or pushing the page sideways.
+    page.evaluate(
+        """() => {
+            const title = document.querySelector('.project-art-header .project-header-title');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'project-header-title project-header-title-action';
+            const text = document.createElement('span');
+            text.className = 'project-header-title-text';
+            text.textContent = 'Extremely long AI agent reliability research title '.repeat(8);
+            const frame = document.createElement('span');
+            frame.className = 'research-running-indicator-frame';
+            frame.setAttribute('aria-hidden', 'true');
+            const pulse = document.createElement('span');
+            pulse.className = 'research-running-indicator';
+            frame.append(pulse);
+            button.append(text, frame);
+            title.replaceWith(button);
+        }"""
+    )
+    for width in (1280, 700, 390, 320):
+        page.set_viewport_size({"width": width, "height": 800})
+        geometry = page.locator(".project-header-title-action").evaluate(
+            """button => {
+                const row = button.closest('.project-header-title-row');
+                const frame = button.querySelector('.research-running-indicator-frame');
+                const text = button.querySelector('.project-header-title-text');
+                const pulse = frame.querySelector('.research-running-indicator');
+                const box = e => {
+                    const r = e.getBoundingClientRect();
+                    return { left: r.left, right: r.right, width: r.width, center: (r.left + r.right) / 2 };
+                };
+                return {
+                    button: box(button), row: box(row), frame: box(frame),
+                    pulse: box(pulse), text: box(text),
+                    textOverflow: getComputedStyle(text).textOverflow,
+                    pageWidth: document.documentElement.scrollWidth,
+                    viewportWidth: window.innerWidth,
+                };
+            }"""
+        )
+        assert geometry["frame"]["width"] >= 24, (width, geometry)
+        assert geometry["textOverflow"] == "ellipsis", (width, geometry)
+        assert geometry["button"]["right"] <= geometry["row"]["right"] + 1, (width, geometry)
+        assert geometry["pageWidth"] <= geometry["viewportWidth"], (width, geometry)
+        # At the maximum heartbeat scale (1.32x), the 3px outer shadow must
+        # still fit inside the frame instead of being cut off at the title edge.
+        pulse_radius = geometry["pulse"]["width"] * 1.32 / 2 + 3
+        assert geometry["pulse"]["center"] + pulse_radius <= geometry["frame"]["right"] + 0.5, (width, geometry)
+        assert geometry["pulse"]["center"] - pulse_radius >= geometry["frame"]["left"] - 0.5, (width, geometry)
+
     close.evaluate("e => e.disabled = true")
     expect(close).to_be_disabled()
     assert close.evaluate("e => getComputedStyle(e).cursor") == "wait"
