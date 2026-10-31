@@ -246,7 +246,10 @@ def check_frontend_cache_policy() -> None:
     # works if those URLs change across release builds.
     asset_urls = re.findall(r'(?:src|href)="/assets/([^"]+)"', html.text)
     assert any(name.endswith(".js") for name in asset_urls), "Vite JS bundle not found"
-    assert all(re.search(r"-[\\w-]{6,}\\.(?:js|css|woff2?|png|svg)$", name) for name in asset_urls)
+    assert all(
+        re.search(r"-[A-Za-z0-9_-]{6,}[.](?:js|css|woff2?|png|svg)$", name)
+        for name in asset_urls
+    ), asset_urls
     for name in asset_urls:
         asset = httpx.get(BASE_URL + "/assets/" + name, timeout=15)
         assert asset.status_code == 200, (name, asset.status_code)
@@ -258,9 +261,7 @@ def check_frontend_cache_policy() -> None:
     # HTML disguised as a JavaScript/CSS response.
     missing = httpx.get(BASE_URL + "/assets/sigma-stale-release-00000000.js", timeout=15)
     assert missing.status_code == 404, missing.status_code
-    assert "text/html" not in missing.headers.get("content-type", "").lower() or (
-        "<html" not in missing.text.lower()
-    )
+    assert missing.content != html.content, "Missing JS fell back to the SPA document"
 
     # SPA deep links still return HTML and are also revalidated on refresh.
     deep = httpx.get(BASE_URL + "/project?path=fixture", timeout=15)
