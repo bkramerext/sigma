@@ -6,6 +6,7 @@ The SQLite database contains only access rules, OAuth flow state, and hashed ses
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -447,6 +448,52 @@ def _authorization_in_db(
         "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
     ).fetchone()
     return allowed["role"] if allowed and allowed["active"] else None
+
+
+def _materialize_domain_member(
+    db: sqlite3.Connection, subject: str, email: str
+) -> bool:
+    """Convert an active member-domain policy into an individual member grant.
+
+    An explicit email grant (including a revoked grant) always wins. The caller
+    must have verified the Google subject and email; neither comes from a form.
+    """
+    if not subject or subject.startswith("legacy-denied:"):
+        return False
+    if db.execute(
+        "SELECT 1 FROM grants WHERE kind='email' AND value=?", (email,)
+    ).fetchone():
+        return False
+    domain = email.rsplit("@", 1)[1]
+    allowed = db.execute(
+        "SELECT allowance_usd FROM grants WHERE kind='domain' AND value=? AND role='member' AND active=1",
+        (domain,),
+    ).fetchone()
+    if allowed is None:
+        return False
+    now = _now()
+    db.execute(
+        "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
+        "VALUES('email',?,'member',1,?,?)",
+        (email, now, allowed["allowance_usd"]),
+    )
+    db.execute(
+        "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) "
+        "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+        (subject, email, now),
+    )
+    db.execute(
+        "INSERT INTO invitation_requests(subject,email,requested_at,status,request_type) "
+        "VALUES(?,?,?,'reviewed','invitation') "
+        "ON CONFLICT(subject) DO UPDATE SET email=excluded.email,status='reviewed',"
+        "request_type='invitation',notification_started_at=NULL,notification_error=NULL",
+        (subject, email, now),
+    )
+    db.execute(
+        "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+        (email, "domain_auto_member", "email", email, now),
+    )
+    return True
 
 
 def _sponsorship_eligibility_in_db(
@@ -1756,7 +1803,11 @@ async def callback(
                 # workspace. The original guest copy remains intact until expiry.
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
+    auto_domain_member = False
     with _db(cfg) as db:
+        auto_domain_member = role == "member" and _materialize_domain_member(
+            db, subject, email
+        )
         existing_account = db.execute(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
@@ -1805,6 +1856,18 @@ async def callback(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
+    if auto_domain_member:
+        try:
+            await asyncio.to_thread(
+                _deliver_invitation, email, _now(), request_type="auto_approved"
+            )
+        except RuntimeError:
+            # Membership is durable and never rolled back by mail delivery.
+            with _db(cfg) as db:
+                db.execute(
+                    "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
+                    ("delivery failed", subject),
+                )
     response = RedirectResponse(return_to, status_code=303)
     response.set_cookie(
         _cookie_name(SESSION_COOKIE, cfg),
@@ -1948,11 +2011,15 @@ def _deliver_invitation(email: str, requested_at: int, *, request_type: str = "i
     title = (
         "SIGMA sponsorship reload request"
         if request_type == "reload"
+        else "SIGMA member automatically approved"
+        if request_type == "auto_approved"
         else "SIGMA invitation request"
     )
     introduction = (
         "A signed-in SIGMA member requested a sponsored allowance reload.\n\n"
         if request_type == "reload"
+        else "Automatically approved via member domain. No administrator action is required.\n\n"
+        if request_type == "auto_approved"
         else "A verified Google account requested SIGMA access.\n\n"
     )
     _deliver_admin_notice(
@@ -1987,7 +2054,9 @@ class InvitationRequestBody(BaseModel):
 
 
 @router.post("/invitation-request")
-def request_invitation(request: Request, body: InvitationRequestBody | None = None):
+def request_invitation(
+    request: Request, response: Response, body: InvitationRequestBody | None = None
+):
     """Record an invitation or an eligible signed-in member's reload request."""
     body = body or InvitationRequestBody()
     cfg = config()
@@ -2013,7 +2082,7 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         identity = {"email": principal.email, "subject": principal.subject}
     elif (
         authenticated := resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
-    ) is not None and authenticated.role == "guest":
+    ) is not None and authenticated.role in {"guest", "member"}:
         identity = {"email": authenticated.email, "subject": authenticated.subject}
     else:
         denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
@@ -2029,8 +2098,53 @@ def request_invitation(request: Request, body: InvitationRequestBody | None = No
         # A previously denied identity must not submit an invitation after it
         # gains authorization through the configured contact or a grant.
         if identity["subject"] and _authorization(cfg, identity["subject"], identity["email"]):
-            raise HTTPException(409, "This Google account is already authorized. Sign in again.")
+            # A domain added since Google sign-in can now auto-invite this
+            # previously denied, verified identity. Existing explicit grants
+            # and administrator identities are not re-granted.
+            with _db(cfg) as db:
+                email_grant = db.execute(
+                    "SELECT 1 FROM grants WHERE kind='email' AND value=?",
+                    (identity["email"],),
+                ).fetchone()
+            if email_grant or _authorization(cfg, identity["subject"], identity["email"]) != "member":
+                raise HTTPException(409, "This Google account is already authorized. Sign in again.")
     now = _now()
+    if body.request_type == "invitation" and identity["subject"]:
+        with _db(cfg) as db:
+            auto_approved = _materialize_domain_member(
+                db, identity["subject"], identity["email"]
+            )
+            if auto_approved:
+                _sync_user_state_in_db(db, cfg)
+                token = secrets.token_urlsafe(32) if denied_cookie else None
+                if token:
+                    db.execute(
+                        "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
+                        (_hash(token), identity["subject"], identity["email"], now + SESSION_SECONDS),
+                    )
+        if auto_approved:
+            if token:
+                response.set_cookie(
+                    _cookie_name(SESSION_COOKIE, cfg),
+                    token,
+                    **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
+                )
+                _clear_cookie(response, cfg, DENIED_COOKIE)
+            try:
+                if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
+                    _deliver_invitation(identity["email"], now, request_type="auto_approved")
+            except RuntimeError:
+                with _db(cfg) as db:
+                    db.execute(
+                        "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
+                        ("delivery failed", identity["subject"]),
+                    )
+            return {"status": "approved", "duplicate": False}
+    if body.request_type == "invitation" and authenticated is not None:
+        # Already authorized members with individual grants have nothing to
+        # request; retain the existing no-duplicate semantics.
+        if authenticated.role == "member":
+            raise HTTPException(409, "This Google account is already authorized.")
     with _db(cfg) as db:
         # Bind to the verified Google subject without relying on browser-supplied identity.
         subject = identity["subject"]
