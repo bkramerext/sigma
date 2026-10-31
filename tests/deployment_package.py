@@ -20,6 +20,7 @@ def main() -> None:
     frontend = (ROOT / "deploy/frontend.Dockerfile").read_text(encoding="utf-8")
     compose = (ROOT / "deploy/compose.yaml").read_text(encoding="utf-8")
     caddy = (ROOT / "deploy/Caddyfile").read_text(encoding="utf-8")
+    nginx = (ROOT / "deploy/nginx.conf").read_text(encoding="utf-8")
     host_caddy = (ROOT / "deploy/host-caddy.Caddyfile").read_text(encoding="utf-8")
     gce_compose = (ROOT / "deploy/compose.gce.yaml").read_text(encoding="utf-8")
     startup = (ROOT / "deploy/start-gce.sh").read_text(encoding="utf-8")
@@ -77,6 +78,16 @@ def main() -> None:
     assert '"8000:8000"' not in compose and '"5173:5173"' not in compose
     assert "reverse_proxy backend:8000" in caddy
     assert "reverse_proxy frontend:8080" in caddy
+    # Issue #360: mutable SPA HTML and public assets revalidate, only
+    # fingerprinted Vite build assets are cached immutably.
+    assert "location / {" in nginx
+    assert "try_files $uri $uri/ /index.html;" in nginx
+    assert 'Cache-Control "no-cache, max-age=0, must-revalidate"' in nginx
+    assert "location ^~ /assets/ {" in nginx
+    assert "try_files $uri =404;" in nginx
+    assert 'Cache-Control "public, max-age=31536000, immutable"' in nginx
+    assert nginx.count("add_header X-Content-Type-Options nosniff always;") == 2
+    assert nginx.count("add_header Referrer-Policy no-referrer always;") == 2
     assert "header_up X-Forwarded-Proto {$SIGMA_CADDY_UPSTREAM_SCHEME}" in caddy
     assert "sigma-research.duckdns.org" in host_caddy
     assert "reverse_proxy 127.0.0.1:18080" in host_caddy

@@ -41,6 +41,7 @@ SAMPLE = ROOT / "samples/nonconsecutive-subset-sums/project.json"
 ORIGIN = "https://localhost"
 MATRIX = {
     "packaged Compose SPA/API and stock sample catalog": "NOT RUN",
+    "ordinary HTML reload revalidates and fingerprinted assets are immutable": "NOT RUN",
     "sample project copy; project and strategy edits; save/reload/reopen": "NOT RUN",
     "saved sessions, outcomes, and report download": "NOT RUN",
     "workspace survives backend container recreation": "NOT RUN",
@@ -233,6 +234,42 @@ def api_get(user: dict[str, str], endpoint: str, **params: str) -> httpx.Respons
     )
 
 
+def check_frontend_cache_policy() -> None:
+    """Probe the actual packaged Nginx/Caddy HTTP path, not Vite dev."""
+    html = httpx.get(BASE_URL + "/", timeout=15)
+    assert html.status_code == 200, html.status_code
+    assert "no-cache" in html.headers.get("cache-control", "").lower()
+    assert "must-revalidate" in html.headers.get("cache-control", "").lower()
+    assert "text/html" in html.headers.get("content-type", "").lower()
+
+    # Vite fingerprints build-time JS/CSS in /assets; immutable caching only
+    # works if those URLs change across release builds.
+    asset_urls = re.findall(r'(?:src|href)="/assets/([^"]+)"', html.text)
+    assert any(name.endswith(".js") for name in asset_urls), "Vite JS bundle not found"
+    assert all(
+        re.search(r"-[A-Za-z0-9_-]{6,}[.](?:js|css|woff2?|png|svg)$", name) for name in asset_urls
+    ), asset_urls
+    for name in asset_urls:
+        asset = httpx.get(BASE_URL + "/assets/" + name, timeout=15)
+        assert asset.status_code == 200, (name, asset.status_code)
+        cache = asset.headers.get("cache-control", "").lower()
+        assert "immutable" in cache and "max-age=31536000" in cache, (name, cache)
+        assert asset.headers.get("x-content-type-options") == "nosniff"
+
+    # An outdated tab referring to a removed fingerprint must not get SPA
+    # HTML disguised as a JavaScript/CSS response.
+    missing = httpx.get(BASE_URL + "/assets/sigma-stale-release-00000000.js", timeout=15)
+    assert missing.status_code == 404, missing.status_code
+    assert "immutable" not in missing.headers.get("cache-control", "").lower()
+    assert missing.content != html.content, "Missing JS fell back to the SPA document"
+
+    # SPA deep links still return HTML and are also revalidated on refresh.
+    deep = httpx.get(BASE_URL + "/project?path=fixture", timeout=15)
+    assert deep.status_code == 200, deep.status_code
+    assert "no-cache" in deep.headers.get("cache-control", "").lower()
+    assert deep.content == html.content, "Deep link served a different SPA build"
+
+
 def main() -> None:
     global OVERRIDE_FILE
     if not Path(CHROME).is_file():
@@ -240,6 +277,10 @@ def main() -> None:
             "FAIL — installed Chrome executable not found"
         )
         raise SystemExit(1)
+
+    MATRIX["ordinary HTML reload revalidates and fingerprinted assets are immutable"] = "RUNNING"
+    check_frontend_cache_policy()
+    MATRIX["ordinary HTML reload revalidates and fingerprinted assets are immutable"] = "PASS"
 
     MATRIX["packaged Compose SPA/API and stock sample catalog"] = "RUNNING"
     source_digest = hashlib.sha256(SAMPLE.read_bytes()).hexdigest()
