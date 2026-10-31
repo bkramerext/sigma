@@ -386,6 +386,8 @@ def _initialize(path: Path) -> None:
         flow_columns = {row["name"] for row in db.execute("PRAGMA table_info(flows)")}
         if "return_to" not in flow_columns:
             db.execute("ALTER TABLE flows ADD COLUMN return_to TEXT")
+        # Remove legacy inactive grants. Audit and usage history are separate.
+        db.execute("DELETE FROM grants WHERE active=0")
     if not existed:
         path.chmod(0o600)
 
@@ -445,8 +447,8 @@ def _authorization_in_db(
     explicit = db.execute(
         "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
     ).fetchone()
-    if explicit:
-        return explicit["role"] if explicit["active"] else None
+    if explicit and explicit["active"]:
+        return explicit["role"]
     domain = email.rsplit("@", 1)[1]
     allowed = db.execute(
         "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
@@ -455,25 +457,30 @@ def _authorization_in_db(
 
 
 def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str) -> bool:
-    """Convert an active member-domain policy into an individual member grant.
+    """Materialize a verified domain member as an individual authorization.
 
-    An explicit email grant (including a revoked grant) always wins. The caller
-    must have verified the Google subject and email; neither comes from a form.
+    Only active individual grants take precedence. Remove is not a ban.
     """
     if not subject or subject.startswith("legacy-denied:"):
         return False
     now = _now()
-    # One conditional INSERT is the admission/approval decision. It checks
-    # the live domain policy and absence of any explicit (including revoked)
-    # email grant under SQLite's writer transaction, so two tabs cannot both
-    # approve or race an administrator's revocation between SELECT and INSERT.
+    domain = email.rsplit("@", 1)[1]
+    # Prior versions left an inactive email tombstone on Remove. Clear it
+    # only if this email currently qualifies for active domain membership.
+    # Keep audit and historical usage untouched.
+    db.execute(
+        "DELETE FROM grants WHERE kind='email' AND value=? AND active=0 "
+        "AND EXISTS(SELECT 1 FROM grants WHERE kind='domain' AND value=? "
+        "AND role='member' AND active=1)",
+        (email, domain),
+    )
     inserted = db.execute(
         "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
         "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
         "WHERE d.kind='domain' AND d.value=? AND d.role='member' AND d.active=1 "
         "AND NOT EXISTS(SELECT 1 FROM grants AS e WHERE e.kind='email' AND e.value=?) "
         "ON CONFLICT(kind,value) DO NOTHING",
-        (email, now, email.rsplit("@", 1)[1], email),
+        (email, now, domain, email),
     )
     if inserted.rowcount != 1:
         return False
@@ -801,7 +808,15 @@ def resolve_session(raw: str | None) -> Principal | None:
         ).fetchone()
         if not row or row["expires_at"] <= _now():
             return None
-        role = _authorization(cfg, row["subject"], row["email"])
+        role = _authorization_in_db(db, cfg, row["subject"], row["email"])
+        if role == "member" or (
+            role is None
+            and row["email"] not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}
+        ):
+            # A newer domain grant can supersede an older revocation, but
+            # never bypass a subject-bound administrator identity.
+            _materialize_domain_member(db, row["subject"], row["email"])
+            role = _authorization_in_db(db, cfg, row["subject"], row["email"])
         # A verified Google identity remains signed in locally while awaiting
         # an invitation. This is identity only: middleware keeps guest access
         # on the public sample and invitation paths below.
@@ -1701,7 +1716,13 @@ async def callback(
     except (httpx.HTTPError, jwt.PyJWTError, ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(401, "Google sign-in could not be verified.") from None
     invite_intent = request.cookies.get(_cookie_name(INVITE_INTENT_COOKIE, cfg)) == state
-    role = _authorization(cfg, subject, email)
+    auto_domain_member = False
+    with _db(cfg) as db:
+        role = _authorization_in_db(db, cfg, subject, email)
+        if role is None and email not in {_bootstrap_admin_email(db, cfg), cfg.admin_contact_email}:
+            auto_domain_member = _materialize_domain_member(db, subject, email)
+            if auto_domain_member:
+                role = _authorization_in_db(db, cfg, subject, email)
     if not role:
         if cfg.local:
             # Local Google identity is independent of invitation membership.
@@ -1804,9 +1825,9 @@ async def callback(
                 # workspace. The original guest copy remains intact until expiry.
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
-    auto_domain_member = False
     with _db(cfg) as db:
-        auto_domain_member = role == "member" and _materialize_domain_member(db, subject, email)
+        if role == "member" and _materialize_domain_member(db, subject, email):
+            auto_domain_member = True
         existing_account = db.execute(
             "SELECT 1 FROM user_state WHERE subject=?", (subject,)
         ).fetchone()
@@ -2575,8 +2596,15 @@ def list_grants():
         active: dict[str, dict[str, object]] = {}
         for session in sessions:
             role = _authorization_in_db(db, cfg, session["subject"], session["email"])
-            if session["expires_at"] <= _now() or not role:
+            if session["expires_at"] <= _now():
                 db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
+                continue
+            if not role:
+                # A local verified Guest session is intentional. Opening
+                # Administrator Settings must not destroy it while a newer
+                # domain grant is awaiting materialization on status refresh.
+                if not cfg.local:
+                    db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
                 continue
             current = active.get(session["subject"])
             if current is None:
@@ -2802,14 +2830,7 @@ def revoke_grant(kind: str, value: str, request: Request):
         raise HTTPException(409, "The configured administrator cannot be revoked here.")
     actor: Principal = request.state.cloud_principal
     with _db(cfg) as db:
-        row = db.execute(
-            "SELECT role FROM grants WHERE kind=? AND value=?", (kind, normalized)
-        ).fetchone()
-        role = row["role"] if row else "member"
-        db.execute(
-            "INSERT INTO grants(kind,value,role,active,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(kind,value) DO UPDATE SET active=0,updated_at=excluded.updated_at",
-            (kind, normalized, role, 0, _now()),
-        )
+        db.execute("DELETE FROM grants WHERE kind=? AND value=?", (kind, normalized))
         if kind == "email":
             db.execute("DELETE FROM sessions WHERE email=?", (normalized,))
         db.execute(

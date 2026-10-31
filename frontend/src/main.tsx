@@ -4597,7 +4597,13 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
   }
   async function addInvitation(item: CloudInvitationRequest) {
     try {
-      await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: null });
+      // An individual member approval inherits the matching domain allowance.
+      const email = item.email.trim().toLowerCase();
+      const domain = email.split('@')[1];
+      const policy = grants.find(grant =>
+        grant.kind === 'domain' && grant.active === 1 && grant.value.toLowerCase() === domain
+      );
+      await onAdd({ kind: 'email', value: item.email, role: 'member', allowance_usd: policy?.allowance_usd ?? null });
       await onUpdateInvitation(item, 'reviewed');
       setMessage(`Added ${item.email} as an authorized member.`);
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
@@ -4641,7 +4647,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
           const reloadable = !!account && grant.active === 1 && grant.role === 'member'
             && !hasDrafts && (account.spending?.reload_eligible ?? (account.spending?.reserved_and_estimated_usd ?? 0) > 0);
           return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
-            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Removed'}</small></th>
+            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td className="admin-allowance-cell">{draft.role === 'admin' ? <span>Unlimited</span> : <><label className="admin-allowance-input"><span className="sr-only">Sponsorship allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></>}</td>
             <td><div className="admin-authorized-actions">{reloadable && <button type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => void reload(grant)}>Reload</button>}{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</div></td>

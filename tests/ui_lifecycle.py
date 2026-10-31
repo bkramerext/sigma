@@ -115,6 +115,9 @@ def main():
             SIGMA_FIXTURE_LOG=str(base / "provider.log"),
             SIGMA_AUTH_HOME=str(base / "auth"),
             SIGMA_STATE_DIR=str(base / "state"),
+            # A stale shell proxy must not redirect the local launcher away
+            # from the API process it started for this checkout.
+            SIGMA_API_TARGET="http://127.0.0.1:65534",
         )
         subprocess.run(
             ["uv", "sync", "--locked", "--project", str(root)],

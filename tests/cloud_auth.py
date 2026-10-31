@@ -1150,9 +1150,7 @@ class CloudAuthTests(TestCase):
             ).fetchone()
         self.assertEqual(member_state, (0, 0))
         self.assertEqual(member.get("/api/projects/recent").status_code, 401)
-        self.assertEqual(
-            self.client.get("/api/cloud-auth/admin/grants").json()["grants"][0]["active"], 0
-        )
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").json()["grants"], [])
         self.assertEqual(
             self.client.post("/api/ai/disconnect", headers={"Origin": ORIGIN}).status_code, 403
         )
@@ -3236,6 +3234,216 @@ class CloudAuthTests(TestCase):
                     "sponsored",
                 )
 
+    def test_pending_guest_invitation_is_auto_approved_on_next_google_signin(self):
+        """A prior pending request must not block a newly authorized domain."""
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="pending-domain-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        applicant_email = "nontrivialzeero@gmail.com"
+        applicant_subject = "pending-domain-applicant"
+        denied = self.finish(applicant_email, applicant_subject)
+        self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(cloud_auth, "_deliver_invitation"):
+            requested = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(requested.status_code, 200, requested.text)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            pending = db.execute(
+                "SELECT status FROM invitation_requests WHERE subject=?", (applicant_subject,)
+            ).fetchone()
+        self.assertIn(pending["status"], {"notified", "pending"})
+        granted = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={
+                "kind": "domain",
+                "value": "gmail.com",
+                "role": "member",
+                "allowance_usd": 10,
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(granted.status_code, 200, granted.text)
+        with patch.object(cloud_auth, "_deliver_invitation") as notice:
+            signed = self.finish(applicant_email, applicant_subject)
+        self.assertIn(cloud_auth.SESSION_COOKIE, signed.cookies)
+        principal = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
+        self.assertIsNotNone(principal)
+        assert principal is not None
+        self.assertEqual(principal.role, "member")
+        notice.assert_called_once()
+        self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            grant = db.execute(
+                "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                (applicant_email,),
+            ).fetchone()
+            request = db.execute(
+                "SELECT status FROM invitation_requests WHERE subject=?", (applicant_subject,)
+            ).fetchone()
+        self.assertEqual(
+            (grant["role"], grant["active"], grant["allowance_usd"]), ("member", 1, 10)
+        )
+        self.assertEqual(request["status"], "reviewed")
+        listed = admin.get("/api/cloud-auth/admin/grants").json()
+        self.assertTrue(
+            any(
+                account["email"] == applicant_email and account["authorized"]
+                for account in listed["sessions"]
+            )
+        )
+        self.assertFalse(
+            any(
+                req["email"] == applicant_email
+                for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+            )
+        )
+
+    def test_local_pending_guest_domain_promotion_materializes_member(self):
+        local_origin = "http://127.0.0.1:5173"
+        email = "nontrivialzeero@gmail.com"
+        subject = "local-domain-applicant"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            signed = self.finish(email=email, subject=subject)
+            self.client.cookies.set("sigma_session", signed.cookies["sigma_session"])
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            with patch.object(cloud_auth, "_deliver_invitation"):
+                requested = self.client.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                )
+            self.assertEqual(requested.status_code, 200, requested.text)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
+                    "VALUES('domain','gmail.com','member',1,?,10)",
+                    (cloud_auth._now(),),
+                )
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["user"]["role"], "member")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                grant = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                pending = db.execute(
+                    "SELECT status FROM invitation_requests WHERE subject=?", (subject,)
+                ).fetchone()
+                approvals = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (email,),
+                ).fetchone()[0]
+            self.assertIsNotNone(grant)
+            self.assertEqual(tuple(grant), ("member", 1, 10))
+            self.assertEqual(pending["status"], "reviewed")
+            self.assertEqual(approvals, 1)
+            self.client.get("/api/cloud-auth/status")
+            # Membership persists independently of the original domain rule.
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute("UPDATE grants SET active=0 WHERE kind='domain'")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
+            )
+
+    def test_local_fresh_google_signin_after_admin_domain_grant(self):
+        """Exercise local admin-save -> fresh Google callback, not just session refresh."""
+        local_origin = "http://127.0.0.1:5173"
+        applicant_email = "nontrivialzeero@gmail.com"
+        applicant_subject = "local-fresh-domain-applicant"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            signed_admin = self.finish(
+                email="admin@example.org", subject="local-domain-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", signed_admin.cookies["sigma_session"])
+
+            # Create a pending invitation before domain approval, as in the
+            # failing manual scenario. The subsequent callback is a NEW login.
+            guest = self.finish(applicant_email, applicant_subject)
+            self.assertEqual(guest.status_code, 303)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            with patch.object(cloud_auth, "_deliver_invitation"):
+                requested = self.client.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                )
+            self.assertEqual(requested.status_code, 200, requested.text)
+            self.client.cookies.clear()
+
+            granted = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "domain",
+                    "value": "gmail.com",
+                    "role": "member",
+                    "allowance_usd": 10,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(granted.status_code, 200, granted.text)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                policy = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants "
+                    "WHERE kind='domain' AND value='gmail.com'"
+                ).fetchone()
+            self.assertEqual(tuple(policy), ("member", 1, 10))
+
+            with patch.object(cloud_auth, "_deliver_invitation") as notice:
+                signed = self.finish(applicant_email, applicant_subject)
+            self.assertEqual(signed.status_code, 303, signed.text)
+            self.assertIn("sigma_session", signed.cookies)
+            notice.assert_called_once()
+            self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                individual = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (applicant_email,),
+                ).fetchone()
+                invitation = db.execute(
+                    "SELECT status FROM invitation_requests WHERE subject=?",
+                    (applicant_subject,),
+                ).fetchone()
+                audit_count = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (applicant_email,),
+                ).fetchone()[0]
+            self.assertEqual(tuple(individual), ("member", 1, 10))
+            self.assertEqual(invitation["status"], "reviewed")
+            self.assertEqual(audit_count, 1)
+            listed = admin.get("/api/cloud-auth/admin/grants").json()
+            self.assertTrue(
+                any(
+                    item["email"] == applicant_email and item["authorized"]
+                    for item in listed["sessions"]
+                )
+            )
+
     def test_domain_approved_google_login_materializes_individual_member(self):
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
@@ -3406,42 +3614,302 @@ class CloudAuthTests(TestCase):
         assert existing is not None
         self.assertEqual(existing.role, "member")
 
-    def test_explicit_user_revocation_prevents_domain_auto_member(self):
+    def test_new_domain_grant_supersedes_older_revocation_but_not_later_revoke(self):
+        """The newest explicit admin admission decision wins in local Google auth."""
+        local_origin = "http://127.0.0.1:5173"
+        email = "nontrivialzeero@gmail.com"
+        subject = "previously-revoked-domain-user"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            signed_admin = self.finish(
+                email="admin@example.org", subject="domain-policy-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", signed_admin.cookies["sigma_session"])
+            old_grant = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": email, "role": "member"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(old_grant.status_code, 200, old_grant.text)
+            revoked = admin.delete(
+                "/api/cloud-auth/admin/grants/email/" + email,
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(revoked.status_code, 200, revoked.text)
+            guest = self.finish(email, subject)
+            self.assertEqual(guest.status_code, 303)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            # Opening admin settings must not delete this legitimate Guest
+            # session just because an explicit email grant was revoked.
+            self.assertEqual(admin.get("/api/cloud-auth/admin/grants").status_code, 200)
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            # An explicit NEW domain grant supersedes the old revocation.
+            granted = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "domain",
+                    "value": "gmail.com",
+                    "role": "member",
+                    "allowance_usd": 10,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(granted.status_code, 200, granted.text)
+            # The admin UI automatically reloads grants after saving. That
+            # must not terminate the previously signed-in Guest session.
+            self.assertEqual(admin.get("/api/cloud-auth/admin/grants").status_code, 200)
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["user"]["role"], "member")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                restored = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                approvals = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (email,),
+                ).fetchone()[0]
+            self.assertEqual(tuple(restored), ("member", 1, 10))
+            self.assertEqual(approvals, 1)
+
+            # Removing the individual grant is not a ban. Active gmail.com
+            # grants authorize the SAME Google account again on the next pass.
+            removed = admin.delete(
+                "/api/cloud-auth/admin/grants/email/" + email,
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(removed.status_code, 200, removed.text)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                self.assertIsNone(
+                    db.execute(
+                        "SELECT 1 FROM grants WHERE kind='email' AND value=?", (email,)
+                    ).fetchone()
+                )
+            for cycle in range(2):
+                with patch.object(cloud_auth, "_deliver_invitation") as notice:
+                    signed = self.finish(email, subject)
+                self.assertEqual(signed.status_code, 303, signed.text)
+                self.assertEqual(
+                    self.client.get("/api/cloud-auth/status").json()["user"]["role"],
+                    "member",
+                    f"repeat sign-in cycle {cycle}",
+                )
+                notice.assert_called_once()
+                if cycle == 0:
+                    removed = admin.delete(
+                        "/api/cloud-auth/admin/grants/email/" + email,
+                        headers={"Origin": local_origin},
+                    )
+                    self.assertEqual(removed.status_code, 200, removed.text)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                final_grant = db.execute(
+                    "SELECT active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+            self.assertEqual(tuple(final_grant), (1, 10))
+
+    def test_three_domain_authorization_cycles_reusing_same_google_account(self):
+        """Remove/reauthorize must not poison later logins for the same subject."""
+        local_origin = "http://127.0.0.1:5173"
+        email = "nontrivialzeero@gmail.com"
+        subject = "repeat-domain-member-subject"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            admin_login = self.finish(
+                email="admin@example.org", subject="repeat-domain-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            for cycle in range(3):
+                granted = admin.post(
+                    "/api/cloud-auth/admin/grants",
+                    json={
+                        "kind": "domain",
+                        "value": "gmail.com",
+                        "role": "member",
+                        "allowance_usd": 10,
+                    },
+                    headers={"Origin": local_origin},
+                )
+                self.assertEqual(granted.status_code, 200, (cycle, granted.text))
+                visible = admin.get("/api/cloud-auth/admin/grants")
+                self.assertEqual(visible.status_code, 200, visible.text)
+                domain = next(
+                    grant
+                    for grant in visible.json()["grants"]
+                    if grant["kind"] == "domain" and grant["value"] == "gmail.com"
+                )
+                self.assertEqual((domain["role"], domain["active"]), ("member", 1))
+                with patch.object(cloud_auth, "_deliver_invitation"):
+                    login = self.finish(email, subject)
+                self.assertEqual(login.status_code, 303, (cycle, login.text))
+                role = self.client.get("/api/cloud-auth/status").json()["user"]["role"]
+                self.assertEqual(role, "member", f"member login cycle {cycle}")
+                with cloud_auth._db(cloud_auth.config()) as db:
+                    grant = db.execute(
+                        "SELECT role,active,allowance_usd FROM grants "
+                        "WHERE kind='email' AND value=?",
+                        (email,),
+                    ).fetchone()
+                self.assertEqual(tuple(grant), ("member", 1, 10))
+                # Remove both derived email authorization and its domain.
+                # No permanent deny or stale session may survive this reset.
+                for kind, value in (("email", email), ("domain", "gmail.com")):
+                    removed = admin.delete(
+                        f"/api/cloud-auth/admin/grants/{kind}/{value}",
+                        headers={"Origin": local_origin},
+                    )
+                    self.assertEqual(removed.status_code, 200, (cycle, removed.text))
+                self.client.cookies.clear()
+                self.assertEqual(admin.get("/api/cloud-auth/admin/grants").json()["grants"], [])
+                with patch.object(cloud_auth, "_deliver_invitation"):
+                    guest = self.finish(email, subject)
+                self.assertEqual(guest.status_code, 303, (cycle, guest.text))
+                guest_status = self.client.get("/api/cloud-auth/status").json()
+                self.assertEqual(
+                    guest_status["user"]["role"],
+                    "guest",
+                    f"guest between cycles {cycle}",
+                )
+                self.client.cookies.clear()
+
+    def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
+        """A new domain admission supersedes old revocation and pending request."""
+        local_origin = "http://127.0.0.1:5173"
+        email = "previous-invite@gmail.com"
+        subject = "fresh-previous-invite-sub"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            admin_context = TestClient(app)
+            admin = admin_context.__enter__()
+            self.addCleanup(admin_context.__exit__, None, None, None)
+            admin_login = self.finish(
+                email="admin@example.org", subject="fresh-policy-admin", client=admin
+            )
+            admin.cookies.set("sigma_session", admin_login.cookies["sigma_session"])
+            old_grant = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": email, "role": "member"},
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(old_grant.status_code, 200, old_grant.text)
+            revoke = admin.delete(
+                "/api/cloud-auth/admin/grants/email/" + email,
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(revoke.status_code, 200, revoke.text)
+            guest = self.finish(email, subject)
+            self.assertEqual(guest.status_code, 303, guest.text)
+            with patch.object(cloud_auth, "_deliver_invitation"):
+                request = self.client.post(
+                    "/api/cloud-auth/invitation-request",
+                    headers={"Origin": local_origin},
+                )
+            self.assertEqual(request.status_code, 200, request.text)
+            self.client.cookies.clear()
+
+            domain = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={
+                    "kind": "domain",
+                    "value": "gmail.com",
+                    "role": "member",
+                    "allowance_usd": 10,
+                },
+                headers={"Origin": local_origin},
+            )
+            self.assertEqual(domain.status_code, 200, domain.text)
+            with patch.object(cloud_auth, "_deliver_invitation") as notice:
+                signed = self.finish(email, subject)
+            self.assertEqual(signed.status_code, 303, signed.text)
+            notice.assert_called_once()
+            self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
+            )
+            with cloud_auth._db(cloud_auth.config()) as db:
+                grant = db.execute(
+                    "SELECT active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                invitation = db.execute(
+                    "SELECT status FROM invitation_requests WHERE subject=?",
+                    (subject,),
+                ).fetchone()
+                audit = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (email,),
+                ).fetchone()[0]
+            self.assertEqual(tuple(grant), (1, 10))
+            self.assertEqual(invitation["status"], "reviewed")
+            self.assertEqual(audit, 1)
+
+    def test_legacy_inactive_email_does_not_block_active_domain(self):
+        """Pre-migration revocation tombstones cannot disable later domain grants."""
         admin_context = TestClient(app)
         admin = admin_context.__enter__()
         self.addCleanup(admin_context.__exit__, None, None, None)
         signed_admin = self.finish(
-            email="admin@example.org", subject="auto-deny-admin", client=admin
+            email="admin@example.org", subject="legacy-tombstone-admin", client=admin
         )
         admin.cookies.set(
             cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
         )
-        admin.post(
+        domain = admin.post(
             "/api/cloud-auth/admin/grants",
-            json={"kind": "domain", "value": "example.org", "role": "member"},
+            json={
+                "kind": "domain",
+                "value": "example.org",
+                "role": "member",
+                "allowance_usd": 10,
+            },
             headers={"Origin": ORIGIN},
         )
+        self.assertEqual(domain.status_code, 200, domain.text)
         with cloud_auth._db(cloud_auth.config()) as db:
             db.execute(
                 "INSERT INTO grants(kind,value,role,active,updated_at) "
                 "VALUES('email','blocked@example.org','member',0,?)",
                 (cloud_auth._now(),),
             )
-        denied = self.finish("blocked@example.org", "auto-blocked-member")
-        self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
-        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
-        with patch.object(cloud_auth, "_deliver_invitation") as mail:
-            requested = self.client.post(
-                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
-            )
-        self.assertEqual(requested.status_code, 200)
-        self.assertNotEqual(requested.json()["status"], "approved")
-        self.assertEqual(mail.call_args.kwargs.get("request_type", "invitation"), "invitation")
+        with patch.object(cloud_auth, "_deliver_invitation") as notice:
+            signed = self.finish("blocked@example.org", "legacy-blocked-subject")
+        self.assertIn(cloud_auth.SESSION_COOKIE, signed.cookies)
+        principal = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
+        self.assertIsNotNone(principal)
+        assert principal is not None
+        self.assertEqual(principal.role, "member")
+        notice.assert_called_once()
         with cloud_auth._db(cloud_auth.config()) as db:
-            row = db.execute(
-                "SELECT active FROM grants WHERE kind='email' AND value='blocked@example.org'"
+            grant = db.execute(
+                "SELECT active,role,allowance_usd FROM grants WHERE kind='email' "
+                "AND value='blocked@example.org'"
             ).fetchone()
-        self.assertEqual(row["active"], 0)
+        self.assertEqual(tuple(grant), (1, "member", 10))
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
@@ -3499,7 +3967,7 @@ class CloudAuthTests(TestCase):
         )
         self.assertIsNone(
             cloud_auth.resolve_session(member_cookie)
-        )  # Explicit deny beats allowed domain.
+        )  # Remove ends the old session, even with a domain rule.
         lookalike = self.finish("member@notexample.org", "lookalike-sub")
         self.assertNotIn(cloud_auth.SESSION_COOKIE, lookalike.cookies)
         removed = admin_client.delete(
