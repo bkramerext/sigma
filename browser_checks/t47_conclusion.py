@@ -314,7 +314,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 "height: el.getBoundingClientRect().height, "
                 "backgroundImage: getComputedStyle(el).backgroundImage})"
             )
-            assert latex_hover["width"] == 34 and latex_hover["height"] == 34, latex_hover
+            assert latex_hover["width"] == 50 and latex_hover["height"] == 34, latex_hover
             assert "gradient" in latex_hover["backgroundImage"], latex_hover
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
