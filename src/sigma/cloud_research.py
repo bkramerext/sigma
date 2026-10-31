@@ -546,8 +546,28 @@ def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str
         raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
 
 
+def _require_research_capacity(db: sqlite3.Connection, owner: str, session_id: str) -> None:
+    """Reserve running capacity before publishing a session; no execution queue."""
+    user_limit, global_limit, _, _ = _evaluation_queue_limits()
+    states = "('queued','running','stopping')"
+    user = db.execute(
+        "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND job_kind='research' "
+        f"AND status IN {states} AND session_id<>?",
+        (owner, session_id),
+    ).fetchone()[0]
+    total = db.execute(
+        "SELECT COUNT(*) FROM jobs WHERE job_kind='research' "
+        f"AND status IN {states} AND session_id<>?",
+        (session_id,),
+    ).fetchone()[0]
+    if user >= user_limit or total >= global_limit:
+        raise CloudResearchUnavailable(
+            "Research capacity is currently full. Please try again shortly."
+        )
+
+
 def prepare_job(record: dict[str, Any]) -> None:
-    """Atomically reserve a bounded queue slot for a persisted session ID."""
+    """Atomically reserve execution capacity without waiting or provider calls."""
     owner = _workspace_id()
     from sigma.cloud_sponsor import inference_provider
 
@@ -565,7 +585,6 @@ def prepare_job(record: dict[str, Any]) -> None:
     user_ceiling_units = _ceiling_units(_effective_user_spend_ceiling_decimal())
     unlimited_admin = _admin_has_unlimited_spend()
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
-    _, _, per_user_queue, global_queue = _evaluation_queue_limits()
     call_limit = record.get("call_limit")
     duration_limit = record.get("duration_limit_minutes")
     maximum_cost = record.get("maximum_estimated_cost_usd")
@@ -674,17 +693,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                         raise CloudResearchUnavailable(
                             "The per-user research token budget has been reached."
                         )
-                    per_user = db.execute(
-                        "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
-                        (owner,),
-                    ).fetchone()[0]
-                    total = db.execute(
-                        "SELECT COUNT(*) FROM jobs WHERE status='queued'"
-                    ).fetchone()[0]
-                    if not auxiliary and (per_user >= per_user_queue or total >= global_queue):
-                        raise CloudResearchUnavailable(
-                            "Research queue is full; retry when capacity is available."
-                        )
+                    if not auxiliary:
+                        _require_research_capacity(db, owner, record["id"])
                     db.execute(
                         "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=?,session_slot=? WHERE session_id=?",
                         (now, project_relpath, _PROCESS_EPOCH, session_slot, record["id"]),
@@ -704,17 +714,10 @@ def prepare_job(record: dict[str, Any]) -> None:
                 raise CloudResearchUnavailable(
                     "The per-user research token budget has been reached."
                 )
-            user_queued = db.execute(
-                "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'", (owner,)
-            ).fetchone()[0]
-            total_queued = db.execute("SELECT COUNT(*) FROM jobs WHERE status='queued'").fetchone()[
-                0
-            ]
-            if not auxiliary and (user_queued >= per_user_queue or total_queued >= global_queue):
-                raise CloudResearchUnavailable(
-                    "Research queue is full; retry when capacity is available."
-                )
-            # Jobs are initially queued. Claiming uses an atomic running-slot test.
+            if not auxiliary:
+                _require_research_capacity(db, owner, record["id"])
+            # "queued" is a transient persisted admission state, not a
+            # waiting queue: its execution slot is already reserved.
             db.execute(
                 "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot,job_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (

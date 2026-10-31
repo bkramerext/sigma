@@ -10002,66 +10002,39 @@ def _prior_session_failures_index(
 async def _claim_cloud_job(session_id: str, path: str) -> bool:
     if not cloud_research.billing_enabled():
         return True
-    while True:
-        record = _read(path, session_id)
-        if record.get("status") != "queued":
-            return False
-        try:
-            if cloud_research.claim_job(session_id):
-                return True
-            ledger_status = cloud_research.job_status(session_id)
-            if ledger_status != "queued":
-                # The worker holds the exclusive project worker lock. No other
-                # process can legitimately own a running slot for this session.
-                # A stale slot must not strand the UI in "queued" until timeout.
-                async with _session_state_lock(session_id):
-                    record = _read(path, session_id)
-                    if record["status"] != "queued":
-                        return False
-                    record["status"] = "paused"
-                    record["updated_at"] = _now()
-                    record["current_action"] = "Paused after worker recovery"
-                    record["message"] = (
-                        "The saved session's worker reservation is no longer runnable. "
-                        "Its saved research is intact; resume to create a new worker reservation."
-                    )
-                    for branch in record.get("strategy_runs", []):
-                        if branch.get("status") == "queued":
-                            branch["status"] = "paused"
-                            branch["current_action"] = record["current_action"]
-                            branch["reason"] = record["message"]
-                    _event(record, "interrupted", record["message"])
-                    _save(path, record)
-                # Finish durable crash recovery after the saved session has
-                # been paused. Otherwise sync_job would overwrite the
-                # interrupted ledger status with a generic paused state.
-                if ledger_status in {"running", "stopping"}:
-                    cloud_research.recover_job(session_id)
+    record = _read(path, session_id)
+    if record.get("status") != "queued":
+        return False
+    try:
+        # Admission has already reserved capacity in one SQLite transaction.
+        # Do not busy-poll and do not wait for other sessions to finish.
+        if cloud_research.claim_job(session_id):
+            return True
+        ledger_status = cloud_research.job_status(session_id)
+        async with _session_state_lock(session_id):
+            record = _read(path, session_id)
+            if record["status"] != "queued":
                 return False
-        except cloud_research.CloudResearchUnavailable as exc:
-            raise ProjectError(str(exc)) from exc
-        if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
-            async with _session_state_lock(session_id):
-                record = _read(path, session_id)
-                record["status"] = "ended"
-                record["message"] = (
-                    "Cloud research queue wait reached the configured session time limit."
-                )
-                record["current_action"] = "Completed · duration limit"
-                for branch in record.get("strategy_runs", []):
-                    if branch.get("status") in {"queued", "running"}:
-                        branch["status"] = "ended"
-                        branch["current_action"] = "Duration limit"
-                        branch["reason"] = record["message"]
-                if record.get("strategy_runs"):
-                    record["outcome"] = _outcome(record)
-                    record["strategy_assessments"] = _strategy_assessments(record)
-                    record["portfolio_decision"] = _portfolio_decision(record)
-                record["updated_at"] = _now()
-                _event(record, "queue.expired", record["message"])
-                _save(path, record)
-            return False
-        await asyncio.sleep(0.1)
+            record["status"] = "paused"
+            record["updated_at"] = _now()
+            record["stopped_at"] = _now()
+            record["current_action"] = "Paused after worker recovery"
+            record["message"] = (
+                "This execution reservation could not start. Saved research is intact; "
+                "resume to retry once capacity is available."
+            )
+            for branch in record.get("strategy_runs", []):
+                if branch.get("status") == "queued":
+                    branch["status"] = "paused"
+                    branch["current_action"] = record["current_action"]
+                    branch["reason"] = record["message"]
+            _event(record, "interrupted", record["message"])
+            _save(path, record)
+        if ledger_status in {"running", "stopping"}:
+            cloud_research.recover_job(session_id)
+        return False
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
 
 
 async def _worker(session_id: str, path: str) -> None:

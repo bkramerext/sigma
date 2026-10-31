@@ -108,8 +108,10 @@ def test_orphaned_job_reconciliation(
             os.environ,
             {
                 **limits_env,
-                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
-                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+                # This suite injects several independent historical jobs to
+                # test recovery, not the hosted execution-capacity boundary.
+                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "8",
+                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "32",
                 "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
                 "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
                 "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
@@ -1289,6 +1291,10 @@ def test_json_project_orphan_recovery(
             os.environ,
             {
                 **limits_env,
+                # This fixture preserves several historical queued rows to
+                # exercise crash recovery, not hosted capacity enforcement.
+                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "4",
+                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "4",
                 "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
                 "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
                 "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
@@ -2061,7 +2067,7 @@ def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Pat
 
 
 def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
-    """Two projects per owner and multiple owners share a bounded global queue."""
+    """Reject excess before persisting; admit after another owner exits."""
     left = workspace(root, "e" * 32)
     right = workspace(root, "f" * 32)
     settings = {
@@ -2072,8 +2078,6 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
         "SIGMA_CLOUD_USER_MAX_CONCURRENT": "2",
         "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "3",
-        "SIGMA_CLOUD_USER_MAX_QUEUED": "4",
-        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
         "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
     }
     entries = [
@@ -2086,12 +2090,27 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
         patch.dict(os.environ, settings, clear=False),
         patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
     ):
-        for owner, record in entries:
+        for owner, record in entries[:3]:
             token = cloud_workspaces._CURRENT.set(owner)
             try:
                 cloud_research.prepare_job(record)
             finally:
                 cloud_workspaces._CURRENT.reset(token)
+
+        # Pending execution claims already occupy a slot: no queue.
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            try:
+                cloud_research.prepare_job(entries[3][1])
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "capacity is currently full" in str(exc)
+            else:
+                raise AssertionError("Fourth research job must be refused immediately")
+            with cloud_research._connect() as db:
+                assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 3
+                assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
 
         for owner, record in entries[:3]:
             token = cloud_workspaces._CURRENT.set(owner)
@@ -2099,22 +2118,15 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
                 assert cloud_research.claim_job(record["id"])
             finally:
                 cloud_workspaces._CURRENT.reset(token)
-
-        token = cloud_workspaces._CURRENT.set(right)
-        try:
-            assert not cloud_research.claim_job(entries[3][1]["id"])
-        finally:
-            cloud_workspaces._CURRENT.reset(token)
-
         token = cloud_workspaces._CURRENT.set(left)
         try:
-            # Releasing one finished job admits the next queued owner safely.
             cloud_research.release_job(entries[0][1]["id"], paused=True)
         finally:
             cloud_workspaces._CURRENT.reset(token)
 
         token = cloud_workspaces._CURRENT.set(right)
         try:
+            cloud_research.prepare_job(entries[3][1])
             assert cloud_research.claim_job(entries[3][1]["id"])
         finally:
             cloud_workspaces._CURRENT.reset(token)
@@ -2246,8 +2258,13 @@ def main() -> None:
                 assert summary["user_reserved_or_observed_tokens"] == 120
 
                 second = job(a.workspace_id)
-                cloud_research.prepare_job(second)
-                assert not cloud_research.claim_job(second["id"])
+                try:
+                    cloud_research.prepare_job(second)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "capacity is currently full" in str(exc)
+                else:
+                    raise AssertionError("Second research job must fail fast at capacity")
+                assert cloud_research.job_status(second["id"]) is None
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
@@ -2263,8 +2280,13 @@ def main() -> None:
                     pass
                 assert cloud_research.snapshot()["jobs"].get("queued", 0) == 0
                 third = job(b.workspace_id)
-                cloud_research.prepare_job(third)
-                assert not cloud_research.claim_job(third["id"])
+                try:
+                    cloud_research.prepare_job(third)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "capacity is currently full" in str(exc)
+                else:
+                    raise AssertionError("Third research job must fail fast at global capacity")
+                assert cloud_research.job_status(third["id"]) is None
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
@@ -2941,9 +2963,10 @@ def main() -> None:
                     assert worker_snapshot["events"][-1]["kind"] == "interrupted"
                     assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
 
-                    # A queued job that never claims capacity must terminate
-                    # with its strategy branches ended, not left "queued" in
-                    # the saved playback after the session deadline.
+                    # A legacy queued job that cannot claim a running slot
+                    # is paused immediately, without waiting for its deadline.
+                    # This is recovery behavior; new capacity-full requests
+                    # are refused before a session is created.
                     expiry_project = initialize_project(
                         a.path / "queue-expiry.sigma", "Queue expiry", "Check expiry"
                     )
@@ -2988,17 +3011,16 @@ def main() -> None:
                             is False
                         )
                     played = research_sessions._read(expiry_project.path, expired["id"])
-                    assert played["status"] == "ended"
-                    assert played["strategy_runs"][0]["status"] == "ended"
-                    assert played["events"][-1]["kind"] == "queue.expired"
-                    assert cloud_research.job_status(expired["id"]) == "terminal"
+                    assert played["status"] == "paused"
+                    assert played["strategy_runs"][0]["status"] == "paused"
+                    assert played["events"][-1]["kind"] == "interrupted"
+                    assert cloud_research.job_status(expired["id"]) == "paused"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
         # Concurrent owners race for one global execution slot. SQLite's
-        # BEGIN IMMEDIATE transaction must admit exactly one claimant.
-        # Prior tests can exhaust the intentionally tiny token allowance;
-        # the race tests execution slots rather than token exhaustion.
+        # BEGIN IMMEDIATE admission must persist exactly one job; excess
+        # work is rejected before any worker or call can start.
         with (
             patch.dict(
                 os.environ,
@@ -3007,34 +3029,38 @@ def main() -> None:
             ),
             patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
         ):
-            # Clear prior slots to isolate this race while retaining spend history.
             db = cloud_research._connect()
             db.execute("UPDATE jobs SET status='paused'")
             db.close()
             jobs = [job(a.workspace_id), job(b.workspace_id)]
-            for record in jobs:
-                token = cloud_workspaces._CURRENT.set(
-                    a if record["project_id"].endswith("a" * 32) else b
-                )
-                try:
-                    cloud_research.prepare_job(record)
-                finally:
-                    cloud_workspaces._CURRENT.reset(token)
-
             barrier = threading.Barrier(2)
 
-            def claim(record: dict, owner: cloud_workspaces.Workspace) -> bool:
+            def admit(record: dict, owner: cloud_workspaces.Workspace) -> bool:
                 context = cloud_workspaces._CURRENT.set(owner)
                 try:
                     barrier.wait(timeout=5)
-                    return cloud_research.claim_job(record["id"])
+                    try:
+                        cloud_research.prepare_job(record)
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        assert "capacity is currently full" in str(exc)
+                        return False
+                    return True
                 finally:
                     cloud_workspaces._CURRENT.reset(context)
 
             with ThreadPoolExecutor(max_workers=2) as pool:
-                results = [pool.submit(claim, record, owner) for record, owner in zip(jobs, (a, b))]
-                claimed = [future.result(timeout=10) for future in results]
-            assert sorted(claimed) == [False, True], claimed
+                results = [pool.submit(admit, record, owner) for record, owner in zip(jobs, (a, b))]
+                admitted = [future.result(timeout=10) for future in results]
+            assert sorted(admitted) == [False, True], admitted
+            for record, owner, accepted in zip(jobs, (a, b), admitted):
+                token = cloud_workspaces._CURRENT.set(owner)
+                try:
+                    if accepted:
+                        assert cloud_research.claim_job(record["id"])
+                    else:
+                        assert cloud_research.job_status(record["id"]) is None
+                finally:
+                    cloud_workspaces._CURRENT.reset(token)
 
         spend_root = root / "spend-ledger"
         spend_root.mkdir(mode=0o700)
