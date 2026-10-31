@@ -1,3 +1,59 @@
+## Production deployment — SIGMA v0.1.7 (2026-10-30 PDT)
+
+Deployed exact merged `main` SHA `802e9b6b7da5829868070f760e17280cd8a927f2`
+(v0.1.7) to `sigma-gce-01`. It includes domain-authorization PR #389 and
+maintenance-page PR #385. PR #390 merged after exact-head CI passed; the
+post-merge `main` verification passed in [run 41177482484](https://github.com/bkramerext/sigma/actions/runs/41177482484).
+`./sigma test` also passed locally on the exact candidate; its optional
+graph-present sandbox scenario skipped because the Python sandbox image was
+unavailable. No release tag was created.
+
+The pre-deployment READY snapshot `sigma-state-v016-pre-20261030-1122` was
+retained after its isolated read-only restore drill. At cutover, host checkout
+and protected `SIGMA_RELEASE` both matched old SHA
+`0e51d20341ea5656f971e075b466694393e25d97`; preflight passed all 23 checks;
+all three containers were healthy; the persistent state disk was mounted at
+`/srv/sigma-state`; and the research ledger had zero queued, running, or
+stopping jobs. The exact-SHA guarded helper built both images from a Git archive
+of the target SHA, enabled host-Caddy maintenance, stopped/started SIGMA,
+verified container health and the mounted state disk, then disabled maintenance.
+
+Public monitoring observed the maintenance page at HTTP 503 from
+2026-10-31 06:46:53 UTC through 06:47:34 UTC (about 41 seconds between first
+and last 503); the first subsequent normal root response was HTTP 200 at
+06:47:36 UTC. The 503 response included `Cache-Control: no-store, max-age=0`;
+the maintenance PNG returned HTTP 200 as `image/png` and matched committed
+asset SHA-256 `6d7034dcb1d372c43b2a572a5b8c44e3ab68bd84ac3f2a965d3546864a0bf54e`.
+The post-cutover root returned HTTP 200 without maintenance content. The public
+endpoint verifier passed DNS, private-port, HTTP redirect, HTTPS certificate,
+root, SPA deep link, and hosted API checks. The hosted auth status returned
+HTTP 200 and `ready=true`; an unauthenticated member API request returned the
+expected HTTP 401. Headless Chrome rendered the SIGMA application at
+`https://sigma-research.duckdns.org/`. The served frontend bundle contains
+`0.1.7` and build prefix `802e9b6`.
+
+Post-cutover, checkout and protected pin match
+`802e9b6b7da5829868070f760e17280cd8a927f2`; backend, frontend, and edge are
+healthy; `sigma.service` and Caddy are active with no pending systemd unit
+reload; and `/srv/sigma-state` remains mounted from UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Backend image ID is
+`sha256:d97c4ff5092fb6fedb74d5e6842ae95ddb755fa063958ab24468d1643da20223`;
+frontend image ID is
+`sha256:852158bc89470ea2a486f224935ad51b799649b64e9b9082d8fd1329366c682d`.
+Their source labels and running image IDs match the deployed SHA. A protected
+image record is saved at
+`/var/lib/sigma/releases/802e9b6b7da5829868070f760e17280cd8a927f2.json`.
+
+Issue #383 maintenance setup and production verification passed. PR #385 had
+auto-closed the issue before production verification; it was reopened after
+that ordering was found and closed again at 2026-10-31 06:50:23 UTC, after the
+production checks. The Caddy config backup is
+`/etc/caddy/Caddyfile.pre-sigma-v017-20261031`; maintenance is off in normal
+operation. The restore snapshot remains a pre-v0.1.7 point, so the next release
+requires a fresh recovery point. The recurring backup timer is still absent;
+exact recovery-drill billing has not been independently queried. No paid
+provider calls or local SIGMA server requests were made.
+
 ## Production About build SHA correction (2026-10-30)
 
 Production About showed `unknown` because the frontend image is built from a
