@@ -8471,3 +8471,21 @@ and failure, and remove. Real Chrome saved-paper acceptance passed for TeX
 human-readable clipboard success/failure and existing browser/download actions.
 No paid provider calls, merge, or deployment were made. See the R4R handoff for
 per-check results and screenshots.
+
+## PR #398 final recovery corrections (2026-10-31)
+
+Q/A archive refresh now distinguishes a successful empty list from a failed
+read. Both the recovery check and confirmed start-over path stop on read failure,
+clear any stale restart confirmation, and do not dispatch another request. A
+separate bounded pending-request ledger (1,000 exact request markers) no longer
+subtracts from the 50 completed-answer slots. The ledger retains markers for
+potentially charged requests and refuses new requests safely if its own bound is
+reached. Regression tests cover archive failures in both recovery UI paths,
+more failed markers than the completed-answer limit, and a full marker ledger
+with no provider call.
+
+Focused Research Q/A and API security tests, Ruff, Pyright, frontend typecheck
+and build, `./sigma test`, and the real Chrome recovery check all passed. Chrome
+simulated archive HTTP failures in both recovery paths and verified no extra
+mock-provider call. The optional graph-present sandbox test remains skipped
+because its local image is unavailable. No paid calls, deployment, or merge.

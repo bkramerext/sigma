@@ -48,3 +48,12 @@ Chrome confirmed the artifact citation opens Advanced Outcome and its evidence s
 - **UNVERIFIED** — live external provider behavior and paid request cancellation behavior were not exercised, as requested. The local sandbox image was unavailable for the optional graph-present test.
 
 No merge or deployment was performed. PR #395/Blue changes were not included.
+
+## Second review correction addendum
+
+- Recovery `refresh()` now reports failure distinctly from a valid empty archive. `checkRecovery()` and `startOver()` both stop and retract stale confirmation when the saved-answer read fails; no new provider request is sent until a successful read.
+- Failed/interrupted request markers are isolated from the 50 completed-answer limit. Exact markers remain in a separately bounded 1,000-entry ledger; when full, the service fails closed before provider dispatch rather than discarding duplicate-call protection.
+- Regression coverage proves archive read errors in both UI recovery actions result in no additional deterministic provider call; 50 older pending markers do not block a new completed answer; a full marker ledger is bounded and refuses provider dispatch.
+- Review correction implementation commit: `c426ac47` (full SHA is recorded in the commit log and PR head).
+
+Checks for this correction: focused `tests/research_qa.py` and `tests/research_qa_security.py`, Ruff, Pyright (0 errors/warnings), frontend typecheck/build, full `./sigma test`, and `browser_checks/research_qa.py` in real Chrome all passed. Chrome verified archive failure recovery in both check and restart actions without a repeated fixture call. `./sigma test` skipped only the optional graph-present sandbox check because the local image is unavailable. No paid provider calls were made.
