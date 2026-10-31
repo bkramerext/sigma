@@ -127,6 +127,8 @@ Select **Connect AI** to continue with ChatGPT. Eligible usage depends on your a
 
 Select the strategies you want to investigate, then start a **research session** using its controls. Investigator and Skeptic agents examine claims, challenge reasoning, and record evidence under bounded call and spending limits. Use the session controls to inspect progress, pause or stop work, and revisit earlier sessions. Available controls and limits depend on the current session state.
 
+**Concurrent research:** Project Settings → Limits controls the maximum number of active sessions in that project, including queued sessions. With a limit above one, you can start or resume another session while one is already running, even from another browser window. Different projects and signed-in users have independent research workspaces. On the hosted service, worker and queue capacity are also bounded per user and globally (defaults: 2 running and 4 queued per user, 4 running and 16 queued globally). A session waiting for a worker remains queued without dispatching or billing a provider call; account allowances and global spending ceilings still apply. The hosting operator can override these capacities with `SIGMA_CLOUD_*_MAX_CONCURRENT` and `SIGMA_CLOUD_*_MAX_QUEUED` settings. Existing server-side environment overrides take precedence over the defaults.
+
 Review the **Outcome** and its conclusion alongside detailed findings, objections, experiments, and unresolved questions. A successful numerical test or agreement between agents is **not** a mathematical proof. SIGMA preserves partial and negative results so they can inform later investigations.
 
 ## Reports and exports
