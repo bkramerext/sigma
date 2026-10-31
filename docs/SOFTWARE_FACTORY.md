@@ -15,6 +15,8 @@ A second ChatGPT conversation may coordinate a distinct domain. For example, clo
 
 **Accountability:** The coordinator must distinguish *assigned*, *started*, *reported complete*, *reviewed*, *merged*, and *accepted*. Assigning work does not make it run. ChatGPT cannot claim background execution without an actual persistent worker or scheduled mechanism.
 
+**Human-request acknowledgment convention:** In coordinator replies, explicitly acknowledge each distinct actionable request or decision from the human with a visible `✓` and a concise status. Use `✓ Captured` or `✓ Included` when the item has been recorded in the ticket or plan; use `✓ Completed` only after verifying the action actually happened. For multi-part requests, enumerate the distinct items so none silently disappears. A checkmark is acknowledgment, **not** proof of implementation, tests, merge, or acceptance. Mark blockers and unverified work plainly, and do not add ceremonial checklists to ordinary worker logs or code reviews where they obscure substance. This is a lightweight communication habit, not a new approval gate.
+
 ## 2. Color identity and ownership
 
 Colors identify **persistent Codex sessions/terminal windows**, not PR status or severity. Color-coding was adopted because terminal titles were unreliable. Use the color in every assignment and handoff to avoid sending instructions to the wrong worker.
