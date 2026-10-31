@@ -63,11 +63,72 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("Ask a question about the research performed in this project")
     expect(dialog.locator("input[type=checkbox]")).to_have_count(0)
     expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_disabled(timeout=20000)
+    state_before = page.evaluate(
+        "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
+    )
+    page.evaluate(
+        "async () => fetch('/api/__fixture/qa-control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delay_seconds:2})})"
+    )
     question = "What did the saved research conclude?"
     dialog.get_by_label("Question").fill(question)
     dialog.get_by_role("button", name="Ask", exact=True).click()
+    dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(dialog.get_by_role("alert")).to_contain_text("Request stopped")
+    dialog.get_by_role("button", name="Close", exact=True).click()
+    expect(dialog).not_to_be_visible()
+    page.get_by_role("button", name="Research Q/A", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Research Q/A")
+    expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
+    recovery = dialog.get_by_role("group", name="Recover interrupted Q/A request")
+    recovery.get_by_role("button", name="Check saved answers").click()
+    confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
+    expect(confirmation).to_be_visible(timeout=5000)
+    needs_second_check = True
+    expect(confirmation).to_contain_text("may incur another charge")
+    confirmation.get_by_role("button", name="Cancel", exact=True).click()
+    saved_answers = []
+    for _ in range(120):
+        saved_answers = page.evaluate(
+            "async path => (await (await fetch('/api/projects/research-qa?' + new URLSearchParams({path}))).json()).answers",
+            path,
+        )
+        if any(answer["question"] == question for answer in saved_answers):
+            break
+        page.wait_for_timeout(250)
+    assert any(answer["question"] == question for answer in saved_answers), saved_answers
+    if needs_second_check:
+        recovery.get_by_role("button", name="Check saved answers").click()
+    expect(
+        dialog.get_by_text("The previous request completed and its saved answer is open.")
+    ).to_be_visible()
+    state_after_cancel = page.evaluate(
+        "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
+    )
+    assert state_after_cancel["started"] == state_before["started"] + 1
+
+    failed_question = "Retry the same question after the confirmed failure?"
+    page.evaluate(
+        "async () => fetch('/api/__fixture/qa-control', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fail_next:1})})"
+    )
+    dialog.get_by_role("textbox", name="Question", exact=True).fill(failed_question)
+    dialog.get_by_role("button", name="Ask", exact=True).click()
+    expect(dialog.get_by_role("alert")).to_be_visible(timeout=30000)
+    recovery = dialog.get_by_role("group", name="Recover interrupted Q/A request")
+    recovery.get_by_role("button", name="Start over / Ask again").click()
+    confirmation = dialog.get_by_role("group", name="Confirm a fresh Q/A request")
+    expect(confirmation).to_contain_text("may incur another charge")
+    confirmation.get_by_role("button", name="Confirm Start over").click()
+    expect(dialog.locator(".saved-paper-card").first).to_contain_text(
+        failed_question, timeout=30000
+    )
+    state_after_retry = page.evaluate(
+        "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
+    )
+    assert state_after_retry["started"] == state_after_cancel["started"] + 2
+
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=30000)
+    question = failed_question
     expect(card.locator(".saved-paper-expand")).to_contain_text(question)
     card.locator(".saved-paper-expand").click()
     expect(card.locator(".saved-paper-expand")).to_have_attribute("aria-expanded", "false")
@@ -104,32 +165,68 @@ with sync_playwright() as playwright:
     browser_page = popup.value
     expect(browser_page.get_by_role("heading", name="Research Q/A")).to_be_visible()
     expect(browser_page.get_by_text(question, exact=True)).to_be_visible()
-    expect(browser_page.locator("a").first).to_have_attribute("href", re.compile("reveal_session="))
+    citation_links = browser_page.locator("main ul a")
+    expect(citation_links).to_have_count(3)
+    expect(citation_links.nth(0)).to_have_attribute("href", re.compile("reveal_session="))
+    expect(citation_links.nth(1)).to_have_attribute("href", re.compile("reveal_artifact="))
+    expect(citation_links.nth(2)).to_have_text("Current Understanding")
     browser_page.screenshot(path=str(OUT / "research-qa-browser-desktop.png"), full_page=True)
     browser_page.set_viewport_size({"width": 390, "height": 844})
     browser_page.screenshot(path=str(OUT / "research-qa-browser-mobile.png"), full_page=True)
     assert browser_page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    artifact_link = citation_links.nth(1)
+    with browser_page.expect_navigation():
+        artifact_link.click()
+    browser_page.wait_for_function("new URL(location.href).searchParams.has('reveal_artifact')")
+    artifact = browser_page.locator("[id^='research-artifact-']")
+    expect(artifact).to_be_visible()
+    expect(artifact).to_have_class(re.compile("citation-highlight"))
     browser_page.close()
+
+    with page.expect_popup() as understanding_popup:
+        card.get_by_role("link", name="Open in browser").click()
+    understanding_page = understanding_popup.value
+    with understanding_page.expect_navigation():
+        understanding_page.locator("main ul a").filter(has_text="Current Understanding").click()
+    understanding_page.wait_for_function(
+        "new URL(location.href).searchParams.get('reveal_understanding') === '1'"
+    )
+    understanding = understanding_page.locator(".current-understanding")
+    expect(understanding).to_be_visible()
+    expect(understanding).to_have_attribute("open", "")
+    expect(understanding).to_have_class(re.compile("citation-highlight"))
+    understanding_page.close()
 
     citation.click()
     page.wait_for_function("new URL(location.href).searchParams.has('reveal_session')")
     session = page.locator("li[data-session-id]").first
     expect(session.locator(".session-row-disclosure")).to_have_attribute("aria-expanded", "true")
+    expect(session).to_have_class(re.compile("citation-highlight"))
+    page.wait_for_function(
+        """() => {
+          const row = document.querySelector('li[data-session-id]');
+          if (!row) return false;
+          const rect = row.querySelector('.session-row-disclosure').getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= innerHeight;
+        }"""
+    )
 
     page.go_back()
     page.get_by_role("button", name="Research Q/A", exact=True).click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
-    expect(dialog.locator(".saved-paper-card")).to_have_count(1)
+    expect(dialog.locator(".saved-paper-card")).to_have_count(2)
     page.set_viewport_size({"width": 390, "height": 844})
     page.screenshot(path=str(OUT / "research-qa-mobile.png"), full_page=True)
     mobile_dialog = page.get_by_role("dialog", name="Research Q/A")
     assert mobile_dialog.bounding_box()["width"] <= 390
-    remove = mobile_dialog.locator(".saved-paper-meta").get_by_role("button", name="Remove")
+    remove = mobile_dialog.locator(".saved-paper-card").first.get_by_role(
+        "button", name="Remove", exact=True
+    )
     remove.click()
     mobile_dialog.get_by_role("button", name="Confirm", exact=True).click()
-    expect(mobile_dialog.locator(".saved-paper-card")).to_have_count(0)
+    expect(mobile_dialog.locator(".saved-paper-card")).to_have_count(1)
     assert not errors, errors
     print(
-        "Research Q/A Chrome acceptance passed: dialog, bounded fixture answer, archive reopen, citations, browser view, copy, remove, mobile layout, and no new research session."
+        "Research Q/A Chrome acceptance passed: recovery UI, archive, completed-session scroll, artifact and Current Understanding navigation, standalone desktop/mobile, clipboard success/failure, removal, and no new research session."
     )
     browser.close()

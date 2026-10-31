@@ -1,101 +1,50 @@
-# R4R — Research Q/A
+# R4R — Research Q/A review corrections
 
 ## Delivery
 
 - Branch: `green/research-qa`
-- Initial base: `main` at `2d0a564c731655d4ba7264fab826f96b12c63b96`
-- Implementation commit: `065e1d0e093b248df78a3a1199b7e7d50637ca4d`
-- Current `main` merged before delivery: `f6578249b6afc709b3976a56689e4ee1ed68b075`
-  (release-note PR #397 only; no Blue work was included)
-- PR: [#398](https://github.com/bkramerext/sigma/pull/398), open and unmerged
-- PR head before final handoff update: `1527f76f39bc267c549cdf7e855165e943da0859`
+- PR: [#398](https://github.com/bkramerext/sigma/pull/398), existing PR, open and unmerged
+- Review base/head: `cefef4115308d05eea57fe59a91b06347f93041d`
+- Review-correction commit: recorded after commit below
 - Merge/deploy: not performed
-- Provider cost: no paid provider calls; browser checks used the deterministic
-  local provider fixture
+- Provider cost: no paid provider calls; browser checks used a deterministic local fixture
 
-## Result
+## Corrections delivered
 
-Added a Research Q/A dialog beside TeX, using saved project evidence and the
-configured project model. Answers are stored with the exact question, selected
-evidence snapshot, snapshot hash, model/thinking metadata and validated source
-IDs. Request IDs and a persisted pre-dispatch marker prevent an interrupted
-request from being silently repeated. Q/A does not create sessions or modify
-strategies/findings. The archive survives bundle export/import and supports
-removal without touching research.
+- Failed and interrupted requests retain a per-project recovery marker across dialog closure. Reopening Q/A restores the question and request ID. Recovery checks the saved archive before allowing an explicitly confirmed fresh request, and explains that it may incur another charge.
+- Archive read/modify/write operations share a short project write transaction. Provider inference runs outside the filesystem lock; the final save rereads the archive so concurrent deletes and answer writes are preserved.
+- Detached request tasks clean their own registry entries after either success or failure, while same-request in-flight deduplication remains active.
+- API adversarial coverage checks unauthenticated and cross-user list/get/delete/browser/generation, traversal and symlink paths, forged project and connection identifiers, invalid IDs, oversized questions, workspace isolation, and zero provider calls for denied requests.
+- Artifact navigation now enables Advanced Outcome, expands the evidence section, opens and scrolls the exact cited artifact, and highlights it. Session links scroll the session heading into view. Current Understanding navigation is also covered.
+- A subprocess restart test verifies persisted answers can be read after a real process restart. Malformed imported Q/A records fail safely.
 
-Session, artifact and Current Understanding citations are rendered from stored
-validated source identifiers. Session/artifact links use the existing reveal
-flow; disappeared evidence retains its citation with navigation marked
-unavailable. The browser view escapes question/answer content, uses a restrictive
-CSP, and generates links from stored references. TeX and Q/A saved records now
-reuse the existing clipboard button; TeX copies the human-readable `/txt`
-representation.
+## Tests actually run
 
-## Changed files
+- `uv run --locked --no-sync ruff check src/sigma/api.py src/sigma/research_qa.py src/sigma/tooling.py tests/research_qa.py tests/research_qa_security.py browser_checks/research_qa.py browser_checks/provider_fixture.py` — passed.
+- `uv run --locked --no-sync pyright` — passed, 0 errors, warnings, or information.
+- `npm --prefix frontend run typecheck` — passed.
+- `npm --prefix frontend run build` — passed; Vite reported its existing >500 kB chunk advisory.
+- `./sigma test` — passed all configured steps. The optional graph-present local sandbox check was skipped because its configured Python sandbox image is unavailable. New registered Q/A functional and security tests passed, including archive concurrency, interrupted/failure/restart paths, subprocess restart durability, malformed import, and API authorization cases.
+- `uv run --with playwright python browser_checks/research_qa.py` — passed in real Chrome against the local deterministic provider fixture: close/reopen recovery, interrupted and failed/restarted request flows, session-heading scroll, artifact and Current Understanding deep links, standalone browser view, desktop/mobile layout, clipboard success/failure, removal, and no new research session.
+- `uv run --with playwright python browser_checks/saved_paper_library.py` — passed in real Chrome: TeX human-readable clipboard success/failure, preserved TeX/PDF actions, inline PDF browser view, mobile layout, and confirmed removal.
 
-- `src/sigma/research_qa.py` — bounded evidence selection, provider synthesis,
-  validation, persistence, navigation availability and safe browser HTML.
-- `src/sigma/api.py` — list/answer/get/remove/browser endpoints and shielded
-  idempotent request task handling.
-- `src/sigma/tooling.py` — deterministic service test registered in `./sigma test`.
-- `tests/research_qa.py` — multi-session citations, unsupported/uncertain
-  evidence, forged citations, deleted-source navigation, idempotency,
-  persistence/export-import, escaping and no project mutation.
-- `frontend/src/main.tsx` — Q/A dialog/archive, citations, reveal query handling,
-  Q/A clipboard and TeX text clipboard.
-- `frontend/src/workspace.css`, `frontend/src/strategies.css` — existing-style
-  spacing, input and citation highlight.
-- `browser_checks/provider_fixture.py` — deterministic `sigma_research_qa`
-  mock-provider output.
-- `browser_checks/research_qa.py` — Chrome flow for Q/A and responsive browser
-  presentation.
-- `browser_checks/saved_paper_library.py` — TeX clipboard regression coverage.
-- `docs/evaluations/research_qa/research-qa-browser-desktop.png`
-- `docs/evaluations/research_qa/research-qa-mobile.png`
-- `docs/evaluations/research_qa/research-qa-browser-mobile.png`
-- `tickets/t314_research_qa.md`, `docs/STATUS.md`, this handoff.
+No live paid provider call was made.
 
-## Checks actually run
-
-- `./sigma test` — passed. Included Ruff check/format, Pyright (0 errors),
-  frontend typecheck/build, existing TeX tests and `tests/research_qa.py`.
-  The suite noted the pre-existing optional graph-present Python sandbox case
-  skipped because its local image is unavailable.
-- `uv run --with playwright --no-project python browser_checks/research_qa.py`
-  — passed in real Chrome against the local deterministic fixture: Q/A action
-  placement, question, archive open/collapse/expand, citations, session reveal,
-  browser open, desktop/mobile view, copy success/failure, removal, and unchanged
-  session count.
-- `SIGMA_PAPER_UI=http://127.0.0.1:5174 SIGMA_PAPER_FIXTURE=http://127.0.0.1:8012 uv run --with playwright --no-project python browser_checks/saved_paper_library.py`
-  — passed in real Chrome against the local fixture: saved TeX human-readable
-  clipboard success/failure, text/TeX/PDF payloads, PDF browser view, responsive
-  layout and removal.
-- `uv run --locked --no-sync ruff check` on changed Python files — passed.
-- Vite emitted its existing large-chunk advisory during build; the build passed.
-
-## Screenshots and observations
+## Screenshots and browser observations
 
 - [Standalone desktop](../docs/evaluations/research_qa/research-qa-browser-desktop.png)
 - [Standalone mobile](../docs/evaluations/research_qa/research-qa-browser-mobile.png)
 - [Q/A dialog mobile](../docs/evaluations/research_qa/research-qa-mobile.png)
 
-The visual flow follows the existing dark/copper SIGMA styling. The standalone
-mobile check caught and fixed an unbroken snapshot hash causing horizontal
-overflow; metadata now wraps safely.
+Chrome confirmed the artifact citation opens Advanced Outcome and its evidence subsection, then scrolls the target artifact into view with a temporary highlight. The historical session link brings its heading into view with a temporary highlight. Current Understanding opens and highlights the correct section. The standalone page remained within the mobile viewport width.
 
 ## Acceptance status
 
-- **MET** — project-scoped Q/A archive, frozen saved-evidence synthesis,
-  validated source IDs, exact question and evidence provenance, unsupported and
-  uncertain answers, session/artifact deep links, unavailable-source behavior,
-  browser presentation, safe escaping, copy controls, TeX regression, remove,
-  export/import, and no research mutation in deterministic tests.
-- **MET** — local Chrome desktop/mobile checks and required repository suite.
-- **UNMET** — none identified in implemented scope.
-- **UNVERIFIED** — live external provider behavior intentionally not exercised;
-  cross-user denial and path-traversal attacks were not separately exercised in
-  dedicated adversarial API tests; process restart was not performed as a
-  separate browser acceptance step. Durable storage was verified by reloading
-  records and export/import.
+- **MET** — explicit interrupted/failed request recovery, saved-answer check, charge confirmation, deterministic in-flight deduplication and cleanup.
+- **MET** — concurrent archive delete/generation preservation, restart persistence, malformed import rejection, user/project isolation and adversarial API security coverage.
+- **MET** — session, artifact, and Current Understanding citation navigation; browser rendering; Q/A/TeX clipboard behavior; no research mutation; responsive Chrome acceptance.
+- **MET** — Ruff, Pyright, frontend checks, `./sigma test`, and affected real-Chrome checks.
+- **UNMET** — none identified in the requested review corrections.
+- **UNVERIFIED** — live external provider behavior and paid request cancellation behavior were not exercised, as requested. The local sandbox image was unavailable for the optional graph-present test.
 
-No PR review, merge, or deployment was performed.
+No merge or deployment was performed. PR #395/Blue changes were not included.

@@ -26,6 +26,7 @@ samples.SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 # They let browser acceptance exercise recovery states without contacting a
 # provider endpoint or spending an account allowance.
 _paper_failures: dict[str, dict[str, int]] = {}
+_qa_control = {"delay_seconds": 0.0, "fail_next": 0, "started": 0, "completed": 0}
 _real_provider_structured = papers._provider_structured
 
 
@@ -44,6 +45,27 @@ def set_paper_failure(body: dict[str, object]):
         return {"error": "Invalid deterministic paper-fixture control"}, 400
     _paper_failures[schema_name] = {"mode": str(mode), "count": count}
     return {"configured": True}
+
+
+@app.post("/api/__fixture/qa-control")
+def set_qa_control(body: dict[str, object]):
+    delay = body.get("delay_seconds", 0)
+    failures = body.get("fail_next", 0)
+    if (
+        type(delay) not in {int, float}
+        or not 0 <= delay <= 5
+        or type(failures) is not int
+        or not 0 <= failures <= 2
+    ):
+        return {"error": "Invalid deterministic Q/A fixture control"}, 400
+    _qa_control["delay_seconds"] = float(delay)
+    _qa_control["fail_next"] = failures
+    return {"configured": True}
+
+
+@app.get("/api/__fixture/qa-state")
+def qa_fixture_state():
+    return dict(_qa_control)
 
 
 async def fixture_provider_structured(input_value, *args, schema_name: str, **kwargs):
@@ -206,17 +228,26 @@ async def handler(request):
             },
         )
     if schema_name == "sigma_research_qa":
+        _qa_control["started"] = int(_qa_control["started"]) + 1
+        if _qa_control["fail_next"]:
+            _qa_control["fail_next"] = int(_qa_control["fail_next"]) - 1
+            _qa_control["completed"] = int(_qa_control["completed"]) + 1
+            return httpx.Response(500, json={"error": {"message": "Deterministic Q/A failure"}})
+        delay = float(_qa_control["delay_seconds"])
+        if delay:
+            await asyncio.sleep(delay)
         question = context.get("question", "")
-        session_sources = [
-            source["id"]
-            for source in context.get("sources", [])
-            if source.get("kind") in {"session", "artifact"}
-        ]
-        refs = list(dict.fromkeys(session_sources))[:2]
+        sources = context.get("sources", [])
+        refs = []
+        for kind in ("session", "artifact", "current_understanding"):
+            source = next((item for item in sources if item.get("kind") == kind), None)
+            if source:
+                refs.append(source["id"])
         output = {
             "answer": f"The saved research answers: {question}. The record is provisional and should be reviewed with its supporting evidence.",
             "source_refs": refs,
         }
+        _qa_control["completed"] = int(_qa_control["completed"]) + 1
         return httpx.Response(
             200,
             json={

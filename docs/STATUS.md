@@ -8443,3 +8443,31 @@ was not independently captured and remains unverified. No paid provider calls
 were made. See [the issue handoff](../messages/issue_301_green_r4r.txt) for the
 current SHA, exact evidence, screenshots, and limitations. PR remains open and
 unmerged.
+
+## PR #398 Research Q/A review corrections (2026-10-31)
+
+Updated `green/research-qa` for review feedback. Q/A recovery now survives closing
+and reopening the dialog, checks the saved archive before fresh generation, and
+requires explicit confirmation that another provider attempt may incur a charge.
+Archive writes use brief shared project write transactions after inference, so a
+concurrent deletion cannot be undone by stale answer data. Detached provider
+workers remove their own request-registry entries on completion or failure.
+Artifact citations enable Advanced Outcome, expand the evidence subsection, and
+scroll/highlight the exact saved artifact; session links scroll the session
+heading into view. Dedicated API adversarial tests cover unauthorized and
+cross-user list/get/delete/browser/generation access, traversal/symlink paths,
+forged project/connection IDs, invalid IDs, oversized questions, and zero provider
+calls on denied requests. Tests also cover actual subprocess restart durability
+and malformed imported archives.
+
+Validation on the review-correction tree: Ruff, Pyright (0 errors/warnings),
+frontend typecheck/build, and `./sigma test` passed. The complete suite skipped
+only the optional graph-present sandbox check because the local Python sandbox
+image is unavailable. Real Chrome Q/A acceptance passed against the deterministic
+provider fixture, including close/reopen recovery, confirmed restart after a
+failed request, completed historical session scrolling, exact artifact and
+Current Understanding navigation, desktop/mobile browser view, clipboard success
+and failure, and remove. Real Chrome saved-paper acceptance passed for TeX
+human-readable clipboard success/failure and existing browser/download actions.
+No paid provider calls, merge, or deployment were made. See the R4R handoff for
+per-check results and screenshots.

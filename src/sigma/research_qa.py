@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import html
 import json
 import os
 import re
 import stat
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +24,7 @@ from sigma.projects import (
     ProjectError,
     inspect_project,
     project_path,
+    project_write_lock,
     read_project_artifact,
     save_project_artifacts,
 )
@@ -33,7 +34,13 @@ MAX_RECORDS = 50
 MAX_RECORD_BYTES = 2_000_000
 MAX_ARCHIVE_BYTES = 30_000_000
 MAX_QUESTION = 4000
-_project_locks: dict[str, asyncio.Lock] = {}
+
+
+@contextmanager
+def _archive_transaction(path: str) -> Iterator[None]:
+    """Serialize brief archive read/modify/write transactions across processes."""
+    with project_write_lock(path):
+        yield
 
 
 class AnswerDraft(BaseModel):
@@ -96,26 +103,91 @@ def _load_archive(path: str) -> tuple[list[dict[str, Any]], list[dict[str, str]]
         return [], []
     except (OSError, ValueError) as exc:
         raise ProjectError("Q/A archive is unreadable") from exc
+    project_id = inspect_project(path).project.id
     if (
         not isinstance(value, dict)
-        or value.get("project_id") != inspect_project(path).project.id
+        or value.get("schema_version") != 1
+        or value.get("project_id") != project_id
         or not isinstance(value.get("records"), list)
     ):
         raise ProjectError("Q/A archive is invalid or belongs to another project")
-    records = [
-        item
-        for item in value["records"]
-        if isinstance(item, dict) and isinstance(item.get("qa_id"), str)
-    ]
+    records = value["records"]
     pending = value.get("pending_requests", [])
+    if not isinstance(records, list) or len(records) > MAX_RECORDS or not isinstance(pending, list):
+        raise ProjectError("Q/A pending request ledger is invalid")
+    qa_ids: set[str] = set()
+    request_ids: set[str] = set()
+    for record in records:
+        _validate_record(record, project_id)
+        if record["qa_id"] in qa_ids or record["request_id"] in request_ids:
+            raise ProjectError("Q/A archive contains duplicate answer identifiers")
+        qa_ids.add(record["qa_id"])
+        request_ids.add(record["request_id"])
     if not isinstance(pending, list) or any(
         not isinstance(item, dict)
-        or not isinstance(item.get("request_id"), str)
-        or not isinstance(item.get("question_sha256"), str)
+        or not re.fullmatch(r"[0-9a-f]{32}", str(item.get("request_id", "")))
+        or not re.fullmatch(r"[0-9a-f]{64}", str(item.get("question_sha256", "")))
         for item in pending
     ):
         raise ProjectError("Q/A pending request ledger is invalid")
     return records, pending
+
+
+def _validate_record(record: Any, project_id: str) -> None:
+    if not isinstance(record, dict):
+        raise ProjectError("Q/A archive contains a malformed answer")
+    if (
+        not re.fullmatch(r"[0-9a-f]{32}", str(record.get("qa_id", "")))
+        or not re.fullmatch(r"[0-9a-f]{32}", str(record.get("request_id", "")))
+        or record.get("project_id") != project_id
+        or not isinstance(record.get("question"), str)
+        or not 1 <= len(record["question"]) <= MAX_QUESTION
+        or not isinstance(record.get("answer"), str)
+        or not 1 <= len(record["answer"]) <= 16000
+        or not re.fullmatch(r"[0-9a-f]{64}", str(record.get("snapshot_sha256", "")))
+        or not isinstance(record.get("evidence_snapshot"), list)
+        or not isinstance(record.get("sources"), list)
+        or len(record["sources"]) > 40
+        or not isinstance(record.get("generation"), dict)
+        or not isinstance(record.get("created_at"), str)
+    ):
+        raise ProjectError("Q/A archive contains a malformed answer")
+    try:
+        datetime.fromisoformat(record["created_at"])
+    except ValueError as exc:
+        raise ProjectError("Q/A archive contains an invalid answer timestamp") from exc
+    evidence_ids = set()
+    if len(record["evidence_snapshot"]) > 500:
+        raise ProjectError("Q/A archive contains too many evidence references")
+    for evidence in record["evidence_snapshot"]:
+        if (
+            not isinstance(evidence, dict)
+            or not isinstance(evidence.get("id"), str)
+            or not isinstance(evidence.get("kind"), str)
+        ):
+            raise ProjectError("Q/A archive contains malformed evidence provenance")
+        evidence_ids.add(evidence["id"])
+    for source in record["sources"]:
+        if (
+            not isinstance(source, dict)
+            or not isinstance(source.get("source_id"), str)
+            or source["source_id"] not in evidence_ids
+            or not isinstance(source.get("kind"), str)
+            or (
+                source.get("session_number") is not None
+                and type(source.get("session_number")) is not int
+            )
+        ):
+            raise ProjectError("Q/A archive contains an invalid citation")
+    generation = record["generation"]
+    if (
+        not isinstance(generation.get("model"), str)
+        or not isinstance(generation.get("reasoning_effort"), str)
+        or not isinstance(generation.get("mode"), str)
+        or type(generation.get("generation_elapsed_seconds")) is not int
+        or generation["generation_elapsed_seconds"] < 0
+    ):
+        raise ProjectError("Q/A archive contains invalid generation metadata")
 
 
 def _save(
@@ -251,12 +323,7 @@ def _selected_sources(question: str, package: dict[str, Any]) -> list[dict[str, 
 async def answer(
     path: str, question: str, expected_project_id: str, expected_binding: str, request_id: str
 ) -> dict[str, Any]:
-    key = str(project_path(path).resolve())
-    lock = _project_locks.setdefault(key, asyncio.Lock())
-    async with lock:
-        return await _answer_locked(
-            path, question, expected_project_id, expected_binding, request_id
-        )
+    return await _answer_locked(path, question, expected_project_id, expected_binding, request_id)
 
 
 async def _answer_locked(
@@ -273,20 +340,15 @@ async def _answer_locked(
         raise ProjectError("AI connection changed before Q/A started")
     if not re.fullmatch(r"[0-9a-f]{32}", request_id):
         raise ProjectError("Invalid Q/A request identifier")
-    records, pending = _load_archive(path)
-    previous = next((row for row in records if row.get("request_id") == request_id), None)
-    if previous:
-        if previous.get("question") != question:
-            raise ProjectError("Q/A request identifier was already used for a different question")
-        return previous
     question_hash = hashlib.sha256(question.encode()).hexdigest()
-    marker = next((item for item in pending if item.get("request_id") == request_id), None)
-    if marker:
-        if marker.get("question_sha256") != question_hash:
-            raise ProjectError("Q/A request identifier was already used for a different question")
-        raise ProjectError(
-            "This Q/A request may already have reached the provider. Check Saved answers before starting a new question."
-        )
+    with _archive_transaction(path):
+        records, pending = _load_archive(path)
+        previous = _request_record(records, request_id, question)
+        if previous:
+            return previous
+        _check_pending_request(pending, request_id, question_hash)
+        if len(records) + len(pending) >= MAX_RECORDS:
+            raise ProjectError("This project has reached the 50 saved Q/A limit")
     package, snapshot_hash = papers._snapshot(path)
     from sigma.research_state import current_understanding
 
@@ -310,8 +372,16 @@ async def _answer_locked(
     started = datetime.now(UTC)
     # Persist an idempotency marker before dispatch. If the process exits after
     # provider bytes may have been sent, a retry cannot silently charge twice.
-    pending.append({"request_id": request_id, "question_sha256": question_hash})
-    _save(path, records, pending)
+    with _archive_transaction(path):
+        records, pending = _load_archive(path)
+        previous = _request_record(records, request_id, question)
+        if previous:
+            return previous
+        _check_pending_request(pending, request_id, question_hash)
+        if len(records) + len(pending) >= MAX_RECORDS:
+            raise ProjectError("This project has reached the 50 saved Q/A limit")
+        pending.append({"request_id": request_id, "question_sha256": question_hash})
+        _save(path, records, pending)
     structured, _raw = await papers._provider_structured(
         {"question": question, "sources": selected},
         binding,
@@ -374,11 +444,41 @@ async def _answer_locked(
         record["evidence_snapshot"] = [
             {"id": row.get("id"), "kind": row.get("kind")} for row in selected
         ]
-    if len(records) >= MAX_RECORDS:
-        raise ProjectError("This project has reached the 50 saved Q/A limit")
-    records.append(record)
-    _save(path, records, [item for item in pending if item.get("request_id") != request_id])
-    return record
+    with _archive_transaction(path):
+        records, pending = _load_archive(path)
+        previous = _request_record(records, request_id, question)
+        if previous:
+            return previous
+        marker = next((item for item in pending if item.get("request_id") == request_id), None)
+        if marker is None or marker.get("question_sha256") != question_hash:
+            raise ProjectError("Q/A request reservation changed before the answer was saved")
+        if len(records) >= MAX_RECORDS:
+            raise ProjectError("This project has reached the 50 saved Q/A limit")
+        records.append(record)
+        _save(path, records, [item for item in pending if item.get("request_id") != request_id])
+        return record
+
+
+def _request_record(
+    records: list[dict[str, Any]], request_id: str, question: str
+) -> dict[str, Any] | None:
+    previous = next((row for row in records if row.get("request_id") == request_id), None)
+    if previous and previous.get("question") != question:
+        raise ProjectError("Q/A request identifier was already used for a different question")
+    return previous
+
+
+def _check_pending_request(
+    pending: list[dict[str, str]], request_id: str, question_hash: str
+) -> None:
+    marker = next((item for item in pending if item.get("request_id") == request_id), None)
+    if marker is None:
+        return
+    if marker.get("question_sha256") != question_hash:
+        raise ProjectError("Q/A request identifier was already used for a different question")
+    raise ProjectError(
+        "This Q/A request may already have reached the provider. Check Saved answers before starting a new question."
+    )
 
 
 def get_answer(path: str, qa_id: str) -> dict[str, Any]:
@@ -391,9 +491,13 @@ def get_answer(path: str, qa_id: str) -> dict[str, Any]:
 
 
 def delete_answer(path: str, qa_id: str) -> None:
-    get_answer(path, qa_id)
-    records, pending = _load_archive(path)
-    _save(path, [row for row in records if row.get("qa_id") != qa_id], pending)
+    if not re.fullmatch(r"[0-9a-f]{32}", qa_id):
+        raise ProjectError("Invalid Q/A identifier")
+    with _archive_transaction(path):
+        records, pending = _load_archive(path)
+        if not any(row.get("qa_id") == qa_id for row in records):
+            raise ProjectError("Saved Q/A answer was not found")
+        _save(path, [row for row in records if row.get("qa_id") != qa_id], pending)
 
 
 def standalone_html(path: str, qa_id: str) -> str:
