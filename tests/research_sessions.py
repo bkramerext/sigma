@@ -526,7 +526,15 @@ async def test_distinct_portfolio_sessions_dispatch_simultaneously(root: Path):
         running: set[str] = set()
         both_running = asyncio.Event()
 
-        async def provider(record, role, context, timeout_seconds=None, step_id=None):
+        async def provider(
+            record,
+            role,
+            context,
+            timeout_seconds=None,
+            step_id=None,
+            running=running,
+            both_running=both_running,
+        ):
             del context, timeout_seconds
             assert isinstance(step_id, str)
             if role == "investigator":
@@ -546,12 +554,18 @@ async def test_distinct_portfolio_sessions_dispatch_simultaneously(root: Path):
         ):
             first, second = await asyncio.gather(
                 research_sessions.start_session(
-                    str(left), first_strategy.id, str(uuid4()),
-                    first_view.project.id, credential["identity"]
+                    str(left),
+                    first_strategy.id,
+                    str(uuid4()),
+                    first_view.project.id,
+                    credential["identity"],
                 ),
                 research_sessions.start_session(
-                    str(right), second_strategy.id, str(uuid4()),
-                    second_view.project.id, credential["identity"]
+                    str(right),
+                    second_strategy.id,
+                    str(uuid4()),
+                    second_view.project.id,
+                    credential["identity"],
                 ),
             )
             assert first["id"] != second["id"]
@@ -7130,10 +7144,12 @@ async def test_changed_bindings_pause_before_provider(path: Path):
     release = asyncio.Event()
     provider_calls = []
 
-    async def blocked_gate():
+    original_role_call = research_sessions._portfolio_role_call
+
+    async def blocked_role_call(*args, **kwargs):
         entered.set()
         await release.wait()
-        return []
+        return await original_role_call(*args, **kwargs)
 
     async def handler(request):
         provider_calls.append(request)
@@ -7144,7 +7160,7 @@ async def test_changed_bindings_pause_before_provider(path: Path):
             research_sessions, "auth_context", new=AsyncMock(side_effect=[credential, changed])
         ),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
-        patch.object(research_sessions, "_acquire_gates", new=blocked_gate),
+        patch.object(research_sessions, "_portfolio_role_call", new=blocked_role_call),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -7180,7 +7196,7 @@ async def test_changed_bindings_pause_before_provider(path: Path):
         patch.object(
             research_sessions, "configuration", new=AsyncMock(return_value=account_config)
         ),
-        patch.object(research_sessions, "_acquire_gates", new=blocked_gate),
+        patch.object(research_sessions, "_portfolio_role_call", new=blocked_role_call),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -7208,9 +7224,10 @@ async def test_legacy_resume_accepts_reverted_eligibility_events(path: Path):
     gate_entered = asyncio.Event()
     provider_calls = []
 
-    async def blocked_gate():
+    async def blocked_role_call(*_args, **_kwargs):
         gate_entered.set()
         await asyncio.Event().wait()
+        return False
 
     async def handler(request):
         provider_calls.append(request)
@@ -7221,7 +7238,7 @@ async def test_legacy_resume_accepts_reverted_eligibility_events(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
-        patch.object(research_sessions, "_acquire_gates", new=blocked_gate),
+        patch.object(research_sessions, "_portfolio_role_call", new=blocked_role_call),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
