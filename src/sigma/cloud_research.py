@@ -7,9 +7,11 @@ write-ahead cost reservations without creating a second research engine.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import sqlite3
+import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -1078,8 +1080,26 @@ def reconcile_orphaned_jobs() -> list[str]:
                     session_record = project / "research-sessions" / f"{session_id}.json"
                     has_session = session_record.exists() or session_record.is_symlink()
                 if candidate["status"] in {"running", "stopping"}:
-                    # The per-session OS lock, not elapsed time, distinguishes
-                    # a legitimate slow worker from an abandoned process.
+                    # Even an unpublished/missing session record can belong to
+                    # a live worker. Never free its slot while its OS lock is held.
+                    lock_path = research_sessions._worker_lock_path(str(project), session_id)
+                    try:
+                        fd = os.open(
+                            lock_path,
+                            os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                            0o600,
+                        )
+                    except OSError:
+                        continue
+                    try:
+                        try:
+                            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        except BlockingIOError:
+                            continue
+                        else:
+                            fcntl.flock(fd, fcntl.LOCK_UN)
+                    finally:
+                        os.close(fd)
                     if has_session:
                         try:
                             saved = research_sessions._read(str(project), session_id)
@@ -1139,6 +1159,66 @@ def reconcile_orphaned_jobs() -> list[str]:
             # Recovery is conservative: inability to prove absence keeps the row.
             continue
     return removed
+
+
+def reconcile_all_orphaned_jobs() -> None:
+    """Recover old research workers across workspaces before new admission.
+
+    Reuse the existing per-workspace recovery and OS worker locks. An active
+    request only triggers maintenance; it cannot choose another workspace or
+    receive that workspace's records. Unknown owners fail closed.
+    """
+    current = _ledger_workspace()
+    if current is None:
+        raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
+    try:
+        parent = current.path.parent.resolve(strict=True)
+        with _connect() as db:
+            owners = [
+                row["workspace_id"]
+                for row in db.execute(
+                    "SELECT DISTINCT workspace_id FROM jobs "
+                    "WHERE job_kind='research' AND status IN ('queued','running','stopping') "
+                    "AND process_epoch<>?",
+                    (_PROCESS_EPOCH,),
+                ).fetchall()
+            ]
+    except (OSError, sqlite3.Error) as exc:
+        raise CloudResearchUnavailable("Research worker recovery is unavailable.") from exc
+
+    for owner in owners:
+        if (
+            not isinstance(owner, str)
+            or len(owner) != 32
+            or any(character not in "0123456789abcdef" for character in owner)
+        ):
+            continue
+        owner_path = parent / owner
+        try:
+            info = owner_path.lstat()
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or owner_path.is_symlink()
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
+            ):
+                continue
+            resolved = owner_path.resolve(strict=True)
+            if resolved.parent != parent:
+                continue
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if owner == current.workspace_id:
+            reconcile_orphaned_jobs()
+            continue
+        # Only the server's durable ledger supplies owner IDs. Use a tightly
+        # scoped internal binding so existing recovery cannot cross owner roots.
+        recovery = cloud_workspaces.Workspace(owner, "", resolved)
+        token = cloud_workspaces.bind_workspace(recovery)
+        try:
+            reconcile_orphaned_jobs()
+        finally:
+            cloud_workspaces.reset(token)
 
 
 def release_job(session_id: str, *, paused: bool = False) -> None:
