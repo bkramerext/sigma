@@ -5,7 +5,7 @@
 - Branch: `green/research-qa`
 - PR: [#398](https://github.com/bkramerext/sigma/pull/398), existing PR, open and unmerged
 - Review base/head: `cefef4115308d05eea57fe59a91b06347f93041d`
-- Review-correction commit: recorded after commit below
+- Review-correction SHA: `592ebd684b542fc9280ea518c43b6823bbbbd90a`
 - Merge/deploy: not performed
 - Provider cost: no paid provider calls; browser checks used a deterministic local fixture
 
