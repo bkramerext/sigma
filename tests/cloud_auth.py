@@ -3787,11 +3787,17 @@ class CloudAuthTests(TestCase):
                 with patch.object(cloud_auth, "_deliver_invitation"):
                     guest = self.finish(email, subject)
                 self.assertEqual(guest.status_code, 303, (cycle, guest.text))
+                guest_status = self.client.get("/api/cloud-auth/status").json()
                 self.assertEqual(
-                    self.client.get("/api/cloud-auth/status").json()["user"]["role"],
+                    guest_status["user"]["role"],
                     "guest",
                     f"guest between cycles {cycle}",
                 )
+                diagnostic = guest_status["account"]["local_auth_diagnostic"]
+                self.assertEqual(diagnostic["policy"], "remove-deletes-grants")
+                self.assertIsNone(diagnostic["email_grant"])
+                self.assertIsNone(diagnostic["domain_grant"])
+                self.assertEqual(diagnostic["domain"], "gmail.com")
                 self.client.cookies.clear()
 
     def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
