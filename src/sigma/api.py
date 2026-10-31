@@ -1486,23 +1486,31 @@ async def delete_project_view(body: DeleteProjectRequest):
         view = inspect_project(str(authorized))
         if view.project.id != body.expected_project_id:
             raise ProjectError("Project changed; refresh before deleting it")
-        # Admission takes the same lock from reservation through publication.
-        # Hold it while stopping workers and unlinking data so no new worker can
-        # enter between cancellation and deletion.
+        # Admission holds the same manager lock until its worker is published.
+        # Keep it across deletion; prove every saved session's original worker
+        # has exited before removing its project, including foreign-process
+        # workers whose local task is invisible in this process.
+        from contextlib import ExitStack
+
         with research_sessions._project_manager_lock(str(authorized)):
             view = inspect_project(str(authorized))
             if view.project.id != body.expected_project_id:
                 raise ProjectError("Project changed; refresh before deleting it")
             await research_sessions.stop_project_sessions(str(authorized))
-            await asyncio.to_thread(
-                session_log.delete_project, body.expected_project_id, authorized
-            )
-            if authorized.suffix == ".json":
-                authorized.unlink()
-            elif authorized.suffix == ".sigma" and authorized.is_dir():
-                shutil.rmtree(authorized)
-            else:
-                raise ProjectError("Unsupported project storage format")
+            with ExitStack() as worker_fences:
+                for session in research_sessions._all(str(authorized)):
+                    worker_fences.enter_context(
+                        research_sessions._idle_worker_lock(str(authorized), session["id"])
+                    )
+                await asyncio.to_thread(
+                    session_log.delete_project, body.expected_project_id, authorized
+                )
+                if authorized.suffix == ".json":
+                    authorized.unlink()
+                elif authorized.suffix == ".sigma" and authorized.is_dir():
+                    shutil.rmtree(authorized)
+                else:
+                    raise ProjectError("Unsupported project storage format")
         from sigma.recents import forget_recent
 
         forget_recent(body.expected_project_id, str(authorized))
