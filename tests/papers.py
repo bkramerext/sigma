@@ -1102,6 +1102,136 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
 
 
+def test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts() -> None:
+    """Repeated TeX option changes retain drafts and count each paid call once."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "proofreading-render-call-accounting.sigma"
+        initialize_project(path, "Proofreading accounting", "Keep the saved paper draft.")
+        view = inspect_project(path)
+        credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        project_package, _ = papers._snapshot(str(path))
+        project_ref = next(
+            item["id"] for item in project_package["sources"] if item["kind"] == "project"
+        )
+        authored = draft(project_ref)
+        authored = authored.model_copy(
+            update={
+                "diagrams": [
+                    papers.PaperDiagram(
+                        caption="Evidence flow for the saved project.",
+                        nodes=[
+                            papers.DiagramNode(id="source", label="Source"),
+                            papers.DiagramNode(id="claim", label="Claim"),
+                        ],
+                        edges=[papers.DiagramEdge(source="source", target="claim")],
+                        evidence_refs=[project_ref],
+                        claim_ids=["C1"],
+                    )
+                ]
+            }
+        )
+        author_calls = 0
+        proofreading_calls = 0
+        compile_calls = 0
+        diagnostic_sources: list[str] = []
+
+        async def author(_context, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            return authored, config["model"]
+
+        async def proofreader(*_args, **_kwargs):
+            nonlocal proofreading_calls
+            proofreading_calls += 1
+            return papers.TeXProofreadResult(corrections=[]), config["model"]
+
+        def split_tex(tex: str) -> list[tuple[int, int]]:
+            middle = len(tex) // 2
+            return [(0, middle), (middle, len(tex))]
+
+        def intermittent_compile(tex: str, **_kwargs) -> bytes:
+            nonlocal compile_calls
+            compile_calls += 1
+            if compile_calls % 2:
+                diagnostic_sources.append(tex)
+                return b"%PDF-diagnostics-fixture"
+            if compile_calls in {2, 4}:
+                raise RuntimeError("fixture final compile failure; preserve checkpoint")
+            return b"%PDF-final-fixture"
+
+        async def run(*, details: bool = False, diagrams: bool = True, notes: bool = False):
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=author),
+                patch.object(papers, "_provider_structured", new=proofreader),
+                patch.object(papers, "_tex_chunks", new=split_tex),
+                patch.object(papers, "_compile_pdf", new=intermittent_compile),
+            ):
+                return await papers.generate(
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
+                    include_research_details=details,
+                    include_diagrams=diagrams,
+                    include_validation_notes=notes,
+                )
+
+        async def exercise() -> dict[str, Any]:
+            for options in (
+                {"details": False, "diagrams": True},
+                {"details": True, "diagrams": False},
+            ):
+                try:
+                    await run(**options)
+                except ProjectError as exc:
+                    assert "fixture final compile failure" in str(exc)
+                else:
+                    raise AssertionError("The first two versions must preserve resumable work")
+                checkpoint = papers._load_work(str(path))
+                assert checkpoint is not None
+                assert checkpoint["proofreading"]["provider_calls_attempted"] == 2
+                expected_prior = 0 if options["details"] is False else 2
+                assert checkpoint["proofreading_calls_prior"] == expected_prior
+            preflight = papers.preflight(
+                str(path),
+                expected_project_id=view.project.id,
+                expected_binding=credential["identity"],
+                mode=credential["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert preflight["draft_recovery_available"] is True
+            assert preflight["provider_calls_attempted"] == 5  # author 1 + proofreader 4
+            assert preflight["provider_calls_lifetime_total"] == 5
+            return await run(details=False, diagrams=True, notes=True)
+
+        result = asyncio.run(exercise())
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert author_calls == 1, "Option changes must reuse the saved authored draft."
+        assert proofreading_calls == 6  # two bounded chunks for each TeX rendering
+        assert compile_calls == 6
+        assert len(diagnostic_sources) == 3 and len(set(diagnostic_sources)) == 3
+        assert saved["generation"]["proofreading"]["provider_calls_current_render"] == 2
+        assert saved["generation"]["proofreading"]["prior_render_provider_calls"] == 4
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 6
+        assert saved["generation"]["provider_calls_attempted"] == 7
+        assert saved["generation"]["provider_calls_lifetime_total"] == 7
+        assert saved["generation"]["include_validation_notes"] is True
+        assert saved["generation"]["include_diagrams_and_tables"] is True
+        assert papers._load_work(str(path)) is None
+
+
 def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_accounting() -> None:
     """TikZ fallback preserves accepted proofreading patches and exact PDF source."""
     with TemporaryDirectory() as temporary:
@@ -4942,6 +5072,7 @@ def main() -> None:
     test_paper_stage_accepts_completed_chatgpt_stream_with_trailing_usage()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
+    test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()
     test_paper_progress_endpoint_recovers_interrupted_checkpoint()

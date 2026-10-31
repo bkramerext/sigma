@@ -1899,6 +1899,10 @@ def _load_work(path: str) -> dict[str, Any] | None:
             )
             or type(proofreading.get("provider_calls_attempted")) is not int
             or not 0 <= proofreading["provider_calls_attempted"] <= MAX_PROOFREAD_CALLS
+            or type(proofreading.get("provider_calls_prior_at_start", 0)) is not int
+            or not 0 <= proofreading.get("provider_calls_prior_at_start", 0) <= MAX_PROOFREAD_CALLS
+            or type(proofreading.get("provider_calls_accounting_version", 1)) is not int
+            or proofreading.get("provider_calls_accounting_version", 1) not in {1, 2}
             or type(proofreading.get("safe_retry_count", 0)) is not int
             or not 0 <= proofreading.get("safe_retry_count", 0) <= MAX_PROOFREAD_CALLS * 2
             or type(proofreading.get("ai_performed")) is not bool
@@ -4609,12 +4613,13 @@ async def _proofread_tex(
             "corrections": [],
             "diagnostics": _tex_static_diagnostics(tex),
             "provider_calls_attempted": 0,
+            "provider_calls_prior_at_start": int(state.get("proofreading_calls_prior", 0)),
+            "provider_calls_accounting_version": 2,
             "safe_retry_count": 0,
             "elapsed_seconds": 0,
             "ai_performed": False,
             "fallback_reason": None,
         }
-        checkpoint["provider_calls_attempted"] = int(state.get("proofreading_calls_prior", 0))
         state["proofreading"] = checkpoint
         _save_work(project_path_value, state)
     elif not isinstance(checkpoint, dict):
@@ -5284,9 +5289,21 @@ async def _generate_impl(
                     # A user changed an authoring preference or TeX render option.
                     # Keep the old paid result in the attempt ledger and proofread
                     # only this new rendering; never regenerate the paper draft.
-                    work["proofreading_calls_prior"] = int(
-                        work.get("proofreading_calls_prior", 0)
-                    ) + int(saved_proofreading.get("provider_calls_attempted", 0))
+                    # Older checkpoints included the prior-render total in
+                    # provider_calls_attempted. New checkpoints keep that
+                    # total separately and count only calls for this TeX.
+                    prior_calls = int(work.get("proofreading_calls_prior", 0))
+                    checkpoint_calls = int(saved_proofreading.get("provider_calls_attempted", 0))
+                    if saved_proofreading.get("provider_calls_accounting_version", 1) == 2:
+                        render_calls = checkpoint_calls
+                    else:
+                        # Version 1 included the prior-render total in this
+                        # checkpoint's count; subtract its value at creation.
+                        calls_at_render_start = int(
+                            saved_proofreading.get("provider_calls_prior_at_start", prior_calls)
+                        )
+                        render_calls = max(0, checkpoint_calls - calls_at_render_start)
+                    work["proofreading_calls_prior"] = prior_calls + render_calls
                     work.pop("proofreading", None)
                     _save_work(path, work)
             await report(
@@ -5333,14 +5350,19 @@ async def _generate_impl(
                 "fallback_reason": proofreading.get("fallback_reason"),
                 "original_tex_sha256": proofreading.get("initial_sha256"),
                 "corrected_tex_sha256": proofreading.get("final_sha256"),
-                "provider_calls_attempted": proofreading.get("provider_calls_attempted", 0),
+                "provider_calls_attempted": int(work.get("proofreading_calls_prior", 0))
+                + int(proofreading.get("provider_calls_attempted", 0)),
+                "provider_calls_current_render": proofreading.get("provider_calls_attempted", 0),
+                "prior_render_provider_calls": int(work.get("proofreading_calls_prior", 0)),
                 "elapsed_seconds": proofreading.get("elapsed_seconds", 0),
                 "model": config["model"],
                 "reasoning_effort": config["reasoning_effort"],
             }
-            record["generation"]["provider_calls_attempted"] = int(
-                work.get("provider_calls", provider_calls)
-            ) + int(proofreading.get("provider_calls_attempted", 0))
+            record["generation"]["provider_calls_attempted"] = (
+                int(work.get("provider_calls", provider_calls))
+                + int(work.get("proofreading_calls_prior", 0))
+                + int(proofreading.get("provider_calls_attempted", 0))
+            )
             record["generation"]["provider_calls_lifetime_total"] = int(
                 work.get("provider_calls_total", provider_calls)
             )
@@ -5716,6 +5738,7 @@ def preflight(
             len(work_state.get("omitted_evidence", [])) if resume_available else 0
         ),
         "provider_calls_attempted": work_state.get("provider_calls", 0)
+        + work_state.get("proofreading_calls_prior", 0)
         + (saved_proofreading or {}).get("provider_calls_attempted", 0),
         "provider_calls_previous_runs": previous_calls,
         "provider_calls_lifetime_total": work_state.get("provider_calls_total", 0),

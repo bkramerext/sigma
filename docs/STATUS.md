@@ -50,6 +50,26 @@ not independently validated research or live-provider proofreading. No live
 or paid provider calls occurred; actual provider latency, cost and correction
 quality remain **UNVERIFIED**.
 
+## PR #395 proofreading call-accounting correction (2026-10-31)
+
+Checkpointed TeX proofreader counts are now per rendering. Calls from replaced
+renderings are transferred once into a separate cumulative prior-render total;
+new proofreading checkpoints start at zero. Preflight and archived generation
+provenance include both totals. A version marker preserves correct accounting
+when resuming checkpoints created by the earlier implementation, which mixed
+the prior-render total into the current checkpoint count.
+
+The deterministic regression changes visual and research-detail options across
+three TeX renderings, forces two recoverable compilation failures, and confirms
+the one authored draft is reused. Two proofreader calls per rendering are
+reported as six total (four prior-render, two final-render); preflight after the
+second rendering reports five calls including the single author call. No live
+or paid provider call was made. `tests/papers.py` and `./sigma test` passed,
+including Ruff check/format, Pyright, frontend typecheck/build, and all
+configured integration suites. The optional graph-present sandbox scenario
+skipped because the local image is unavailable; frontend build retains the
+existing large-chunk advisory.
+
 ## Production deployment — SIGMA v0.1.7 (2026-10-30 PDT)
 
 Deployed exact merged `main` SHA `802e9b6b7da5829868070f760e17280cd8a927f2`
