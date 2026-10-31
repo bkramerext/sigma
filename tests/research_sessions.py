@@ -1349,7 +1349,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert started["backend_build_commit"] == "a" * 40
         assert started["call_limit"] == 6
         assert started["cycle_limit"] == 3
-        assert started["duration_limit_minutes"] == 30
+        assert started["duration_limit_minutes"] == 60
         assert started["output_token_limit"] == 4000
         finished = await wait_for(path, started["id"])
         duplicate = await research_sessions.start_session(
