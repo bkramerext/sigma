@@ -801,7 +801,12 @@ def resolve_session(raw: str | None) -> Principal | None:
         ).fetchone()
         if not row or row["expires_at"] <= _now():
             return None
-        role = _authorization(cfg, row["subject"], row["email"])
+        role = _authorization_in_db(db, cfg, row["subject"], row["email"])
+        if role == "member":
+            # A verified guest may still have a live session when the admin
+            # adds its domain. Persist the same individual approval as a new
+            # Google callback, including allowance and pending-request cleanup.
+            _materialize_domain_member(db, row["subject"], row["email"])
         # A verified Google identity remains signed in locally while awaiting
         # an invitation. This is identity only: middleware keeps guest access
         # on the public sample and invitation paths below.

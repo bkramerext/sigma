@@ -3265,8 +3265,10 @@ class CloudAuthTests(TestCase):
         granted = admin.post(
             "/api/cloud-auth/admin/grants",
             json={
-                "kind": "domain", "value": "gmail.com",
-                "role": "member", "allowance_usd": 10,
+                "kind": "domain",
+                "value": "gmail.com",
+                "role": "member",
+                "allowance_usd": 10,
             },
             headers={"Origin": ORIGIN},
         )
@@ -3276,6 +3278,7 @@ class CloudAuthTests(TestCase):
         self.assertIn(cloud_auth.SESSION_COOKIE, signed.cookies)
         principal = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
         self.assertIsNotNone(principal)
+        assert principal is not None
         self.assertEqual(principal.role, "member")
         notice.assert_called_once()
         self.assertEqual(notice.call_args.kwargs["request_type"], "auto_approved")
@@ -3287,17 +3290,76 @@ class CloudAuthTests(TestCase):
             request = db.execute(
                 "SELECT status FROM invitation_requests WHERE subject=?", (applicant_subject,)
             ).fetchone()
-        self.assertEqual((grant["role"], grant["active"], grant["allowance_usd"]), ("member", 1, 10))
+        self.assertEqual(
+            (grant["role"], grant["active"], grant["allowance_usd"]), ("member", 1, 10)
+        )
         self.assertEqual(request["status"], "reviewed")
         listed = admin.get("/api/cloud-auth/admin/grants").json()
-        self.assertTrue(any(
-            account["email"] == applicant_email and account["authorized"]
-            for account in listed["sessions"]
-        ))
-        self.assertFalse(any(
-            req["email"] == applicant_email
-            for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
-        ))
+        self.assertTrue(
+            any(
+                account["email"] == applicant_email and account["authorized"]
+                for account in listed["sessions"]
+            )
+        )
+        self.assertFalse(
+            any(
+                req["email"] == applicant_email
+                for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+            )
+        )
+
+    def test_local_pending_guest_domain_promotion_materializes_member(self):
+        local_origin = "http://127.0.0.1:5173"
+        email = "nontrivialzeero@gmail.com"
+        subject = "local-domain-applicant"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+            },
+        ):
+            signed = self.finish(email=email, subject=subject)
+            self.client.cookies.set("sigma_session", signed.cookies["sigma_session"])
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "guest"
+            )
+            with patch.object(cloud_auth, "_deliver_invitation"):
+                requested = self.client.post(
+                    "/api/cloud-auth/invitation-request", headers={"Origin": local_origin}
+                )
+            self.assertEqual(requested.status_code, 200, requested.text)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
+                    "VALUES('domain','gmail.com','member',1,?,10)",
+                    (cloud_auth._now(),),
+                )
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["user"]["role"], "member")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                grant = db.execute(
+                    "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                    (email,),
+                ).fetchone()
+                pending = db.execute(
+                    "SELECT status FROM invitation_requests WHERE subject=?", (subject,)
+                ).fetchone()
+                approvals = db.execute(
+                    "SELECT count(*) FROM audit WHERE action='domain_auto_member' AND value=?",
+                    (email,),
+                ).fetchone()[0]
+            self.assertIsNotNone(grant)
+            self.assertEqual(tuple(grant), ("member", 1, 10))
+            self.assertEqual(pending["status"], "reviewed")
+            self.assertEqual(approvals, 1)
+            self.client.get("/api/cloud-auth/status")
+            # Membership persists independently of the original domain rule.
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute("UPDATE grants SET active=0 WHERE kind='domain'")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["user"]["role"], "member"
+            )
 
     def test_domain_approved_google_login_materializes_individual_member(self):
         admin_context = TestClient(app)
