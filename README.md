@@ -16,12 +16,13 @@ SIGMA supports ordinary local use without a Google account, local testing of Goo
 
 ## Example Outcome Papers
 
-Four examples of the research SIGMA can preserve and communicate, spanning proven arguments, partial results, and carefully stated hypotheses. **These papers are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its [TeX source](papers/).
+Five examples of the research SIGMA can preserve and communicate, spanning proven arguments, partial results, and carefully stated hypotheses. **These papers are experimental AI-generated work, not independently verified publications.** Each PDF is accompanied by its [TeX source](papers/).
 
 | | |
 | :--- | :--- |
 | **<img src="papers/icons/mathematics.svg" width="22" height="22" alt="Mathematics" /> Mathematics · Easy · [Maximum Regions by Lines](papers/maximum-regions.pdf)**<br><br>A complete geometric argument for the greatest number of regions formed by straight lines, including an explicit construction attaining the bound. | **<img src="papers/icons/mathematics.svg" width="22" height="22" alt="Mathematics" /> Mathematics · Hard · [Nonconsecutive Subset Sums](papers/nonconsecutive-subset-sums.pdf)**<br><br>Exact enumeration and a corrected combinatorial identity, with an unproved recurrence and density limit clearly identified. TeX formatting was manually repaired for this example. |
 | **<img src="papers/icons/biology.svg" width="22" height="22" alt="Biology" /> Biology · Hard · [Xenopus Tail Regeneration](papers/xenopus-tail-regeneration.pdf)**<br><br>A testable hypothesis about the developmental loss of regeneration competence, distinguishing what existing data might show from what remains untested. | **<img src="papers/icons/military.svg" width="22" height="22" alt="Military planning" /> Military planning · Hard · [Operation Narrow Passage](papers/operation-narrow-passage.pdf)**<br><br>Conditional analysis of a fictional maritime crisis: competing objectives, uncertainty, and why no response can be guaranteed to succeed. |
+| **<img src="papers/icons/physics.svg" width="22" height="22" alt="Physics" /> Physics · Hard · [Warp Drive Design](papers/warp-drive.pdf)**<br><br>A conditional general-relativistic analysis of a spherical shift bubble, including a negative-energy lower bound and a subluminal travel-time comparison. No realizable propulsion mechanism is claimed. | |
 
 ### Screenshots
 
