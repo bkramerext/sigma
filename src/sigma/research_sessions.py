@@ -803,7 +803,9 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         "model_calls": (2, 120),
         "output_tokens_per_call": (256, 20000),
     }
-    duration = result.get("session_duration_minutes")
+    if "session_duration_minutes" not in result:
+        raise ProjectError("Maximum session duration is required (or explicitly Unlimited)")
+    duration = result["session_duration_minutes"]
     if duration is not None and (
         type(duration) is not int or not 1 <= duration <= MAX_SESSION_DURATION_MINUTES
     ):
