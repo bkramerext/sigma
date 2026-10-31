@@ -10,7 +10,7 @@ import sqlite3
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -28,6 +28,7 @@ from sigma import (
     papers,
     proposals,
     python_sandbox,
+    research_qa,
     research_sessions,
     session_log,
 )
@@ -101,6 +102,19 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
+_research_qa_tasks: dict[
+    tuple[str, str], tuple[tuple[str, str, str], asyncio.Task[dict[str, Any]]]
+] = {}
+
+
+def _cleanup_research_qa_task(key: tuple[str, str], task: asyncio.Task[dict[str, Any]]) -> None:
+    entry = _research_qa_tasks.get(key)
+    if entry is not None and entry[1] is task:
+        _research_qa_tasks.pop(key, None)
+    if not task.cancelled():
+        task.exception()
+
+
 # Installed before routes, so FastAPI applies this dependency after the auth
 # middleware has attached its verified principal. Cloud-auth's own public and
 # admin endpoints do not access workspace data.
@@ -467,6 +481,84 @@ class PaperRestartRequest(OpenRequest):
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     confirm_restart: Literal[True]
     long_form: bool = False
+
+
+class ResearchQARequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+    request_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    question: str = Field(min_length=1, max_length=4000)
+
+
+@app.get("/api/projects/research-qa")
+def research_qa_list(path: str):
+    return {
+        "answers": research_qa.list_answers(path),
+        "archive_available": research_qa.archive_available(path),
+    }
+
+
+@app.post("/api/projects/research-qa")
+async def research_qa_answer(body: ResearchQARequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    key = (os.path.realpath(body.path), body.request_id)
+    fingerprint = (body.expected_project_id, body.expected_binding, body.question)
+    entry = _research_qa_tasks.get(key)
+    if entry is not None and entry[0] != fingerprint:
+        raise ProjectError("Q/A request identifier is in use with different request parameters")
+    task = entry[1] if entry is not None else None
+    if task is None:
+        task = asyncio.create_task(
+            research_qa.answer(
+                body.path,
+                body.question,
+                body.expected_project_id,
+                body.expected_binding,
+                body.request_id,
+            )
+        )
+        _research_qa_tasks[key] = (fingerprint, task)
+        task.add_done_callback(
+            lambda completed, task_key=key: _cleanup_research_qa_task(task_key, completed)
+        )
+    try:
+        return await asyncio.shield(task)
+    finally:
+        if task.done():
+            _cleanup_research_qa_task(key, task)
+
+
+@app.get("/api/projects/research-qa/{qa_id}")
+def research_qa_get(qa_id: str, path: str):
+    return research_qa.get_answer(path, qa_id)
+
+
+@app.delete("/api/projects/research-qa/{qa_id}")
+def research_qa_delete(qa_id: str, path: str):
+    research_qa.delete_answer(path, qa_id)
+    return {"deleted": qa_id}
+
+
+@app.get("/api/projects/research-qa/{qa_id}/browser")
+def research_qa_browser(qa_id: str, path: str):
+    research_qa.get_answer(path, qa_id)
+    return RedirectResponse(
+        f"/project?{urlencode({'path': path, 'qa_browser': qa_id})}",
+        status_code=303,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/projects/research-qa/{qa_id}/markdown")
+def research_qa_markdown(qa_id: str, path: str):
+    record = research_qa.get_answer(path, qa_id)
+    return Response(
+        research_qa.markdown_document(record),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @app.get("/api/projects/papers")

@@ -5,8 +5,9 @@
 below. Read-only host inspection, all three container health checks, and the
 public endpoint probe passed. The latest listed READY snapshot predates the
 v0.1.5 deployment; the release runbook requires a fresh application-consistent
-snapshot and restore verification before the next cutover. See [Status](STATUS.md)
-for the latest evidence. This document describes observed deployment state and
+snapshot and restore verification before the next cutover. See the [Operations
+Runbook](OPERATION_RUNBOOK.md) and the relevant committed PR handoff under
+`messages/` for operational evidence. This document describes observed deployment state and
 links to operator procedures.
 
 Use [Operations Runbook](OPERATION_RUNBOOK.md) for commands that operate on the
@@ -174,9 +175,9 @@ against the deployed persistent data. No clean-machine OAuth or live paid
 inference test is claimed.
 
 The current evidence and owners' remaining acceptance matrix are maintained in
-[Status](STATUS.md) and the [Operations Runbook](OPERATION_RUNBOOK.md). GitHub
-Issues and PRs remain the authoritative development history; this guide is not
-a ticket tracker.
+the [Operations Runbook](OPERATION_RUNBOOK.md), tickets, and relevant committed
+PR handoffs under `messages/`. GitHub Issues and PRs remain the authoritative
+development history; this guide is not a ticket tracker.
 
 ---
 

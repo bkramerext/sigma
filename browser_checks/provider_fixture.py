@@ -33,6 +33,7 @@ class PaperFailure(TypedDict):
 
 
 _paper_failures: dict[str, PaperFailure] = {}
+_qa_control = {"delay_seconds": 0.0, "fail_next": 0, "started": 0, "completed": 0}
 _real_provider_structured = papers._provider_structured
 
 
@@ -56,6 +57,27 @@ def set_paper_failure(body: dict[str, object]):
         return {"error": "Invalid deterministic paper-fixture control"}, 400
     _paper_failures[schema_name] = {"mode": str(mode), "count": count}
     return {"configured": True}
+
+
+@app.post("/api/__fixture/qa-control")
+def set_qa_control(body: dict[str, object]):
+    delay = body.get("delay_seconds", 0)
+    failures = body.get("fail_next", 0)
+    if (
+        type(delay) not in {int, float}
+        or not 0 <= delay <= 5
+        or type(failures) is not int
+        or not 0 <= failures <= 2
+    ):
+        return {"error": "Invalid deterministic Q/A fixture control"}, 400
+    _qa_control["delay_seconds"] = float(delay)
+    _qa_control["fail_next"] = failures
+    return {"configured": True}
+
+
+@app.get("/api/__fixture/qa-state")
+def qa_fixture_state():
+    return dict(_qa_control)
 
 
 async def fixture_provider_structured(input_value, *args, schema_name: str, **kwargs):
@@ -116,6 +138,7 @@ async def handler(request):
         "sigma_long_paper_section",
         "sigma_tex_proofread_patches",
         "sigma_research_paper",
+        "sigma_research_qa",
     }:
         await asyncio.sleep(min(progress_delay, 5))
     if schema_name in {
@@ -220,6 +243,44 @@ async def handler(request):
                 ],
             },
         )
+    if schema_name == "sigma_research_qa":
+        _qa_control["started"] = int(_qa_control["started"]) + 1
+        if _qa_control["fail_next"]:
+            _qa_control["fail_next"] = int(_qa_control["fail_next"]) - 1
+            _qa_control["completed"] = int(_qa_control["completed"]) + 1
+            return httpx.Response(500, json={"error": {"message": "Deterministic Q/A failure"}})
+        delay = float(_qa_control["delay_seconds"])
+        if delay:
+            await asyncio.sleep(delay)
+        question = context.get("question", "")
+        sources = context.get("sources", [])
+        refs = []
+        for kind in ("project", "strategy", "session", "artifact", "current_understanding"):
+            candidates = [item for item in sources if item.get("kind") == kind]
+            source = next(
+                (item for item in candidates if not item.get("data", {}).get("removed_at")),
+                candidates[0] if candidates else None,
+            )
+            if source:
+                refs.append(source["id"])
+        output = {
+            "answer": f"## Evidence-based answer\n\nThe saved research answers: {question}. The record is provisional and should be reviewed with its supporting evidence.\n\n- Check the supporting saved session.\n\nThe saved expression is $R(n) = 1 + n(n+1)/2$.\n\n<script>window.__sigmaInjected = true</script>\n\n[forged citation](/project?path=%2Fother-project.sigma&reveal_project=1)",
+            "source_refs": refs,
+        }
+        _qa_control["completed"] = int(_qa_control["completed"]) + 1
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(output)}],
+                    }
+                ],
+            },
+        )
     if schema_name == "sigma_research_paper":
         sources = context["sources"]
         project_source = next(item for item in sources if item["kind"] == "project")
@@ -237,7 +298,7 @@ async def handler(request):
         if max_regions:
             evidence = artifact_refs[:4] or [project_source["id"]]
             paper = {
-                "title": "The Maximum Number of Regions Formed by Lines",
+                "title": "The Maximum Number of Regions Formed by Lines: An Evidence-Bound Mathematical Framework with Explicit Construction and Unverified Claims",
                 "abstract": r"We study the maximum number $R(n)$ of regions cut out in the plane by $n$ distinct lines. Inserting lines one at a time gives an upper bound of $k$ new regions at step $k$. The family $L_j:y=jx+j^2$ attains this bound at every step, since the intersections on each new line are distinct. Together with the empty arrangement, this yields the candidate formula $R(n)=1+n(n+1)/2$. The complete argument is present in the saved research record, but has not been independently verified.",
                 "abstract_claim_ids": ["C1", "C2", "C3"],
                 "problem_framing": [

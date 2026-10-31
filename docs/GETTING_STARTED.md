@@ -160,6 +160,6 @@ The ordinary local app uses `SIGMA_STORAGE_BACKEND=local` (the default) and keep
 
 If **Connect AI** or generation fails, check the connection status and usage limits before retrying. For optional API-key billing, put `OPENAI_API_KEY` in the repository-root `.env` file or server environment and restart SIGMA. Never put secrets in frontend configuration.
 
-For command and API details, see `./sigma --help` and the relevant technical docs. For implemented behavior and known verification limits, see [Status](STATUS.md). The [Backlog](BACKLOG.md) tracks future ideas.
+For command and API details, see `./sigma --help` and the relevant technical docs. For active work and verification evidence, see [ticket tracking](TICKET_TRACKING.md), the active ticket, and the relevant PR handoff under `messages/`. The [Backlog](BACKLOG.md) tracks future ideas.
 
 **Research integrity:** SIGMA is an investigation tool. Distinguish conjectures, computations, agent-reviewed arguments, and independently verified results. Its Riemann Hypothesis sample is not a claimed proof.

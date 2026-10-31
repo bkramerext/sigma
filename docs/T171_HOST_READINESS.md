@@ -157,5 +157,6 @@ pass.
 
 ## Offline test results
 
-See `docs/STATUS.md` for actual commands and results. No live host commands,
-installer, reboot, provider calls or infrastructure changes were run.
+Record actual commands and results in the active ticket or a committed PR
+handoff under `messages/`. No live host commands, installer, reboot, provider
+calls or infrastructure changes were run for this readiness note.

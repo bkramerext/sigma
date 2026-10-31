@@ -226,7 +226,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             expect(row).to_be_visible()
             row.get_by_role("button", name="Remove").click()
             row.get_by_role("group", name="Confirm removal of Saved fixture 1").get_by_role(
-                "button", name="Confirm remove"
+                "button", name="Confirm", exact=True
             ).click()
             expect(
                 dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')

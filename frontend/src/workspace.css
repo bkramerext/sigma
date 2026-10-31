@@ -327,6 +327,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   box-sizing: border-box; width: 34px; min-width: 34px; height: 34px; min-height: 34px;
   margin-right: 10px; padding: 0; border: 1px solid transparent; border-radius: 6px;
 }
+.workspace-page .project-pane-actions .text-view-icon.project-qa-button { box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px; padding: 0; font: 700 17px/1 Inter, sans-serif; letter-spacing: .02em; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .project-primary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 1px 0 10px 32px; }
@@ -335,8 +336,24 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .project-primary-actions .project-pane-actions .project-latex-button,
 .workspace-page .project-primary-actions .project-pane-actions .project-lean-button { margin-right: 0; }
 .workspace-page .project-primary-actions .project-pane-actions .project-latex-button { margin-right: 10px; }
+.workspace-page .project-primary-actions .project-pane-actions .project-latex-button { margin-right: 0; }
+.workspace-page .research-qa-form { display: grid; gap: 8px; margin-top: 14px; }
+.workspace-page .research-qa-form label { color: #e4ebf3; font-size: 13px; }
+.workspace-page .research-qa-form textarea { box-sizing: border-box; width: 100%; min-height: 100px; resize: vertical; padding: 10px 12px; border: 1px solid #46525d; border-radius: 7px; background: #171d23; color: #e4ebf3; font: inherit; line-height: 1.5; }
+.workspace-page .research-qa-form textarea:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
+.research-qa-answer-heading h3 { margin: 0; }
+.research-qa-version { display: inline-flex; align-items: center; gap: 6px; color: var(--workspace-muted, #b9aa98); font-size: 12px; }
+.research-qa-version span { cursor: help; }
+.research-qa-technical { margin: 8px 0; font-size: 12px; overflow-wrap: anywhere; }
+.research-qa-technical > .text-copy-button { margin-top: 4px; }
+.research-qa-browser-page { box-sizing: border-box; min-height: 100vh; padding: 24px 16px; }
+.research-qa-browser-card { box-sizing: border-box; width: min(100%, 860px); margin: 0 auto; padding: clamp(18px, 4vw, 36px); border: 1px solid var(--workspace-border, #3d4852); border-radius: 10px; background: var(--workspace-panel, #1b2229); overflow-wrap: anywhere; }
+.research-qa-browser-card .outcome-markdown { max-width: 100%; overflow-wrap: anywhere; }
+.research-qa-browser-card .outcome-markdown img, .research-qa-browser-card .outcome-markdown table { max-width: 100%; }
+.research-qa-browser-card .outcome-markdown table { display: block; overflow-x: auto; }
+@media (max-width: 600px) { .research-qa-browser-page { padding: 10px 8px; } .research-qa-browser-card { padding: 16px 12px; } .research-qa-library .saved-paper-actions { flex-wrap: wrap; } }
 
 /* Current understanding retains its original disclosure layout. */
 .current-understanding { margin: 0 0 8px; padding: 0; overflow: hidden; }

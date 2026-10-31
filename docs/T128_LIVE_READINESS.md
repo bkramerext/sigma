@@ -110,4 +110,5 @@ and port. Do not change rules under this assignment.
    recovery exercise; verify disk UUID, workspace persistence, daemon/socket,
    containers and preflight after reboot.
 
-Repository test results and elapsed time are recorded in [`STATUS.md`](STATUS.md).
+Repository test results and elapsed time belong in the active ticket or a
+committed PR handoff under `messages/`.
