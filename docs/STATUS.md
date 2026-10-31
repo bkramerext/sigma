@@ -1,3 +1,37 @@
+## PR #395 — mandatory TeX proofreading stage (2026-10-31)
+
+Added an automatic, bounded TeX proofreading stage between research validation
+and PDF compilation for one-shot and long-form papers. It checkpoints the exact
+authored TeX, partitions the entire source into bounded chunks, gathers static
+and temporary Tectonic diagnostics, and requests strict structured minimal
+patches from the configured model. Conservative semantic signatures reject
+changes to prose, scientific claims, equation tokens, numerical values, units,
+citation/source identifiers, and diagram labels/table contents while allowing
+documented geometry and formatting edits. Completed corrections are reused on
+recovery; an interrupted dispatched call is treated as uncertain and is never
+replayed. Failure preserves authored work and emits an explicit publication
+note. Archived TeX is the exact source compiled to the saved PDF, with
+proofreading hashes, categories, unresolved diagnostics, elapsed time, and
+provider-call accounting in paper provenance. The UI now shows “Proofreading
+TeX” and “Checking and correcting typesetting issues”; its cost disclosure
+identifies proofreading as AI work.
+
+Verification on branch `blue/sovereign-ai-federation` included the focused
+`tests/papers.py` suite (real Tectonic compilation plus deterministic local
+provider responses), `./sigma test` (all steps passed, including Ruff,
+format-check, Pyright, frontend typecheck/build, and cloud-research tests), and
+real Chrome `browser_checks/issue328_paper_progress.py` against the isolated
+deterministic provider fixture. The Chrome run verified one-shot progress,
+long-form recovery in a fresh tab, completion and PDF availability; the
+proofreading progress capture was visually inspected at
+`/tmp/sigma-issue328-proofreading-progress.png`. No live or paid provider calls
+were made. The full test command skipped only the optional graph-present local
+execution scenario because the existing Python sandbox image was unavailable.
+The frontend build reported its existing large-chunk advisory. Live model
+proofreading quality, actual provider cost/latency, representative real-paper
+before/after typography, and unresolved diagnostics from real authoring remain
+unverified under the no-paid-calls constraint.
+
 ## Production deployment — SIGMA v0.1.7 (2026-10-30 PDT)
 
 Deployed exact merged `main` SHA `802e9b6b7da5829868070f760e17280cd8a927f2`

@@ -38,6 +38,9 @@ with sync_playwright() as playwright:
     page.goto(UI_ORIGIN + "/project?path=" + quote(path, safe=""))
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(dialog).to_contain_text(
+        "TeX proofreading uses this model; PDF compilation does not use AI."
+    )
     generate = dialog.get_by_role("button", name="Generate", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     expect(generate).to_have_css("text-decoration-line", "underline")
@@ -65,6 +68,10 @@ with sync_playwright() as playwright:
     expect(generate).to_be_enabled(timeout=10000)
     generate.click()
     expect(status).to_contain_text("Writing the paper", timeout=10000)
+    expect(status).to_contain_text("Proofreading TeX", timeout=30_000)
+    expect(status).to_contain_text("Checking and correcting typesetting issues.")
+    expect(status).to_contain_text("Waiting for the AI response.")
+    page.screenshot(path="/tmp/sigma-issue328-proofreading-progress.png", full_page=True)
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
     expect(dialog.get_by_role("status")).to_contain_text("Paper saved in Saved versions.")

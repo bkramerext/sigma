@@ -12,7 +12,9 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
+from time import monotonic
 from typing import Annotated, Any, Literal, TypedDict
 from uuid import uuid4
 
@@ -54,6 +56,10 @@ MAX_LONG_PAPER_CALLS = (
     + MAX_LONG_PAPER_OUTLINE_CALLS
     + MAX_LONG_PAPER_SECTIONS
 )
+MAX_PROOFREAD_CALLS = 32
+MAX_PROOFREAD_CHUNK_CHARS = 16_000
+MAX_PROOFREAD_CHUNK_BYTES = 32_000
+MAX_PROOFREAD_TEX_BYTES = 2_000_000
 MAX_RESPONSE_BYTES = 1_000_000
 # Responses SSE contains event envelopes and can repeat an entire completed output.
 # Keep a finite transport bound separate from the validated 1 MB API response.
@@ -69,6 +75,7 @@ PaperProgressStage = Literal[
     "planning",
     "sections",
     "validation",
+    "proofreading",
     "compile",
     "retry",
     "complete",
@@ -84,6 +91,7 @@ class PaperProgressEvent(TypedDict):
     total: int | None
     started_at: str
     elapsed_seconds: int
+    detail: str | None
 
 
 PaperProgressCallback = Callable[[PaperProgressEvent], Awaitable[None]]
@@ -231,6 +239,27 @@ class PaperDraft(BaseModel):
     conclusion_claim_ids: list[str] = Field(max_length=30)
     validation_warnings: list[str] = Field(max_length=12)
     diagrams: list[PaperDiagram] = Field(default_factory=list, max_length=2)
+
+
+class TeXCorrection(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    category: Literal[
+        "math_notation",
+        "escaping",
+        "environment",
+        "unicode",
+        "diagram_layout",
+        "table_layout",
+        "spacing",
+    ]
+    find: str = Field(min_length=1, max_length=2_000)
+    replace: str = Field(max_length=2_000)
+    rationale: str = Field(min_length=3, max_length=240)
+
+
+class TeXProofreadResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    corrections: list[TeXCorrection] = Field(max_length=16)
 
 
 class EvidenceNote(BaseModel):
@@ -1671,14 +1700,22 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "explicit_restart_pending",
         "planning_fallback_pending",
         "include_diagrams",
+        "proofreading",
+        "proofreading_calls_prior",
     }
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
+    value.setdefault("proofreading_calls_prior", 0)
     value.setdefault("kind", "long_form")
     value.setdefault("one_shot_draft", None)
     if "include_diagrams" in value and type(value["include_diagrams"]) is not bool:
         raise ProjectError("Long-paper diagram selection is invalid")
+    if (
+        type(value["proofreading_calls_prior"]) is not int
+        or not 0 <= value["proofreading_calls_prior"] <= MAX_PROOFREAD_CALLS
+    ):
+        raise ProjectError("TeX proofreading prior-call accounting is invalid")
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
     value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
@@ -1731,7 +1768,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
     if any(
         not isinstance(run, dict)
         or type(run.get("provider_calls_attempted")) is not int
-        or not 0 <= run["provider_calls_attempted"] <= MAX_LONG_PAPER_CALLS
+        or not 0 <= run["provider_calls_attempted"] <= MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
         or not isinstance(run.get("reset_at"), str)
         for run in prior_runs
     ):
@@ -1793,6 +1830,75 @@ def _load_work(path: str) -> dict[str, Any] | None:
         LongPaperPlan.model_validate(value["plan"])
     if value["one_shot_draft"] is not None:
         PaperDraft.model_validate(value["one_shot_draft"])
+    proofreading = value.get("proofreading")
+    if proofreading is not None:
+        if (
+            not isinstance(proofreading, dict)
+            or proofreading.get("status") not in {"running", "complete", "fallback"}
+            or not isinstance(proofreading.get("initial_tex"), str)
+            or len(proofreading["initial_tex"].encode("utf-8")) > MAX_PROOFREAD_TEX_BYTES
+            or hashlib.sha256(proofreading["initial_tex"].encode()).hexdigest()
+            != proofreading.get("initial_sha256")
+        ):
+            raise ProjectError("TeX proofreading checkpoint is invalid")
+        bounds = proofreading.get("bounds")
+        corrected = proofreading.get("corrected_chunks")
+        attempts = proofreading.get("attempts")
+        if (
+            not isinstance(bounds, list)
+            or not 1 <= len(bounds) <= MAX_PROOFREAD_CALLS
+            or not isinstance(corrected, list)
+            or len(corrected) != len(bounds)
+            or not isinstance(attempts, list)
+            or len(attempts) != len(bounds)
+        ):
+            raise ProjectError("TeX proofreading checkpoint chunks are invalid")
+        cursor = 0
+        for index, bounds_item in enumerate(bounds):
+            if (
+                not isinstance(bounds_item, list)
+                or len(bounds_item) != 2
+                or type(bounds_item[0]) is not int
+                or type(bounds_item[1]) is not int
+                or bounds_item[0] != cursor
+                or bounds_item[1] < bounds_item[0]
+                or bounds_item[1] > len(proofreading["initial_tex"])
+                or attempts[index]
+                not in {"pending", "dispatched", "complete", "uncertain", "rejected", "skipped"}
+                or (corrected[index] is not None and not isinstance(corrected[index], str))
+            ):
+                raise ProjectError("TeX proofreading checkpoint chunk bounds are invalid")
+            if (
+                isinstance(corrected[index], str)
+                and len(corrected[index]) > MAX_PROOFREAD_CHUNK_CHARS * 2
+            ):
+                raise ProjectError("TeX proofreading correction exceeds its safety bound")
+            cursor = bounds_item[1]
+        if cursor != len(proofreading["initial_tex"]):
+            raise ProjectError("TeX proofreading checkpoint does not cover its complete source")
+        if (
+            not isinstance(proofreading.get("corrections"), list)
+            or len(proofreading["corrections"]) > MAX_PROOFREAD_CALLS * 16
+            or not all(
+                isinstance(item, str) and len(item) <= 40 for item in proofreading["corrections"]
+            )
+            or not isinstance(proofreading.get("diagnostics"), list)
+            or len(proofreading["diagnostics"]) > 100
+            or not all(
+                isinstance(item, str) and len(item) <= 1500 for item in proofreading["diagnostics"]
+            )
+            or type(proofreading.get("provider_calls_attempted")) is not int
+            or not 0 <= proofreading["provider_calls_attempted"] <= MAX_PROOFREAD_CALLS
+            or type(proofreading.get("safe_retry_count", 0)) is not int
+            or not 0 <= proofreading.get("safe_retry_count", 0) <= MAX_PROOFREAD_CALLS * 2
+            or type(proofreading.get("ai_performed")) is not bool
+            or type(proofreading.get("elapsed_seconds")) is not int
+        ):
+            raise ProjectError("TeX proofreading checkpoint provenance is invalid")
+        if "final_sha256" in proofreading and not re.fullmatch(
+            r"[0-9a-f]{64}", proofreading["final_sha256"]
+        ):
+            raise ProjectError("TeX proofreading final source hash is invalid")
     for key in ("reduction_input", "reduction_output"):
         if key in value:
             items = value[key]
@@ -1823,12 +1929,20 @@ def _load_work(path: str) -> dict[str, Any] | None:
         if (
             not isinstance(progress_state, dict)
             or not required_progress_keys.issubset(progress_state)
-            or set(progress_state) - required_progress_keys not in (set(), {"failure_reason"})
+            or set(progress_state) - required_progress_keys
+            not in (set(), {"failure_reason"}, {"detail"}, {"failure_reason", "detail"})
             or (
                 "failure_reason" in progress_state
                 and (
                     not isinstance(progress_state["failure_reason"], str)
                     or len(progress_state["failure_reason"]) > 500
+                )
+            )
+            or (
+                "detail" in progress_state
+                and (
+                    not isinstance(progress_state["detail"], str)
+                    or len(progress_state["detail"]) > 160
                 )
             )
             or not isinstance(progress_state.get("run_id"), str)
@@ -1843,6 +1957,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 "planning",
                 "sections",
                 "validation",
+                "proofreading",
                 "compile",
                 "retry",
                 "complete",
@@ -1921,6 +2036,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
+        **({"detail": state["detail"]} if isinstance(state.get("detail"), str) else {}),
         **(
             {"failure_reason": state["failure_reason"]}
             if status == "failed" and state.get("failure_reason")
@@ -2079,7 +2195,8 @@ async def _restart_work_locked(
     if not _can_rebase_explicit_restart(state, view.project.id):
         history.append(
             {
-                "provider_calls_attempted": state.get("provider_calls", 0),
+                "provider_calls_attempted": state.get("provider_calls", 0)
+                + (state.get("proofreading") or {}).get("provider_calls_attempted", 0),
                 "snapshot_sha256": state["snapshot_sha256"],
                 "model": state["model"],
                 "reset_at": _now(),
@@ -2104,7 +2221,11 @@ async def _restart_work_locked(
     return {
         "provider_calls_attempted": 0,
         "provider_calls_previous_runs": sum(item["provider_calls_attempted"] for item in history),
-        "maximum_provider_calls": MAX_LONG_PAPER_CALLS,
+        "maximum_provider_calls": (
+            MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+            if restarted["kind"] == "long_form"
+            else 1 + MAX_PROOFREAD_CALLS
+        ),
         "snapshot_bytes": len(_json(package)),
         "snapshot_sha256": snapshot_hash,
         "evidence_updated_since_preflight": snapshot_hash != expected_snapshot_sha256,
@@ -4164,6 +4285,485 @@ or document markup."""
     return draft, calls, len(batches)
 
 
+def _tex_chunks(tex: str) -> list[tuple[int, int]]:
+    """Split at paragraph boundaries while keeping every byte and visual block."""
+    if len(tex.encode("utf-8")) > MAX_PROOFREAD_TEX_BYTES:
+        raise ProjectError(
+            "The authored TeX exceeds the bounded proofreading size; the draft is saved."
+        )
+    separators = list(re.finditer(r"\n{2,}", tex))
+    units: list[tuple[int, int]] = []
+    start = 0
+    for separator in separators:
+        end = separator.end()
+        units.append((start, end))
+        start = end
+    if start < len(tex):
+        units.append((start, len(tex)))
+    chunks: list[tuple[int, int]] = []
+    chunk_start = 0
+    chunk_end = 0
+
+    def fits(start: int, end: int) -> bool:
+        return (
+            end - start <= MAX_PROOFREAD_CHUNK_CHARS
+            and len(tex[start:end].encode("utf-8")) <= MAX_PROOFREAD_CHUNK_BYTES
+        )
+
+    for start, end in units:
+        if not fits(start, end):
+            if chunk_start < chunk_end:
+                chunks.append((chunk_start, chunk_end))
+                chunk_start = chunk_end = start
+            position = start
+            while position < end:
+                limit = min(position + MAX_PROOFREAD_CHUNK_CHARS, end)
+                while (
+                    limit > position + 1
+                    and len(tex[position:limit].encode("utf-8")) > MAX_PROOFREAD_CHUNK_BYTES
+                ):
+                    limit = position + max(1, (limit - position) // 2)
+                if limit < end:
+                    newline = tex.rfind("\n", position, limit)
+                    if newline > position and fits(position, newline + 1):
+                        limit = newline + 1
+                if not fits(position, limit) or limit == position:
+                    raise ProjectError(
+                        "A single TeX line is too long to proofread safely; the draft is saved."
+                    )
+                chunks.append((position, limit))
+                position = limit
+            chunk_start = chunk_end = end
+        elif chunk_end == chunk_start:
+            chunk_start, chunk_end = start, end
+        elif fits(chunk_start, end):
+            chunk_end = end
+        else:
+            chunks.append((chunk_start, chunk_end))
+            chunk_start, chunk_end = start, end
+    if chunk_end > chunk_start:
+        chunks.append((chunk_start, chunk_end))
+    if not chunks:
+        chunks = [(0, len(tex))]
+    if len(chunks) > MAX_PROOFREAD_CALLS:
+        raise ProjectError(
+            f"The paper needs more than {MAX_PROOFREAD_CALLS} bounded proofreading calls; the authored draft is saved."
+        )
+    if (
+        chunks[0][0] != 0
+        or chunks[-1][1] != len(tex)
+        or any(left[1] != right[0] for left, right in pairwise(chunks))
+    ):
+        raise ProjectError(
+            "TeX proofreading could not partition the complete draft safely; the draft is saved."
+        )
+    return chunks
+
+
+def _tex_semantic_signature(tex: str) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """Conservatively fingerprint authored words, math tokens, values, and references."""
+    source = re.sub(r"(?<!\\)%[^\n]*", "", tex)
+    refs = tuple(
+        (match.group(1), match.group(2).strip())
+        for match in re.finditer(
+            r"\\(cite\w*|ref|eqref|pageref|autoref|label)\s*\{([^{}]*)\}", source
+        )
+    )
+    for symbol, replacement in _UNICODE_MATH.items():
+        source = source.replace(symbol, replacement)
+    # These are unambiguous repairs of a command accidentally made printable.
+    source = re.sub(r"\\{2}(alpha|beta|gamma|pi|sum|prod|frac|sqrt)\b", r"\\\1", source)
+    source = re.sub(
+        r"\\textbackslash\{\}(alpha|beta|gamma|pi|sum|prod|frac|sqrt)\b", r"\\\1", source
+    )
+    source = re.sub(
+        r"\\begin\{(equation\*?|align\*?|aligned|gather\*?|multline\*?|split)\}",
+        r"\\begin{MATH}",
+        source,
+    )
+    source = re.sub(
+        r"\\end\{(equation\*?|align\*?|aligned|gather\*?|multline\*?|split)\}",
+        r"\\end{MATH}",
+        source,
+    )
+    source = re.sub(r"\\(?:\(|\)|\[|\])|(?<!\\)\$\$?", "", source)
+    # Coordinates, style options, and the longtable column preamble are geometry.
+    source = re.sub(
+        r"(\\begin\{tikzpicture\}.*?\\end\{tikzpicture\})",
+        lambda match: re.sub(
+            r"\[[^\[\]]*\]|\(-?\d+(?:\.\d+)?(?:cm|mm|pt)?\s*,\s*-?\d+(?:\.\d+)?(?:cm|mm|pt)?\)",
+            " ",
+            match.group(1),
+            flags=re.DOTALL,
+        ),
+        source,
+        flags=re.DOTALL,
+    )
+    longtable = re.search(r"\\begin\{longtable\}\s*\{", source)
+    if longtable:
+        depth = 1
+        cursor = longtable.end()
+        while cursor < len(source) and depth:
+            if source[cursor] == "{":
+                depth += 1
+            elif source[cursor] == "}":
+                depth -= 1
+            cursor += 1
+        if depth == 0:
+            source = source[: longtable.end() - 1] + "{}" + source[cursor:]
+    source = re.sub(r"\\(?:hspace|vspace|smallskip|medskip|bigskip)\*?(?:\{[^{}]*\})?", " ", source)
+    presentation = {
+        "begin",
+        "end",
+        "textbf",
+        "textit",
+        "emph",
+        "small",
+        "scriptsize",
+        "footnotesize",
+        "smallskip",
+        "medskip",
+        "bigskip",
+        "centering",
+        "raggedright",
+        "displaystyle",
+        "textstyle",
+        "left",
+        "right",
+        "!",
+        ",",
+        ";",
+        "quad",
+        "qquad",
+        "labelsep",
+        "hfill",
+        "newpage",
+        "clearpage",
+        "pagebreak",
+        "linebreak",
+        "newline",
+        "par",
+        "noindent",
+        "resizebox",
+        "makebox",
+        "textwidth",
+        "linewidth",
+        "columnwidth",
+        "arraystretch",
+        "tabcolsep",
+        "setlength",
+    }
+    tokens: list[str] = []
+    for token in re.findall(
+        r"\\[A-Za-z]+|\\[^A-Za-z]|[A-Za-z]+|\d+(?:[.,]\d+)*(?:%?)|[^\s{}]", source
+    ):
+        if token.startswith("\\"):
+            name = token[1:]
+            if name in presentation:
+                continue
+            tokens.append(token[1:] if len(token) == 2 else token)
+        elif token.startswith("\\") and len(token) == 2:
+            tokens.append(token[1:])
+        else:
+            tokens.append(token)
+    return tuple(tokens), refs
+
+
+def _tex_static_diagnostics(tex: str) -> list[str]:
+    diagnostics: list[str] = []
+    if tex.count(r"\begin{document}") != 1 or tex.count(r"\end{document}") != 1:
+        diagnostics.append("Document start/end structure is missing or duplicated.")
+    environments: list[str] = []
+    for match in re.finditer(r"\\(begin|end)\{([A-Za-z*]+)\}", tex):
+        action, environment = match.groups()
+        if action == "begin":
+            environments.append(environment)
+        elif not environments or environments[-1] != environment:
+            diagnostics.append(f"Mismatched TeX environment near {environment}.")
+            break
+        else:
+            environments.pop()
+    if environments:
+        diagnostics.append(f"Unclosed TeX environment: {environments[-1]}.")
+    for command in ("alpha", "beta", "gamma", "pi", "frac", "sqrt", "text", "begin", "end"):
+        if re.search(r"\\\\" + command + r"\b", tex):
+            diagnostics.append(f"Potentially double-escaped TeX command: {command}.")
+    if tex.count(r"\(") != tex.count(r"\)") or tex.count(r"\[") != tex.count(r"\]"):
+        diagnostics.append("Math delimiter counts do not match.")
+    math_tokens = re.findall(r"\\\[|\\\]|\\\(|\\\)|(?<!\\)\$\$?", tex)
+    math_stack: list[str] = []
+    expected_close = {r"\[": r"\]", r"\(": r"\)"}
+    for token in math_tokens:
+        if token in {"$", "$$"}:
+            if math_stack and math_stack[-1] == token:
+                math_stack.pop()
+            else:
+                math_stack.append(token)
+        elif token in expected_close:
+            math_stack.append(expected_close[token])
+        elif not math_stack or math_stack.pop() != token:
+            diagnostics.append("Math delimiters are crossed or incorrectly paired.")
+            break
+    if math_stack:
+        diagnostics.append("A math delimiter is unclosed.")
+    if re.search(r"\\\\(?:textbackslash|verb|begin|end)\b", tex):
+        diagnostics.append("A literal TeX command may be double-escaped into printable text.")
+    for index, line in enumerate(tex.splitlines(), start=1):
+        if len(line) > 180 and (r"\node" in line or r"&" in line):
+            diagnostics.append(
+                f"Potentially wide diagram or table line {index} ({len(line)} characters)."
+            )
+    return list(dict.fromkeys(diagnostics))[:100]
+
+
+async def _proofread_tex(
+    tex: str,
+    state: dict[str, Any],
+    *,
+    binding: Mapping[str, Any],
+    config: dict[str, Any],
+    project_id: str,
+    project_path_value: str,
+    report: Callable[..., Awaitable[None]],
+) -> tuple[str, dict[str, Any]]:
+    """Checkpoint exact authored TeX and bounded, content-preserving patches."""
+    checkpoint = state.get("proofreading")
+    if checkpoint is None:
+        bounds = _tex_chunks(tex)
+        checkpoint = {
+            "status": "running",
+            "initial_tex": tex,
+            "initial_sha256": hashlib.sha256(tex.encode()).hexdigest(),
+            "bounds": [[start, end] for start, end in bounds],
+            "corrected_chunks": [None] * len(bounds),
+            "attempts": ["pending"] * len(bounds),
+            "corrections": [],
+            "diagnostics": _tex_static_diagnostics(tex),
+            "provider_calls_attempted": 0,
+            "safe_retry_count": 0,
+            "elapsed_seconds": 0,
+            "ai_performed": False,
+            "fallback_reason": None,
+        }
+        checkpoint["provider_calls_attempted"] = int(state.get("proofreading_calls_prior", 0))
+        state["proofreading"] = checkpoint
+        _save_work(project_path_value, state)
+    elif not isinstance(checkpoint, dict):
+        raise ProjectError(
+            "The saved TeX proofreading checkpoint is invalid; authored work is preserved."
+        )
+    initial = checkpoint.get("initial_tex")
+    if (
+        not isinstance(initial, str)
+        or hashlib.sha256(initial.encode()).hexdigest() != checkpoint.get("initial_sha256")
+        or initial != tex
+    ):
+        raise ProjectError(
+            "The saved authored TeX no longer matches its proofreading checkpoint; the draft is preserved."
+        )
+    bounds = checkpoint.get("bounds")
+    corrected = checkpoint.get("corrected_chunks")
+    attempts = checkpoint.get("attempts")
+    if (
+        not isinstance(bounds, list)
+        or not isinstance(corrected, list)
+        or not isinstance(attempts, list)
+    ):
+        raise ProjectError(
+            "The saved TeX proofreading chunks are invalid; authored work is preserved."
+        )
+    if (
+        len(bounds) != len(corrected)
+        or len(bounds) != len(attempts)
+        or len(bounds) > MAX_PROOFREAD_CALLS
+    ):
+        raise ProjectError(
+            "The saved TeX proofreading chunk count is invalid; authored work is preserved."
+        )
+    elapsed_before = int(checkpoint.get("elapsed_seconds", 0))
+    elapsed_started = monotonic()
+
+    def save_checkpoint() -> None:
+        checkpoint["elapsed_seconds"] = elapsed_before + max(0, int(monotonic() - elapsed_started))
+        state["proofreading"] = checkpoint
+        _save_work(project_path_value, state)
+
+    def compose() -> str:
+        return "".join(
+            corrected[index] if isinstance(corrected[index], str) else initial[start:end]
+            for index, (start, end) in enumerate(bounds)
+        )
+
+    if checkpoint.get("status") in {"complete", "fallback"}:
+        final_tex = compose()
+        if checkpoint.get("final_sha256") not in (
+            None,
+            hashlib.sha256(final_tex.encode()).hexdigest(),
+        ):
+            raise ProjectError(
+                "The saved corrected TeX checksum is invalid; the draft is preserved."
+            )
+        return final_tex, checkpoint
+    if int(state.get("proofreading_calls_prior", 0)) + len(bounds) > MAX_PROOFREAD_CALLS:
+        raise ProjectError(
+            "The bounded proofreading call limit is exhausted; the authored draft remains saved."
+        )
+
+    # An interruption after dispatch is ambiguous and must not replay a paid call.
+    if "dispatched" in attempts:
+        checkpoint["status"] = "fallback"
+        checkpoint["fallback_reason"] = (
+            "An AI proofreading response was interrupted after dispatch; it was not replayed."
+        )
+        for index, attempt in enumerate(attempts):
+            if attempt == "dispatched":
+                attempts[index] = "uncertain"
+                corrected[index] = None
+            elif attempt == "pending":
+                attempts[index] = "skipped"
+                corrected[index] = None
+        save_checkpoint()
+        final_tex = compose()
+        diagnostics = [*_tex_static_diagnostics(final_tex), checkpoint["fallback_reason"]]
+        checkpoint["diagnostics"] = list(
+            dict.fromkeys([*checkpoint.get("diagnostics", []), *diagnostics])
+        )[:100]
+        checkpoint["final_sha256"] = hashlib.sha256(final_tex.encode()).hexdigest()
+        save_checkpoint()
+        return final_tex, checkpoint
+
+    compiler_diagnostics: list[str] = []
+    try:
+        await asyncio.to_thread(
+            _compile_pdf,
+            initial,
+            max_source_bytes=50_000_000,
+            timeout_seconds=300,
+            max_pdf_bytes=80_000_000,
+            diagnostics=compiler_diagnostics,
+        )
+    except RuntimeError:
+        if not compiler_diagnostics:
+            compiler_diagnostics.append(
+                "Temporary Tectonic compilation failed without a classifiable diagnostic."
+            )
+    checkpoint["diagnostics"] = list(
+        dict.fromkeys([*checkpoint.get("diagnostics", []), *compiler_diagnostics])
+    )[:100]
+    save_checkpoint()
+    total = len(bounds)
+    instructions = """You are a mechanical LaTeX proofreader, not a researcher, author, mathematician, or fact checker. Correct only definite TeX syntax, escaping, math delimiter/environment, Unicode rendering, or visual layout defects in the supplied exact chunk. Preserve every word, scientific claim, conclusion, counterexample, limitation, equation meaning, numerical value and unit, citation, label, reference, and source identifier. Never add, remove, reorder, summarize, or reinterpret research content. Diagrams and tables are encouraged when supported by evidence; improve their geometry and readability, never delete them. Return only minimal exact find/replace patches. Each find string must occur exactly once in this chunk. Leave ambiguous notation unchanged. An empty corrections list is correct when no safe repair is justified."""
+    for index, (start, end) in enumerate(bounds):
+        if attempts[index] == "complete":
+            continue
+        chunk = initial[start:end]
+        await report(
+            "proofreading", index + 1, total, "Checking and correcting typesetting issues."
+        )
+        try:
+            response: BaseModel | None = None
+            for attempt_number in range(1, 4):
+                attempts[index] = "dispatched"
+                checkpoint["provider_calls_attempted"] += 1
+                state["provider_calls_total"] = int(state.get("provider_calls_total", 0)) + 1
+                save_checkpoint()
+                try:
+                    response, _ = await _provider_structured(
+                        {
+                            "chunk_number": index + 1,
+                            "chunk_count": total,
+                            "exact_tex_chunk": chunk,
+                            "diagnostics": checkpoint["diagnostics"][:20],
+                            "chunk_sha256": hashlib.sha256(chunk.encode()).hexdigest(),
+                        },
+                        binding,
+                        config,
+                        instructions=instructions,
+                        schema_name="sigma_tex_proofread_patches",
+                        response_model=TeXProofreadResult,
+                        max_input_bytes=MAX_PROVIDER_INPUT_BYTES,
+                        project_id=project_id,
+                        project_path_value=project_path_value,
+                    )
+                    break
+                except PaperConnectionFailure:
+                    # This exception is defined only for connection failures
+                    # known to precede request delivery, so these attempts are
+                    # accounted for separately and can safely be retried.
+                    checkpoint["provider_calls_attempted"] -= 1
+                    checkpoint["safe_retry_count"] = int(checkpoint.get("safe_retry_count", 0)) + 1
+                    state["provider_calls_total"] = max(
+                        0, int(state.get("provider_calls_total", 0)) - 1
+                    )
+                    attempts[index] = "pending"
+                    save_checkpoint()
+                    if attempt_number == 3:
+                        raise
+                    await report(
+                        "proofreading",
+                        index + 1,
+                        total,
+                        detail="Retrying a connection failure before provider delivery.",
+                    )
+                    await asyncio.sleep(0.4 * attempt_number)
+                except asyncio.CancelledError:
+                    save_checkpoint()
+                    raise
+            if response is None:
+                raise ProjectError("The proofreader returned no structured response.")
+            proposals = TeXProofreadResult.model_validate(response).corrections
+            candidate = chunk
+            for proposal in proposals:
+                if candidate.count(proposal.find) != 1:
+                    raise ValueError(
+                        "A proposed TeX correction did not identify one exact source span."
+                    )
+                candidate = candidate.replace(proposal.find, proposal.replace, 1)
+            before_signature = _tex_semantic_signature(chunk)
+            after_signature = _tex_semantic_signature(candidate)
+            if before_signature != after_signature:
+                raise ValueError(
+                    "A proposed correction changed protected scientific or reference content."
+                )
+            current_chunks = [
+                corrected[item] if isinstance(corrected[item], str) else initial[left:right]
+                for item, (left, right) in enumerate(bounds)
+            ]
+            current_chunks[index] = candidate
+            if _tex_semantic_signature(initial) != _tex_semantic_signature("".join(current_chunks)):
+                raise ValueError(
+                    "A proposed correction changed the full paper's protected content."
+                )
+            corrected[index] = candidate if candidate != chunk else None
+            attempts[index] = "complete"
+            checkpoint["ai_performed"] = True
+            for proposal in proposals:
+                checkpoint["corrections"].append(proposal.category)
+            await report("proofreading", index + 1, total, "Applying mechanical corrections.")
+        except (ProjectError, ValidationError, ValueError, TypeError, OSError) as exc:
+            # The provider response may have consumed allowance. Preserve safe earlier patches,
+            # skip every remaining AI call, and use the authored text for this and later chunks.
+            attempts[index] = "rejected"
+            corrected[index] = None
+            for remaining in range(index + 1, total):
+                attempts[remaining] = "skipped"
+                corrected[remaining] = None
+            checkpoint["status"] = "fallback"
+            checkpoint["fallback_reason"] = "AI proofreading stopped safely: " + str(exc)[:300]
+            save_checkpoint()
+            break
+        save_checkpoint()
+    final_tex = compose()
+    checkpoint["status"] = "fallback" if checkpoint.get("fallback_reason") else "complete"
+    checkpoint["final_sha256"] = hashlib.sha256(final_tex.encode()).hexdigest()
+    checkpoint["diagnostics"] = list(
+        dict.fromkeys([*checkpoint.get("diagnostics", []), *_tex_static_diagnostics(final_tex)])
+    )[:100]
+    save_checkpoint()
+    await report("proofreading", total, total, "Verifying corrected TeX.")
+    return final_tex, checkpoint
+
+
 async def _generate_impl(
     path: str,
     expected_binding: str | None = None,
@@ -4189,6 +4789,7 @@ async def _generate_impl(
             current: int | None,
             total: int | None,
             state: Literal["active", "milestone", "complete"] = "active",
+            detail: str | None = None,
         ) -> None:
             now = _now()
             elapsed = elapsed_before + max(
@@ -4204,6 +4805,8 @@ async def _generate_impl(
                 "updated_at": now,
                 "elapsed_seconds": elapsed,
             }
+            if detail:
+                saved_progress["detail"] = detail[:160]
             _active_progress[project_key] = saved_progress
             if work:
                 work["progress"] = saved_progress
@@ -4218,6 +4821,7 @@ async def _generate_impl(
                         "total": total,
                         "started_at": started_at,
                         "elapsed_seconds": elapsed,
+                        "detail": detail,
                     }
                 )
 
@@ -4489,7 +5093,11 @@ async def _generate_impl(
                 "reasoning_effort": config["reasoning_effort"],
                 "max_output_tokens_per_call": 12000 if initial_auth["mode"] == "api_key" else None,
                 "max_response_bytes": MAX_RESPONSE_BYTES,
-                "call_limit": MAX_LONG_PAPER_CALLS if long_form else 1,
+                "call_limit": (
+                    MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS
+                    if long_form
+                    else 1 + MAX_PROOFREAD_CALLS
+                ),
                 "provider_calls_attempted": provider_calls,
                 "provider_calls_prior_runs": (
                     sum(item["provider_calls_attempted"] for item in work.get("prior_runs", []))
@@ -4588,6 +5196,79 @@ async def _generate_impl(
                 "include_research_excerpts": include_research_excerpts,
             }
             tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+            saved_proofreading = work.get("proofreading")
+            if isinstance(saved_proofreading, dict):
+                if saved_proofreading.get("initial_tex") == tex:
+                    # Continue resumes the exact source frozen before proofreading.
+                    tex = saved_proofreading["initial_tex"]
+                else:
+                    # A user changed an authoring preference or TeX render option.
+                    # Keep the old paid result in the attempt ledger and proofread
+                    # only this new rendering; never regenerate the paper draft.
+                    work["proofreading_calls_prior"] = int(
+                        work.get("proofreading_calls_prior", 0)
+                    ) + int(saved_proofreading.get("provider_calls_attempted", 0))
+                    work.pop("proofreading", None)
+                    _save_work(path, work)
+            await report(
+                "proofreading", None, None, detail="Checking and correcting typesetting issues."
+            )
+            tex, proofreading = await _proofread_tex(
+                tex,
+                work,
+                binding=initial_auth,
+                config=config,
+                project_id=view.project.id,
+                project_path_value=path,
+                report=report,
+            )
+            _save_work(path, work)
+            if proofreading.get("status") == "fallback":
+                fallback_note = (
+                    "AI TeX proofreading did not complete. The authored typesetting was retained; "
+                    "consult the archived proofreading record for unresolved mechanical diagnostics."
+                )
+                warnings.append(fallback_note)
+                marker = r"\end{document}"
+                if tex.count(marker) != 1:
+                    raise ProjectError(
+                        "TeX proofreading fell back, but the publication note could not be placed safely. The authored draft remains saved."
+                    )
+                tex = tex.replace(
+                    marker,
+                    r"\section*{Typesetting verification note}"
+                    + "\n"
+                    + _latex(fallback_note)
+                    + "\n"
+                    + marker,
+                    1,
+                )
+                proofreading["publication_note_added"] = True
+            record["generation"]["proofreading"] = {
+                "attempted": True,
+                "ai_performed": proofreading.get("ai_performed", False),
+                "status": proofreading.get("status"),
+                "accepted_correction_count": len(proofreading.get("corrections", [])),
+                "correction_categories": sorted(set(proofreading.get("corrections", []))),
+                "unresolved_diagnostics": proofreading.get("diagnostics", [])[:100],
+                "fallback_reason": proofreading.get("fallback_reason"),
+                "original_tex_sha256": proofreading.get("initial_sha256"),
+                "corrected_tex_sha256": proofreading.get("final_sha256"),
+                "provider_calls_attempted": proofreading.get("provider_calls_attempted", 0),
+                "elapsed_seconds": proofreading.get("elapsed_seconds", 0),
+                "model": config["model"],
+                "reasoning_effort": config["reasoning_effort"],
+            }
+            record["generation"]["provider_calls_attempted"] = int(
+                work.get("provider_calls", provider_calls)
+            ) + int(proofreading.get("provider_calls_attempted", 0))
+            record["generation"]["provider_calls_lifetime_total"] = int(
+                work.get("provider_calls_total", provider_calls)
+            )
+            record["generation"]["call_limit"] = (
+                MAX_LONG_PAPER_CALLS + MAX_PROOFREAD_CALLS if long_form else 1 + MAX_PROOFREAD_CALLS
+            )
+            compile_diagnostics: list[str] = []
             await report("compile", None, None)
             try:
                 pdf = await asyncio.to_thread(
@@ -4596,6 +5277,7 @@ async def _generate_impl(
                     max_source_bytes=50_000_000,
                     timeout_seconds=300,
                     max_pdf_bytes=80_000_000,
+                    diagnostics=compile_diagnostics,
                 )
             except RuntimeError:
                 if not draft.diagrams:
@@ -4611,6 +5293,7 @@ async def _generate_impl(
                     max_source_bytes=50_000_000,
                     timeout_seconds=300,
                     max_pdf_bytes=80_000_000,
+                    diagnostics=compile_diagnostics,
                 )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
@@ -4619,6 +5302,17 @@ async def _generate_impl(
         record["draft"] = draft.model_dump()
         record["validation_warnings"] = warnings
         record["generation"]["diagram_count"] = len(draft.diagrams)
+        record["generation"]["proofreading"]["unresolved_diagnostics"] = list(
+            dict.fromkeys(
+                [
+                    *record["generation"]["proofreading"]["unresolved_diagnostics"],
+                    *compile_diagnostics,
+                ]
+            )
+        )[:100]
+        record["generation"]["proofreading"]["final_tex_sha256"] = hashlib.sha256(
+            tex.encode()
+        ).hexdigest()
         record["tex_source"] = tex
         record["generation"]["generation_elapsed_seconds"] = int(
             elapsed_before
@@ -4807,7 +5501,7 @@ def preflight(
     previous_calls = sum(
         item["provider_calls_attempted"] for item in work_state.get("prior_runs", [])
     )
-    maximum_calls = (
+    maximum_author_calls = (
         (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
         if fast_preflight
         else min(
@@ -4822,7 +5516,7 @@ def preflight(
         if one_shot_draft_available
         else 1
     )
-    maximum_restart_calls = (
+    maximum_restart_author_calls = (
         (FAST_MAX_SECTIONS + MAX_LONG_PAPER_OUTLINE_CALLS) * 3
         if fast_preflight
         else min(
@@ -4835,16 +5529,33 @@ def preflight(
         if long_form
         else 1
     )
-    calls_remaining = (
+    maximum_restart_calls = maximum_restart_author_calls + MAX_PROOFREAD_CALLS
+    saved_proofreading = work_state.get("proofreading") if resume_available else None
+    if isinstance(saved_proofreading, dict):
+        attempts = saved_proofreading.get("attempts", [])
+        proofread_remaining = (
+            sum(attempt == "pending" for attempt in attempts)
+            if saved_proofreading.get("status") == "running"
+            else 0
+        )
+    else:
+        proofread_remaining = max(
+            0,
+            MAX_PROOFREAD_CALLS - int(work_state.get("proofreading_calls_prior", 0)),
+        )
+    author_remaining = (
         0
-        if one_shot_draft_available and resume_available
+        if one_shot_draft_available
         else max(
             0,
-            (maximum_calls if fast_preflight else MAX_LONG_PAPER_CALLS)
-            - work_state.get("provider_calls", 0),
+            (maximum_author_calls if long_form else 1) - work_state.get("provider_calls", 0),
         )
         if resume_available
-        else maximum_calls
+        else maximum_author_calls
+    )
+    calls_remaining = author_remaining + proofread_remaining
+    maximum_calls = (
+        calls_remaining if resume_available else maximum_author_calls + MAX_PROOFREAD_CALLS
     )
     maximum_output_tokens = calls_remaining * 12_000 if mode == "api_key" else None
     maximum_structured_input_bytes = (
@@ -4908,7 +5619,8 @@ def preflight(
         "evidence_fields_omitted": (
             len(work_state.get("omitted_evidence", [])) if resume_available else 0
         ),
-        "provider_calls_attempted": work_state.get("provider_calls", 0),
+        "provider_calls_attempted": work_state.get("provider_calls", 0)
+        + (saved_proofreading or {}).get("provider_calls_attempted", 0),
         "provider_calls_previous_runs": previous_calls,
         "provider_calls_lifetime_total": work_state.get("provider_calls_total", 0),
         "provider_calls_remaining": calls_remaining,

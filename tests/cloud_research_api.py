@@ -389,7 +389,9 @@ def main() -> None:
                     if paper_long_mode:
                         payload = json.loads(request.content)
                         schema_name = payload["text"]["format"]["name"]
-                        if schema_name == "sigma_paper_evidence_batch":
+                        if schema_name == "sigma_tex_proofread_patches":
+                            output = {"corrections": []}
+                        elif schema_name == "sigma_paper_evidence_batch":
                             batch = json.loads(payload["input"])
                             fields = batch["fields"]
                             paper_long_evidence_ref = fields[0]["source_ref"]
@@ -468,6 +470,31 @@ def main() -> None:
                                         "type": "message",
                                         "content": [
                                             {"type": "output_text", "text": json.dumps(output)}
+                                        ],
+                                    }
+                                ],
+                            },
+                        )
+                    payload = json.loads(request.content)
+                    if payload["text"]["format"]["name"] == "sigma_tex_proofread_patches":
+                        return httpx.Response(
+                            200,
+                            json={
+                                "status": "completed",
+                                "model": "gpt-6.1-sol",
+                                "usage": {
+                                    "input_tokens": 80,
+                                    "output_tokens": 20,
+                                    "input_tokens_details": {"cached_tokens": 0},
+                                },
+                                "output": [
+                                    {
+                                        "type": "message",
+                                        "content": [
+                                            {
+                                                "type": "output_text",
+                                                "text": json.dumps({"corrections": []}),
+                                            }
                                         ],
                                     }
                                 ],
@@ -766,7 +793,7 @@ def main() -> None:
                     (paper_project_id,),
                 ).fetchone()[0]
                 db.close()
-                assert paper_audit == 1
+                assert paper_audit == 2  # authoring plus mandatory TeX proofreading
 
                 # Forced long-form generation meters every evidence, plan and
                 # section call and preserves a resumable per-project workflow.
@@ -799,9 +826,10 @@ def main() -> None:
                 paper_long_mode = False
                 assert long_response.status_code == 200, long_response.text
                 assert '"type": "complete"' in long_response.text, long_response.text
-                # Fast path makes one plan call plus two section calls:
-                # no separate evidence-extraction call is billed.
-                assert provider_calls - long_calls_before == 3
+                # Fast path makes one plan call, two section calls, and one
+                # mandatory TeX proofreading call; no separate evidence
+                # extraction call is billed.
+                assert provider_calls - long_calls_before == 4
                 all_papers = client.get("/api/projects/papers", params={"path": paper_path}).json()[
                     "papers"
                 ]
@@ -821,7 +849,7 @@ def main() -> None:
                     (paper_project_id,),
                 ).fetchone()[0]
                 db.close()
-                assert paper_audit == 4
+                assert paper_audit == 6
 
                 response_body = {
                     "status": "completed",

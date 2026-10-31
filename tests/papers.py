@@ -398,6 +398,328 @@ def test_visual_preference_controls_one_shot_and_long_paper_wire_schemas() -> No
     }
 
 
+def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> None:
+    with TemporaryDirectory() as temporary:
+        checkpoint_path = Path(temporary) / "proofreading.sigma"
+        initialize_project(checkpoint_path, "Proofreading fixture", "Preserve authored TeX.")
+        view = inspect_project(checkpoint_path)
+        state = papers._new_work(
+            "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = (
+            r"\documentclass{article}"
+            + "\n"
+            + r"\begin{document}"
+            + "\n"
+            + r"$\\alpha=3$"
+            + "\n"
+            + r"The result holds. \\cite{source:one}"
+            + "\n"
+            + r"\end{document}"
+            + "\n"
+        )
+        calls = 0
+        progress: list[papers.PaperProgressEvent] = []
+
+        async def provider(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal calls
+            calls += 1
+            assert response_model is papers.TeXProofreadResult
+            return (
+                response_model(
+                    corrections=[
+                        papers.TeXCorrection(
+                            category="math_notation",
+                            find=r"\\alpha",
+                            replace=r"\alpha",
+                            rationale="Remove an accidental extra escape in math mode.",
+                        )
+                    ]
+                ),
+                "fixture",
+            )
+
+        async def report(stage, current, total, _state="active", detail=None):
+            progress.append(
+                {
+                    "type": "progress",
+                    "state": "active",
+                    "stage": stage,
+                    "current": current,
+                    "total": total,
+                    "started_at": "2026-10-31T00:00:00+00:00",
+                    "elapsed_seconds": 0,
+                    "detail": detail,
+                }
+            )
+
+        async def run() -> tuple[str, dict]:
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                patch.object(papers, "_provider_structured", new=provider),
+            ):
+                return await papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(checkpoint_path),
+                    report=report,
+                )
+
+        corrected, provenance = asyncio.run(run())
+        assert corrected != tex
+        assert r"$\alpha=3$" in corrected
+        assert r"\\cite{source:one}" in corrected
+        assert provenance["status"] == "complete"
+        assert provenance["provider_calls_attempted"] == 1
+        assert provenance["corrections"] == ["math_notation"]
+        assert provenance["initial_sha256"] == papers.hashlib.sha256(tex.encode()).hexdigest()
+        assert any(item["stage"] == "proofreading" for item in progress)
+        completed_calls = calls
+        resumed, reused = asyncio.run(run())
+        assert resumed == corrected
+        assert reused["status"] == "complete"
+        assert calls == completed_calls, "A completed proofreading call must not be repeated"
+        if shutil.which("tectonic"):
+            compiled = papers._compile_pdf(corrected, timeout_seconds=90)
+            assert compiled.startswith(b"%PDF-")
+
+
+def test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data() -> None:
+    normal = r"\documentclass{article}\begin{document}Result $x=3$.\end{document}"
+    assert papers._tex_static_diagnostics(normal) == []
+    malformed = (
+        r"\documentclass{article}\begin{document}\begin{align}x=3\end{equation}"
+        r"\\alpha\end{document}"
+    )
+    warnings = papers._tex_static_diagnostics(malformed)
+    assert any("Mismatched TeX environment" in warning for warning in warnings)
+    assert any("double-escaped" in warning for warning in warnings)
+
+    table_before = (
+        r"\begin{longtable}{p{\dimexpr\linewidth/2\relax}p{\dimexpr\linewidth/2\relax}}"
+        r"Campus & 3 GPUs\\\end{longtable}"
+    )
+    table_after = (
+        r"\begin{longtable}{p{\dimexpr\linewidth/3\relax}p{\dimexpr\linewidth*2/3\relax}}"
+        r"Campus & 3 GPUs\\\end{longtable}"
+    )
+    assert papers._tex_semantic_signature(table_before) == papers._tex_semantic_signature(
+        table_after
+    )
+    assert papers._tex_semantic_signature(table_before) != papers._tex_semantic_signature(
+        table_after.replace("3 GPUs", "4 GPUs")
+    )
+
+    diagram_before = (
+        r"\begin{tikzpicture}\node[draw,text width=3cm] (campus) at (0,0) {Campus model};"
+        r"\end{tikzpicture}"
+    )
+    diagram_after = (
+        r"\begin{tikzpicture}\node[draw,text width=4cm] (campus) at (2,1) {Campus model};"
+        r"\end{tikzpicture}"
+    )
+    assert papers._tex_semantic_signature(diagram_before) == papers._tex_semantic_signature(
+        diagram_after
+    )
+    assert papers._tex_semantic_signature(diagram_before) != papers._tex_semantic_signature(
+        diagram_after.replace("Campus model", "Frontier model")
+    )
+    assert papers._tex_semantic_signature("$α=3$") == papers._tex_semantic_signature(r"$\alpha=3$")
+
+
+def test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "proofreading-recovery.sigma"
+        view = initialize_project(path, "Proofreading recovery", "Preserve an authored conclusion.")
+        state = papers._new_work(
+            "c" * 64, view.project.id, "d" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = "\\documentclass{article}\n\\begin{document}\nThe result is 3.\n\\end{document}\n"
+        calls = 0
+
+        async def mutate(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal calls
+            calls += 1
+            return (
+                response_model(
+                    corrections=[
+                        papers.TeXCorrection(
+                            category="spacing",
+                            find="result is 3",
+                            replace="result is 4",
+                            rationale="Fixture malicious scientific edit.",
+                        )
+                    ]
+                ),
+                "fixture",
+            )
+
+        async def report(*_args, **_kwargs):
+            return None
+
+        async def run() -> tuple[str, dict]:
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                patch.object(papers, "_provider_structured", new=mutate),
+            ):
+                return await papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+
+        preserved, provenance = asyncio.run(run())
+        assert preserved == tex
+        assert provenance["status"] == "fallback"
+        assert provenance["corrections"] == []
+        assert "changed protected scientific" in provenance["fallback_reason"]
+        assert calls == 1
+
+        interrupted_state = papers._new_work(
+            "e" * 64, view.project.id, "f" * 64, "fixture", "high", kind="one_shot"
+        )
+        large_tex = (
+            "\\documentclass{article}\n\\begin{document}\n\n"
+            + "A " * 5_500
+            + "\n\n"
+            + "B " * 5_500
+            + "\n\n\\end{document}\n"
+        )
+        assert len(papers._tex_chunks(large_tex)) == 2
+        resumed_calls = 0
+
+        async def interrupt_second(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal resumed_calls
+            resumed_calls += 1
+            if resumed_calls == 2:
+                raise asyncio.CancelledError()
+            return response_model(corrections=[]), "fixture"
+
+        async def interrupt() -> None:
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                patch.object(papers, "_provider_structured", new=interrupt_second),
+            ):
+                await papers._proofread_tex(
+                    large_tex,
+                    interrupted_state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+
+        try:
+            asyncio.run(interrupt())
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("The proofreader fixture should interrupt on its second chunk")
+        assert interrupted_state["proofreading"]["attempts"] == ["complete", "dispatched"]
+        with patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"):
+            recovered, recovered_provenance = asyncio.run(
+                papers._proofread_tex(
+                    large_tex,
+                    interrupted_state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+            )
+        assert recovered == large_tex
+        assert recovered_provenance["status"] == "fallback"
+        assert resumed_calls == 2, "The ambiguous second provider call must not be replayed"
+
+
+def test_one_shot_and_long_form_both_proofread_before_compiling() -> None:
+    with TemporaryDirectory() as temporary:
+        one_path = Path(temporary) / "one-shot.sigma"
+        long_path = Path(temporary) / "long-form.sigma"
+        one_view = initialize_project(one_path, "One-shot proofreading", "Test stage ordering.")
+        long_view = initialize_project(long_path, "Long-form proofreading", "Test stage ordering.")
+        credential = {"identity": "fixture:proofread", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        events: dict[str, list[papers.PaperProgressEvent]] = {"one": [], "long": []}
+        proofreader_calls = 0
+
+        async def author(package, *_args):
+            source = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            return draft(source), config["model"]
+
+        async def long_author(package, _binding, _config, state, _save, *_args, **_kwargs):
+            source = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            state["provider_calls"] = 2
+            state["provider_calls_total"] = 2
+            return draft(source), 2, 0
+
+        async def proofreader(_input, _binding, _config, *, response_model, **_kwargs):
+            nonlocal proofreader_calls
+            proofreader_calls += 1
+            assert response_model is papers.TeXProofreadResult
+            return response_model(corrections=[]), config["model"]
+
+        async def run(path: Path, view, key: str, force_long: bool = False):
+            async def collect(event: papers.PaperProgressEvent) -> None:
+                events[key].append(event)
+
+            with (
+                patch.object(
+                    papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)
+                ),
+                patch.object(
+                    papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+                ),
+                patch.object(papers, "_provider", new=author),
+                patch.object(papers, "_generate_long_draft", new=long_author),
+                patch.object(papers, "_provider_structured", new=proofreader),
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            ):
+                return await papers.generate(
+                    str(path),
+                    credential["identity"],
+                    view.project.id,
+                    progress=collect,
+                    force_long_form=force_long,
+                )
+
+        one = asyncio.run(run(one_path, one_view, "one"))
+        long = asyncio.run(run(long_path, long_view, "long", force_long=True))
+        assert proofreader_calls == 2
+        for key, result in (("one", one), ("long", long)):
+            stages = [
+                event["stage"] for event in events[key] if event["state"] in {"active", "milestone"}
+            ]
+            assert (
+                stages.index("validation") < stages.index("proofreading") < stages.index("compile")
+            )
+            record = papers.get_paper(
+                str(one_path if key == "one" else long_path), result["paper_id"]
+            )
+            assert record["generation"]["proofreading"]["attempted"] is True
+            assert record["generation"]["proofreading"]["ai_performed"] is True
+            assert record["generation"]["proofreading"]["provider_calls_attempted"] == 1
+            assert (
+                record["generation"]["provider_calls_attempted"]
+                == record["generation"]["provider_calls_lifetime_total"]
+            )
+            assert record["generation"]["long_form"] is (key == "long")
+
+
 def test_strict_paper_schemas_require_all_properties() -> None:
     # Pydantic's default_factory fields are optional in its validation schema;
     # Responses strict JSON rejects them unless they are marked required.
@@ -569,7 +891,7 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         def fail_compile_visual_and_fallback(_tex, **_kwargs):
             nonlocal compile_calls
             compile_calls += 1
-            if compile_calls <= 2:
+            if compile_calls <= 3:
                 raise RuntimeError("fixture compiler unavailable")
             return b"%PDF-fixture"
 
@@ -651,9 +973,10 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert compile_calls == 3
-        assert saved["generation"]["provider_calls_attempted"] == 1
-        assert saved["generation"]["provider_calls_lifetime_total"] == 1
+        assert compile_calls == 5
+        assert saved["generation"]["provider_calls_attempted"] == 3
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["provider_calls_lifetime_total"] == 3
         assert saved["generation"]["include_research_details"] is True
         assert saved["generation"]["include_diagrams_and_tables"] is False
         assert saved["draft"]["diagrams"] == []
@@ -663,12 +986,9 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         assert r"\section*{About this paper}" in saved["tex_source"]
         assert papers._load_work(str(path)) is None
         assert len(papers.list_papers(str(path))) == 1
-        assert [event["stage"] for event in first_events if event["state"] == "active"] == [
-            "snapshot",
-            "writing",
-            "validation",
-            "compile",
-        ]
+        first_stages = [event["stage"] for event in first_events if event["state"] == "active"]
+        assert first_stages.index("validation") < first_stages.index("proofreading")
+        assert first_stages.index("proofreading") < first_stages.index("compile")
         assert retry_events[-1]["stage"] == "complete" and retry_events[-1]["state"] == "complete"
         assert retry_events[-1]["elapsed_seconds"] >= first_events[-1]["elapsed_seconds"]
 
@@ -726,7 +1046,7 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
 
         def fail_diagram_then_compile(tex: str, **kwargs):
             compile_tex.append(tex)
-            if len(compile_tex) == 1:
+            if len(compile_tex) <= 2:
                 raise RuntimeError("diagram engine fixture failure")
             return real_compile(tex, **kwargs) if shutil.which("tectonic") else b"%PDF-fixture"
 
@@ -746,12 +1066,14 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         result = asyncio.run(run())
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert len(compile_tex) == 2
+        assert len(compile_tex) == 3
         assert r"\usepackage{tikz}" in compile_tex[0]
-        assert r"\usepackage{tikz}" not in compile_tex[1]
-        assert r"\begin{longtable}" in compile_tex[0] and r"\begin{longtable}" in compile_tex[1]
+        assert r"\usepackage{tikz}" in compile_tex[1]
+        assert r"\usepackage{tikz}" not in compile_tex[2]
+        assert all(r"\begin{longtable}" in source for source in compile_tex)
         assert saved["snapshot_sha256"] == snapshot_hash
-        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 1
         assert saved["draft"]["diagrams"] == []
         assert saved["draft"]["sections"][0]["tables"]
         assert any("text-only PDF fallback" in warning for warning in saved["validation_warnings"])
@@ -2014,7 +2336,9 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert saved["snapshot_sha256"] == result["snapshot_sha256"]
         assert len(papers._json(saved["snapshot"])) == target_bytes
         assert saved["generation"]["long_form"] is True
-        assert saved["generation"]["call_limit"] == papers.MAX_LONG_PAPER_CALLS
+        assert saved["generation"]["call_limit"] == (
+            papers.MAX_LONG_PAPER_CALLS + papers.MAX_PROOFREAD_CALLS
+        )
         assert saved["generation"]["provider_calls_attempted"] == provider_calls - calls_at_restart
         assert saved["generation"]["evidence_fields_omitted"] == batch_count
         assert len(saved["generation"]["omitted_evidence"]) == batch_count
@@ -3176,6 +3500,8 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
 
         async def simulated_provider(input_value, _binding, _config, *, schema_name, **_kwargs):
             mock_calls.append(schema_name)
+            if schema_name == "sigma_tex_proofread_patches":
+                return papers.TeXProofreadResult(corrections=[]), config["model"]
             if schema_name == "sigma_long_paper_plan":
                 refs = sorted(
                     {ref for item in input_value["evidence_index"] for ref in item["evidence_refs"]}
@@ -3284,7 +3610,7 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
         record = papers.get_paper(str(path), result["paper_id"])
         assert record["pdf_available"] is True
         assert record["pdf_size_bytes"] > 500
-        assert record["generation"]["provider_calls_attempted"] == 3
+        assert record["generation"]["provider_calls_attempted"] == 4
         assert record["generation"]["evidence_batch_count"] == 0
         assert record["generation"]["evidence_fields_omitted"] == 0
         assert (
@@ -3304,7 +3630,7 @@ def test_tadpoles_five_session_mock_provider_to_pdf_timing() -> None:
             and item["status"] == "Listed as open in paper"
             for item in record["obligation_reconciliation"]
         )
-        assert len(mock_calls) == 3
+        assert len(mock_calls) == 4
         assert elapsed_seconds < 300
         compiler_label = (
             "real Tectonic compilation" if tectonic_available else "stub PDF (Tectonic unavailable)"
@@ -3581,7 +3907,7 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
                 reasoning_effort="high",
             )
             assert after["long_form"] is False
-            assert after["maximum_provider_calls"] == 1
+            assert after["maximum_provider_calls"] == 1 + papers.MAX_PROOFREAD_CALLS
             assert after["provider_calls_attempted"] == 0
 
 
@@ -3638,7 +3964,7 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
                 assert provider_calls == 1
                 saved = papers.get_paper(str(path), result["paper_id"])
                 assert saved["pdf_available"] is True
-                assert saved["generation"]["provider_calls_attempted"] == 1
+                assert saved["generation"]["provider_calls_attempted"] == 2
                 assert papers._load_work(str(path)) is None
 
         asyncio.run(run())
@@ -3758,7 +4084,8 @@ def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
         saved = papers.get_paper(str(path), completed["paper_id"])
         assert saved["snapshot_sha256"] == fingerprint
         assert saved["snapshot"] == package
-        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["proofreading"]["attempted"] is True
 
 
 def test_one_shot_publishes_with_repaired_claim_links() -> None:
@@ -3806,7 +4133,8 @@ def test_one_shot_publishes_with_repaired_claim_links() -> None:
         assert saved["draft"]["abstract_claim_ids"] == ["C1"]
         assert saved["draft"]["claims"][0]["status"] == "unresolved"
         assert saved["draft"]["claims"][0]["evidence_refs"] == []
-        assert saved["generation"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 2
+        assert saved["generation"]["proofreading"]["attempted"] is True
         assert any("not established" in x for x in saved["draft"]["limitations"])
         assert saved["pdf_available"] is True
         assert papers._load_work(str(path)) is None
@@ -3932,9 +4260,9 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
                 result = await papers.generate(str(path), account["identity"], view.project.id)
                 assert calls == 2
                 record = papers.get_paper(str(path), result["paper_id"])
-                assert record["generation"]["provider_calls_attempted"] == 1
+                assert record["generation"]["provider_calls_attempted"] == 2
                 assert record["generation"]["provider_calls_prior_runs"] == 1
-                assert record["generation"]["provider_calls_lifetime_total"] == 2
+                assert record["generation"]["provider_calls_lifetime_total"] == 3
                 assert papers._load_work(str(path)) is None
 
         asyncio.run(check())
@@ -4307,6 +4635,10 @@ def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
 
 
 def main() -> None:
+    test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
+    test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data()
+    test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls()
+    test_one_shot_and_long_form_both_proofread_before_compiling()
     test_combined_visual_schema_and_safe_tex_rendering()
     test_fast_long_draft_obeys_combined_diagram_and_table_preference()
     test_diagram_compile_fallback_preserves_evidence_tables_and_provider_accounting()
@@ -4853,7 +5185,7 @@ def main() -> None:
         assert r"\section*{About this paper}" not in record["tex_source"]
         assert "AI-generated research synthesis" not in record["tex_source"]
         assert "SIGMA AI-assisted research synthesis" in record["tex_source"]
-        assert record["generation"]["call_limit"] == 1
+        assert record["generation"]["call_limit"] == 1 + papers.MAX_PROOFREAD_CALLS
         assert papers.get_pdf(str(path), first["paper_id"]).startswith(b"%PDF-")
         saved_text = papers.paper_text(str(path), first["paper_id"])
         assert saved_text.startswith("An evidence-bound exploratory note\n")
@@ -4947,4 +5279,23 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Fixture credentials must never reach the real model service. Provider
+    # protocol tests install their own MockTransport; all other client calls
+    # receive a local response so the engineering suite cannot incur charges.
+    real_async_client = httpx.AsyncClient
+
+    def offline_async_client(*args, **kwargs):
+        if "transport" not in kwargs:
+            kwargs["transport"] = httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    503,
+                    json={"error": {"code": "offline_test_fixture", "message": "offline"}},
+                )
+            )
+        return real_async_client(*args, **kwargs)
+
+    httpx.AsyncClient = offline_async_client  # type: ignore[assignment]
+    try:
+        main()
+    finally:
+        httpx.AsyncClient = real_async_client
