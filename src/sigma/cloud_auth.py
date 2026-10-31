@@ -2227,8 +2227,9 @@ def request_invitation(
     except RuntimeError:
         with _db(cfg) as db:
             db.execute(
-                "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? WHERE subject=?",
-                ("delivery failed", subject),
+                "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? "
+                "WHERE subject=? AND status='sending' AND request_type=?",
+                ("delivery failed", subject, body.request_type),
             )
         # The durable request is already recorded and visible to administrators.
         # Notification delivery is best-effort; returning an error here would
@@ -2236,8 +2237,9 @@ def request_invitation(
         return {"status": "pending", "duplicate": bool(existing)}
     with _db(cfg) as db:
         db.execute(
-            "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL WHERE subject=?",
-            (subject,),
+            "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL "
+            "WHERE subject=? AND status='sending' AND request_type=?",
+            (subject, body.request_type),
         )
     return {"status": "notified", "duplicate": bool(existing)}
 
