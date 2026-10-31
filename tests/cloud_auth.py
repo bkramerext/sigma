@@ -1456,7 +1456,7 @@ class CloudAuthTests(TestCase):
         cfg = cloud_auth.config()
         self.assertEqual(
             cloud_auth._notification_admin_recipients(cfg),
-            ["admin@example.org", "second@example.org"],
+            ["admin@example.org", "not-verified@example.org", "second@example.org"],
         )
         with (
             patch.dict(
@@ -1472,14 +1472,23 @@ class CloudAuthTests(TestCase):
         client = smtp_factory.return_value.__enter__.return_value
         sent = client.send_message.call_args
         self.assertEqual(sent.args[0]["To"], "sigma-notify@example.org")
-        self.assertEqual(sent.args[0]["Bcc"], "admin@example.org, second@example.org")
-        self.assertEqual(sent.kwargs["to_addrs"], ["admin@example.org", "second@example.org"])
+        self.assertEqual(
+            sent.args[0]["Bcc"],
+            "admin@example.org, not-verified@example.org, second@example.org",
+        )
+        self.assertEqual(
+            sent.kwargs["to_addrs"],
+            ["admin@example.org", "not-verified@example.org", "second@example.org"],
+        )
         with cloud_auth._db(cfg) as db:
             db.execute(
                 "UPDATE grants SET active=0 WHERE kind='email' AND value=?",
                 ("second@example.org",),
             )
-        self.assertEqual(cloud_auth._notification_admin_recipients(cfg), ["admin@example.org"])
+        self.assertEqual(
+            cloud_auth._notification_admin_recipients(cfg),
+            ["admin@example.org", "not-verified@example.org"],
+        )
 
     def test_feedback_delivery_failure_does_not_lose_saved_submission(self):
         self.finish(email="admin@example.org", subject="notice-feedback-admin")
@@ -3226,6 +3235,211 @@ class CloudAuthTests(TestCase):
                     ],
                     "sponsored",
                 )
+
+    def test_domain_approved_google_login_materializes_individual_member(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-login-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        grant = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={
+                "kind": "domain",
+                "value": "example.org",
+                "role": "member",
+                "allowance_usd": 1.25,
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(grant.status_code, 200, grant.text)
+        with patch.object(cloud_auth, "_deliver_invitation") as notify:
+            member = self.finish("member@example.org", "auto-login-member")
+        self.assertEqual(member.status_code, 303)
+        self.assertIn(cloud_auth.SESSION_COOKIE, member.cookies)
+        notify.assert_called_once()
+        self.assertEqual(notify.call_args.kwargs["request_type"], "auto_approved")
+        self.assertEqual(notify.call_args.args[0], "member@example.org")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            row = db.execute(
+                "SELECT role,active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+                ("member@example.org",),
+            ).fetchone()
+            notice = db.execute(
+                "SELECT status FROM invitation_requests WHERE subject='auto-login-member'"
+            ).fetchone()
+        self.assertEqual((row["role"], row["active"], row["allowance_usd"]), ("member", 1, 1.25))
+        self.assertEqual(notice["status"], "reviewed")
+        listed = admin.get("/api/cloud-auth/admin/grants").json()
+        self.assertTrue(
+            any(
+                account["email"] == "member@example.org" and account["authorized"]
+                for account in listed["sessions"]
+            )
+        )
+        self.assertFalse(
+            any(
+                req["email"] == "member@example.org"
+                for req in admin.get("/api/cloud-auth/admin/invitation-requests").json()["requests"]
+            )
+        )
+        revoked = admin.delete(
+            "/api/cloud-auth/admin/grants/domain/example.org", headers={"Origin": ORIGIN}
+        )
+        self.assertEqual(revoked.status_code, 200)
+        # Revoking the domain policy blocks future automatic invites, but
+        # already-materialized individual members remain independently active.
+        current_member = cloud_auth.resolve_session(member.cookies[cloud_auth.SESSION_COOKIE])
+        assert current_member is not None
+        self.assertEqual(current_member.role, "member")
+
+    def test_domain_granted_after_denied_signin_approves_invite_me_immediately(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-request-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        denied = self.finish("later@example.org", "auto-request-member")
+        self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        rule = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "domain", "value": "example.org", "role": "member"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(rule.status_code, 200)
+        with patch.object(cloud_auth, "_deliver_invitation") as notify:
+            approved = self.client.post(
+                "/api/cloud-auth/invitation-request",
+                json={"email": "forged@elsewhere.org"},
+                headers={"Origin": ORIGIN},
+            )
+        self.assertEqual(approved.status_code, 200, approved.text)
+        self.assertEqual(approved.json(), {"status": "approved", "duplicate": False})
+        notify.assert_called_once()
+        self.assertEqual(notify.call_args.kwargs["request_type"], "auto_approved")
+        token = approved.cookies[cloud_auth.SESSION_COOKIE]
+        active_member = cloud_auth.resolve_session(token)
+        assert active_member is not None
+        self.assertEqual(active_member.email, "later@example.org")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            saved = db.execute(
+                "SELECT role,active FROM grants WHERE kind='email' AND value='later@example.org'"
+            ).fetchone()
+            notice = db.execute(
+                "SELECT status FROM invitation_requests WHERE subject='auto-request-member'"
+            ).fetchone()
+        self.assertEqual((saved["role"], saved["active"]), ("member", 1))
+        self.assertEqual(notice["status"], "reviewed")
+        # A parallel tab that still carries the original denied identity
+        # receives the existing approval; it must not re-open the request.
+        second_context = TestClient(app)
+        second = second_context.__enter__()
+        self.addCleanup(second_context.__exit__, None, None, None)
+        second.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(cloud_auth, "_deliver_invitation") as race_mail:
+            race_result = second.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(race_result.status_code, 200, race_result.text)
+        self.assertEqual(race_result.json(), {"status": "approved", "duplicate": True})
+        race_mail.assert_not_called()
+        self.client.cookies.set(cloud_auth.SESSION_COOKIE, token)
+        with patch.object(cloud_auth, "_deliver_invitation") as duplicate_mail:
+            repeated = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(repeated.json(), {"status": "approved", "duplicate": True})
+        duplicate_mail.assert_not_called()
+
+    def test_domain_auto_member_survives_email_failure_but_revoked_domain_blocks_new_users(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-failure-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        added = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "domain", "value": "example.org", "role": "member"},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(added.status_code, 200)
+        with patch.object(
+            cloud_auth, "_deliver_invitation", side_effect=RuntimeError("mail offline")
+        ):
+            signed = self.finish("new@example.org", "auto-failure-member")
+        self.assertIn(cloud_auth.SESSION_COOKIE, signed.cookies)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            row = db.execute(
+                "SELECT status,notification_error FROM invitation_requests "
+                "WHERE subject='auto-failure-member'"
+            ).fetchone()
+            grant = db.execute(
+                "SELECT role,active FROM grants WHERE kind='email' AND value='new@example.org'"
+            ).fetchone()
+        self.assertEqual((row["status"], row["notification_error"]), ("reviewed", "delivery failed"))
+        self.assertEqual((grant["role"], grant["active"]), ("member", 1))
+        revoked = admin.delete(
+            "/api/cloud-auth/admin/grants/domain/example.org",
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(revoked.status_code, 200)
+        later = self.finish("later@example.org", "auto-failure-new")
+        self.assertIn(cloud_auth.DENIED_COOKIE, later.cookies)
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, later.cookies)
+        existing = cloud_auth.resolve_session(signed.cookies[cloud_auth.SESSION_COOKIE])
+        assert existing is not None
+        self.assertEqual(existing.role, "member")
+
+    def test_explicit_user_revocation_prevents_domain_auto_member(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed_admin = self.finish(
+            email="admin@example.org", subject="auto-deny-admin", client=admin
+        )
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "domain", "value": "example.org", "role": "member"},
+            headers={"Origin": ORIGIN},
+        )
+        with cloud_auth._db(cloud_auth.config()) as db:
+            db.execute(
+                "INSERT INTO grants(kind,value,role,active,updated_at) "
+                "VALUES('email','blocked@example.org','member',0,?)",
+                (cloud_auth._now(),),
+            )
+        denied = self.finish("blocked@example.org", "auto-blocked-member")
+        self.assertIn(cloud_auth.DENIED_COOKIE, denied.cookies)
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied.cookies[cloud_auth.DENIED_COOKIE])
+        with patch.object(cloud_auth, "_deliver_invitation") as mail:
+            requested = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(requested.status_code, 200)
+        self.assertNotEqual(requested.json()["status"], "approved")
+        self.assertEqual(mail.call_args.kwargs.get("request_type", "invitation"), "invitation")
+        with cloud_auth._db(cloud_auth.config()) as db:
+            row = db.execute(
+                "SELECT active FROM grants WHERE kind='email' AND value='blocked@example.org'"
+            ).fetchone()
+        self.assertEqual(row["active"], 0)
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
