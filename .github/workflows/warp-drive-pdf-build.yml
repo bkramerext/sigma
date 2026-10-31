@@ -20,8 +20,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended
-      - name: Regenerate PDF from committed source
+      - name: Regenerate PDF from latest branch source
         run: |
+          git fetch origin warpdrivepaper
+          git reset --hard origin/warpdrivepaper
           mkdir -p /tmp/warp-drive-build
           pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -output-directory=/tmp/warp-drive-build papers/warp-drive.tex
           pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -output-directory=/tmp/warp-drive-build papers/warp-drive.tex
