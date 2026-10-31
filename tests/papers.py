@@ -5246,7 +5246,7 @@ def test_real_tadpole_onp_and_math_table_pdfs() -> None:
             document = pypdfium2.PdfDocument(pdf)
             inspected_page_count, pdf_diagnostics = papers._pdf_text_bounds_diagnostics(pdf)
             assert inspected_page_count == len(document)
-            assert pdf_diagnostics == []
+            assert pdf_diagnostics == [], (name, pdf_diagnostics)
             pages = [document[index] for index in range(len(document))]
             extracted = "\n".join(page.get_textpage().get_text_range() for page in pages)
             normalized_text = unicodedata.normalize("NFKC", " ".join(extracted.split()))
@@ -5313,6 +5313,20 @@ def test_real_tadpole_onp_and_math_table_pdfs() -> None:
                 f"{len(tex.encode())} TeX bytes, "
                 f"{len(pdf)} PDF bytes, {len(diagnostics)} compiler diagnostics"
             )
+
+    overlap_tex = papers._tex(draft(), [], "f" * 64, source_reference_map=source_map).replace(
+        r"\end{document}",
+        r"\par\noindent OVERLAP CONTROL\llap{OBSCURED CONTROL}\par" + "\n" + r"\end{document}",
+    )
+    overlap_pdf = papers._compile_pdf(
+        overlap_tex,
+        timeout_seconds=120,
+        max_pdf_bytes=40_000_000,
+    )
+    _, overlap_warnings = papers._pdf_text_bounds_diagnostics(overlap_pdf)
+    assert any("substantially overlap" in item for item in overlap_warnings), overlap_warnings
+    assert papers._repair_tex_layout(overlap_tex, overlap_warnings) is None
+    print("PASS real overprint negative control: overlapping glyph boxes require layout review")
 
 
 def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:

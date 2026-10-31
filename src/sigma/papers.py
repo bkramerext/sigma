@@ -4936,6 +4936,7 @@ def _pdf_text_bounds_diagnostics(pdf: bytes) -> tuple[int, list[str]]:
                             f"PDF geometry inspection reached the {MAX_PDF_TEXT_BOXES:,}-character safety bound."
                         )
                         return page_count, warnings
+                    glyph_rows: dict[int, list[tuple[int, float, float, float, float, str]]] = {}
                     for index in range(character_count):
                         inspected += 1
                         bounds = textpage.get_charbox(index)
@@ -4958,6 +4959,51 @@ def _pdf_text_bounds_diagnostics(pdf: bytes) -> tuple[int, list[str]]:
                                 f"Text on PDF page {page_number + 1} extends beyond vertical page bounds."
                             )
                             break
+                        character = textpage.get_text_range(index, 1)
+                        if not character.strip() or (x1 - x0) * (y1 - y0) < 0.04:
+                            continue
+                        # Detect severe same-line text overlap, such as an
+                        # \llap label drawn over existing text. The high
+                        # horizontal-overlap threshold and baseline match
+                        # avoid flagging normal kerning, ligatures, and math.
+                        baseline = round(y0 * 2)
+                        candidates = [
+                            glyph
+                            for row_key in (baseline - 1, baseline, baseline + 1)
+                            for glyph in glyph_rows.get(row_key, [])
+                        ]
+                        for (
+                            prior_index,
+                            prior_x0,
+                            prior_y0,
+                            prior_x1,
+                            prior_y1,
+                            prior_character,
+                        ) in candidates:
+                            overlap_width = min(x1, prior_x1) - max(x0, prior_x0)
+                            smaller_width = min(x1 - x0, prior_x1 - prior_x0)
+                            same_baseline = abs(y0 - prior_y0) <= 0.75
+                            if (
+                                abs(index - prior_index) > 2
+                                and same_baseline
+                                and smaller_width > 0
+                                and overlap_width / smaller_width >= 0.55
+                            ):
+                                overlap_height = min(y1, prior_y1) - max(y0, prior_y0)
+                                if overlap_height > 0:
+                                    warnings.append(
+                                        f"Potential obscured text on PDF page {page_number + 1}: glyphs {prior_character!r} and {character!r} substantially overlap; manual layout review is required."
+                                    )
+                                    break
+                        if warnings:
+                            break
+                        row = glyph_rows.setdefault(baseline, [])
+                        if len(row) >= 512:
+                            warnings.append(
+                                f"Text overlap inspection reached its 512-glyph row bound on PDF page {page_number + 1}; manual layout review is required."
+                            )
+                            break
+                        row.append((index, x0, y0, x1, y1, character))
                 finally:
                     textpage.close()
             finally:

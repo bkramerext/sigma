@@ -15,14 +15,26 @@ cyclic, overly wide, crowded, or crossing graphs into a complete readable
 node/edge/boundary list. Diagrams are attached to the section with the most
 overlapping claim IDs. The fallback keeps all graph semantics and evidence.
 
+The PDF check now also detects severe same-baseline text-glyph overlap that
+remains inside page margins. A real Tectonic negative control compiles two
+different labels into one overlapping line and confirms PDFium flags it for
+manual layout review, while the math, table, and diagram fixtures remain clear.
+The check avoids broad intersection thresholds because kerning, ligatures, and
+math can create legitimate partial box intersections. It does not detect text
+obscured by non-text graphics, every crossing edge, or all internally
+unreadable tables. These geometry checks are defect detectors, not proof of
+visual quality; publication signoff still requires inspection of rendered
+pages.
+
 After TeX proofreading, SIGMA now compiles and checks the actual PDF with
 Tectonic diagnostics and PDFium per-character page-bound checks. The UI shows
 `Compiling PDF` and `Checking PDF · pass N of 3`, plus the explicit statement
 that TeX is authoritative and PDFs are not edited. If a check detects a
 correctable horizontal/vertical overflow, SIGMA changes only TeX layout
 settings and compiles again. It stops after a clean check or after at most
-three PDF checks; remaining warnings on pass 3 produce a visible `Needs review`
-status and preserve the exact TeX/PDF pair with pass diagnostics. This does not
+three PDF checks; remaining warnings after pass 3, or a warning with no safe
+deterministic TeX repair, produce a visible `Needs review` status and preserve
+the exact TeX/PDF pair with pass diagnostics. This does not
 rerun the AI proofreader or research author. A diagram-specific Tectonic/PGF
 error retains the existing semantics-preserving TeX fallback.
 
@@ -32,6 +44,10 @@ fallback, a readable DAG rendering, and a multi-page five-column ONP table.
 PDFium extracts text, checks every glyph box against the page bounds, renders
 actual pages, and verifies math values, dash glyphs, complete graph
 labels/edges/boundaries, readable evidence labels, and repeated table headers.
+An additional overprint control compiles `OVERLAP CONTROL` with an obscuring
+`\llap{OBSCURED CONTROL}` on the same baseline; PDFium reports substantial
+glyph overlap and the generation path preserves the TeX/PDF while marking
+publication `Needs review`. It does not guess a semantic correction.
 The deterministic pass regression forces pass 1 and 2 line-layout warnings,
 confirms TeX-only repairs stop after a clean pass 2, and confirms unresolved
 warnings stop after pass 3 with a review status. One-shot and long-form flows
@@ -54,6 +70,20 @@ conditional on the progress still being on screen. The local browser check
 completed successfully; the fixture project/PDFs are temporary and do not
 constitute research results. No AI/provider charges were incurred. GitHub
 workflows on the pushed final SHA remain pending.
+
+Coordinator follow-up feedback at `7f3cac0c27318b0aaca84c4ec925c3d9f8357864`
+identified that page-edge bounds alone miss internal text overlap. This
+follow-up preserves the rendering changes and adds the overprint detector and
+negative control above. Focused `tests/papers.py` passes: four representative
+real PDFs have no overlap/bounds warnings, and the overprint negative control
+is flagged. The one-shot and long-form deterministic end-to-end Tectonic paths
+took 1.166 s and 1.180 s respectively in this run. `./sigma test` passes on
+the follow-up working tree, including the 14 sovereign-cost and 8 MindRouter
+envelope tests, Ruff, formatting, Pyright, frontend typecheck/build, and paper
+tests. No live/paid calls occurred. Rendered checks here use deterministic
+engineering fixtures; the original uploaded ONP and Tadpoles PDFs are not
+regression inputs in this worktree. Overall visual acceptance therefore
+remains **UNMET** pending manual inspection of generated publication PDFs.
 
 ## PR #395 — mandatory TeX proofreading stage (2026-10-31)
 
