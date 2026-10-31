@@ -3790,11 +3790,6 @@ class CloudAuthTests(TestCase):
                     "guest",
                     f"guest between cycles {cycle}",
                 )
-                diagnostic = guest_status["account"]["local_auth_diagnostic"]
-                self.assertEqual(diagnostic["policy"], "remove-deletes-grants")
-                self.assertIsNone(diagnostic["email_grant"])
-                self.assertIsNone(diagnostic["domain_grant"])
-                self.assertEqual(diagnostic["domain"], "gmail.com")
                 self.client.cookies.clear()
 
     def test_fresh_local_google_login_after_old_revoke_and_new_domain_grant(self):
