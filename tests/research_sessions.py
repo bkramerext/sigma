@@ -484,6 +484,7 @@ async def test_start_preflight_does_not_hold_project_or_global_admission_locks(p
         )
         try:
             await asyncio.wait_for(entered.wait(), timeout=2)
+
             # A concurrent request must still be able to acquire both admission
             # locks while the external account check is pending.
             async def acquire_both():
