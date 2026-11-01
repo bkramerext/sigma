@@ -3123,13 +3123,13 @@ def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
         (
             "mathematical",
             "lemmas by logical dependency",
-            "a universal theorem",
+            "a universal proof",
             "chosen metric or field ansatz",
         ),
         (
             "physics",
             "theoretical derivation",
-            "a chosen metric or field ansatz",
+            "A chosen metric or field ansatz",
             "Finite enumeration or numerical pattern matching",
         ),
     )
@@ -3150,9 +3150,7 @@ def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
                 paragraphs=["The bounded source analysis supports a conditional result."]
             ), "fixture-model"
 
-        state = papers._new_work(
-            "a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high"
-        )
+        state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
 
         async def write_long() -> None:
             with patch.object(papers, "_provider_structured", new=fake_stage):
@@ -3207,8 +3205,8 @@ def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
 
         opening, methods, _, _ = papers._paper_style(project_type)
         tex = papers._tex(draft(), [], "f" * 64, investigation_type=project_type)
-        assert rf"\\section{{{opening}}}" in tex
-        assert rf"\\section{{{methods}}}" in tex
+        assert rf"\section{{{opening}}}" in tex
+        assert rf"\section{{{methods}}}" in tex
         assert marker not in papers._paper_style("default")[3]
 
 
