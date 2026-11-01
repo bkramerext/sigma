@@ -5146,8 +5146,9 @@ async def _proofread_tex(
             "provider_calls_attempted": int(result["provider_calls_attempted"]) - prior_attempts,
             "safe_retry_count": int(result["safe_retry_count"]) - prior_retries,
             "elapsed_seconds": int(result["elapsed_seconds"]) - prior_elapsed,
-            "corrections": list(result["corrections"]),
+            "corrections": list(result["corrections"])[sum(len(p["corrections"]) for p in history):],
             "diagnostics": list(result["diagnostics"]),
+            "original_sha256": (history[0]["original_sha256"] if history else result["initial_sha256"]),
         })
         # The completed pass remains durable until the next pass checkpoint is
         # persisted, so interruption never repeats its paid calls.
@@ -5194,10 +5195,11 @@ async def _proofread_tex_single_pass(
             "pass_history": list(pass_history or []),
             "initial_tex": tex,
             "initial_sha256": hashlib.sha256(tex.encode()).hexdigest(),
+            "original_sha256": (pass_history or [{}])[0].get("original_sha256", hashlib.sha256(tex.encode()).hexdigest()),
             "bounds": [[start, end] for start, end in bounds],
             "corrected_chunks": [None] * len(bounds),
             "attempts": ["pending"] * len(bounds),
-            "corrections": [],
+            "corrections": [category for p in (pass_history or []) for category in p["corrections"]],
             "diagnostics": _tex_static_diagnostics(tex),
             "provider_calls_attempted": sum(int(p["provider_calls_attempted"]) for p in (pass_history or [])),
             "provider_calls_prior_at_start": int(state.get("proofreading_calls_prior", 0)),
@@ -5976,7 +5978,7 @@ async def _generate_impl(
                 "correction_categories": sorted(set(proofreading.get("corrections", []))),
                 "unresolved_diagnostics": proofreading.get("diagnostics", [])[:100],
                 "fallback_reason": proofreading.get("fallback_reason"),
-                "original_tex_sha256": proofreading.get("initial_sha256"),
+                "original_tex_sha256": proofreading.get("original_sha256", proofreading.get("initial_sha256")),
                 "corrected_tex_sha256": proofreading.get("final_sha256"),
                 "provider_calls_attempted": int(work.get("proofreading_calls_prior", 0))
                 + int(proofreading.get("provider_calls_attempted", 0)),
