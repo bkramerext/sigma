@@ -10164,6 +10164,8 @@ def main():
         )
         asyncio.run(
             test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage()
+        )
+        asyncio.run(
             test_eighteen_turns_survive_project_edits_and_bounded_context(
                 root / "portfolio-eighteen-turns.sigma"
             )
