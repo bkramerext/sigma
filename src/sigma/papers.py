@@ -1503,6 +1503,20 @@ def _evidence_based_long_plan(
 
     ranked_candidates = {id(note): candidate(note) for note in notes}
 
+    def effective_kind(note: EvidenceNote) -> str:
+        """Keep proposed protocols out of the fallback's findings category."""
+        score, statement, field_path, _refs = ranked_candidates[id(note)]
+        if score < 0:
+            return note.kind
+        path_parts = field_path.casefold().split("/")
+        if "reasoning_steps" in path_parts and re.match(
+            r"(?i)^(?:use|test|evaluate|implement|conduct|obtain|retrieve|report|define|"
+            r"compare|require|fit|establish|specify|prioritize|measure)\b\s+",
+            statement,
+        ):
+            return "method"
+        return note.kind
+
     def bounded_question(value: str, limit: int = 850) -> str:
         """Summarize at a complete sentence/word boundary, never inside a URL."""
         value = " ".join(value.split()).strip()
@@ -1557,7 +1571,9 @@ def _evidence_based_long_plan(
     groups: list[tuple[str, str, list[str], list[EvidenceNote]]] = []
     for heading, purpose, kinds in categories:
         relevant = [
-            note for note in notes if note.kind in kinds and ranked_candidates[id(note)][0] >= 0
+            note
+            for note in notes
+            if effective_kind(note) in kinds and ranked_candidates[id(note)][0] >= 0
         ]
         refs = list(
             dict.fromkeys(
@@ -1611,7 +1627,7 @@ def _evidence_based_long_plan(
                 else:
                     _score, statement, field_path, valid_refs = ranked_candidates[id(note)]
                     refs_for_claim = list(valid_refs)[:20]
-                    kind = note.kind
+                    kind = effective_kind(note)
                 claim_id = f"C{len(claims) + 1}"
                 claims.append(
                     PaperClaim(
@@ -1681,7 +1697,7 @@ def _evidence_based_long_plan(
     questions = [
         ranked_candidates[id(note)][1]
         for note in notes
-        if note.kind == "question" and ranked_candidates[id(note)][0] >= 0
+        if effective_kind(note) == "question" and ranked_candidates[id(note)][0] >= 0
     ]
     warnings = [
         (
@@ -1701,14 +1717,18 @@ def _evidence_based_long_plan(
     # report. Build a *specific but qualified* abstract from the saved index;
     # never infer a proof, experiment, or resolution from a result-shaped note.
     def complete_excerpt(kind: str) -> str | None:
-        eligible = [
-            ranked_candidates[id(note)]
-            for note in notes
-            if note.kind == kind
-            and ranked_candidates[id(note)][0] >= 0
-            and len(ranked_candidates[id(note)][1]) <= 260
-            and ranked_candidates[id(note)][1].endswith((".", "?", "!"))
-        ]
+        eligible: list[tuple[int, str, str, tuple[str, ...]]] = []
+        for note in notes:
+            score, statement, field_path, refs = ranked_candidates[id(note)]
+            if score < 0 or effective_kind(note) != kind:
+                continue
+            # A long, complete source field can still support a concise abstract
+            # sentence. Select only a whole first sentence; never slice a claim.
+            excerpt = statement
+            if len(excerpt) > 460:
+                excerpt = re.split(r"(?<=[.!?])\s+", excerpt, maxsplit=1)[0]
+            if len(excerpt) <= 460 and excerpt.endswith((".", "?", "!")):
+                eligible.append((score, excerpt, field_path, refs))
         return (
             max(eligible, default=(-1, "", "", ()), key=lambda item: (item[0], item[1]))[1] or None
         )
@@ -1723,7 +1743,7 @@ def _evidence_based_long_plan(
     abstract_parts = [opening]
     if reported_result:
         abstract_parts.append(
-            "The saved research reports a provisional finding, not independently "
+            "The frozen record includes a source-linked finding that is not independently "
             f"verified here: {reported_result}"
         )
     else:
@@ -1741,6 +1761,14 @@ def _evidence_based_long_plan(
         "or proof steps absent from the frozen record."
     )
     abstract = " ".join(abstract_parts)
+    abstract_claim_ids = [
+        claim.id
+        for claim in claims
+        if (reported_result and claim.statement.startswith(reported_result))
+        or (recorded_failure and claim.statement.startswith(recorded_failure))
+    ]
+    if not abstract_claim_ids:
+        abstract_claim_ids = [claim.id for claim in claims[:2]]
     conclusion_claims = [
         next((claim for claim in claims if claim_kinds.get(claim.id) == kind), None)
         for kind in ("result", "negative", "limitation", "question")
@@ -1818,7 +1846,7 @@ def _evidence_based_long_plan(
     return LongPaperPlan(
         title=title,
         abstract=abstract,
-        abstract_claim_ids=[claim.id for claim in claims[:2]],
+        abstract_claim_ids=abstract_claim_ids,
         problem_framing=[f"The investigation asks: {question}"],
         problem_framing_claim_ids=[claims[0].id],
         methods=[

@@ -3104,7 +3104,7 @@ def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
 
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
-        "biology": ("Introduction and biological context", "cross-species limitations"),
+        "biology": ("Introduction and biological context", "cross-species limits"),
         "mathematical": ("Introduction", "bridges between logical steps"),
         "military": ("Question and operational context", "alternative courses of action"),
     }
@@ -4442,6 +4442,68 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
     conclusion = " ".join(plan.conclusions)
     assert "stable difference" in conclusion and "no stable difference" in conclusion
     assert "process restart" in conclusion
+
+
+def test_fallback_abstract_uses_complete_result_and_keeps_proposals_out_of_findings() -> None:
+    result_ref = "artifact:conditional-result"
+    proposal_ref = "artifact:proposed-pilot"
+    result = (
+        "Under the stated partition model, cached approval cannot guarantee immediate "
+        "revocation while preserving disconnected admission. This limitation applies only "
+        "when the replica has neither authoritative information nor an earlier grant. "
+        + "Additional source detail supports the same conditional result. "
+        * 5
+    )
+    proposal = "Use matched campus cohorts and report clustered uncertainty at the end."
+    notes = [
+        papers.EvidenceNote(
+            statement=f"claim_or_question: {result}",
+            kind="result",
+            evidence_refs=[result_ref],
+        ),
+        papers.EvidenceNote(
+            statement=f"argument: {proposal}",
+            kind="result",
+            evidence_refs=[proposal_ref],
+        ),
+    ]
+    sources = [
+        {
+            "id": result_ref,
+            "kind": "artifact",
+            "data": {"claim_or_question": result},
+        },
+        {
+            "id": proposal_ref,
+            "kind": "artifact",
+            "data": {"investigator_output": {"reasoning_steps": [{"argument": proposal}]}},
+        },
+    ]
+    plan = papers._evidence_based_long_plan(
+        {
+            "title": "A partition and policy analysis",
+            "problem": "When can remote access remain safe?",
+        },
+        notes,
+        {result_ref, proposal_ref},
+        sources,
+    )
+    assert "cached approval cannot guarantee immediate revocation" in plan.abstract
+    assert "does not establish an independently verified resolution" not in plan.abstract
+    assert "Use matched campus cohorts" not in plan.abstract
+    assert "Use matched campus cohorts" not in " ".join(
+        claim.statement for claim in plan.claims if claim.id in plan.sections[0].claim_ids
+    )
+    proposed_claim = next(claim for claim in plan.claims if claim.statement == proposal)
+    methods = next(
+        section
+        for section in plan.sections
+        if section.heading == "Research methods and proposed approaches"
+    )
+    assert proposed_claim.id in methods.claim_ids
+    assert plan.abstract_claim_ids == [
+        next(claim.id for claim in plan.claims if claim.statement == result)
+    ]
 
 
 def test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness() -> None:
