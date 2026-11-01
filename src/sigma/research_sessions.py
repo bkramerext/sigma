@@ -2270,7 +2270,7 @@ AMBIENT_RESEARCH_RUBRIC = (
 # Phase 2 methods are short, testable behavioral objectives, not a second
 # generic proof rubric. The primary Investigator/Skeptic guidance remains in force.
 # A saved provider request contains this version in its exact request audit.
-RESEARCH_METHOD_VERSION = "phase2-i2-v1"
+RESEARCH_METHOD_VERSION = "phase2-i2-v2"
 RESEARCH_DISCOVERY_GUIDANCE = (
     "Prefer one decisive, feasible reduction in uncertainty over repeating future-work proposals. "
     "Identify the strongest material open assumption or obligation and perform an exact "
@@ -2283,6 +2283,21 @@ RESEARCH_DISCOVERY_GUIDANCE = (
     "500 characters; keep substantive qualifications in method, reasoning_steps and "
     "open_obligations rather than cutting the status off mid-sentence. "
 )
+# Cross-cutting research practice from NASEM reproducibility, NASEM modeling
+# credibility, Cochrane evidence selection, and SEP on competing explanations.
+# Apply the shared method before the relevant domain lens.
+RESEARCH_SHARED_VALIDATION_GUIDANCE = (
+    "Across disciplines, specify the question, key definitions and scope, the "
+    "premises and availability of the supporting evidence, and a feasible "
+    "discriminating check or counterexample. Test an important competing "
+    "explanation, apply an independent check where feasible, and preserve "
+    "negative findings, corrections and still-unresolved questions. "
+    "Distinguish formal deductions, conditional models, computations, observed "
+    "results and conjectures. A source pointer is not an inspected source, and "
+    "multiple agents agreeing is not independent confirmation. Select only "
+    "methods relevant to this question; empirical measurement protocols are "
+    "not mandatory for a pure mathematical proof. "
+)
 RESEARCH_SKEPTIC_METHOD_GUIDANCE = (
     "Test the most consequential premise, middle inference, counterexample or "
     "observational equivalence, not the amount of prose. State a concrete outcome "
@@ -2290,12 +2305,23 @@ RESEARCH_SKEPTIC_METHOD_GUIDANCE = (
     "can do so, record the identifiability limit and leave the claim conditional. "
     "Preserve valid bounded results while rejecting only their unjustified extension. "
 )
+# Mathematical discovery methods are *not* limited to combinatorics,
+# recurrence problems, discrete mathematics or numerical experiments.
+# Sources: T. Tao, Solving Mathematical Problems / Be sceptical of your own
+# work; AMS on research examples and proofs; general proofwriting guidance.
 RESEARCH_MATH_METHOD_GUIDANCE = (
-    "For mathematics, check quantified domain, boundary and initial cases, proof "
-    "dependencies, the weakest unproved lemma, and phase/order of algebraic steps. "
-    "An exact finite computation can refute a universal conjecture but cannot "
-    "establish it. Prove a proposed recurrence for all required indices and prove "
-    "any asymptotic rate separately; otherwise label each as unproved. "
+    "In any branch of mathematics, first formalize exact objects, domains, "
+    "hypotheses, quantifiers and desired implication. Explore meaningful "
+    "special cases, analogies and attempted counterexamples to expose the "
+    "essential obstruction; derive useful intermediate lemmas or reformulations. "
+    "Choose a proof method appropriate to the field and proposition (for "
+    "example construction, contradiction, induction, algebraic manipulation, "
+    "analysis or a rigorous bound), not a canned method from another field. "
+    "For every central inference record its assumptions and dependency; "
+    "check boundary/degenerate cases and both directions of an equivalence. "
+    "Finite computations, randomized searches and numerical patterns may suggest "
+    "or refute propositions but do not prove universal claims. Preserve correct "
+    "partial theorems, explicit countermodels and the precise unproved step. "
 )
 RESEARCH_BIOLOGY_METHOD_GUIDANCE = (
     "For biological hypotheses, distinguish organism or sample as the experimental "
@@ -2311,18 +2337,22 @@ RESEARCH_SYSTEMS_METHOD_GUIDANCE = (
     "minimal indistinguishable history or changed-assumption counterexample and "
     "identify a feasible observation oracle before claiming effectiveness. "
 )
+# Physics may be theoretical, experimental, phenomenological or computational.
+# Sources: Feynman Lectures I.1; NASEM VVUQ chapters 1, 3 and 7;
+# NIST TN 1297 when empirical uncertainty is actually applicable.
 RESEARCH_PHYSICS_METHOD_GUIDANCE = (
-    "For theoretical physics, define the physical quantities, units, metric signature, "
-    "coordinate gauge and explicit assumptions before calculating. Distinguish a "
-    "prescribed geometric metric from a self-consistent Einstein-equation source, "
-    "a realizable stress-energy configuration, a dynamically stable solution and an "
-    "engineerable system. Check tensor/curvature and dimensional identities, limiting "
-    "cases, causal horizons, energy conditions, conservation, backreaction and "
-    "perturbative stability where relevant. Separate invariant physical observables "
-    "from coordinate artifacts, and test the strongest countermodel with a feasible "
-    "discriminating calculation. A numerically computed tensor in one model is not "
-    "evidence the required matter or propulsion exists. Mark inaccessible primary "
-    "physics literature and absent empirical validation explicitly. "
+    "For any branch of physics, identify the physical question, measurable "
+    "or well-defined quantities, units, regimes, approximations, symmetries "
+    "and applicable conservation laws. Match methods to the work: derive "
+    "predictions and internal consistency for theory; identify instrument "
+    "and sampling uncertainty and controls for observation; validate numerical "
+    "solutions against equations, convergence and sensitivity for simulation. "
+    "Separate mathematical consistency, computed predictions, observations "
+    "that test them and evidence of physical realizability. Check limiting "
+    "cases, invariant or operationally measurable effects, countermodels and "
+    "domains of validity. An idealized model alone is not an observed physical "
+    "effect. Do not force general relativity, energy conditions or an "
+    "experimental protocol onto unrelated physics problems. "
 )
 RESEARCH_TRADE_STUDY_METHOD_GUIDANCE = (
     "For economic or engineering trade studies, compare feasible alternatives on "
@@ -2330,6 +2360,49 @@ RESEARCH_TRADE_STUDY_METHOD_GUIDANCE = (
     "Check failure/partition conditions, liabilities and subgroup effects before "
     "asserting a benefit. State which inputs are measured versus hypothetical. "
 )
+RESEARCH_CHEMISTRY_METHOD_GUIDANCE = (
+    "For chemistry, choose relevant molecular mechanism or reaction model, "
+    "test stoichiometry, mass/charge conservation and conditions, and distinguish "
+    "computed energies or proposed synthesis from measured outcomes. Use proper "
+    "controls, uncertainty and safety constraints when describing experiments. "
+)
+RESEARCH_PHILOSOPHY_METHOD_GUIDANCE = (
+    "For philosophical arguments, clarify meanings, premises and rival accounts; "
+    "test validity with countermodels and edge cases. Distinguish conceptual "
+    "coherence and inference from an empirical claim requiring observation. "
+)
+RESEARCH_LEGAL_METHOD_GUIDANCE = (
+    "For legal research, identify jurisdiction, controlling authority and "
+    "effective dates; distinguish a cited primary legal text from an "
+    "unverified interpretation and examine adverse precedent or exceptions. "
+)
+RESEARCH_OTHER_METHOD_GUIDANCE = (
+    "Match the chosen inquiry to its actual discipline: determine the unit "
+    "of analysis, relevant primary evidence, rival explanation and valid "
+    "inference standard; do not transplant methods from unrelated fields. "
+)
+RESEARCH_MODE_METHOD_GUIDANCE: dict[str, str] = {
+    "mathematical": RESEARCH_MATH_METHOD_GUIDANCE,
+    "physics": RESEARCH_PHYSICS_METHOD_GUIDANCE,
+    "biology": RESEARCH_BIOLOGY_METHOD_GUIDANCE,
+    "computer_science": RESEARCH_SYSTEMS_METHOD_GUIDANCE,
+    "engineering": RESEARCH_TRADE_STUDY_METHOD_GUIDANCE,
+    "economics": RESEARCH_TRADE_STUDY_METHOD_GUIDANCE,
+    "chemistry": RESEARCH_CHEMISTRY_METHOD_GUIDANCE,
+    "philosophy": RESEARCH_PHILOSOPHY_METHOD_GUIDANCE,
+    "law": RESEARCH_LEGAL_METHOD_GUIDANCE,
+    "military": RESEARCH_OTHER_METHOD_GUIDANCE,
+    "religion": RESEARCH_OTHER_METHOD_GUIDANCE,
+    "default": RESEARCH_OTHER_METHOD_GUIDANCE,
+}
+
+
+def _research_mode_guidance(context: dict[str, Any]) -> str:
+    """Select one specific research lens from an actual persisted project type."""
+    kind = context.get("investigation_type")
+    if isinstance(kind, str):
+        return RESEARCH_MODE_METHOD_GUIDANCE.get(kind, RESEARCH_OTHER_METHOD_GUIDANCE)
+    return RESEARCH_OTHER_METHOD_GUIDANCE
 
 INVESTIGATOR_GUIDANCE = (
     "Examine the exact project objective and the selected strategy as a proposed approach. "
@@ -2760,12 +2833,9 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + guidance
         + " "
         + RESEARCH_DISCOVERY_GUIDANCE
+        + RESEARCH_SHARED_VALIDATION_GUIDANCE
         + (RESEARCH_SKEPTIC_METHOD_GUIDANCE if role == "skeptic" else "")
-        + (RESEARCH_MATH_METHOD_GUIDANCE if context.get("investigation_type") == "mathematical" else "")
-        + (RESEARCH_PHYSICS_METHOD_GUIDANCE if context.get("investigation_type") == "physics" else "")
-        + (RESEARCH_BIOLOGY_METHOD_GUIDANCE if context.get("investigation_type") == "biology" else "")
-        + (RESEARCH_SYSTEMS_METHOD_GUIDANCE if context.get("investigation_type") == "computer_science" else "")
-        + (RESEARCH_TRADE_STUDY_METHOD_GUIDANCE if context.get("investigation_type") in {"engineering", "economics"} else "")
+        + _research_mode_guidance(context)
         + " "
         + AMBIENT_RESEARCH_RUBRIC
         + " Keep responses compact: do not duplicate open obligations or lengthy source text; "
