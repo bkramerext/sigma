@@ -8229,6 +8229,43 @@ def _commit_portfolio_review(
             f"The Skeptic's decisive-counterexample stop for {branch['strategy_title']} conflicted with its evidence; the unsupported stop signal was not accepted.",
         )
 
+    # A portfolio's scheduled rounds are an investigation budget, not a
+    # license for one model to terminate its strategy on a provisional claim.
+    # Keep a contested counterexample or locally exhausted path under review
+    # until its configured rounds run, without inventing provider allowance.
+    if (
+        len(record.get("strategy_runs", [])) > 1
+        and cycle < int(record.get("cycle_limit", 3))
+        and int(record.get("calls_used", 0)) + 2 <= int(record.get("call_limit", CALL_LIMIT))
+        and decision in {
+            "stop_decisive_counterexample",
+            "stop_no_progress",
+            "stop_productive_conclusion",
+        }
+        and not objective_candidate
+    ):
+        proposed_stop = decision
+        next_question = (
+            output["next_question"].strip()
+            or next((item.strip() for item in output["remaining_obligations"] if item.strip()), "")
+            or (
+                "Independently test the reported counterexample against the exact project objective, "
+                "check the assumptions, and seek a falsifying case."
+                if proposed_stop == "stop_decisive_counterexample"
+                else "Adversarially test the proposed conclusion against the original objective and "
+                "identify a new discriminating test."
+                if proposed_stop == "stop_productive_conclusion"
+                else "Find a different falsifiable approach to this strategy's objective and report "
+                "what the previous attempt failed to establish."
+            )
+        )
+        decision = "revise"
+        _event(
+            record,
+            "coordinator.provisional_stop_reopened",
+            f"{branch['strategy_title']}: {proposed_stop} was provisional; continuing to independently test the claim within the configured rounds.",
+        )
+
     artifact_id = str(uuid4())
     valid_cycles = {
         item.get("strategy_cycle", item["sequence"]): item["id"] for item in branch_artifacts
@@ -9833,7 +9870,13 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
         why = (
             "the shared turn limit was reached"
             if calls >= call_limit
-            else "the remaining shared turns could not fund another complete Investigator/Skeptic pair"
+            else "the affected strategies reached their configured per-strategy round limit; "
+            "unused shared turns are not a provider allowance or funding shortage"
+            if all(
+                int(branch.get("cycle", 0)) >= cycle_limit for branch in budget_stopped
+            )
+            else "the scheduler could not admit another complete Investigator/Skeptic pair "
+            "under the configured per-session and per-strategy limits"
         )
         return (
             f"{limit_kind}_limit_reached",
