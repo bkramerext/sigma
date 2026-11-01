@@ -192,8 +192,8 @@ def main() -> None:
                 if item["id"] == "ref-cleanup"
             )
             assert cleaned["research_standards_references"] == [
-                "http://example.org/STYLE.html",
                 "http://example.org/style.html",
+                "http://example.org/STYLE.html",
             ]
             assert cleaned["publication_standards_references"] == [
                 "https://example.com/guide",
