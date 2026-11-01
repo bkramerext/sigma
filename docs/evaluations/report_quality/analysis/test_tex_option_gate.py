@@ -25,7 +25,7 @@ class TexOptionGateTests(unittest.TestCase):
     def test_long_url_warning_is_context_not_proof(self):
         tex = "Header\nhttps://example.org/long_path/file.pdf\n"
         result = audit_tex(tex, {"generation": {"layout_warnings": ["warning: report.tex:2: Overfull \\hbox (99pt too wide)"]}})
-        self.assertEqual(result["overfull_line_contexts"][0]["candidate_signals"], ["raw_url"])
+        self.assertEqual(result["overfull_line_contexts"][0]["candidate_signals"], ["nearby_raw_url"])
         self.assertEqual(result["review_flags"], [])
 
 
