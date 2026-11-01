@@ -131,6 +131,17 @@ function sessionForDisplay(value: unknown): ResearchSession | null {
   const branches = Array.isArray(raw.strategy_runs) ? raw.strategy_runs.filter(branch =>
     !!branch && typeof branch === 'object' && !Array.isArray(branch))
     .map(branch => ({ ...branch, artifacts: Array.isArray(branch.artifacts) ? branch.artifacts : [] })) : undefined;
+  const priorFindings = Array.isArray(raw.prior_session_findings)
+    ? raw.prior_session_findings.filter(finding =>
+      !!finding && typeof finding === 'object' && !Array.isArray(finding))
+      .map(finding => ({
+        ...finding,
+        assumptions: Array.isArray(finding.assumptions) ? finding.assumptions : [],
+        objections: Array.isArray(finding.objections) ? finding.objections : [],
+        open_obligations: Array.isArray(finding.open_obligations) ? finding.open_obligations : [],
+        obligation_reviews: Array.isArray(finding.obligation_reviews) ? finding.obligation_reviews : [],
+      }))
+    : [];
   return {
     ...raw,
     session_number: typeof raw.session_number === 'number' && Number.isFinite(raw.session_number) ? raw.session_number : 0,
@@ -147,6 +158,7 @@ function sessionForDisplay(value: unknown): ResearchSession | null {
     events: Array.isArray(raw.events) ? raw.events : [],
     artifacts: Array.isArray(raw.artifacts) ? raw.artifacts : [],
     strategy_runs: branches,
+    prior_session_findings: priorFindings,
     outcome: {
       ...(outcome ?? {}),
       assessment: assessments.includes(outcome?.assessment as typeof assessments[number])
