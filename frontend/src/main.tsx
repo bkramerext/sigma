@@ -193,6 +193,20 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   if (!hasCompleteFinding) return { cause: 'The session was stopped before it saved a complete finding.', next: 'Resume when you are ready; backend safeguards still apply.' };
   return { cause: 'The session is stopped. Saved research is preserved.', next: 'Review the saved findings, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
 }
+
+function StoppedSessionNotice({ session, dismissed, onDismiss }: {
+  session: ResearchSession; dismissed: boolean; onDismiss: () => void;
+}) {
+  if (dismissed) return null;
+  const guidance = stoppedSessionGuidance(session);
+  const hasCompleteFinding = session.artifacts.some(artifact =>
+    Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
+  return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${session.session_number} stopped and what to do next`}>
+    <SessionNoticeDismiss number={session.session_number} onDismiss={onDismiss}/>
+    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
+    {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
+  </div>;
+}
 type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
 type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
 type CurrentQuestion = { id: string; text: string; status: string; actionable: boolean; sources: EvidencePointer[]; narrative_resolution_sources: EvidencePointer[]; note: string; dispositions: { source: EvidencePointer; valid: boolean; rationale: string }[] };
@@ -437,7 +451,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
 
 type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
 
-type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; children: ReactNode };
+type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; children: ReactNode; fallback?: ReactNode };
 type SessionRenderBoundaryState = { error: Error | null };
 
 /** A single corrupt historical record must not take down the project workspace. */
@@ -462,7 +476,7 @@ class SessionRenderBoundary extends Component<SessionRenderBoundaryProps, Sessio
   }
 
   render() {
-    if (this.state.error) return <li className="session-row session-render-error" data-session-id={this.props.sessionId}>
+    if (this.state.error) return this.props.fallback ?? <li className="session-row session-render-error" data-session-id={this.props.sessionId}>
       <p role="alert"><strong>Session #{this.props.sessionNumber} could not be displayed.</strong> Its saved record remains available in the project export. Details: {this.state.error.message}</p>
     </li>;
     return this.props.children;
@@ -1464,7 +1478,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
+                {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
