@@ -14,25 +14,23 @@ EVIDENCE.mkdir(parents=True, exist_ok=True)
 
 
 def project(page, title: str, type_id: str) -> dict:
-    created = page.request.post(
-        f"{FIXTURE_URL}/api/projects/create",
-        data={
-            "title": title,
-            "problem": "Preserve the saved type context.",
-            "investigation_type": type_id,
-        },
+    created = page.evaluate(
+        """async ({title, typeId}) => {
+          const response = await fetch('/api/projects/create', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({title, problem: 'Preserve the saved type context.', investigation_type: typeId})});
+          return {status: response.status, body: await response.json()};
+        }""",
+        {"title": title, "typeId": type_id},
     )
-    assert created.status == 201, created.text()
-    result = created.json()
-    strategy = page.request.post(
-        f"{FIXTURE_URL}/api/projects/strategies",
-        data={
-            "path": result["path"],
-            "title": "Inspect",
-            "approach": "Inspect the saved research evidence.",
-        },
+    assert created["status"] == 201, created["body"]
+    result = created["body"]
+    strategy = page.evaluate(
+        """async ({path}) => {
+          const response = await fetch('/api/projects/strategies', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({path, title: 'Inspect', approach: 'Inspect the saved research evidence.'})});
+          return {status: response.status, body: await response.json()};
+        }""",
+        {"path": result["path"]},
     )
-    assert strategy.status == 201, strategy.text()
+    assert strategy["status"] == 201, strategy["body"]
     return result
 
 
@@ -52,7 +50,6 @@ with sync_playwright() as playwright:
     errors: list[str] = []
     api_requests: list[tuple[str, dict | None]] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.on("dialog", lambda native_dialog: native_dialog.accept())
 
     def observe_request(request) -> None:
         if "/api/" not in request.url:
@@ -72,6 +69,9 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", proxy)
     page.goto(BASE_URL)
+    page.evaluate(
+        "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
+    )
 
     # The native Project Types dialog traps keyboard focus, closes on Escape,
     # restores focus, and keeps the Literature/open-book catalog read-only.
@@ -80,6 +80,15 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_be_checked()
+    checkbox = dialog.get_by_role("checkbox", name="Show built-in project types")
+    for width in (1440, 390):
+        page.set_viewport_size({"width": width, "height": 844})
+        box = checkbox.bounding_box()
+        label = checkbox.locator("xpath=..")
+        label_box = label.bounding_box()
+        assert box and label_box and 14 <= box["width"] <= 18 and 14 <= box["height"] <= 18
+        assert label_box["width"] < 300 and box["x"] < label_box["x"] + label_box["width"]
+    page.set_viewport_size({"width": 1440, "height": 1000})
     expect(dialog.get_by_text("Literature", exact=True).first).to_be_visible()
     assert dialog.get_by_text("Other", exact=True).count() == 0
     literature = dialog.locator('.project-type-card:has(> summary strong:text-is("Literature"))')
@@ -199,9 +208,30 @@ with sync_playwright() as playwright:
     )
     assert parent_after_cancel["scope"] == "Original copied research scope"
 
+    # Remove multiple referenced types in one Save and retain each original name.
+    types_button.click()
+    dialog = page.get_by_role("dialog", name="Project Types")
+    dialog.get_by_role("button", name="Add project type").click()
+    second_card = dialog.locator(".project-type-card[open]")
+    second_card.get_by_label("Name").fill("Browser Second")
+    second_card.get_by_label("Scope").fill("Second saved scope")
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/project-types") and response.request.method == "PUT"
+        )
+    ):
+        dialog.get_by_role("button", name="Save", exact=True).click()
+    second_type = next(
+        item
+        for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
+        if item["name"] == "Browser Second"
+    )
+
     # Project owns a frozen snapshot. Removing its type at Save warns about use,
     # but the derived custom type remains independent from its removed origin.
     affected = project(page, "Deleted custom parent", parent_type["id"])
+    project(page, "Deleted second custom type", second_type["id"])
+    before = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     parent_card = dialog.locator(
@@ -209,16 +239,46 @@ with sync_playwright() as playwright:
     )
     parent_card.locator("summary").click()
     parent_card.locator(".project-type-card-actions button").click()
+    second_type_card = dialog.locator(
+        '.project-type-card:has(> summary strong:text-is("Browser Second"))'
+    )
+    second_type_card.locator("summary").click()
+    second_type_card.locator(".project-type-card-actions button").click()
     assert (
         page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"]
         == before["revision"]
     )
-    page.get_by_role("button", name="Save", exact=True).click()
+    assert (
+        page.request.get(f"{FIXTURE_URL}/api/project-types/{parent_type['id']}/usage").json()[
+            "project_count"
+        ]
+        == 1
+    )
+    assert (
+        page.request.get(f"{FIXTURE_URL}/api/project-types/{second_type['id']}/usage").json()[
+            "project_count"
+        ]
+        == 1
+    )
+    with page.expect_response(
+        lambda response: (
+            response.url.endswith("/api/project-types") and response.request.method == "PUT"
+        )
+    ):
+        page.get_by_role("button", name="Save", exact=True).click()
+    confirmations = page.evaluate("window.__projectTypeConfirmations")
+    assert any(
+        "Browser Parent" in message and "1 project" in message for message in confirmations
+    ), confirmations
+    assert any(
+        "Browser Second" in message and "1 project" in message for message in confirmations
+    ), confirmations
     expect(dialog).not_to_be_visible()
     catalog_after_delete = page.request.get(f"{FIXTURE_URL}/api/project-types").json()[
         "project_types"
     ]
     assert all(item["id"] != parent_type["id"] for item in catalog_after_delete)
+    assert all(item["id"] != second_type["id"] for item in catalog_after_delete)
     derived_after_delete = next(
         item for item in catalog_after_delete if item["id"] == child_type["id"]
     )
@@ -227,6 +287,7 @@ with sync_playwright() as playwright:
 
     open_project(page, affected["path"])
     expect(page.get_by_role("heading", name="Deleted custom parent")).to_be_visible()
+    expect(page.get_by_text("DESCRIPTION AND ACCEPTANCE CRITERIA", exact=True)).to_be_visible()
     expect(page.get_by_text("Project type unavailable", exact=True).first).to_be_visible()
     expect(page.get_by_role("button", name="Export project")).to_be_visible()
     with page.expect_download() as download_info:

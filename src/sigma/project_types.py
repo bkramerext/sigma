@@ -65,13 +65,17 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
             raise ProjectError(f"{field} contains an invalid URL")
         from urllib.parse import urlsplit, urlunsplit
 
-        parsed = urlsplit(item.strip())
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username:
+        try:
+            parsed = urlsplit(item.strip())
+            hostname = parsed.hostname
+            port = parsed.port
+        except ValueError as exc:
+            raise ProjectError(f"{field} contains an invalid URL") from exc
+        if parsed.scheme not in {"http", "https"} or not hostname or parsed.username:
             raise ProjectError(f"{field} URLs must use HTTP or HTTPS and include a host")
-        host = parsed.hostname.casefold()
+        host = hostname.casefold()
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
-        port = parsed.port
         if (
             port is not None
             and not (parsed.scheme.casefold() == "https" and port == 443)

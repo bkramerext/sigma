@@ -252,6 +252,18 @@ def exercise(ui_url: str, root: Path) -> None:
         sample_group = page.locator("details.sample-type-group").filter(
             has_text="Did Jesus Use Cannabis?"
         )
+        qubit_group = page.locator("details.sample-type-group").filter(
+            has_text="When Does Qubit Decoherence Require a Non-Markovian Model?"
+        )
+        expect(qubit_group).to_be_visible()
+        qubit_group.evaluate("element => { element.open = true; }")
+        expect(qubit_group.locator("summary")).to_contain_text("Physics")
+        expect(qubit_group.locator("summary svg.research-type-icon-physics")).to_be_visible()
+        expect(
+            qubit_group.get_by_role(
+                "button", name="Open When Does Qubit Decoherence Require a Non-Markovian Model?"
+            )
+        ).to_be_visible()
         sample_group.evaluate("element => { element.open = true; }")
         expect(sample_group.locator("button.sample-open")).to_be_visible()
         if page.get_by_text("Authentication required.").count():

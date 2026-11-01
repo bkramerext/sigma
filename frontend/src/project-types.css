@@ -11,8 +11,8 @@
 .project-types-body { flex: 1 1 auto; overflow: auto; padding: 16px 20px 22px; }
 .project-types-body > section { margin-top: 18px; }
 .project-types-body h3 { margin: 0 0 9px; color: #edc38d; font: 400 17px/1.35 Georgia, serif; }
-.project-types-checkbox { display: flex; align-items: center; gap: 9px; color: #c4ced8; }
-.project-types-checkbox input { accent-color: #bc7e58; }
+.project-types-checkbox { display: inline-flex; align-items: center; gap: 8px; width: fit-content; color: #c4ced8; cursor: pointer; }
+.project-types-dialog .project-types-checkbox input[type="checkbox"] { box-sizing: border-box; display: inline-block; flex: 0 0 16px; width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; padding: 0; accent-color: #bc7e58; }
 .project-type-card { margin: 7px 0; border: 1px solid #604832; border-radius: 6px; background: #0b141e; }
 .project-type-card > summary { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 6px 11px; color: #e5c49c; cursor: pointer; list-style: none; }
 .project-type-card > summary::-webkit-details-marker { display: none; }

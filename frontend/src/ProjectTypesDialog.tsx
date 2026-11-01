@@ -22,6 +22,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
+  const initialCustomNames = useRef<Map<string, string>>(new Map());
   const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
@@ -51,6 +52,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     setDrafts(data.project_types.filter(item => item.user_defined));
     setPlaceholderIcon(data.icons.placeholder);
     initialCustomIds.current = data.project_types.filter(item => item.user_defined).map(item => item.id);
+    initialCustomNames.current = new Map(data.project_types.filter(item => item.user_defined).map(item => [item.id, item.name]));
     setRevision(data.revision);
   }
   useEffect(() => { void load().catch(cause => setError(cause instanceof Error ? cause.message : String(cause))); }, []);
@@ -76,12 +78,11 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
       const confirmedRemovals: Record<string, number> = {};
       for (const id of removed) {
-        const item = drafts.find(candidate => candidate.id === id);
         const usageResponse = await fetch(`/api/project-types/${encodeURIComponent(id)}/usage`, { cache: 'no-store' });
         const usage = await usageResponse.json() as { project_count: number };
         if (!usageResponse.ok) throw new Error('Could not check which projects use a removed type.');
         confirmedRemovals[id] = usage.project_count;
-        if (usage.project_count && !window.confirm(`Remove “${item?.name ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} will keep their saved type settings and show a missing-type warning.`)) return;
+        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return;
       }
       const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_types: drafts, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();

@@ -63,6 +63,22 @@ def main() -> None:
                     "icon": _placeholder(),
                     "research_standards_references": ["javascript:alert(1)"],
                 },
+                *[
+                    {
+                        "name": f"Bad URL {index}",
+                        "scope": "Research",
+                        "icon": _placeholder(),
+                        "research_standards_references": [url],
+                    }
+                    for index, url in enumerate(
+                        (
+                            "https://example.com:invalid/path",
+                            "https://[broken/path",
+                            "https://example.com:99999/",
+                        ),
+                        start=1,
+                    )
+                ],
             ):
                 try:
                     project_types.save_type(invalid)
@@ -80,6 +96,20 @@ def main() -> None:
             assert catalog.status_code == 200
             revision = catalog.json()["revision"]
             placeholder = _placeholder()
+            for bad_url in (
+                "https://example.com:invalid/path",
+                "https://[broken/path",
+                "https://example.com:99999/",
+            ):
+                invalid = _record("bad-reference", "Bad reference", "Research", placeholder)
+                invalid["research_standards_references"] = [bad_url]
+                response = client.put(
+                    "/api/project-types",
+                    json={"project_types": [invalid], "expected_revision": revision},
+                )
+                assert response.status_code == 400, (bad_url, response.status_code, response.text)
+                assert client.get("/api/project-types").json()["revision"] == revision
+                assert project_types.custom_types() == []
             parent = _record("draft-parent", "Draft parent", "Copied scope", placeholder)
             child = _record(
                 "draft-child",
