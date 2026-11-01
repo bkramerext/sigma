@@ -4,6 +4,7 @@ Saved research records are authoritative. This module changes only the model
 dispatch packet and never alters a saved artifact or treats an omitted extract
 as verified evidence.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,22 +48,24 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             continue
         # Compact optional extracts before material evidence, then older
         # entries before newer ones within each priority class.
-        material_ids = {
-            source_id
-            for group in manifest.get("sources", [])
-            if isinstance(group, dict)
-            and group.get("category") == "current_session_material_evidence"
-            and group.get("status") == "selected"
-            for source_id in group.get("source_ids", [])
-            if isinstance(source_id, str)
-        } if field == "prior_artifacts" else set()
-        indices = sorted(
-            range(len(entries)),
-            key=lambda i: (
-                isinstance(entries[i], dict) and entries[i].get(id_field) in material_ids,
-                i,
-            ),
+        material_ids = (
+            {
+                source_id
+                for group in manifest.get("sources", [])
+                if isinstance(group, dict)
+                and group.get("category") == "current_session_material_evidence"
+                and group.get("status") == "selected"
+                for source_id in group.get("source_ids", [])
+                if isinstance(source_id, str)
+            }
+            if field == "prior_artifacts"
+            else set()
         )
+        def is_material(index: int) -> bool:
+            item = entries[index]
+            return isinstance(item, dict) and item.get(id_field) in material_ids
+
+        indices = sorted(range(len(entries)), key=lambda i: (is_material(i), i))
         for index in indices:
             entry = entries[index]
             if _bytes(context) <= limit:
@@ -124,7 +127,9 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
         previous = manifest.get("dispatch_budget_compaction", {})
         prior_counts = previous.get("counts", {}) if isinstance(previous, dict) else {}
         prior_ids = previous.get("ids", {}) if isinstance(previous, dict) else {}
-        prior_unlisted = previous.get("unlisted_id_counts", {}) if isinstance(previous, dict) else {}
+        prior_unlisted = (
+            previous.get("unlisted_id_counts", {}) if isinstance(previous, dict) else {}
+        )
         counts = dict(prior_counts)
         ids = {field: list(values) for field, values in prior_ids.items()}
         unlisted = dict(prior_unlisted)
@@ -147,7 +152,8 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             if (
                 isinstance(group, dict)
                 and group.get("status") == "selected"
-                and group.get("category") in {
+                and group.get("category")
+                in {
                     "current_session_material_evidence",
                     "current_session_history",
                     "prior_session_finding",
