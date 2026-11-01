@@ -2934,9 +2934,16 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
         return None
     payload = _role_request_payload(record, role, context)
     input_byte_bound = len(_serialized_role_request(payload)) + 8192
-    output_tokens = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
-    if output_tokens is None:
+    provider_output_bound = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
+    if provider_output_bound is None:
         return None
+    # Estimate spend using the session's configured output target, not the
+    # model's enormous absolute maximum. This only changes funding estimates,
+    # NEVER the request payload or the research evidence given to the model.
+    output_tokens = min(
+        provider_output_bound,
+        max(1, int(record.get("output_token_limit") or 4000)),
+    )
     # UTF-8 bytes conservatively bound billable input tokens. OpenAI applies
     # 2x input/cache and 1.5x output rates above its documented long-context
     # threshold; reflect that in both admission and settlement.
@@ -8441,14 +8448,21 @@ async def _portfolio_role_call(
                 _role_request_payload(record, role, context)
             )
             request_token_bound = len(serialized_request) + 8192
-            token_reserve = request_token_bound + output_bound
+            # Funding is estimated from the user's configured per-turn output
+            # target; the actual model response remains unrestricted by this
+            # estimate and its measured usage is reconciled on completion.
+            estimated_output_tokens = min(
+                output_bound, max(1, int(record.get("output_token_limit") or 4000))
+            )
+            token_reserve = request_token_bound + estimated_output_tokens
             if isinstance(hard_ledger, dict):
                 try:
                     budget_reservation = reserve_before_dispatch(
                         hard_ledger,
                         call_id=step_id,
                         request_body=serialized_request,
-                        output_token_reservation=output_bound,
+                        output_token_reservation=estimated_output_tokens,
+                        allow_concurrent=True,
                     )
                 except BudgetExceeded as exc:
                     if _portfolio_has_pending_reservation(record):
