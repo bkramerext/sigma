@@ -425,7 +425,7 @@
 /* Revised A17.1 section, row and inline-edit conventions. */
 .workspace-page .project-pane-heading { padding: 10px 0 5px; }
 .workspace-page .project-pane-heading h2 { text-transform: uppercase; letter-spacing: .14em; font-size: 17px; }
-.workspace-page .project-overview-card { min-width: 0; min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; padding: 8px 14px 10px; }
+.workspace-page .project-overview-card { min-width: 0; min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; padding: 8px 8px 10px; }
 .workspace-page .project-pane-title-line { display: flex; align-items: center; flex-wrap: nowrap; column-gap: 6px; min-width: 0; margin: 0; }
 .workspace-page .project-pane-title-line .current-project { min-width: 0; max-width: calc(100% - 102px); flex: 0 1 auto; overflow: hidden; margin: 0; color: #e3e9ef; font: 500 19px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-page .project-pane-title-line .project-title-pencil { flex: 0 0 28px; }
