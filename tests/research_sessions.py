@@ -8155,17 +8155,14 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         )
         finished = await wait_for(path, started["id"])
 
-    assert finished["status"] == "ended"
+    assert finished["status"] == "paused"
     assert len(provider_calls) == 1
     assert provider_calls == [first.id]
-    assert (
-        "ChatGPT rejected a request because its plan or app usage limit was reached"
-        in finished["message"]
-    )
+    assert "Research paused after a confirmed provider usage-limit rejection" in finished["message"]
     branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
-    assert branches[first.id]["status"] == "failed"
-    assert branches[second.id]["status"] == "ended"
-    assert "Not started because ChatGPT rejected a request" in branches[second.id]["reason"]
+    assert branches[first.id]["status"] == "paused"
+    assert branches[second.id]["status"] == "paused"
+    assert "explicitly resume this session" in branches[second.id]["reason"]
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
@@ -8189,6 +8186,128 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         assert limited.get("provider_stream_event") is None
         assert "HTTP 429" in limited["failure_message"]
     assert finished["calls_used"] == 1
+
+
+async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Path):
+    view, strategy, credential, config = await setup(path)
+    credential["mode"] = "chatgpt"
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    research_sessions.save_limits(str(path), limits)
+    provider_limited = True
+    calls: list[str] = []
+
+    async def handler(request):
+        nonlocal provider_limited
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        calls.append(role)
+        if provider_limited:
+            return httpx.Response(
+                429,
+                json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
+            )
+        output = (
+            investigation(1)
+            if role == "research_investigator"
+            else skeptic(1, "stop", "no_progress")
+        )
+        response_id = f"recovered-{len(calls)}"
+        envelope = {
+            "id": response_id,
+            "status": "completed",
+            "usage": {"input_tokens": 25, "output_tokens": 12},
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": json.dumps(output)}],
+                }
+            ],
+        }
+        events = [
+            {"type": "response.created", "sequence_number": 0, "response": {"id": response_id}},
+            {"type": "response.completed", "sequence_number": 1, "response": envelope},
+        ]
+        body = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events)
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        paused = await wait_for(path, started["id"])
+        assert paused["status"] == "paused"
+        assert paused["calls_used"] == 1 and calls == ["research_investigator"]
+        rejected_attempt = paused["steps"][0]["attempt_id"]
+
+        provider_limited = False
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        finished = await wait_for(path, started["id"])
+
+    assert len(calls) == 3
+    assert finished["calls_used"] == 3
+    assert [step["status"] for step in finished["steps"]] == [
+        "failed",
+        "completed",
+        "completed",
+    ]
+    assert finished["steps"][0]["attempt_id"] == rejected_attempt
+    assert finished["provider_usage_limited"] is False
+    assert [step["role"] for step in finished["steps"][1:]] == ["investigator", "skeptic"]
+
+
+def test_provider_limit_recovery_requires_known_dispatch_and_enough_turns():
+    strategy_id = str(uuid4())
+    record = {
+        "provider_usage_limited": True,
+        "cycle_limit": 3,
+        "call_limit": 6,
+        "calls_used": 3,
+        "strategy_runs": [
+            {"strategy_id": strategy_id, "status": "failed", "current_action": "Failed"}
+        ],
+        "steps": [
+            {"strategy_id": strategy_id, "role": "investigator", "status": "completed"},
+            {"strategy_id": strategy_id, "role": "skeptic", "status": "completed"},
+            {
+                "strategy_id": strategy_id,
+                "role": "investigator",
+                "status": "failed",
+                "failure_kind": "provider_limited",
+                "provider_input_audit": {"status": "provider_response_rejected"},
+            },
+        ],
+    }
+    branches, reason = research_sessions._provider_limit_recovery_plan(record)
+    assert branches is None and "Only 3 call attempts remain" in str(reason)
+
+    record["call_limit"] = 7
+    branches, reason = research_sessions._provider_limit_recovery_plan(record)
+    assert reason is None and branches == record["strategy_runs"]
+
+    record["steps"].append(
+        {
+            "strategy_id": strategy_id,
+            "role": "skeptic",
+            "status": "failed",
+            "failure_kind": "provider_error",
+            "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+        }
+    )
+    record["calls_used"] = 4
+    branches, reason = research_sessions._provider_limit_recovery_plan(record)
+    assert branches is None and "uncertain or non-rejected" in str(reason)
+    assert "Only 3 call attempts remain" in str(reason)
 
 
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
@@ -11199,6 +11318,12 @@ def main():
                 root / "chatgpt-sse-error-event.sigma", streamed=True, sse_error_event=True
             )
         )
+        asyncio.run(
+            test_chatgpt_usage_limit_recovers_only_after_explicit_resume(
+                root / "chatgpt-limit-resume.sigma"
+            )
+        )
+        test_provider_limit_recovery_requires_known_dispatch_and_enough_turns()
         asyncio.run(
             test_session_deadline_bounds_generous_call_timeout(
                 root / "generous-call-deadline.sigma"

@@ -5203,6 +5203,35 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             await asyncio.gather(task, return_exceptions=True)
         return _public(_read(record["project_path"], session_id))
     record = _recover(_read(path, session_id))
+    if (
+        action == "resume"
+        and record.get("status") in {"ended", "failed"}
+        and record.get("provider_usage_limited") is True
+    ):
+        recovery_branches, recovery_error = _provider_limit_recovery_plan(record)
+        if recovery_branches is None:
+            raise ProjectError(
+                recovery_error
+                or "This provider-limited session cannot be resumed safely from its saved state."
+            )
+        pause_message = (
+            "A confirmed provider usage-limit stop is recoverable. Completed turns and rejected "
+            "attempts remain saved. Confirm the provider limit has reset before explicitly "
+            "resuming; SIGMA will not automatically retry rejected calls."
+        )
+        for branch in recovery_branches:
+            branch["status"] = "paused"
+            branch["current_action"] = "Paused · provider usage limit"
+            branch["reason"] = pause_message
+        record["status"] = "paused"
+        record["current_action"] = "Paused · provider usage limit"
+        record["provider_limit_recovery_ready"] = True
+        record["stopped_at"] = _now()
+        record["message"] = pause_message
+        record["terminal_reason"] = pause_message
+        record["termination_reason_code"] = "provider_usage_limit_recovery_available"
+        _event(record, "provider.usage_limit_recovery_enabled", pause_message)
+        _save(path, record)
     # Legacy sessions ended after a known clipped response even with unused turns.
     # Convert only this exact terminal state to a paused, resumable session.
     if action == "resume" and _public(record).get("recoverable_clipped_response"):
@@ -5403,6 +5432,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                     "interrupted.cost_recovered",
                     "Saved call reservations conservatively cover uncertain provider billing; interrupted calls will not be replayed.",
                 )
+            if record.get("provider_limit_recovery_ready") is True:
+                record["provider_usage_limited"] = False
+                record["provider_limit_recovery_ready"] = False
+                record.pop("terminal_reason", None)
+                record.pop("termination_reason_code", None)
             record["status"] = "queued"
             for branch in record.get("strategy_runs", []):
                 if branch.get("status") in {"paused", "stopped"}:
@@ -10295,6 +10329,92 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
     )
 
 
+def _provider_limit_recovery_plan(
+    record: dict[str, Any],
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Allow explicit recovery only when rejected calls and remaining turns are safe."""
+    if record.get("provider_usage_limited") is not True:
+        return None, "The session did not stop at a provider usage limit."
+    run_steps = [
+        step
+        for step in record.get("steps", [])
+        if step.get("role") in {"investigator", "skeptic"} and step.get("status") != "completed"
+    ]
+    target_turns_per_strategy = max(1, int(record.get("cycle_limit", 1))) * 2
+    steps_by_strategy: dict[str, list[dict[str, Any]]] = {}
+    for step in record.get("steps", []):
+        if step.get("role") in {"investigator", "skeptic"}:
+            steps_by_strategy.setdefault(str(step.get("strategy_id") or ""), []).append(step)
+    required_calls = sum(
+        max(
+            0,
+            target_turns_per_strategy
+            - sum(
+                step.get("status") == "completed"
+                for step in steps_by_strategy.get(str(branch.get("strategy_id") or ""), [])
+            ),
+        )
+        for branch in record.get("strategy_runs", [])
+    )
+    available_calls = max(0, int(record.get("call_limit", 0)) - int(record.get("calls_used", 0)))
+    unsafe_steps = [
+        step
+        for step in run_steps
+        if step.get("failure_kind") not in {"provider_limited", "provider_rate_limited"}
+        or (step.get("provider_input_audit") or {}).get("status") != "provider_response_rejected"
+    ]
+    if not run_steps or unsafe_steps:
+        message = (
+            f"This session contains {len(unsafe_steps)} uncertain or non-rejected provider attempt(s); "
+            "automatic resume could replay work with unknown provider usage."
+        )
+        if available_calls < required_calls:
+            message += (
+                f" Only {available_calls} call attempts remain, but completing the pending "
+                f"protocol requires at least {required_calls}."
+            )
+        return None, message
+
+    resumable: list[dict[str, Any]] = []
+    for branch in record.get("strategy_runs", []):
+        strategy_id = str(branch.get("strategy_id") or "")
+        completed = sum(
+            step.get("status") == "completed" for step in steps_by_strategy.get(strategy_id, [])
+        )
+        remaining_turns = max(0, target_turns_per_strategy - completed)
+        if remaining_turns == 0:
+            continue
+        branch_failures = [step for step in run_steps if step.get("strategy_id") == strategy_id]
+        interrupted_by_limit = bool(branch_failures) or (
+            branch.get("current_action") == "Provider usage limit"
+            or str(branch.get("reason") or "").startswith(
+                "Not started because ChatGPT rejected a request"
+            )
+            or (
+                branch.get("status") == "ended"
+                and branch.get("current_action") == "Research conclusion · unverified"
+                and branch.get("last_decision") == "stop_productive_conclusion"
+            )
+        )
+        if branch.get("status") in {"queued", "running"}:
+            interrupted_by_limit = True
+        if not interrupted_by_limit:
+            return None, (
+                "An incomplete strategy branch did not stop at the provider limit; "
+                "review its saved state before resuming."
+            )
+        resumable.append(branch)
+
+    if not resumable:
+        return None, "No incomplete strategy branches remain to resume."
+    if available_calls < required_calls:
+        return None, (
+            f"Only {available_calls} call attempts remain, but completing the pending "
+            f"protocol requires at least {required_calls}; increase the session call limit explicitly first."
+        )
+    return resumable, None
+
+
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
     # One in-flight call per strategy; the backend-wide gate protects provider
@@ -10348,6 +10468,32 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             active = [branch for branch in runs if branch["status"] in {"queued", "running"}]
             remaining = record["call_limit"] - record["calls_used"]
             if not active or remaining < 1:
+                recovery_branches, _recovery_error = _provider_limit_recovery_plan(record)
+                if recovery_branches:
+                    pause_message = (
+                        "Research paused after a confirmed provider usage-limit rejection. Completed "
+                        "turns and rejected attempts are preserved; no automatic retry was made. "
+                        "After confirming the provider limit has reset, explicitly resume this session."
+                    )
+                    for branch in recovery_branches:
+                        branch["status"] = "paused"
+                        branch["current_action"] = "Paused · provider usage limit"
+                        branch["reason"] = pause_message
+                    record["status"] = "paused"
+                    record["current_action"] = "Paused · provider usage limit"
+                    record["termination_reason_code"] = "provider_usage_limit_recovery_available"
+                    record["message"] = pause_message
+                    record["terminal_reason"] = pause_message
+                    record["provider_limit_recovery_ready"] = True
+                    record["stopped_at"] = _now()
+                    record["cycle"] = max((branch["cycle"] for branch in runs), default=0)
+                    record["outcome"] = _outcome(record)
+                    record["strategy_assessments"] = _strategy_assessments(record)
+                    record["portfolio_decision"] = _portfolio_decision(record)
+                    record["updated_at"] = _now()
+                    _event(record, "provider.usage_limit_recovery_paused", pause_message)
+                    _save(path, record)
+                    return
                 context_paused = [branch for branch in runs if branch.get("status") == "paused"]
                 if context_paused and remaining >= 1:
                     record["status"] = "paused"
@@ -10544,6 +10690,34 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return
+            recovery_branches, _recovery_error = _provider_limit_recovery_plan(record)
+            if recovery_branches:
+                pause_message = (
+                    "Research paused after a confirmed provider usage-limit rejection. Completed "
+                    "turns and rejected attempts are preserved; no automatic retry was made. "
+                    "After confirming the provider limit has reset, explicitly resume this session."
+                )
+                for branch in recovery_branches:
+                    branch["status"] = "paused"
+                    branch["current_action"] = "Paused · provider usage limit"
+                    branch["reason"] = pause_message
+                record["status"] = "paused"
+                record["current_action"] = "Paused · provider usage limit"
+                record["termination_reason_code"] = "provider_usage_limit_recovery_available"
+                record["message"] = pause_message
+                record["terminal_reason"] = pause_message
+                record["provider_limit_recovery_ready"] = True
+                record["stopped_at"] = _now()
+                record["cycle"] = max(
+                    (branch["cycle"] for branch in record["strategy_runs"]), default=0
+                )
+                record["outcome"] = _outcome(record)
+                record["strategy_assessments"] = _strategy_assessments(record)
+                record["portfolio_decision"] = _portfolio_decision(record)
+                record["updated_at"] = _now()
+                _event(record, "provider.usage_limit_recovery_paused", pause_message)
+                _save(path, record)
                 return
             for branch in record["strategy_runs"]:
                 if branch.get("pending_skeptic") is not None:
