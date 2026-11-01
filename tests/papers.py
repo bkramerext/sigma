@@ -5784,9 +5784,9 @@ def main() -> None:
     test_fast_checkpoint_resume_replays_only_incomplete_section()
     test_fast_long_draft_cancellation_keeps_completed_sections()
     test_paper_generation_rejects_concurrent_duplicate_request()
-    test_two_paper_generators_run_concurrently_and_third_fails_fast()
-    test_two_papers_reach_compilation_together_and_hold_capacity()
-    test_eight_research_sessions_overlap_two_paper_generators()
+    test_three_paper_generators_run_concurrently_and_fourth_fails_fast()
+    test_three_papers_reach_compilation_together_and_hold_capacity()
+    test_eight_research_sessions_overlap_three_paper_generators()
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
