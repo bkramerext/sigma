@@ -135,6 +135,31 @@ function parallelSessionActivity(session: ResearchSession): string | null {
   return `${active.size} in flight · ${waiting} waiting · ${session.artifacts.length} findings saved`;
 }
 
+function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
+  if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
+  const active = new Map(
+    session.steps.filter(step => step.status === 'running' && step.strategy_id)
+      .map(step => [step.strategy_id, step] as const),
+  );
+  return session.strategy_runs.map((branch, index) => {
+    const step = active.get(branch.strategy_id);
+    const action = branch.current_action || '';
+    const role = step?.role === 'skeptic' || /skeptic/i.test(action) ? 'Skeptic'
+      : step?.role === 'investigator' || /investigator/i.test(action) ? 'Investigator'
+        : /coordinat/i.test(action) ? 'Coordinator'
+          : branch.status === 'queued' ? 'Queued'
+            : branch.status === 'paused' ? 'Paused'
+              : branch.status === 'failed' ? 'Failed'
+                : branch.status === 'ended' ? 'Ended' : 'Waiting';
+    const detail = step
+      ? (role === 'Investigator' ? 'Investigating' : 'Reviewing') + (branch.current_question ? `: ${branch.current_question}` : ' current research')
+      : branch.status === 'queued' && branch.current_question ? `Next: ${branch.current_question}`
+        : branch.reason || (action && !['Investigator', 'Skeptic'].includes(action) ? action : branch.status);
+    const compact = detail.replace(/\s+/g, ' ').trim();
+    return { id: branch.strategy_id, label: `S${index + 1}/${role}`, detail: compact.length > 150 ? `${compact.slice(0, 147)}…` : compact };
+  });
+}
+
 function liveResearchSummary(session: ResearchSession): string | null {
   if (session.status !== 'running') return null;
   const activity = parallelSessionActivity(session);
@@ -1420,6 +1445,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                 {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {sessionEstimatedCostLabel(item)}</small>
+                {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
               </div>
             </div>
             <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
