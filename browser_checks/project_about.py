@@ -26,10 +26,16 @@ with sync_playwright() as playwright:
         "request",
         lambda request: api_requests.append(request.url) if "/api/" in request.url else None,
     )
-    page.route(
-        "**/api/**",
-        lambda route: route.continue_(url=route.request.url.replace(BASE_URL, FIXTURE_URL)),
-    )
+
+    def proxy(route):
+        headers = dict(route.request.headers)
+        headers["origin"] = "http://127.0.0.1:5173"
+        response = route.fetch(
+            url=route.request.url.replace(BASE_URL, FIXTURE_URL), headers=headers
+        )
+        route.fulfill(response=response)
+
+    page.route("**/api/**", proxy)
 
     page.goto(BASE_URL)
     samples = page.get_by_role("tab", name="Samples", exact=True)

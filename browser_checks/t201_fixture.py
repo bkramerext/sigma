@@ -15,7 +15,9 @@ from tests.research_sessions import investigation, provider_response, skeptic
 
 root = Path(os.environ["SIGMA_PROJECTS_ROOT"])
 path = root / "t201-overflow.json"
-initialize_project(path, "T201 overflow fixture", "A bounded mathematical question")
+initialize_project(
+    path, "T201 overflow fixture", "A bounded mathematical question", research_mode="mathematical"
+)
 view = inspect_project(path)
 strategy = create_strategy(
     path, "Overflowing strategy", "Investigate boundary cases."

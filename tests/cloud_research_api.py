@@ -148,7 +148,11 @@ def main() -> None:
                 )
                 created = client.post(
                     "/api/projects/create",
-                    json={"title": "Cloud research API", "problem": "A recurrence bound"},
+                    json={
+                        "title": "Cloud research API",
+                        "problem": "A recurrence bound",
+                        "investigation_type": "mathematical",
+                    },
                 )
                 assert created.status_code == 201, created.text
                 path = created.json()["path"]
@@ -279,7 +283,11 @@ def main() -> None:
                 # Project deletion stops a live worker before removing its log tree.
                 active_project = client.post(
                     "/api/projects/create",
-                    json={"title": "Active deletion", "problem": "A cancellation fixture."},
+                    json={
+                        "title": "Active deletion",
+                        "problem": "A cancellation fixture.",
+                        "investigation_type": "mathematical",
+                    },
                 )
                 assert active_project.status_code == 201, active_project.text
                 active_path = active_project.json()["path"]

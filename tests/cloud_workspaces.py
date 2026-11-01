@@ -170,7 +170,7 @@ def project_document_bytes(path: str | Path) -> bytes:
     return (target / "project.json").read_bytes()
 
 
-def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
+def exercise(root: Path) -> tuple[str, str, str, str, str, str, str]:
     server = Server(root)
     try:
         with (
@@ -200,6 +200,50 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
             assert not any(path.suffix == ".sigma" for path in workspace_a.iterdir())
             assert not any(path.suffix == ".sigma" for path in workspace_b.iterdir())
 
+            # Project types belong to the authenticated workspace, never a
+            # shared catalog or path selected by the request.
+            a_catalog = request(user_a, "GET", "/api/project-types").json()
+            b_catalog = request(user_b, "GET", "/api/project-types").json()
+            private_type = {
+                "id": "workspace-a-custom",
+                "name": "Workspace A custom",
+                "scope": "A only",
+                "description": "",
+                "based_on": None,
+                "origin": None,
+                "user_defined": True,
+                "icon": a_catalog["icons"]["placeholder"],
+                "research_standards_references": [],
+                "publication_standards_references": [],
+                "behavior": {},
+            }
+            saved_types = request(
+                user_a,
+                "PUT",
+                "/api/project-types",
+                json={
+                    "project_types": [private_type],
+                    "expected_revision": a_catalog["revision"],
+                },
+            )
+            assert saved_types.status_code == 200, saved_types.text
+            assert all(item["id"] != private_type["id"] for item in b_catalog["project_types"])
+            denied_delete = request(
+                user_b,
+                "DELETE",
+                f"/api/project-types/{private_type['id']}",
+                json={
+                    "confirm": True,
+                    "expected_project_count": 0,
+                    "expected_revision": b_catalog["revision"],
+                },
+            )
+            assert denied_delete.status_code == 400
+            assert all(
+                item["id"] != private_type["id"]
+                for item in request(user_b, "GET", "/api/project-types").json()["project_types"]
+            )
+
             local_project = root / "local-projects" / "local-only.sigma"
             assert (local_project / "project.json").is_file()
             hidden_local = request(
@@ -214,7 +258,11 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 user_a,
                 "POST",
                 "/api/projects/create",
-                json={"title": "Workspace A project", "problem": "A private question"},
+                json={
+                    "title": "Workspace A project",
+                    "problem": "A private question",
+                    "investigation_type": private_type["id"],
+                },
             )
             b_created = request(
                 user_b,
@@ -621,7 +669,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
             assert stat_mode(workspaces) == 0o700
             assert stat_mode(Path(a_path).parent) == 0o700
             assert stat_mode(workspaces / "workspaces.sqlite3") == 0o600
-            return a_id, b_id, execution_id, b_path, a_path, paper_id
+            return a_id, b_id, execution_id, b_path, a_path, paper_id, private_type["id"]
     finally:
         server.stop()
 
@@ -644,7 +692,7 @@ def main() -> None:
             "legacy local project sentinel", encoding="utf-8"
         )
 
-        first_a, first_b, execution_id, b_path, a_path, paper_id = exercise(root)
+        first_a, first_b, execution_id, b_path, a_path, paper_id, private_type_id = exercise(root)
         # Restart the real uvicorn process, then prove the same subject mapping,
         # recent index, session-independent execution record and bytes persist.
         restarted = Server(root)
@@ -661,6 +709,10 @@ def main() -> None:
                     params={"path": b_path},
                 )
                 assert saved.content == b"persistent private artifact\n"
+                assert all(
+                    item["id"] != private_type_id
+                    for item in request(user_b, "GET", "/api/project-types").json()["project_types"]
+                )
             with httpx.Client(base_url=restarted.url, headers=identity("subject-a")) as user_a:
                 paper = request(
                     user_a,
@@ -669,6 +721,14 @@ def main() -> None:
                     params={"path": a_path},
                 )
                 assert paper.content.startswith(b"%PDF-1.4") and paper.content.endswith(b"%%EOF\n")
+                reloaded_types = request(user_a, "GET", "/api/project-types").json()[
+                    "project_types"
+                ]
+                assert any(item["id"] == private_type_id for item in reloaded_types)
+                reloaded_project = request(
+                    user_a, "GET", "/api/projects/inspect", params={"path": a_path}
+                ).json()
+                assert reloaded_project["project"]["project_type_snapshot"]["id"] == private_type_id
         finally:
             restarted.stop()
 

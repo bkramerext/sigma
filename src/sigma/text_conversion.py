@@ -231,7 +231,9 @@ async def _convert_text(
                 {
                     "source_format": source_format,
                     "target_format": target_format,
-                    "research_mode": view.project.research_mode.value,
+                    "research_mode": getattr(
+                        view.project.research_mode, "value", view.project.research_mode
+                    ),
                     "topic": view.project.title[:200],
                     "text": source_body,
                 },

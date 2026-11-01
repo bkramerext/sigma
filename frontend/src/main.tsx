@@ -1,4 +1,4 @@
-import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
+import { Component, createContext, createElement, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -15,6 +15,7 @@ import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRe
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
+import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -66,7 +67,7 @@ const OPENAI_AGENT_CREDIT_ADJECTIVES = [
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
-type ResearchMode = 'biology' | 'chemistry' | 'computer_science' | 'economics' | 'engineering' | 'law' | 'mathematical' | 'military' | 'philosophy' | 'physics' | 'religion' | 'default';
+type ResearchMode = string;
 type ProjectDifficulty = 'easy' | 'medium' | 'hard';
 const difficultyLabels: Record<ProjectDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 const difficultyLabel = (value: ProjectDifficulty | null): string => value ? difficultyLabels[value] : 'Not set';
@@ -78,15 +79,16 @@ const researchTypes: { value: ResearchMode; label: string }[] = [
   { value: 'economics', label: 'Economics' },
   { value: 'engineering', label: 'Engineering' },
   { value: 'law', label: 'Law' },
+  { value: 'literature', label: 'Literature' },
   { value: 'mathematical', label: 'Mathematics' },
   { value: 'military', label: 'Military' },
   { value: 'philosophy', label: 'Philosophy' },
   { value: 'physics', label: 'Physics' },
   { value: 'religion', label: 'Religion' },
-  { value: 'default', label: 'Other' },
 ];
-const researchTypeLabels = Object.fromEntries(researchTypes.map(item => [item.value, item.label])) as Record<ResearchMode, string>;
-const researchTypeLabel = (value: string | null | undefined) => value && value in researchTypeLabels ? researchTypeLabels[value as ResearchMode] : 'Unavailable';
+let projectTypeCache: ProjectTypeRecord[] = [];
+const researchTypeLabels: Record<string, string> = Object.fromEntries(researchTypes.map(item => [item.value, item.label]));
+const researchTypeLabel = (value: string | null | undefined) => value ? projectTypeCache.find(item => item.id === value)?.name ?? researchTypeLabels[value] ?? `Unavailable · ${value}` : 'Unavailable';
 type Strategy = {
   id: string;
   title: string;
@@ -112,6 +114,7 @@ type ProjectView = {
     difficulty: ProjectDifficulty | null;
     show_advanced_outcome_details: boolean;
     investigation_type: ResearchMode;
+    project_type_snapshot?: ProjectTypeRecord | null;
     events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
       project_change?: { previous: Settings; current: Settings } | null;
       order?: string[] | null; stage_change?: { previous: Stage; stage: Stage } | null;
@@ -1244,7 +1247,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession }: { path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void }) {
+function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, onInferredStrategy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange, onRunningChange, onRevealNewSession, missingType, safeSavedTypeSettings, savedTypeName, onChooseReplacement }: { path: string; projectId: string; strategies: Strategy[]; nextStrategyOrdinal: number; onInferredStrategy: (view: ProjectView, id: string) => void; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void; onRunningChange: (running: boolean) => void; onRevealNewSession: () => void; missingType: boolean; safeSavedTypeSettings: boolean; savedTypeName: string; onChooseReplacement: () => void }) {
   const cloud = useCloudIdentity();
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
@@ -1259,6 +1262,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
+  const [confirmMissingType, setConfirmMissingType] = useState(false);
+  const continueWithSavedType = useRef(false);
+  const missingTypeDialog = useRef<HTMLDialogElement>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -1266,6 +1272,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [announcement, setAnnouncement] = useState('');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const dialog = missingTypeDialog.current;
+    if (!dialog) return;
+    if (confirmMissingType && !dialog.open) dialog.showModal();
+    else if (!confirmMissingType && dialog.open) dialog.close();
+  }, [confirmMissingType]);
   const noticeStorageKey = `sigma.dismissedSessionNotices:${path}`;
   const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState<Set<string>>(() => {
     try {
@@ -1390,7 +1402,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const sponsoredSession = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
-  async function begin(onlyIds?: string[]) {
+  async function begin(onlyIds?: string[], continueUsingSavedTypeSettings = false) {
+    continueWithSavedType.current = continueUsingSavedTypeSettings;
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
@@ -1431,8 +1444,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
       const next = mockResearch
-        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current })
-        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current });
+        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current })
+        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
@@ -1569,9 +1582,10 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     if (busy || readError || projectAtCapacity) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
     if (!eligible.length) return;
+    if (missingType) { setConfirmMissingType(true); return; }
     setConfirmStart(false);
     void begin();
-  }, [busy, eligible, readError, path, projectAtCapacity]);
+  }, [busy, eligible, readError, path, projectAtCapacity, missingType]);
   const stop = useCallback(() => {
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
@@ -1600,6 +1614,17 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
 
   const runningCount = activeSessionCount;
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
+    <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
+      <h2 id="missing-type-heading">Project type unavailable</h2>
+      {safeSavedTypeSettings
+        ? <p>This project refers to “{savedTypeName}”, which is no longer available. You can continue with its complete saved settings or choose a replacement.</p>
+        : <p>This project refers to “{savedTypeName}”, which is no longer available, and it does not have a complete saved type snapshot. Choose a replacement before starting a new research session.</p>}
+      <div className="project-type-warning-actions">
+        {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with saved settings</button>}
+        <button type="button" autoFocus={!safeSavedTypeSettings} disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button>
+        <button type="button" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}>Cancel</button>
+      </div>
+    </dialog>
     <header className="workspace-pane-heading sessions-pane-heading">
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
@@ -2398,7 +2423,7 @@ function savedNewProjectValues(): Settings | null {
         typeof value.reasoning_effort !== 'string' ||
         !(value.difficulty === null || value.difficulty === 'easy' || value.difficulty === 'medium' || value.difficulty === 'hard') ||
         typeof value.show_advanced_outcome_details !== 'boolean') return null;
-    return value as Settings;
+    return { ...value, investigation_type: value.investigation_type === 'default' ? '' : value.investigation_type } as Settings;
   } catch { return null; }
 }
 
@@ -2982,13 +3007,14 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}{researchRunning
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{researchRunning
         ? <button type="button" className="project-header-title project-header-title-action" aria-label={`Scroll to running session in ${projectTitle}`} title="Scroll to running session" data-tooltip="Scroll to running session" onClick={() => window.dispatchEvent(new Event('sigma-reveal-running-session'))}><span className="project-header-title-text">{projectTitle}</span><span className="research-running-indicator-frame" aria-hidden="true"><span className="research-running-indicator"/></span></button>
         : <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
+    {close && (!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="about-action project-types-action" aria-label="Project Types" title="Project Types" data-tooltip="Project Types" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
@@ -3431,35 +3457,47 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   </div>;
 }
 
-function ResearchTypeIcon({ type }: { type: ResearchMode }) {
-  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  return <svg className={`research-type-icon research-type-icon-${type}`} viewBox="0 0 24 24" aria-hidden="true">
-    {type === 'mathematical' ? <text x="12" y="18" textAnchor="middle" fill="currentColor" fontFamily="Georgia,serif" fontSize="21">Σ</text>
-      : type === 'religion' ? <path {...common} d="M12 3v18M7 8h10M9 21h6M12 3 9.5 6M12 3l2.5 3"/>
-        : type === 'law' ? <path {...common} d="M12 4v15M7 20h10M5 7h14M12 7 7 15m0 0H3l2-4 2 4Zm5-8 5 8m0 0h-4l2-4 2 4Z"/>
-          : type === 'chemistry' ? <path {...common} d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7 16h10M9 13h6"/>
-            : type === 'biology' ? <g {...common}>
-              <path d="M5 2C5 7 19 7 19 12s-14 5-14 10"/>
-              <path d="M19 2c0 5-14 5-14 10s14 5 14 10"/>
-              <path d="M7 4.5h10M6 12h12M7 19.5h10"/>
-            </g>
-              : type === 'computer_science' ? <path {...common} d="m8 7-5 5 5 5m8-10 5 5-5 5m-1-14-6 18"/>
-                : type === 'economics' ? <text x="12" y="19" textAnchor="middle" fill="currentColor" fontFamily="Georgia,serif" fontSize="20">$</text>
-                  : type === 'engineering' ? <><circle {...common} cx="12" cy="12" r="6.7"/><circle {...common} cx="12" cy="12" r="3.1"/><path {...common} d="M12 1.8v3.5m0 13.4v3.5M1.8 12h3.5m13.4 0h3.5M4.8 4.8l2.5 2.5m9.4 9.4 2.5 2.5m0-14.4-2.5 2.5m-9.4 9.4-2.5 2.5"/></>
-            : type === 'physics' ? <><ellipse {...common} cx="12" cy="12" rx="9" ry="3.8"/><ellipse {...common} cx="12" cy="12" rx="9" ry="3.8" transform="rotate(60 12 12)"/><ellipse {...common} cx="12" cy="12" rx="9" ry="3.8" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></>
-              : type === 'military' ? <><path {...common} d="M12 3 20 6v5c0 5-3.3 8-8 10-4.7-2-8-5-8-10V6l8-3Z"/><path {...common} d="m8 13 4-4 4 4M12 9v6"/></>
-                : type === 'philosophy' ? <><path {...common} d="M4 6c3-1 5 0 8 2 3-2 5-3 8-2v12c-3-1-5 0-8 2-3-2-5-3-8-2V6Z"/><path {...common} d="M12 8v12M8 10h1M15 10h1"/></>
-                  : <><circle {...common} cx="12" cy="12" r="8.5"/><circle cx="7" cy="8" r="1.5" fill="currentColor"/><circle cx="16.5" cy="7" r="1.5" fill="currentColor"/><circle cx="9" cy="16.5" r="1.5" fill="currentColor"/><path {...common} d="m8.5 9 6.5-1m-6 7 1-5m1 6 4-7"/></>}
+function ResearchTypeIcon({ type, snapshot }: { type: ResearchMode; snapshot?: ProjectTypeRecord | null }) {
+  const definition = snapshot?.id === type ? snapshot : projectTypeCache.find(item => item.id === type);
+  const icon = definition?.icon;
+  if (icon?.kind === 'data' && icon.data_uri) return <img className="research-type-icon research-type-icon-custom" src={icon.data_uri} alt=""/>;
+  if (icon?.kind !== 'builtin' || !Array.isArray(icon.elements)) return null;
+  type IconNode = NonNullable<ProjectTypeRecord['icon']['elements']>[number];
+  const render = (node: IconNode, key: string): ReactNode => {
+    if (!['path', 'circle', 'ellipse', 'text', 'g'].includes(node.tag)) return null;
+    const content = node.text ?? node.children?.map((child, index) => render(child, `${key}-${index}`));
+    return createElement(node.tag, { key, ...(node.attrs ?? {}) }, content);
+  };
+  return <svg className={`research-type-icon research-type-icon-${type}`} viewBox={icon.view_box ?? '0 0 24 24'} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    {icon.elements.map((node, index) => render(node, `${type}-${index}`))}
   </svg>;
 }
 
 function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: { value: ResearchMode; onChange: (value: ResearchMode) => void; fieldLabel?: string }) {
   const [open, setOpen] = useState(false);
+  const [choices, setChoices] = useState(researchTypes);
   const [activeIndex, setActiveIndex] = useState(Math.max(0, researchTypes.findIndex(type => type.value === value)));
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const options = useRef<Array<HTMLButtonElement | null>>([]);
-  const selectedIndex = Math.max(0, researchTypes.findIndex(type => type.value === value));
+  const selectedIndex = choices.findIndex(type => type.value === value);
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => {
+      void fetch('/api/project-types', { cache: 'no-store', signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => {
+        projectTypeCache = data.project_types;
+        const next = data.project_types.map(item => ({ value: item.id, label: item.name })).sort((a, b) => a.label.localeCompare(b.label));
+        setChoices(next);
+      }).catch(() => undefined);
+    };
+    window.addEventListener('sigma-project-types-updated', refresh);
+    refresh();
+    return () => { controller.abort(); window.removeEventListener('sigma-project-types-updated', refresh); };
+  }, []);
+  useEffect(() => {
+    const selected = choices.findIndex(item => item.value === value);
+    if (selected >= 0) setActiveIndex(selected);
+  }, [choices, value]);
   useEffect(() => {
     if (open) options.current[activeIndex]?.focus();
   }, [activeIndex, open]);
@@ -3477,22 +3515,23 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
     requestAnimationFrame(() => trigger.current?.focus());
   }
   function move(index: number) {
-    setActiveIndex((index + researchTypes.length) % researchTypes.length);
+    if (!choices.length) return;
+    setActiveIndex((index + choices.length) % choices.length);
   }
-  const selected = researchTypes[selectedIndex];
+  const selected = choices[selectedIndex];
   return <div className="research-type-picker" ref={root}>
-    <button ref={trigger} id="project-mode" type="button" role="combobox" aria-labelledby="project-mode-label project-mode-value" aria-haspopup="listbox" aria-expanded={open} aria-controls="project-mode-options" onClick={() => { setActiveIndex(selectedIndex); setOpen(current => !current); }} onKeyDown={event => {
-      if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(selectedIndex); setOpen(true); }
-      else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(researchTypes.length - 1); setOpen(true); }
+    <button ref={trigger} id="project-mode" type="button" role="combobox" aria-labelledby="project-mode-label project-mode-value" aria-haspopup="listbox" aria-expanded={open} aria-controls="project-mode-options" onClick={() => { setActiveIndex(Math.max(0, selectedIndex)); setOpen(current => !current); }} onKeyDown={event => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(Math.max(0, selectedIndex)); setOpen(true); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(choices.length - 1); setOpen(true); }
     }}>
-      <ResearchTypeIcon type={selected.value}/><span id="project-mode-value">{selected.label}</span><svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
+      {selected && <ResearchTypeIcon type={selected.value}/>}<span id="project-mode-value">{selected?.label ?? (value ? `Project type no longer available · ${value}` : 'Choose a project type')}</span><svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
     </button>
     {open && <div className="research-type-options" id="project-mode-options" role="listbox" aria-label={fieldLabel}>
-      {researchTypes.map((type, index) => <button ref={element => { options.current[index] = element; }} id={`project-mode-option-${type.value}`} key={type.value} type="button" role="option" aria-selected={value === type.value} tabIndex={activeIndex === index ? 0 : -1} onFocus={() => setActiveIndex(index)} onClick={() => choose(type.value)} onKeyDown={event => {
+      {choices.map((type, index) => <button ref={element => { options.current[index] = element; }} id={`project-mode-option-${type.value}`} key={type.value} type="button" role="option" aria-selected={value === type.value} tabIndex={activeIndex === index ? 0 : -1} onFocus={() => setActiveIndex(index)} onClick={() => choose(type.value)} onKeyDown={event => {
         if (event.key === 'ArrowDown') { event.preventDefault(); move(index + 1); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); move(index - 1); }
         else if (event.key === 'Home') { event.preventDefault(); move(0); }
-        else if (event.key === 'End') { event.preventDefault(); move(researchTypes.length - 1); }
+        else if (event.key === 'End') { event.preventDefault(); move(choices.length - 1); }
         else if (event.key === 'Escape') { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
         else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(type.value); }
       }}><ResearchTypeIcon type={type.value}/><span>{type.label}</span></button>)}
@@ -3507,7 +3546,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: '', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -3659,7 +3698,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; error: string | null };
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -3719,9 +3758,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     finally { pending.current = false; setOpening(''); }
   }
   const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
-    const type: ResearchMode = project.investigation_type && Object.hasOwn(researchTypeLabels, project.investigation_type)
-      ? project.investigation_type as ResearchMode
-      : 'default';
+    const type: ResearchMode = project.investigation_type || 'default';
     const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
     else groups.push({ type, projects: [project] });
@@ -3738,7 +3775,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
-      <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}{hiddenRunningProject && <><span className="research-running-indicator" aria-hidden="true"/><span className="sr-only">Research running in this category</span></>}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
@@ -3865,6 +3902,19 @@ function Home({ initialPath, onOpen }: {
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
+  useEffect(() => {
+    const openTypes = () => setProjectTypesOpen(true);
+    const refreshTypes = () => {
+      void fetch('/api/project-types', { cache: 'no-store' }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
+    };
+    window.addEventListener('sigma-open-project-types', openTypes);
+    window.addEventListener('sigma-project-types-updated', refreshTypes);
+    const controller = new AbortController();
+    void fetch('/api/project-types', { signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
+    return () => { controller.abort(); window.removeEventListener('sigma-open-project-types', openTypes); window.removeEventListener('sigma-project-types-updated', refreshTypes); };
+  }, []);
   useEffect(() => {
     const openAbout = () => setAboutOpen(true);
     window.addEventListener('sigma-open-about', openAbout);
@@ -3941,7 +3991,7 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill inviteInHeader/><HomeInvitationAction/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill inviteInHeader/><HomeInvitationAction/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div></div><div className="home-header-actions">{(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}>Project Types</button>}<button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}</div></div>
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -3958,6 +4008,7 @@ function Home({ initialPath, onOpen }: {
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
+      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     </div>
   </div>;
 }
@@ -4308,6 +4359,19 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperOpen, setPaperOpen] = useState(false);
   const [qaOpen, setQaOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
+  useEffect(() => {
+    const openTypes = () => setProjectTypesOpen(true);
+    const refreshTypes = () => {
+      void fetch('/api/project-types', { cache: 'no-store' }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
+    };
+    window.addEventListener('sigma-open-project-types', openTypes);
+    window.addEventListener('sigma-project-types-updated', refreshTypes);
+    const controller = new AbortController();
+    void fetch('/api/project-types', { signal: controller.signal }).then(response => response.ok ? response.json() : Promise.reject()).then((data: { project_types: ProjectTypeRecord[] }) => { projectTypeCache = data.project_types; setTypeCatalogRevision(value => value + 1); }).catch(() => undefined);
+    return () => { controller.abort(); window.removeEventListener('sigma-open-project-types', openTypes); window.removeEventListener('sigma-project-types-updated', refreshTypes); };
+  }, []);
   useEffect(() => {
     if (!view || guest) return;
     let disposed = false;
@@ -4497,7 +4561,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   function closeAbout() {
     setAboutOpen(false);
-    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.about-action')?.focus());
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('button.about-action[aria-label="About SIGMA"]')?.focus());
   }
   const strategies = useMemo(() => {
     if (!view) return [];
@@ -4510,6 +4574,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <p>Close this project to choose another directory.</p>
   </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
   const project = view.project;
+  void typeCatalogRevision;
+  const savedTypeSnapshot = project.project_type_snapshot;
+  const missingProjectType = !projectTypeCache.some(item => item.id === project.investigation_type);
+  const safeSavedTypeSettings = !!savedTypeSnapshot && savedTypeSnapshot.id === project.investigation_type && !!savedTypeSnapshot.name.trim() && !!savedTypeSnapshot.scope.trim() && ['builtin', 'data'].includes(savedTypeSnapshot.icon.kind);
   const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
   function forkFromFindings(session: ResearchSession) {
     if (!enterMode('new-strategy')) return;
@@ -4605,6 +4673,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         </h2>
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
+      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>DESCRIPTION AND ACCEPTANCE CRITERIA</span></div>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
@@ -4690,7 +4759,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setGuestPlayOpen(false);
       requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
     }} playButtonRef={playButton}/>}
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
       const current = settingsOf(view);
       if (current.show_advanced_outcome_details) return;
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
@@ -4700,6 +4769,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
+      {projectTypesOpen && <ProjectTypesDialog onClose={() => setProjectTypesOpen(false)} renderIcon={item => item.icon.kind === 'data' && item.icon.data_uri ? <img src={item.icon.data_uri} alt=""/> : <ResearchTypeIcon type={item.id} snapshot={item}/>}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
         window.localStorage.removeItem(paperRecoveryKey(project.id));

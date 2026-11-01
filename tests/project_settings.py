@@ -149,7 +149,7 @@ def main():
             }
             result = edit(path, values, prior)
             assert result.path == view.path and result.project.id == view.project.id
-            assert result.project.schema_version == max(version, 8)
+            assert result.project.schema_version == max(version, 11)
             assert result.project.difficulty is not None
             assert result.project.difficulty.value == "hard"
             assert result.project.show_advanced_outcome_details is False
@@ -179,13 +179,13 @@ def main():
         legacy_view = inspect_project(legacy)
         legacy_settings = asdict(project_settings(legacy_view.project))
         renamed = edit(legacy, {**legacy_settings, "title": "Still unknown"}, legacy_settings)
-        assert renamed.project.schema_version == 7 and renamed.project.difficulty is None
-        assert "difficulty" not in json.loads((legacy / "project.json").read_bytes())
+        assert renamed.project.schema_version == 11 and renamed.project.difficulty is None
+        assert "difficulty" in json.loads((legacy / "project.json").read_bytes())
         assert inspect_project(legacy).project.difficulty is None
         with TestClient(app) as client:
             exported_legacy = client.get("/api/projects/audit", params={"path": str(legacy)})
             assert exported_legacy.status_code == 200
-            assert "difficulty" not in exported_legacy.json()["project"]
+            assert "difficulty" in exported_legacy.json()["project"]
             report_legacy = client.get(
                 "/api/projects/export/report", params={"path": str(legacy), "format": "txt"}
             )
@@ -201,7 +201,7 @@ def main():
             lambda: initialize_project(root / "invalid-model.sigma", "Bad", "Question", ai_model="")
         )
         assert not (root / "invalid-model.sigma").exists()
-        assert initial.project.schema_version == 9
+        assert initial.project.schema_version == 11
         assert initial.project.difficulty is not None
         assert initial.project.difficulty.value == "medium"
         assert initial.project.show_advanced_outcome_details is False
@@ -244,7 +244,7 @@ def main():
         change_stage(path, item.id, "exploring")
         edit_strategy(path, item.id, "Edited strategy", "New approach")
         remove_strategy(path, item.id)
-        assert inspect_project(path).project.schema_version == 9
+        assert inspect_project(path).project.schema_version == 11
         print(
             "PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes"
         )

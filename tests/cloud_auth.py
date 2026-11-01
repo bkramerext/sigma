@@ -838,7 +838,18 @@ class CloudAuthTests(TestCase):
             self.assertIsNotNone(workspace)
             assert workspace is not None
             self.assertTrue(workspace.guest)
-            sample_id = catalog.json()["projects"][0]["id"]
+            sample_id = "qubit-non-markovian-decoherence"
+            listed_sample = next(
+                item for item in catalog.json()["projects"] if item["id"] == sample_id
+            )
+            source = json.loads(
+                (
+                    Path(__file__).resolve().parents[1] / "samples" / sample_id / "project.json"
+                ).read_bytes()
+            )
+            self.assertEqual(listed_sample["investigation_type"], "physics")
+            self.assertEqual(listed_sample["problem"], source["problem"])
+            self.assertEqual(source["schema_version"], 8)
             opened = guest.post(
                 "/api/projects/samples/open",
                 json={"sample_id": sample_id},
@@ -848,6 +859,12 @@ class CloudAuthTests(TestCase):
             project_path = Path(opened.json()["path"])
             self.assertTrue(project_path.is_relative_to(workspace.path))
             self.assertTrue((project_path / "project.json").is_file())
+            copied = opened.json()["project"]
+            self.assertEqual(copied["investigation_type"], "physics")
+            self.assertEqual(copied["schema_version"], 8)
+            self.assertEqual(copied["problem"], source["problem"])
+            self.assertEqual(copied["project_type_snapshot"]["name"], "Physics")
+            self.assertEqual(copied["project_type_snapshot"]["icon"]["key"], "physics")
             self.assertEqual(guest.get("/api/projects/recent").json(), {"projects": []})
             inspected = guest.get("/api/projects/inspect", params={"path": str(project_path)})
             self.assertEqual(inspected.status_code, 200, inspected.text)
@@ -3127,7 +3144,9 @@ class CloudAuthTests(TestCase):
 
     def test_local_mode_keeps_project_and_provider_apis_unauthenticated(self):
         local_project = self.root / "local-project.sigma"
-        initialize_project(local_project, "Local test", "Test local API access")
+        initialize_project(
+            local_project, "Local test", "Test local API access", research_mode="mathematical"
+        )
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
             self.assertEqual(self.client.get("/api/cloud-auth/status").json()["enabled"], False)
             self.assertNotEqual(
@@ -4593,7 +4612,11 @@ class CloudAuthTests(TestCase):
                 ):
                     created = member.post(
                         "/api/projects/create",
-                        json={"title": "Local sponsor Play", "problem": "Check a recurrence bound"},
+                        json={
+                            "title": "Local sponsor Play",
+                            "problem": "Check a recurrence bound",
+                            "investigation_type": "mathematical",
+                        },
                     )
                     self.assertEqual(created.status_code, 201, created.text)
                     path = created.json()["path"]

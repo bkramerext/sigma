@@ -285,7 +285,9 @@ def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
     async def check() -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "paper-error.sigma"
-            view = initialize_project(path, "Paper error test", "Verify SSE error recovery")
+            view = initialize_project(
+                path, "Paper error test", "Verify SSE error recovery", research_mode="mathematical"
+            )
 
             async def crash(*_args, **_kwargs):
                 raise IndexError("secret saved research must not be exposed")
@@ -506,7 +508,12 @@ def test_visual_preference_controls_one_shot_and_long_paper_wire_schemas() -> No
 def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> None:
     with TemporaryDirectory() as temporary:
         checkpoint_path = Path(temporary) / "proofreading.sigma"
-        initialize_project(checkpoint_path, "Proofreading fixture", "Preserve authored TeX.")
+        initialize_project(
+            checkpoint_path,
+            "Proofreading fixture",
+            "Preserve authored TeX.",
+            research_mode="mathematical",
+        )
         view = inspect_project(checkpoint_path)
         state = papers._new_work(
             "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
@@ -623,7 +630,9 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
 def test_tex_proofreader_three_passes_with_early_convergence() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "three-pass.sigma"
-        view = initialize_project(path, "Three-pass fixture", "Convergent corrections.")
+        view = initialize_project(
+            path, "Three-pass fixture", "Convergent corrections.", research_mode="mathematical"
+        )
         state = papers._new_work(
             "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
         )
@@ -731,7 +740,12 @@ def test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data() -> None:
 def test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "proofreading-recovery.sigma"
-        view = initialize_project(path, "Proofreading recovery", "Preserve an authored conclusion.")
+        view = initialize_project(
+            path,
+            "Proofreading recovery",
+            "Preserve an authored conclusion.",
+            research_mode="mathematical",
+        )
         state = papers._new_work(
             "c" * 64, view.project.id, "d" * 64, "fixture", "high", kind="one_shot"
         )
@@ -845,8 +859,15 @@ def test_one_shot_and_long_form_both_proofread_before_compiling() -> None:
     with TemporaryDirectory() as temporary:
         one_path = Path(temporary) / "one-shot.sigma"
         long_path = Path(temporary) / "long-form.sigma"
-        one_view = initialize_project(one_path, "One-shot proofreading", "Test stage ordering.")
-        long_view = initialize_project(long_path, "Long-form proofreading", "Test stage ordering.")
+        one_view = initialize_project(
+            one_path, "One-shot proofreading", "Test stage ordering.", research_mode="mathematical"
+        )
+        long_view = initialize_project(
+            long_path,
+            "Long-form proofreading",
+            "Test stage ordering.",
+            research_mode="mathematical",
+        )
         credential = {"identity": "fixture:proofread", "mode": "api_key", "token": "fixture"}
         config = {
             "available": True,
@@ -1167,7 +1188,9 @@ def test_long_tex_compiler_source_bound_is_configurable() -> None:
 def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "one-shot-recovery.sigma"
-        initialize_project(path, "One-shot recovery", "Preserve this paper draft")
+        initialize_project(
+            path, "One-shot recovery", "Preserve this paper draft", research_mode="mathematical"
+        )
         view = inspect_project(path)
         credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
         config = {
@@ -1331,7 +1354,12 @@ def test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts(
     """Repeated TeX option changes retain drafts and count each paid call once."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "proofreading-render-call-accounting.sigma"
-        initialize_project(path, "Proofreading accounting", "Keep the saved paper draft.")
+        initialize_project(
+            path,
+            "Proofreading accounting",
+            "Keep the saved paper draft.",
+            research_mode="mathematical",
+        )
         view = inspect_project(path)
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
@@ -1462,7 +1490,9 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
     """TikZ fallback preserves accepted proofreading patches and exact PDF source."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "diagram-compile-fallback.json"
-        view = initialize_project(path, "Diagram fallback", "Preserve the paper evidence.")
+        view = initialize_project(
+            path, "Diagram fallback", "Preserve the paper evidence.", research_mode="mathematical"
+        )
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
             "available": True,
@@ -1618,7 +1648,9 @@ def test_unrelated_compile_failure_does_not_remove_valid_diagrams() -> None:
     """Only a diagnosed TikZ/PGF error is eligible for the text-only fallback."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "unrelated-compile-failure.json"
-        view = initialize_project(path, "Unrelated compile failure", "Keep the diagram.")
+        view = initialize_project(
+            path, "Unrelated compile failure", "Keep the diagram.", research_mode="mathematical"
+        )
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
             "available": True,
@@ -1953,7 +1985,9 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
     async def check() -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "streamed.sigma"
-            initialize_project(path, "Streamed paper", "A paper question")
+            initialize_project(
+                path, "Streamed paper", "A paper question", research_mode="mathematical"
+            )
             project_id = inspect_project(path).project.id
 
             async def fake_generate(
@@ -2052,7 +2086,12 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
     async def check() -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "interrupted.sigma"
-            view = initialize_project(path, "Interrupted paper", "Recover saved paper progress")
+            view = initialize_project(
+                path,
+                "Interrupted paper",
+                "Recover saved paper progress",
+                research_mode="mathematical",
+            )
             state = papers._new_work("a" * 64, view.project.id, "b" * 64, "gpt-fixture", "high")
             state["progress"] = {
                 "run_id": "c" * 32,
@@ -2088,7 +2127,9 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
     """A stale dialog preflight must never trap a confirmed reset."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "stale-restart.sigma"
-        view = initialize_project(path, "Stale restart", "Preserve saved research")
+        view = initialize_project(
+            path, "Stale restart", "Preserve saved research", research_mode="mathematical"
+        )
         current_snapshot_sha256 = papers._snapshot(str(path))[1]
         old_snapshot_sha256 = "a" * 64
         stale_dialog_sha256 = "b" * 64
@@ -2199,7 +2240,9 @@ def test_restart_uses_current_evidence_and_is_idempotent() -> None:
 def test_explicit_restart_checkpoint_migrates_and_rebinds_safely() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "restart.sigma"
-        view = initialize_project(path, "Restarted paper", "A saved evidence question")
+        view = initialize_project(
+            path, "Restarted paper", "A saved evidence question", research_mode="mathematical"
+        )
         current_snapshot = papers._snapshot(str(path))[1]
         prior_runs = [
             {
@@ -2667,7 +2710,9 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
     sample = json.loads(sample_path.read_text(encoding="utf-8"))
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "xenopus-v2.sigma"
-        initialize_project(path, sample["title"] + " v2", sample["problem"])
+        initialize_project(
+            path, sample["title"] + " v2", sample["problem"], research_mode="mathematical"
+        )
         project_view = inspect_project(path)
         base_export = {
             "project": {
@@ -3376,7 +3421,9 @@ def test_paper_failure_reason_survives_reopen() -> None:
     """A disconnected browser can still see why the previous stage failed."""
     with TemporaryDirectory() as directory:
         path = Path(directory) / "paper-failure.sigma"
-        view = initialize_project(path, "Saved failure", "Why did the planning stage fail?")
+        view = initialize_project(
+            path, "Saved failure", "Why did the planning stage fail?", research_mode="mathematical"
+        )
         package, fingerprint = papers._snapshot(str(path))
         work = papers._new_work(fingerprint, view.project.id, "b" * 64, "fixture-model", "high")
         work["frozen_package"] = package
@@ -3659,7 +3706,9 @@ def test_fast_checkpoint_resume_replays_only_incomplete_section() -> None:
 def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "single-flight.sigma"
-        view = initialize_project(path, "Single flight", "Preserve one generation at a time")
+        view = initialize_project(
+            path, "Single flight", "Preserve one generation at a time", research_mode="mathematical"
+        )
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
         config = {
             "available": True,
@@ -3718,7 +3767,12 @@ def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
     with TemporaryDirectory() as temporary:
         paths = [Path(temporary) / f"paper-{index}.sigma" for index in range(3)]
         views = [
-            initialize_project(path, f"Paper project {index}", "Independent bounded research")
+            initialize_project(
+                path,
+                f"Paper project {index}",
+                "Independent bounded research",
+                research_mode="mathematical",
+            )
             for index, path in enumerate(paths)
         ]
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
@@ -3792,7 +3846,12 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
     with TemporaryDirectory() as temporary:
         paths = [Path(temporary) / f"compile-{index}.sigma" for index in range(3)]
         views = [
-            initialize_project(path, f"Compile project {index}", "Compile independently")
+            initialize_project(
+                path,
+                f"Compile project {index}",
+                "Compile independently",
+                research_mode="mathematical",
+            )
             for index, path in enumerate(paths)
         ]
         credential = {"identity": "fixture:account", "mode": "api_key", "token": "fixture"}
@@ -3936,13 +3995,20 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
         research_projects = []
         for index in range(8):
             path = root / f"research-{index}.sigma"
-            view = initialize_project(path, f"Research {index}", "Check independent cases")
+            view = initialize_project(
+                path, f"Research {index}", "Check independent cases", research_mode="mathematical"
+            )
             strategy = create_strategy(
                 path, "Bounded method", "Investigate an independent research approach"
             ).project.strategies[0]
             research_projects.append((path, view, strategy))
         paper_projects = [
-            (path, initialize_project(path, f"Paper {index}", "Independent paper"))
+            (
+                path,
+                initialize_project(
+                    path, f"Paper {index}", "Independent paper", research_mode="mathematical"
+                ),
+            )
             for index in range(2)
             for path in [root / f"paper-{index}.sigma"]
         ]
@@ -4468,7 +4534,9 @@ def test_easy_paper_start_over_escapes_repeated_paid_planning() -> None:
     """An explicit reset switches eligible research to one call without AI."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "easy-restart.sigma"
-        view = initialize_project(path, "Easy paper", "How many regions can n lines form?")
+        view = initialize_project(
+            path, "Easy paper", "How many regions can n lines form?", research_mode="mathematical"
+        )
         package = {
             "schema": "sigma-paper-evidence-v2",
             "project_id": view.project.id,
@@ -4562,7 +4630,9 @@ def test_one_shot_validation_failure_preserves_paid_draft_for_continue() -> None
     """Local validation errors must not erase a complete paid author response."""
     with TemporaryDirectory() as directory:
         path = Path(directory) / "validation-recovery.sigma"
-        view = initialize_project(path, "Paper recovery", "Review the saved objective.")
+        view = initialize_project(
+            path, "Paper recovery", "Review the saved objective.", research_mode="mathematical"
+        )
         account = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
         config = {
             "available": True,
@@ -4622,7 +4692,9 @@ def test_live_research_change_does_not_discard_completed_paper() -> None:
     """A paper cites its frozen input even when unrelated saved research advances."""
     with TemporaryDirectory() as directory:
         path = Path(directory) / "research-advanced.sigma"
-        view = initialize_project(path, "Frozen paper", "Study saved evidence.")
+        view = initialize_project(
+            path, "Frozen paper", "Study saved evidence.", research_mode="mathematical"
+        )
         identity = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
         config = {
             "available": True,
@@ -4676,7 +4748,9 @@ def test_frozen_evidence_checkpoint_survives_live_research_drift() -> None:
     """Resuming a paid draft must not read new research or require Start over."""
     with TemporaryDirectory() as directory:
         path = Path(directory) / "frozen-checkpoint.sigma"
-        view = initialize_project(path, "Frozen paper", "Saved evidence")
+        view = initialize_project(
+            path, "Frozen paper", "Saved evidence", research_mode="mathematical"
+        )
         identity = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
         config = {
             "available": True,
@@ -4742,7 +4816,9 @@ def test_one_shot_publishes_with_repaired_claim_links() -> None:
     """A usable completed author draft is a paper, not a paid repair dialogue."""
     with TemporaryDirectory() as directory:
         path = Path(directory) / "one-shot-repair.sigma"
-        view = initialize_project(path, "Paper recovery", "Study the saved research.")
+        view = initialize_project(
+            path, "Paper recovery", "Study the saved research.", research_mode="mathematical"
+        )
         account = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
         config = {
             "available": True,
@@ -4831,7 +4907,12 @@ def test_one_shot_provider_failure_requires_explicit_reset_without_rebilling() -
     """A lost one-call result may be billable; never replay it silently."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "one-shot-uncertain.sigma"
-        view = initialize_project(path, "One-call recovery", "Explain the recorded research.")
+        view = initialize_project(
+            path,
+            "One-call recovery",
+            "Explain the recorded research.",
+            research_mode="mathematical",
+        )
         snapshot = papers._snapshot(str(path))[1]
         account = {"mode": "chatgpt", "identity": "chatgpt:fixture", "token": "fixture"}
         config = {
@@ -5712,7 +5793,12 @@ def main() -> None:
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
-        initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
+        initialize_project(
+            cancelled_path,
+            "Cancelled paper",
+            "A bounded saved question",
+            research_mode="mathematical",
+        )
         test_api_disconnect_preserves_running_paper_until_explicit_cancel(cancelled_path)
 
     class StreamResponse:
@@ -6167,7 +6253,9 @@ def main() -> None:
 
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "fixture.sigma"
-        initialize_project(path, "Fixture", "Investigate the saved question")
+        initialize_project(
+            path, "Fixture", "Investigate the saved question", research_mode="mathematical"
+        )
         credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
         config = {
             "available": True,
@@ -6225,6 +6313,7 @@ def main() -> None:
             exploratory_path,
             "Unresolved question",
             "Determine whether this open question is tractable",
+            research_mode="mathematical",
         )
 
         async def exploratory_provider(context, *_args):

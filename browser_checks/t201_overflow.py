@@ -30,6 +30,13 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+
+    def normalize_fixture_origin(route):
+        headers = dict(route.request.headers)
+        headers["origin"] = "http://127.0.0.1:5173"
+        route.fulfill(response=route.fetch(headers=headers))
+
+    page.route("**/api/**", normalize_fixture_origin)
     page.goto(base_url + "/project?path=" + quote(str(path), safe=""))
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
 

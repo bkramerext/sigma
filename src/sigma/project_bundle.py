@@ -55,7 +55,7 @@ def _files(directory: Path) -> dict[str, str]:
         raise BundleError("Invalid source project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid source project schema")
-    if not 1 <= document["schema_version"] <= 9:
+    if not 1 <= document["schema_version"] <= 11:
         raise BundleError("Unsupported source project schema")
     return entries
 
@@ -196,7 +196,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         raise BundleError("Invalid project document") from exc
     if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
         raise BundleError("Invalid project document")
-    if not 1 <= document["schema_version"] <= 9:
+    if not 1 <= document["schema_version"] <= 11:
         raise BundleError("Unsupported project schema version")
     return result
 

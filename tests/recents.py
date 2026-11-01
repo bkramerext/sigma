@@ -18,6 +18,7 @@ from sigma.projects import (
     ProjectError,
     create_project,
     create_strategy,
+    initialize_project,
     inspect_project,
     open_project,
 )
@@ -35,11 +36,54 @@ def check(root: Path, base: Path) -> None:
         "Did Jesus Use Cannabis?",
         "Operation Narrow Passage",
         "Warp Drive Feasibility",
+        "When Does Qubit Decoherence Require a Non-Markovian Model?",
     }
     sample_categories = {entry["title"]: entry["investigation_type"] for entry in catalog}
     assert sample_categories["Did Jesus Use Cannabis?"] == "religion"
     assert sample_categories["Operation Narrow Passage"] == "military"
     assert sample_categories["Warp Drive Feasibility"] == "engineering"
+    assert (
+        sample_categories["When Does Qubit Decoherence Require a Non-Markovian Model?"] == "physics"
+    )
+    qubit_source = json.loads(
+        (ROOT / "samples" / "qubit-non-markovian-decoherence" / "project.json").read_bytes()
+    )
+    assert qubit_source["schema_version"] == 8
+    qubit_root = base / "qubit-projects"
+    qubit_root.mkdir()
+    with patch.dict(
+        os.environ,
+        {
+            "SIGMA_PROJECTS_ROOT": str(qubit_root),
+            "SIGMA_STATE_DIR": str(base / "qubit-state"),
+        },
+    ):
+        qubit_sample = open_sample_project("qubit-non-markovian-decoherence")
+    qubit_copy = json.loads((Path(qubit_sample.path) / "project.json").read_bytes())
+    assert qubit_copy["problem"] == qubit_source["problem"]
+    assert qubit_sample.project.investigation_type == "physics"
+    assert qubit_sample.project.schema_version == 8
+    qubit_snapshot = qubit_sample.project.project_type_snapshot
+    assert qubit_snapshot is not None
+    assert qubit_snapshot["name"] == "Physics"
+    assert qubit_snapshot["icon"]["key"] == "physics"
+    with patch.dict(
+        os.environ,
+        {
+            "SIGMA_PROJECTS_ROOT": str(qubit_root),
+            "SIGMA_STATE_DIR": str(base / "qubit-state"),
+        },
+    ):
+        created_physics = initialize_project(
+            qubit_root / "physics-created.sigma",
+            qubit_source["title"],
+            qubit_source["problem"],
+            research_mode="physics",
+        )
+    created_document = json.loads((Path(created_physics.path) / "project.json").read_bytes())
+    assert created_document["problem"] == qubit_source["problem"]
+    assert created_document["project_type_snapshot"]["name"] == "Physics"
+    assert created_document["project_type_snapshot"]["icon"]["key"] == "physics"
     maximum_regions = next(item for item in catalog if item["id"] == "maximum-regions-by-lines")
     assert maximum_regions["difficulty"] == "easy"
     assert maximum_regions["strategy_count"] == 1

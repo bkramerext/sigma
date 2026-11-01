@@ -52,7 +52,7 @@ def main() -> None:
                 assert expected.path and not expected.exists
                 created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
-                assert created.project.schema_version == 9
+                assert created.project.schema_version == 11
                 assert created.project.difficulty is not None
                 assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
@@ -67,7 +67,7 @@ def main() -> None:
                 edit_strategy(created.path, strategy_id, "Edited idea", "Updated approach")
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
-                assert removed.project.schema_version == 9
+                assert removed.project.schema_version == 11
                 snapshot = Path(created.path).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)

@@ -239,6 +239,7 @@ class RecentProject:
     included_example: bool
     available: bool
     error: str | None = None
+    project_type_snapshot: dict | None = None
 
 
 def recent_projects() -> dict:
@@ -278,6 +279,7 @@ def recent_projects() -> dict:
                         **entry,
                         title=view.project.title,
                         investigation_type=view.project.investigation_type,
+                        project_type_snapshot=view.project.project_type_snapshot,
                         strategy_count=len(view.project.active_order),
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
@@ -292,6 +294,7 @@ def recent_projects() -> dict:
                         **entry,
                         title=Path(entry["path"]).name,
                         investigation_type=None,
+                        project_type_snapshot=None,
                         strategy_count=None,
                         difficulty=None,
                         research_running=False,

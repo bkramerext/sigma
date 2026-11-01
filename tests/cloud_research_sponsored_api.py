@@ -370,7 +370,11 @@ def main(mode: str = "api_key") -> None:
                 assert provider_calls == []
                 created = client.post(
                     "/api/projects/create",
-                    json={"title": "Cloud research API", "problem": "A recurrence bound"},
+                    json={
+                        "title": "Cloud research API",
+                        "problem": "A recurrence bound",
+                        "investigation_type": "mathematical",
+                    },
                 )
                 assert created.status_code == 201, created.text
                 path = created.json()["path"]
@@ -597,7 +601,11 @@ print("PASS fresh-process research, Outcome and report recovery")
                 # the reservation is retained and the attempt is never retried.
                 second_project = client.post(
                     "/api/projects/create",
-                    json={"title": "Cloud failure case", "problem": "A bounded question"},
+                    json={
+                        "title": "Cloud failure case",
+                        "problem": "A bounded question",
+                        "investigation_type": "mathematical",
+                    },
                 )
                 assert second_project.status_code == 201, second_project.text
                 second_path = second_project.json()["path"]
