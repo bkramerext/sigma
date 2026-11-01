@@ -51,3 +51,19 @@ When the remaining manuscripts arrive, audit:
 - **All three:** abstract/conclusion agreement, central claim-to-evidence links, contradiction survival, omissions, sections/paragraphs, genre, real generation times and costs.
 
 **Disposition:** No `message_out_2.md` yet. Blue's `message_in_1.md` is explicitly a **checkpoint**, not a finished three-paper baseline; do not advance while Agent and Xenopus remain in flight. No code or live inference changes were made by this coordinator. A separate issue records the failed final Skeptic turn: https://github.com/bkramerext/sigma/issues/431 .
+
+
+## Independent numerical check of the proposed paired efficacy gate (coordinator-owned)
+
+I implemented a deterministic numerical check in `docs/evaluations/report_quality/analysis/pilot_power_exact.py` (NumPy 2.3.5 / SciPy 1.17.0 in the analysis environment; **not** a SIGMA provider run). Under the manuscript's *hypothetical* IID paired-episode alternative `p10=0.30`, `p01=0.10`, margin `Δ>0.10`, the exact multinomial count distribution can be reduced to `X ~ Binomial(n, .30)`, `Z | X=x ~ Binomial(n-x, .10/.70)`. For each `x`, the script sums the conditional probability of `Z` values for which the difference between the two marginal **97.5% equal-tailed Clopper–Pearson** endpoints strictly exceeds `0.10`; then it weights by `P(X=x)`. This is a finite-distribution calculation using numerical special functions, not a simulation and not a formal proof of all premises.
+
+| Paired episodes n | Computed gate-pass probability under this *hypothetical IID model* |
+|---:|---:|
+| 486 | 0.761233 |
+| 521 | 0.800124 |
+| 800 | 0.961326 |
+| 1800 | 0.999983 |
+
+The paper's `n=1800` **sufficient for at least 80%** statement is consistent with this calculation, but **extremely conservative** under the particular specified model. The older approximate `486` calculation does **not** reach 80% for the actual proposed gate in this numerical check. The first `n` reaching 80% among 450–550 was 521; this is **not** a globally optimal, deployable or independently validated sample size. No institutional enrollment recommendation follows: task/researcher clustering, changing task mix, shared-queue interference, budget constraints and the separate safety/fairness gates remain unresolved. A next-stage research challenge is to analyze sensitivity to discordance probability and cluster dependence, not merely to repeat `n=1800` as a polished-looking fact.
+
+This independently checks one narrow conditional quantitative claim while preserving the frozen manuscript and its unresolved evidence gaps.
