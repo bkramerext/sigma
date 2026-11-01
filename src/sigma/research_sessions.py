@@ -6457,14 +6457,18 @@ def _obligation_ledger(
             artifact.get("skeptic_output"), dict
         )
         model_remaining = skeptic.get("model_remaining_obligations")
+        remaining_notes = (
+            model_remaining
+            if isinstance(model_remaining, list)
+            else skeptic.get("remaining_obligations")
+        )
         note_fields = (
             investigator.get("open_obligations"),
             None if structured else artifact.get("open_obligations"),
             artifact.get("objections"),
             objective_review.get("unresolved_objections"),
             skeptic.get("unresolved_objections"),
-            model_remaining if isinstance(model_remaining, list)
-            else skeptic.get("remaining_obligations"),
+            remaining_notes,
         )
         for notes in note_fields:
             for note in notes if isinstance(notes, list) else []:
