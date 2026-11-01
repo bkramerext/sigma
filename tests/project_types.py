@@ -58,7 +58,7 @@ def check_icon_generation_mock() -> None:
         patch.object(
             project_type_icons, "auth_context",
             new=AsyncMock(return_value={
-                "mode": "api_key", "status": "connected", "token": "test-not-real",
+                "mode": "api_key", "status": "connected", "identity": "api_key", "token": "test-not-real",
             }),
         ),
         patch.object(project_type_icons.httpx, "AsyncClient", FakeClient),
