@@ -185,7 +185,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button><button type="button" disabled={busy || !!generatingId || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button></div></header>
+    <header><h2 id="project-types-title">Project Types</h2><div><button type="button" disabled={busy || !!generatingId || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button></div></header>
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim()} onClick={() => setAddingId(null)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
