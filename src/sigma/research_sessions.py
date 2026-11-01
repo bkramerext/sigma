@@ -54,8 +54,12 @@ CALL_LIMIT = 6
 MAX_CLIPPED_AUTO_RETRIES = 1
 MAX_TRANSIENT_AUTO_RETRIES = 1
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
-MAX_RECORD = 2_000_000
-MAX_TOTAL = 16_000_000
+# A 54-turn portfolio stores full audited prompts, provider attempts and
+# source-linked evidence. The old 2 MB per-session limit was nearly exhausted
+# by a real 14-turn session; keep hard, bounded storage limits sized for
+# configured multi-strategy research rather than silently truncating records.
+MAX_RECORD = 32_000_000
+MAX_TOTAL = 128_000_000
 MAX_PRIOR_CONTEXT_BYTES = 32_000
 MAX_PRIOR_FAILURES = 12
 MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
