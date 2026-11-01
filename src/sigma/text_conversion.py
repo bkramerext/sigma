@@ -16,7 +16,9 @@ from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
 from sigma.text_views import Format, _format, digest, inspect_text, store_conversion
 
-CALL_SECONDS = 60
+# Long high-reasoning Markdown conversions routinely exceed one minute.
+# Allow up to ten minutes for the complete provider operation (including SSE).
+CALL_SECONDS = 10 * 60
 MAX_CONVERSION_RESPONSE_BYTES = MAX_STREAM_BYTES
 _gate = asyncio.Lock()
 
