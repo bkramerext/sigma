@@ -763,22 +763,57 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
-def test_phase2_methodology_is_specific_and_versioned_without_new_agents():
-    """Research methods target real deductions, not a longer generic debate."""
+def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
+    """Every current research mode gets a shared core and one suited lens."""
+    from sigma.projects import ResearchMode
+
+    assert set(research_sessions.RESEARCH_MODE_METHOD_GUIDANCE) == {
+        mode.value for mode in ResearchMode
+    }
     common = {"execution_tools": [], "research_method_version": research_sessions.RESEARCH_METHOD_VERSION}
-    math_context = {**common, "investigation_type": "mathematical"}
-    general_context = {**common, "investigation_type": "engineering"}
-    investigator = research_sessions._role_instructions("investigator", math_context)
-    skeptic = research_sessions._role_instructions("skeptic", math_context)
-    general = research_sessions._role_instructions("investigator", general_context)
-    assert "strongest material open assumption or obligation" in investigator
-    assert "complete, concise one- or two-sentence status" in investigator
-    assert "For mathematics, check quantified domain" in investigator
-    assert "prove any asymptotic rate separately" in skeptic
-    assert "observational equivalence" in skeptic
-    assert "For mathematics" not in general
-    assert "No external sources are available" in general
-    assert "Never invent execution results" in general
+    math = {**common, "investigation_type": "mathematical"}
+    physics = {**common, "investigation_type": "physics"}
+    bio = {**common, "investigation_type": "biology"}
+    systems = {**common, "investigation_type": "computer_science"}
+    law = {**common, "investigation_type": "law"}
+    math_inv = research_sessions._role_instructions("investigator", math)
+    math_skep = research_sessions._role_instructions("skeptic", math)
+    physics_inv = research_sessions._role_instructions("investigator", physics)
+    bio_inv = research_sessions._role_instructions("investigator", bio)
+    sys_inv = research_sessions._role_instructions("investigator", systems)
+    law_inv = research_sessions._role_instructions("investigator", law)
+
+    for mode in ResearchMode:
+        for role in ("investigator", "skeptic"):
+            guidance = research_sessions._role_instructions(
+                role, {**common, "investigation_type": mode.value}
+            )
+            assert "Across disciplines, specify the question" in guidance
+            assert "source pointer is not an inspected source" in guidance
+            assert "No external sources are available" in guidance
+            assert research_sessions.RESEARCH_MODE_METHOD_GUIDANCE[mode.value] in guidance
+            assert "one- or two-sentence status" in guidance
+
+    assert "In any branch of mathematics" in math_inv
+    assert "universal claims" in math_skep
+    assert "general relativity" not in math_inv.lower()
+    assert "For any branch of physics" in physics_inv
+    assert "theoretical" not in math_inv.lower() or "For any branch of physics" not in math_inv
+    assert "general relativity" in physics_inv.lower()
+    assert "No unperformed intervention" in bio_inv
+    assert "external ground truth" in sys_inv
+    assert "controlling authority" in law_inv
+    assert "For any branch of physics" not in math_inv
+    assert "In any branch of mathematics" not in physics_inv
+    assert "For biological hypotheses" not in physics_inv
+
+    # Missing/unknown project type receives safe common methods rather than
+    # silently inheriting physics, mathematical, or biological techniques.
+    for context in ({}, {"investigation_type": "unknown"}, {"investigation_type": 42}):
+        fallback = research_sessions._role_instructions("skeptic", {**common, **context})
+        assert "Across disciplines" in fallback
+        assert "unit of analysis" in fallback
+        assert "For any branch of physics" not in fallback
 
 
 def test_request_audit_truncation_tokens_and_reconciliation():
