@@ -5849,7 +5849,9 @@ def test_publication_preserves_failed_final_skeptic_as_research_limitation() -> 
     result = papers._annotate_research_completion(draft(), frozen)
     assert any("call 18 (skeptic)" in item for item in result.limitations)
     assert len(result.limitations) == len(draft().limitations) + 1
-    assert len(papers._annotate_research_completion(result, frozen).limitations) == len(result.limitations)
+    assert len(papers._annotate_research_completion(result, frozen).limitations) == len(
+        result.limitations
+    )
     assert papers._research_completion_limitations({"sources": [healthy]}) == []
 
 
