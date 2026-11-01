@@ -396,15 +396,25 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
                 obligation["unsupplied_source_artifact_count"] = max(0, original_total - len(kept))
             elif field == "pointer_source_artifact_ids":
                 # Pointer IDs describe unavailable evidence; never expose them
-                # in the same namespace as reviewable source references.
-                obligation["withheld_pointer_source_count"] = len(refs)
+                # in the same namespace as reviewable source references. Keep
+                # the count if this already-normalized dispatch context passes
+                # through a second finalization path.
+                prior_count = obligation.get("withheld_pointer_source_count")
+                obligation["withheld_pointer_source_count"] = max(
+                    len(refs), prior_count if type(prior_count) is int and prior_count >= 0 else 0
+                )
                 kept = []
             obligation[field] = kept
         for field in ("source_step_ids", "basis_step_ids"):
             refs = obligation.get(field)
             if isinstance(refs, list):
                 kept = [ref for ref in refs if isinstance(ref, str) and ref in allowed_steps]
-                obligation[f"withheld_{field}_count"] = len(refs) - len(kept)
+                count_key = f"withheld_{field}_count"
+                prior_count = obligation.get(count_key)
+                obligation[count_key] = max(
+                    len(refs) - len(kept),
+                    prior_count if type(prior_count) is int and prior_count >= 0 else 0,
+                )
                 obligation[field] = kept
         if obligation.get("unsupplied_source_artifact_count", 0) or obligation.get(
             "withheld_pointer_source_count", 0

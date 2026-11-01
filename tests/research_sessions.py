@@ -11119,6 +11119,12 @@ def test_obligation_dispatch_citations_exclude_withheld_history() -> None:
     assert actual["source_artifact_availability"] == ("incomplete_extract_original_not_supplied")
     assert saved == original, "Only the dispatch copy may change"
 
+    # Portfolio contexts pass through this normalization after their base
+    # agent context, so repeated finalization must retain omission accounting.
+    research_sessions.restrict_obligation_citations_to_supplied_context(context)
+    assert actual["withheld_pointer_source_count"] == 1
+    assert actual["withheld_source_step_ids_count"] == 1
+
     allowed = {
         "context_artifact_ids": ["present"],
         "prior_session_artifact_ids": [],
@@ -11139,6 +11145,110 @@ def test_obligation_dispatch_citations_exclude_withheld_history() -> None:
     assert allowed["obligation_ledger"][0]["source_artifact_availability"] == (
         "adequate_bounded_extract_original_not_supplied"
     )
+
+
+def test_obligation_dispatch_request_contains_only_supplied_citations() -> None:
+    """Inspect the final serialized Skeptic inputs for both context builders."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "dispatch-citation-audit.sigma"
+        _test_obligation_dispatch_request_contains_only_supplied_citations(path)
+
+
+def _test_obligation_dispatch_request_contains_only_supplied_citations(path: Path) -> None:
+    from copy import deepcopy
+
+    view = initialize_project(path, "Dispatch citation audit", "Check evidence references.")
+    strategy_id = str(uuid4())
+    peer_strategy_id = str(uuid4())
+    investigator_step_id = str(uuid4())
+    source = {
+        "id": "selected-source",
+        "project_id": view.project.id,
+        "session_id": "saved-session",
+        "strategy_id": strategy_id,
+        "strategy_title": "Selected strategy",
+        "sequence": 1,
+        "strategy_cycle": 1,
+        "claim_or_question": "Selected bounded evidence.",
+        "evidence_status": "unverified extract",
+    }
+    obligation = {
+        "obligation_id": "open-1",
+        "strategy_id": strategy_id,
+        "status": "unresolved",
+        "text": "Review the counterexample.",
+        "source_artifact_ids": ["selected-source", "prior-source", "withheld-source"],
+        "source_artifact_count": 3,
+        "basis_artifact_ids": ["selected-source", "withheld-source"],
+        "supplied_source_artifact_ids": ["selected-source", "withheld-source"],
+        "pointer_source_artifact_ids": ["withheld-source"],
+        "source_step_ids": ["old-step"],
+        "basis_step_ids": ["old-step"],
+    }
+    record = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "project_title": view.project.title,
+        "problem": view.project.problem,
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "mode": "chatgpt",
+        "strategy_ids": [strategy_id, peer_strategy_id],
+        "strategy_id": strategy_id,
+        "strategy_title": "Selected strategy",
+        "strategy_text": "Inspect supplied evidence.",
+        "current_question": "Review the saved counterexample.",
+        "strategy_snapshot": [],
+        "artifacts": [source],
+        "steps": [
+            {
+                "id": investigator_step_id,
+                "strategy_id": strategy_id,
+                "role": "investigator",
+                "cycle": 2,
+                "status": "completed",
+            }
+        ],
+        "prior_session_findings": [
+            {"id": "prior-source", "claim_or_question": "Prior supplied extract."}
+        ],
+        "prior_session_obligations": [deepcopy(obligation)],
+        "pending_investigation": {"claim": "Current claim.", "open_obligations": []},
+        "status": "running",
+    }
+    original_obligation = deepcopy(record["prior_session_obligations"][0])
+    branch = {
+        "strategy_id": strategy_id,
+        "strategy_title": "Selected strategy",
+        "strategy_text": "Inspect supplied evidence.",
+        "current_question": "Review the saved counterexample.",
+        "cycle": 1,
+        "status": "running",
+        "pending_investigation": record["pending_investigation"],
+    }
+
+    contexts = (
+        research_sessions._agent_context(record, "skeptic", 2),
+        research_sessions._portfolio_context(record, branch, "skeptic", 2),
+    )
+    for context in contexts:
+        payload = research_sessions._role_request_payload(record, "skeptic", context)
+        exact_input = json.loads(payload["input"][0]["content"])
+        ledger_entry = exact_input["obligation_ledger"][0]
+        assert ledger_entry["source_artifact_ids"] == ["selected-source", "prior-source"]
+        assert ledger_entry["basis_artifact_ids"] == ["selected-source"]
+        assert ledger_entry["supplied_source_artifact_ids"] == [
+            "selected-source",
+            "prior-source",
+        ]
+        assert ledger_entry["pointer_source_artifact_ids"] == []
+        assert ledger_entry["withheld_pointer_source_count"] == 1
+        assert ledger_entry["withheld_source_step_ids_count"] == 1
+        assert ledger_entry["withheld_basis_step_ids_count"] == 1
+        assert "withheld-source" not in json.dumps(ledger_entry)
+        assert "old-step" not in json.dumps(ledger_entry)
+    assert record["prior_session_obligations"][0] == original_obligation
 
 
 def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
@@ -11456,6 +11566,7 @@ def main():
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
     test_obligation_dispatch_citations_exclude_withheld_history()
+    test_obligation_dispatch_request_contains_only_supplied_citations()
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
