@@ -4449,6 +4449,9 @@ async def _generate_long_draft(
     include_diagrams: bool = True,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
+    writing_methodology = paper_writing_sources.prompt_material(
+        list(state.get("writing_sources", []))
+    )
     # Existing paid field-extraction checkpoints remain on their original
     # deterministic batch layout. New/explicitly reset checkpoints select the
     # structured fast path; never silently invalidate a completed paid batch.
@@ -4845,6 +4848,7 @@ Return the complete plan JSON matching the schema."""
         plan_input["indexed_fragments_not_selected"] = len(state.get("omitted_evidence", []))
     else:
         plan_input = _long_plan_input(project_data, index, len(source_ids), len(batches))
+    plan_input["paper_writing_methodology"] = writing_methodology
     long_plan: LongPaperPlan | None = None
     if state.get("plan"):
         try:
@@ -4973,6 +4977,7 @@ or document markup."""
             "title": long_plan.title,
             "project_question": str(project_data.get("problem", ""))[:3_000],
             "investigation_type": project_type,
+            "paper_writing_methodology": writing_methodology,
             "shared_claim_register": [
                 claim.model_dump() for claim in long_plan.claims if claim.id in section.claim_ids
             ],
