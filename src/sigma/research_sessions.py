@@ -8336,7 +8336,7 @@ async def _portfolio_role_call(
         ) from exc
     tools = await asyncio.to_thread(execution_capabilities)
     # Reserve funded attempts only after a global provider slot is available.
-    async with semaphore, _portfolio_global_gate(session_id):
+    async with _portfolio_global_gate(session_id):
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
@@ -9677,9 +9677,12 @@ async def _portfolio_role_call_with_recovery(
         # Funding deferrals are not paid attempts or recovery retries. Wait
         # outside all locks and provider slots until an earlier call settles.
         while True:
-            result = await _portfolio_role_call(
-                session_id, path, strategy_id, role, cycle, semaphore, state_lock
-            )
+            # Admission order is determined before asynchronous account/model
+            # preflight. Do not hold the global provider gate during preflight.
+            async with semaphore:
+                result = await _portfolio_role_call(
+                    session_id, path, strategy_id, role, cycle, semaphore, state_lock
+                )
             if result != "funding_wait":
                 break
             await asyncio.sleep(0.2)
