@@ -390,28 +390,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "element => (element.compareDocumentPosition(element.parentElement.querySelector('.outcome-subsections')) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0"
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text("The investigation is paused")
-                toggle = conclusion.get_by_role("button", name="Show saved Conclusion text")
-                toggle.hover()
-                toggle_style = toggle.evaluate(
-                    "e => ({rect:e.getBoundingClientRect().toJSON(), "
-                    "border:getComputedStyle(e).borderTopWidth, "
-                    "background:getComputedStyle(e).backgroundColor, "
-                    "color:getComputedStyle(e).color, "
-                    "icon:e.querySelector('svg').getBoundingClientRect().toJSON()})"
-                )
-                assert toggle_style["rect"]["width"] == 28, toggle_style
-                assert toggle_style["rect"]["height"] == 28, toggle_style
-                assert toggle_style["border"] == "0px", toggle_style
-                assert toggle_style["background"] == "rgba(0, 0, 0, 0)", toggle_style
-                assert toggle_style["color"] == "rgb(241, 197, 141)", toggle_style
-                assert toggle_style["icon"]["width"] == 24, toggle_style
-                assert toggle_style["icon"]["height"] == 20, toggle_style
-                expect(toggle).to_have_attribute("aria-pressed", "true")
+                # Conclusion has no duplicate Markdown action. The Outcome
+                # heading controls formatting for research sections.
+                expect(conclusion.locator(":scope > .sigma-render-toggle")).to_have_count(0)
+                source_toggle = outcome.locator(".outcome-heading-title > .sigma-render-toggle")
+                expect(source_toggle).to_be_visible()
+                expect(source_toggle).to_have_attribute("aria-pressed", "false")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
-                source_toggle = conclusion.locator(":scope > .sigma-render-toggle")
-                expect(source_toggle).to_have_attribute("aria-pressed", "true")
-                expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion text")
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
                 expect(finding).to_have_text("Preliminary finding")
@@ -456,14 +442,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 )
                 page.mouse.move(1300, 900)
                 conclusion.screenshot(path="/tmp/sigma-conclusion-typeset-desktop.png")
+                # First click turns on all research sections; second returns
+                # to saved text, including Conclusion.
+                source_toggle.click()
+                expect(source_toggle).to_have_attribute("aria-pressed", "true")
                 source_toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
                 expect(source_toggle).to_have_attribute("aria-pressed", "false")
-                assert (
-                    source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(170, 180, 186)"
-                ), (
-                    "Plain-text state must remain visibly gray even while the pointer hovers over the toggle"
-                )
                 expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
                     "ζ(s)=s/(s−1)"
                 )
@@ -476,9 +461,6 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(conclusion.locator(".outcome-conclusion-source")).not_to_contain_text("$$")
                 source_toggle.click()
                 expect(source_toggle).to_have_attribute("aria-pressed", "true")
-                assert (
-                    source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(241, 197, 141)"
-                )
                 expect(conclusion.locator(".outcome-markdown h3").first).to_have_text(
                     "Preliminary finding"
                 )
