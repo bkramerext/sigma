@@ -31,13 +31,14 @@
   },
   "totals": {
     "completed_role_turns": 32,
-    "failed_or_uncertain_attempts": 7,
-    "never_dispatched_required_turns": 21,
+    "failed_or_uncertain_attempts": 15,
+    "never_dispatched_required_turns": 18,
     "complete_sessions": 0,
-    "incomplete_sessions": 5
+    "incomplete_sessions": 5,
+    "failed_protocol_roles": 10
   },
   "staging_blockers": [
-    "ChatGPT plan/app returned subscription_sharing_usage_limit_exceeded; usage-limit scope/reset not identified. No provider retries after rejection.",
+    "After the safe recovery fix, all four resumable projects were retried sequentially at two concurrent strategy calls; all eight attempts received the same provider sharing usage-limit error despite the user-provided Usage page showing remaining overall allowance. Stop further retries until the provider cause is clarified.",
     "All five protocol runs remain incomplete.",
     "Xenopus attempt b0ee377a-c83c-4687-8a4a-8180252c8a2e has call_failed_dispatch_unknown and must not be blindly replayed.",
     "Chat 2 scientific review has not occurred."
@@ -53,7 +54,7 @@
       "problem_sha256": "30ee8fc81efbb3b3f4fd44910483e03b1bdef6dddaee677fb1c489335f66d75d",
       "investigation_type": "computer_science",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "failed",
+      "session_status": "paused",
       "session_id": "e3f02cce-aed5-42f7-aa01-a5cad3c99c18",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -95,7 +96,7 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 10,
+      "calls_used": 12,
       "configured_call_limit": 18,
       "cycle_limit": 3,
       "turns_completed": 8,
@@ -148,7 +149,17 @@
               "attempt_id": "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
               "failure_kind": "provider_limited",
               "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "dispatch_status": "provider_response_rejected",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
+                  "all_selected_method_notes_present": true
+                }
+              ]
             },
             {
               "round": 3,
@@ -203,7 +214,17 @@
               "attempt_id": "96ab13b3-e85a-4b40-bead-5277b72f051d",
               "failure_kind": "provider_limited",
               "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "dispatch_status": "provider_response_rejected",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "15bb0620-3bf2-4b7c-b358-1378ba60c022",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
+                  "all_selected_method_notes_present": true
+                }
+              ]
             },
             {
               "round": 3,
@@ -229,27 +250,83 @@
           "failure_kind": "provider_limited",
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected"
+        },
+        {
+          "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
+          "started_at": "2026-11-01T18:49:53.587907+00:00",
+          "finished_at": "2026-11-01T18:49:55.317850+00:00"
+        },
+        {
+          "attempt_id": "15bb0620-3bf2-4b7c-b358-1378ba60c022",
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
+          "started_at": "2026-11-01T18:49:53.738913+00:00",
+          "finished_at": "2026-11-01T18:49:56.187036+00:00"
         }
       ],
       "started_at": "2026-11-01T18:01:22.082967+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:10:38.076166+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:49:56.187036+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/agent-reliability.bundle.json.gz",
-        "sha256_compressed": "bff09bd1085a8eacb3ea696ba8870a774747c7f5bb109198b860953e4707f548",
-        "sha256_uncompressed": "c70fce03ae0416ca6cae5f42f0e3b6215f717ef3ecc225cb146695831c83df7e",
-        "compressed_bytes": 3497023,
-        "uncompressed_bytes": 9738359,
-        "gzip_json_valid": true
+        "sha256_compressed": "07451f585de66609cc29e3c0c675c395e0de69e1a5def65fe4ba141ee7c834da",
+        "sha256_uncompressed": "71198fe89c78ed241d0c1e1047a5594159aa03093b1e420c7f9d62060c502ac4",
+        "compressed_bytes": 3556322,
+        "uncompressed_bytes": 9847376,
+        "gzip_json_valid": true,
+        "research_step_count": 12,
+        "session_attempt_count": 12
       },
       "mandatory_source_omitted_count": 0,
       "wall_clock_seconds": 555.993,
-      "provider_call_attempts": 10,
+      "provider_call_attempts": 12,
       "automatic_retry_attempts": 0,
       "tokens_used": 177468,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_or_strategy_failure"
+      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "recovery_attempts": [
+        {
+          "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
+          "started_at": "2026-11-01T18:49:53.587907+00:00",
+          "finished_at": "2026-11-01T18:49:55.317850+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        },
+        {
+          "attempt_id": "15bb0620-3bf2-4b7c-b358-1378ba60c022",
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
+          "started_at": "2026-11-01T18:49:53.738913+00:00",
+          "finished_at": "2026-11-01T18:49:56.187036+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        }
+      ]
     },
     {
       "key": "sovereign",
@@ -261,7 +338,7 @@
       "problem_sha256": "88cb02de230083d68c645c93de2cb48bf72da9610b29384123dfe6a05692f204",
       "investigation_type": "computer_science",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "ended",
+      "session_status": "paused",
       "session_id": "d82391f1-956a-4546-adfd-20f030e33688",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -303,12 +380,12 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 7,
+      "calls_used": 9,
       "configured_call_limit": 18,
       "cycle_limit": 3,
       "turns_completed": 6,
-      "turns_failed": 1,
-      "turns_never_dispatched": 5,
+      "turns_failed": 2,
+      "turns_never_dispatched": 4,
       "strategies": [
         {
           "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
@@ -348,7 +425,17 @@
               "attempt_id": "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
               "failure_kind": "provider_limited",
               "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "dispatch_status": "provider_response_rejected",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "040d6361c044678519b93b1ee1c9cf4654a56f793f91843861b5a78ac6d44f7e",
+                  "all_selected_method_notes_present": true
+                }
+              ]
             },
             {
               "round": 3,
@@ -366,8 +453,8 @@
           "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
           "strategy_title": "Fairness, reliability and pilot",
           "turns_completed": 3,
-          "turns_failed": 0,
-          "turns_never_dispatched": 3,
+          "turns_failed": 1,
+          "turns_never_dispatched": 2,
           "turns": [
             {
               "round": 1,
@@ -396,7 +483,22 @@
             {
               "round": 2,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "failed",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
+                  "all_selected_method_notes_present": true
+                }
+              ],
+              "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
+              "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
             },
             {
               "round": 3,
@@ -419,27 +521,83 @@
           "failure_kind": "provider_limited",
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected"
+        },
+        {
+          "attempt_id": "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "040d6361c044678519b93b1ee1c9cf4654a56f793f91843861b5a78ac6d44f7e",
+          "started_at": "2026-11-01T18:50:25.872521+00:00",
+          "finished_at": "2026-11-01T18:50:27.893740+00:00"
+        },
+        {
+          "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
+          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
+          "started_at": "2026-11-01T18:50:25.991401+00:00",
+          "finished_at": "2026-11-01T18:50:28.073655+00:00"
         }
       ],
       "started_at": "2026-11-01T18:01:22.152161+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:09:25.955290+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:50:28.073655+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/sovereign-ai-federation.bundle.json.gz",
-        "sha256_compressed": "8306ba6b2f7df28f13cfaa3737d4b13d4f89cddc8b6ad93fdc530f98e2e975be",
-        "sha256_uncompressed": "05f8497f3c51085a3015a17ac3a7568e007697aaf6747e7699d32f7e6d216af4",
-        "compressed_bytes": 1203453,
-        "uncompressed_bytes": 3322261,
-        "gzip_json_valid": true
+        "sha256_compressed": "cd55d86f735715afa22619a76ee433fef07f732655085a434cd768d6245235ee",
+        "sha256_uncompressed": "385ce730e51f3955479e4d48f3d6656c25bbd4bc38ad89cc81ac7a2003f7ea42",
+        "compressed_bytes": 1275857,
+        "uncompressed_bytes": 3435710,
+        "gzip_json_valid": true,
+        "research_step_count": 9,
+        "session_attempt_count": 9
       },
       "mandatory_source_omitted_count": 0,
       "wall_clock_seconds": 483.803,
-      "provider_call_attempts": 7,
+      "provider_call_attempts": 9,
       "automatic_retry_attempts": 0,
       "tokens_used": 134250,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_or_strategy_failure"
+      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "recovery_attempts": [
+        {
+          "attempt_id": "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "040d6361c044678519b93b1ee1c9cf4654a56f793f91843861b5a78ac6d44f7e",
+          "started_at": "2026-11-01T18:50:25.872521+00:00",
+          "finished_at": "2026-11-01T18:50:27.893740+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        },
+        {
+          "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
+          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
+          "started_at": "2026-11-01T18:50:25.991401+00:00",
+          "finished_at": "2026-11-01T18:50:28.073655+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        }
+      ]
     },
     {
       "key": "xenopus",
@@ -626,11 +784,13 @@
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/xenopus-tadpoles.bundle.json.gz",
-        "sha256_compressed": "4083599b9f73f7bdab386ddc77443a4cfca8196af69765a3d829aa7b5175d4c6",
+        "sha256_compressed": "08353d76eda34dcd8c0a4407ff2e9c3bd8a9a75f5d40dde274812c3272af6011",
         "sha256_uncompressed": "254be1896eaf774793bb03e47fed48c507e12f0eca9a3d03deffb8cce1a9ef68",
-        "compressed_bytes": 872460,
+        "compressed_bytes": 868965,
         "uncompressed_bytes": 2712639,
-        "gzip_json_valid": true
+        "gzip_json_valid": true,
+        "research_step_count": 7,
+        "session_attempt_count": 7
       },
       "mandatory_source_omitted_count": 0,
       "wall_clock_seconds": 469.93,
@@ -638,7 +798,8 @@
       "automatic_retry_attempts": 0,
       "tokens_used": 79881,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_or_strategy_failure"
+      "termination_reason_code": "provider_or_strategy_failure",
+      "recovery_attempts": []
     },
     {
       "key": "math",
@@ -650,7 +811,7 @@
       "problem_sha256": "d72ef1f9904142be654e72c3dbb5e168790e721eff801057b7c458e51d067035",
       "investigation_type": "mathematical",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "ended",
+      "session_status": "paused",
       "session_id": "6ce6a07a-c844-4681-a6ec-ede98aa923ea",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -692,12 +853,12 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 8,
+      "calls_used": 10,
       "configured_call_limit": 18,
       "cycle_limit": 3,
       "turns_completed": 7,
-      "turns_failed": 1,
-      "turns_never_dispatched": 4,
+      "turns_failed": 2,
+      "turns_never_dispatched": 3,
       "strategies": [
         {
           "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
@@ -737,7 +898,17 @@
               "attempt_id": "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
               "failure_kind": "provider_limited",
               "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "dispatch_status": "provider_response_rejected",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "5e9a7725c3dd3017cb819b76f8576c3af4e06df8aa08a19c98acc0b62aef7faf",
+                  "all_selected_method_notes_present": true
+                }
+              ]
             },
             {
               "round": 3,
@@ -755,8 +926,8 @@
           "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf",
           "strategy_title": "Gap removal and Gaussian binomial sums",
           "turns_completed": 4,
-          "turns_failed": 0,
-          "turns_never_dispatched": 2,
+          "turns_failed": 1,
+          "turns_never_dispatched": 1,
           "turns": [
             {
               "round": 1,
@@ -793,7 +964,22 @@
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "failed",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
+                  "all_selected_method_notes_present": true
+                }
+              ],
+              "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
+              "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
             },
             {
               "round": 3,
@@ -811,27 +997,83 @@
           "failure_kind": "provider_limited",
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected"
+        },
+        {
+          "attempt_id": "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
+          "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "5e9a7725c3dd3017cb819b76f8576c3af4e06df8aa08a19c98acc0b62aef7faf",
+          "started_at": "2026-11-01T18:50:28.876882+00:00",
+          "finished_at": "2026-11-01T18:50:30.719102+00:00"
+        },
+        {
+          "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
+          "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf",
+          "role": "investigator",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
+          "started_at": "2026-11-01T18:50:28.969567+00:00",
+          "finished_at": "2026-11-01T18:50:30.598149+00:00"
         }
       ],
       "started_at": "2026-11-01T18:01:22.184063+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:09:12.372880+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:50:30.719102+00:00",
       "outcome_label": "Positive · solution candidate (unverified)",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/nonconsecutive-subset-sums.bundle.json.gz",
-        "sha256_compressed": "0ea59ef540fe7244c942b2e5f4dea9ef85d291169e5b98fc883f11a9a0fb2250",
-        "sha256_uncompressed": "1e43522fb6ac170d91dfafcd12a7dddda9c56c05cfe662dda33cd1f1ad8de2b7",
-        "compressed_bytes": 179017,
-        "uncompressed_bytes": 496827,
-        "gzip_json_valid": true
+        "sha256_compressed": "0cd8d5ba6816f5624b7d81e8634575322dbaf76937e553dc9fddb3348f8e9259",
+        "sha256_uncompressed": "cc08f943064230a173868687fedc5ccaee92907d3629379919fe189b764d3487",
+        "compressed_bytes": 221558,
+        "uncompressed_bytes": 568181,
+        "gzip_json_valid": true,
+        "research_step_count": 10,
+        "session_attempt_count": 10
       },
       "mandatory_source_omitted_count": 0,
       "wall_clock_seconds": 470.189,
-      "provider_call_attempts": 8,
+      "provider_call_attempts": 10,
       "automatic_retry_attempts": 0,
       "tokens_used": 107500,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_or_strategy_failure"
+      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "recovery_attempts": [
+        {
+          "attempt_id": "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
+          "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "5e9a7725c3dd3017cb819b76f8576c3af4e06df8aa08a19c98acc0b62aef7faf",
+          "started_at": "2026-11-01T18:50:28.876882+00:00",
+          "finished_at": "2026-11-01T18:50:30.719102+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        },
+        {
+          "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
+          "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
+          "started_at": "2026-11-01T18:50:28.969567+00:00",
+          "finished_at": "2026-11-01T18:50:30.598149+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        }
+      ]
     },
     {
       "key": "warp",
@@ -843,7 +1085,7 @@
       "problem_sha256": "2c21817948d99c92d596629ddda2c8a6941ea8a610a4647b3c3ae8ed3ce5a08d",
       "investigation_type": "physics",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "ended",
+      "session_status": "paused",
       "session_id": "71bc9990-fab0-4c1a-b03c-1d6daa976a3e",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -885,12 +1127,12 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 7,
+      "calls_used": 9,
       "configured_call_limit": 18,
       "cycle_limit": 3,
       "turns_completed": 6,
-      "turns_failed": 1,
-      "turns_never_dispatched": 5,
+      "turns_failed": 2,
+      "turns_never_dispatched": 4,
       "strategies": [
         {
           "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
@@ -930,7 +1172,17 @@
               "attempt_id": "38c6496d-f4c5-451b-a813-004cccb10327",
               "failure_kind": "provider_limited",
               "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "dispatch_status": "provider_response_rejected",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "52b89a478bfd7345e629f6b3459b6f54f854e8778f490465fd63abfd022a3783",
+                  "all_selected_method_notes_present": true
+                }
+              ]
             },
             {
               "round": 3,
@@ -948,8 +1200,8 @@
           "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
           "strategy_title": "Audit the stress-energy claim",
           "turns_completed": 3,
-          "turns_failed": 0,
-          "turns_never_dispatched": 3,
+          "turns_failed": 1,
+          "turns_never_dispatched": 2,
           "turns": [
             {
               "round": 1,
@@ -978,7 +1230,22 @@
             {
               "round": 2,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "failed",
+              "recovery_attempts": [
+                {
+                  "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
+                  "all_selected_method_notes_present": true
+                }
+              ],
+              "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
+              "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
+              "failure_kind": "provider_limited",
+              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+              "dispatch_status": "provider_response_rejected"
             },
             {
               "round": 3,
@@ -1001,27 +1268,83 @@
           "failure_kind": "provider_limited",
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected"
+        },
+        {
+          "attempt_id": "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
+          "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "52b89a478bfd7345e629f6b3459b6f54f854e8778f490465fd63abfd022a3783",
+          "started_at": "2026-11-01T18:50:32.001692+00:00",
+          "finished_at": "2026-11-01T18:50:35.219655+00:00"
+        },
+        {
+          "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
+          "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
+          "role": "skeptic",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
+          "started_at": "2026-11-01T18:50:32.139819+00:00",
+          "finished_at": "2026-11-01T18:50:33.907394+00:00"
         }
       ],
       "started_at": "2026-11-01T18:01:22.186239+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:10:27.232374+00:00",
+      "last_attempt_finished_at": "2026-11-01T18:50:35.219655+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/warp-drive.bundle.json.gz",
-        "sha256_compressed": "e4aef10f97074ab23d7dbc92eddd5ee8a9b05b14f01b427d30644cc09e6d6b35",
-        "sha256_uncompressed": "7aa67ae66ffa3fa46989a714ad556f59fe8ad456c2524eb0c28a9de146d70d19",
-        "compressed_bytes": 239429,
-        "uncompressed_bytes": 640669,
-        "gzip_json_valid": true
+        "sha256_compressed": "20993d8df92fc36b602414e4d89a99d791919491f479acb673363bad60566099",
+        "sha256_uncompressed": "996174d74f906c795bd11635bdf550415a7fd939d2d479ff485bd28d7f76742f",
+        "compressed_bytes": 304786,
+        "uncompressed_bytes": 740922,
+        "gzip_json_valid": true,
+        "research_step_count": 9,
+        "session_attempt_count": 9
       },
       "mandatory_source_omitted_count": 0,
       "wall_clock_seconds": 545.046,
-      "provider_call_attempts": 7,
+      "provider_call_attempts": 9,
       "automatic_retry_attempts": 0,
       "tokens_used": 128816,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_or_strategy_failure"
+      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "recovery_attempts": [
+        {
+          "attempt_id": "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
+          "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "52b89a478bfd7345e629f6b3459b6f54f854e8778f490465fd63abfd022a3783",
+          "started_at": "2026-11-01T18:50:32.001692+00:00",
+          "finished_at": "2026-11-01T18:50:35.219655+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        },
+        {
+          "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
+          "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
+          "started_at": "2026-11-01T18:50:32.139819+00:00",
+          "finished_at": "2026-11-01T18:50:33.907394+00:00",
+          "token_usage_status": "unavailable",
+          "all_selected_method_notes_present": true
+        }
+      ]
     }
   ],
   "release_gate": "Never READY until all five sessions have 12 completed role turns including each final Skeptic, exports pass full validation, and Chat 2 independently approves scientific review.",
@@ -1057,5 +1380,25 @@
     "chatgpt_plan_usage_consumed": true,
     "plan_usage_units_unavailable": true,
     "tokens_reported_across_sessions": 627915
-  }
+  },
+  "recovery_execution": {
+    "code_sha": "5fc8637535fb4c76f175502645a372e8c569899a",
+    "strategy_call_concurrency_per_resumed_project": 2,
+    "projects_resumed_sequentially": [
+      "agent",
+      "sovereign",
+      "math",
+      "warp"
+    ],
+    "projects_completed_turns_during_recovery": 0,
+    "projects_paused_after_same_provider_error": 4,
+    "additional_provider_attempts": 8,
+    "additional_confirmed_provider_rejections": 8,
+    "automatic_retries": 0,
+    "xenopus_resumed": false,
+    "xenopus_blocker": "Unknown dispatch cannot be replayed safely; five call attempts remain for at least seven pending role turns."
+  },
+  "provider_call_attempts_total": 47,
+  "confirmed_provider_rejections_total": 14,
+  "dispatch_unknown_attempts_total": 1
 }
