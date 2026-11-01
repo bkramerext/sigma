@@ -3665,7 +3665,7 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
                 ]
                 try:
                     await asyncio.wait_for(three_started.wait(), timeout=2)
-                    assert provider_calls == 3, "Both users should reach AI concurrently"
+                    assert provider_calls == 3, "All three users should reach AI concurrently"
                     assert len(papers._generating_paper_projects) == 3
                     try:
                         await papers.generate(
@@ -3678,7 +3678,9 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
                     assert provider_calls == 3
                 finally:
                     release.set()
-                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=5)
+                results = await asyncio.wait_for(
+                    asyncio.gather(first, second, third), timeout=5
+                )
                 assert len(results) == 3
                 assert len(papers.list_papers(str(paths[0]))) == 1
                 assert len(papers.list_papers(str(paths[1]))) == 1
@@ -3750,7 +3752,7 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
                 try:
                     assert await asyncio.wait_for(
                         asyncio.to_thread(three_compiling.wait, 8), timeout=9
-                    ), "Only one paper reached PDF compilation"
+                    ), "Not all three papers reached PDF compilation"
                     assert compilations == 3
                     assert len(papers._generating_paper_projects) == 3
                     try:
@@ -3760,12 +3762,16 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
                     except ProjectError as exc:
                         assert "capacity is full" in str(exc)
                     else:
-                        raise AssertionError("Fourth paper entered while three compilers were active")
+                        raise AssertionError(
+                            "Fourth paper entered while three compilers were active"
+                        )
                     assert provider_calls == 3
                     assert compilations == 3
                 finally:
                     finish_compiling.set()
-                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=6)
+                results = await asyncio.wait_for(
+                    asyncio.gather(first, second, third), timeout=6
+                )
                 assert len(results) == 3
                 assert all(len(papers.list_papers(str(path))) == 1 for path in paths[:3])
                 assert papers.list_papers(str(paths[3])) == []
