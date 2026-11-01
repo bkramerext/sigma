@@ -29,6 +29,7 @@ from sigma.projects import (
 )
 from sigma.research_budget import (
     BudgetExceeded,
+    increase_call_limit,
     new_ledger,
     reserve_before_dispatch,
     settle_rejected,
@@ -57,6 +58,14 @@ def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
     assert current["cost_usd_used_or_reserved"] == 0
     reserve_before_dispatch(ledger, call_id="next", request_body=b"another")
     assert totals(ledger)["calls_including_unknown"] == 2
+    assert increase_call_limit(ledger, 4) == (3, 4)
+    assert ledger["call_limit"] == 4
+    try:
+        increase_call_limit(ledger, 3)
+    except BudgetExceeded as exc:
+        assert "only be increased" in str(exc)
+    else:
+        raise AssertionError("A research call ceiling was reduced")
 
 
 def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried():
@@ -7846,6 +7855,7 @@ async def test_portfolio_preflight_failure_terminates_instead_of_spinning(path: 
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(
             research_sessions,
             "configuration",
@@ -11251,6 +11261,282 @@ def _test_obligation_dispatch_request_contains_only_supplied_citations(path: Pat
     assert record["prior_session_obligations"][0] == original_obligation
 
 
+def test_terminal_protocol_completion_plan_preserves_attempt_history() -> None:
+    def branch(identifier: str, *, status: str = "ended", cycle: int = 3, pending=None):
+        return {
+            "strategy_id": identifier,
+            "strategy_title": identifier,
+            "strategy_text": "Independent bounded strategy.",
+            "status": status,
+            "cycle": cycle,
+            "current_question": "",
+            "pending_investigation": pending,
+            "last_decision": "stop_productive_conclusion",
+        }
+
+    def step(strategy_id: str, role: str, cycle: int, status: str = "completed"):
+        item = {
+            "id": f"{strategy_id}-{role}-{cycle}-{status}",
+            "strategy_id": strategy_id,
+            "role": role,
+            "cycle": cycle,
+            "status": status,
+        }
+        if status == "interrupted":
+            item["failure_kind"] = "interrupted"
+            item["provider_input_audit"] = {"status": "call_interrupted_dispatch_unknown"}
+        elif status == "failed":
+            item["failure_kind"] = "response_invalid"
+            item["provider_input_audit"] = {"status": "provider_response_invalid"}
+        return item
+
+    first, second = "strategy-a", "strategy-b"
+    completed = [
+        step(strategy, role, cycle)
+        for strategy in (first, second)
+        for cycle in (1, 2)
+        for role in ("investigator", "skeptic")
+    ]
+    completed += [step(strategy, "investigator", 3) for strategy in (first, second)]
+    uncertain = step(first, "skeptic", 3, "interrupted")
+    record = {
+        "id": str(uuid4()),
+        "status": "paused",
+        "cycle_limit": 3,
+        "call_limit": 18,
+        "calls_used": 18,
+        "strategy_runs": [
+            branch(first, status="paused", cycle=3, pending={"claim": "Saved claim A"}),
+            branch(second, status="paused", cycle=3, pending={"claim": "Saved claim B"}),
+        ],
+        "steps": completed + [uncertain, step(second, "skeptic", 3, "interrupted")],
+    }
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert error is None and plan is not None
+    assert plan["completed_turns"] == 10
+    assert plan["required_calls"] == 2
+    assert {item["strategy_id"] for item in plan["branches"]} == {first, second}
+    assert all(item["role"] == "skeptic" and item["cycle"] == 3 for item in plan["branches"])
+    assert all("unknown" in item["recovery_context"]["reason"] for item in plan["branches"])
+    assert record["calls_used"] == 18
+    assert uncertain["status"] == "interrupted"
+
+    unsafe = deepcopy(record)
+    unsafe["steps"][-1]["role"] = "investigator"
+    unsafe["steps"] = [
+        item
+        for item in unsafe["steps"]
+        if not (
+            item.get("strategy_id") == second
+            and item.get("role") == "investigator"
+            and item.get("cycle") == 3
+            and item.get("status") == "completed"
+        )
+    ]
+    unsafe["strategy_runs"][1]["cycle"] = 2
+    unsafe["strategy_runs"][1]["pending_investigation"] = None
+    plan, error = research_sessions._protocol_completion_recovery_plan(unsafe)
+    assert plan is None and error is not None and "will not replay" in error
+
+
+def test_terminal_protocol_completion_allows_known_invalid_response_replacement() -> None:
+    first, second = "strategy-a", "strategy-b"
+    steps = []
+    for strategy in (first, second):
+        steps.extend(
+            [
+                {
+                    "id": f"{strategy}-i1",
+                    "strategy_id": strategy,
+                    "role": "investigator",
+                    "cycle": 1,
+                    "status": "completed",
+                },
+                {
+                    "id": f"{strategy}-s1-invalid",
+                    "strategy_id": strategy,
+                    "role": "skeptic",
+                    "cycle": 1,
+                    "status": "failed",
+                    "failure_kind": "response_invalid",
+                    "provider_input_audit": {"status": "provider_response_invalid"},
+                },
+            ]
+        )
+    record = {
+        "status": "failed",
+        "cycle_limit": 3,
+        "call_limit": 15,
+        "calls_used": 4,
+        "steps": steps,
+        "strategy_runs": [
+            {
+                "strategy_id": strategy,
+                "strategy_title": strategy,
+                "strategy_text": "Independent bounded strategy.",
+                "status": "failed",
+                "cycle": 1,
+                "current_question": "Question one",
+                "pending_investigation": {"claim": f"Saved {strategy} claim"},
+            }
+            for strategy in (first, second)
+        ],
+    }
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert error is None and plan is not None
+    assert plan["completed_turns"] == 2
+    assert plan["required_calls"] == 10
+    assert all(item["role"] == "skeptic" and item["cycle"] == 1 for item in plan["branches"])
+    assert all("invalid" in item["recovery_context"]["reason"] for item in plan["branches"])
+
+    record["call_limit"] = 12
+    assert record["call_limit"] - record["calls_used"] == 8
+    assert plan["required_calls"] - (record["call_limit"] - record["calls_used"]) == 2
+
+
+async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path) -> None:
+    view, strategy, credential, config = await setup(path)
+
+    async def idle_worker(*_args):
+        return None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions, "_frozen_session_configuration", new=AsyncMock(return_value=config)
+        ),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        branch = record["strategy_runs"][0]
+        record["cycle_limit"] = 3
+        record["call_limit"] = 3
+        record["calls_used"] = 2
+        record["status"] = "failed"
+        record["current_action"] = "Failed"
+        accepted_id = str(uuid4())
+        invalid_id = str(uuid4())
+        record["steps"] = [
+            {
+                "id": accepted_id,
+                "strategy_id": strategy.id,
+                "role": "investigator",
+                "cycle": 1,
+                "status": "completed",
+            },
+            {
+                "id": invalid_id,
+                "strategy_id": strategy.id,
+                "role": "skeptic",
+                "cycle": 1,
+                "status": "failed",
+                "failure_kind": "response_invalid",
+                "provider_input_audit": {"status": "provider_response_invalid"},
+            },
+        ]
+        record["call_limit"] = 3
+        branch.update(
+            {
+                "status": "failed",
+                "current_action": "Failed",
+                "cycle": 1,
+                "calls_used": 2,
+                "pending_investigation": {
+                    "claim": "Saved Investigator result for round one.",
+                    "reasoning_steps": [],
+                },
+            }
+        )
+        research_sessions._save(str(path), record)
+        original = research_sessions._read(str(path), started["id"])
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "exactly 4" in str(exc)
+        else:
+            raise AssertionError("Protocol recovery silently exceeded its saved call ceiling")
+        assert research_sessions._read(str(path), started["id"]) == original
+
+        resumed = await research_sessions.control_session(
+            str(path), started["id"], "resume", additional_calls=4
+        )
+        assert resumed["status"] == "queued"
+        assert resumed["calls_used"] == 2
+        assert resumed["call_limit"] == 7
+        assert research_sessions._read(str(path), started["id"])["steps"] == original["steps"]
+        assert resumed["call_limit_adjustments"][-1]["from"] == 3
+        assert resumed["call_limit_adjustments"][-1]["to"] == 7
+        branch = resumed["strategy_runs"][0]
+        assert branch["cycle"] == 1
+        assert branch["protocol_completion_recovery"]["role"] == "skeptic"
+        context = research_sessions._portfolio_context(
+            research_sessions._read(str(path), started["id"]), branch, "skeptic", 1
+        )
+        payload = research_sessions._role_request_payload(
+            research_sessions._read(str(path), started["id"]), "skeptic", context
+        )
+        assert "new request" in payload["instructions"]
+        assert invalid_id in json.dumps(payload)
+
+
+def test_protocol_recovery_context_is_a_new_final_provider_input() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "protocol-recovery-context.sigma"
+        view = initialize_project(path, "Protocol recovery audit", "Check saved proof.")
+        strategy_id = str(uuid4())
+        record = {
+            "id": str(uuid4()),
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "project_title": view.project.title,
+            "problem": view.project.problem,
+            "model": MODEL,
+            "reasoning_effort": "high",
+            "mode": "chatgpt",
+            "strategy_ids": [strategy_id],
+            "strategy_id": strategy_id,
+            "strategy_title": "Saved strategy",
+            "strategy_text": "Audit the saved result.",
+            "current_question": "Review the saved result.",
+            "strategy_snapshot": [],
+            "artifacts": [],
+            "steps": [],
+            "prior_session_findings": [],
+            "prior_session_obligations": [],
+            "pending_investigation": {"claim": "Saved accepted Investigator result."},
+            "status": "running",
+            "protocol_completion_recovery": {
+                "role": "skeptic",
+                "cycle": 3,
+                "reason": "A prior Skeptic dispatch has uncertain completion; this is a new independent review.",
+                "prior_attempt_ids": ["unknown-attempt"],
+                "new_request": True,
+            },
+        }
+        branch = {
+            "strategy_id": strategy_id,
+            "strategy_title": record["strategy_title"],
+            "strategy_text": record["strategy_text"],
+            "current_question": record["current_question"],
+            "cycle": 3,
+            "status": "running",
+            "pending_investigation": record["pending_investigation"],
+            "protocol_completion_recovery": record["protocol_completion_recovery"],
+        }
+        context = research_sessions._portfolio_context(record, branch, "skeptic", 3)
+        payload = research_sessions._role_request_payload(record, "skeptic", context)
+        serialized = json.dumps(payload)
+        assert "protocol_completion_recovery" in serialized
+        assert "uncertain completion" in serialized
+        assert "not a replay" in research_sessions._role_instructions("skeptic", context)
+        assert context["protocol_completion_recovery"]["prior_attempt_ids"] == ["unknown-attempt"]
+
+
 def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
     """Regression for Session #5: portfolio coordination must not KeyError."""
     from copy import deepcopy
@@ -11567,6 +11853,15 @@ def main():
     test_context_manifest_compaction_preserves_omission_accounting()
     test_obligation_dispatch_citations_exclude_withheld_history()
     test_obligation_dispatch_request_contains_only_supplied_citations()
+    test_terminal_protocol_completion_plan_preserves_attempt_history()
+    test_terminal_protocol_completion_allows_known_invalid_response_replacement()
+    test_protocol_recovery_context_is_a_new_final_provider_input()
+    with TemporaryDirectory() as temporary:
+        asyncio.run(
+            test_terminal_protocol_resume_extends_only_exact_shortfall(
+                Path(temporary) / "protocol-resume.sigma"
+            )
+        )
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()

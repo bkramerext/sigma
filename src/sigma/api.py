@@ -419,6 +419,7 @@ class ResearchStartRequest(OpenRequest):
 
 class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
+    additional_calls: int = Field(default=0, ge=0, le=12)
 
 
 class ResearchInterventionRequest(OpenRequest):
@@ -901,13 +902,17 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         and isinstance(principal, cloud_auth.Principal)
         and principal.subject.startswith("mock:")
     ):
+        if body.additional_calls:
+            raise HTTPException(400, "Mock research cannot extend provider-call limits.")
         simulated = await run_in_threadpool(
             research_sessions.control_mock_session, body.path, session_id, body.action
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
         return simulated
-    return await research_sessions.control_session(body.path, session_id, body.action)
+    return await research_sessions.control_session(
+        body.path, session_id, body.action, additional_calls=body.additional_calls
+    )
 
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
