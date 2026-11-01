@@ -41,13 +41,13 @@ from sigma.research_budget import (
     settle_after_response,
     settle_rejected,
 )
+from sigma.research_context_budget import compact_dispatch_context
 from sigma.research_epistemics import (
     argument_availability,
     execution_provenance,
     verification_label,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
-from sigma.research_context_budget import compact_dispatch_context
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
@@ -5996,7 +5996,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         if not supplied:
             obligation["source_artifact_availability"] = "pointer_only_original_not_supplied"
         elif any(
-            artifact_availability.get(item) in {
+            artifact_availability.get(item)
+            in {
                 "incomplete_extract_original_not_supplied",
                 "pointer_only_original_not_supplied",
             }
@@ -6972,9 +6973,7 @@ def _select_context_artifacts(
     if len(mandatory_ids) > MAX_CONTEXT_ARTIFACTS:
         # Preserve the newest material evidence and carry older sources as
         # omission pointers instead of terminating a long-running session.
-        recent_material = [
-            item_id for item_id in reversed(list(by_id)) if item_id in mandatory_ids
-        ]
+        recent_material = [item_id for item_id in reversed(list(by_id)) if item_id in mandatory_ids]
         mandatory_ids = set(recent_material[:MAX_CONTEXT_ARTIFACTS])
     ordered_ids = [item_id for item_id in by_id if item_id in mandatory_ids]
     optional_ids = [item_id for item_id in reversed(list(by_id)) if item_id not in mandatory_ids]
@@ -7004,11 +7003,13 @@ def _select_context_artifacts(
                 for key in ("id", "strategy_id", "session_id", "sequence")
                 if key in item
             }
-            pointer.update({
-                "evidence_availability": "pointer_only_original_not_supplied",
-                "extract_truncated_fields": ["budget_compacted_original_not_supplied"],
-                "note": "Saved original intact; this pointer is not a supplied proof or verified source.",
-            })
+            pointer.update(
+                {
+                    "evidence_availability": "pointer_only_original_not_supplied",
+                    "extract_truncated_fields": ["budget_compacted_original_not_supplied"],
+                    "note": "Saved original intact; this pointer is not a supplied proof or verified source.",
+                }
+            )
             saved_bytes = _json_bytes(item) - _json_bytes(pointer)
             if saved_bytes > 0:
                 selected[index] = pointer
@@ -7480,7 +7481,8 @@ def _select_peer_artifacts(
         # Peer evidence grows across strategies. Favor the newest material
         # peers, explicitly retain omitted pointers, and keep research moving.
         recent_material = [
-            artifact["id"] for artifact in reversed(artifacts)
+            artifact["id"]
+            for artifact in reversed(artifacts)
             if isinstance(artifact.get("id"), str) and artifact["id"] in mandatory_ids
         ]
         mandatory_ids = set(recent_material[:MAX_PEER_CONTEXT_ARTIFACTS])
