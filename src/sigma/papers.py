@@ -29,7 +29,7 @@ from pydantic import (
     model_validator,
 )
 
-from sigma import cloud_research, cloud_workspaces
+from sigma import cloud_research, cloud_workspaces, paper_writing_sources
 from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import completed, failure
 from sigma.project_reports import _compile_pdf, _latex
@@ -73,6 +73,7 @@ LongText = Annotated[str, StringConstraints(max_length=8_000)]
 IndexWarning = Annotated[str, StringConstraints(max_length=800)]
 PaperProgressStage = Literal[
     "snapshot",
+    "source_material",
     "writing",
     "evidence",
     "consolidation",
