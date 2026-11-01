@@ -2117,9 +2117,9 @@ async def test_portfolio_python_queue_and_stop(path: Path):
             assert len(finished["artifacts"]) == 3 and finished["calls_used"] == 6
             assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 3
         if action == "project-change":
-            assert not any(
-                event["kind"] == "research.paused" for event in finished["events"]
-            ), "Live strategy edits must not pause the frozen running session"
+            assert not any(event["kind"] == "research.paused" for event in finished["events"]), (
+                "Live strategy edits must not pause the frozen running session"
+            )
 
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
@@ -8006,6 +8006,7 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
     account_view, account_strategy, account_credential, account_config = await setup(account_path)
     entered.clear()
     release.clear()
+    provider_calls.clear()
     with (
         patch.object(
             research_sessions,

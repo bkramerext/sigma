@@ -561,9 +561,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(row.locator(".outcome-simple .outcome-markdown .katex").first).to_be_visible()
             expect(row.locator(".outcome-simple .outcome-markdown .katex-error")).to_have_count(0)
             expect(row.locator(".outcome-conclusion-format-note")).to_have_count(0)
-            expect(row.get_by_role("button", name="Show saved Conclusion")).to_be_visible()
-            expect(row.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
-                "aria-pressed", "true"
+            expect(row.get_by_role("button", name="Show saved Conclusion text")).to_be_visible()
+            expect(row.get_by_role("button", name="Format all research sections as Markdown")).to_have_attribute(
+                "aria-pressed", "false"
             )
             prelude = row.locator(".outcome-evidence-prelude")
             expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
