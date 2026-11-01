@@ -6868,7 +6868,10 @@ async def test_parallel_budget_pressure_defers_without_ending_research(path: Pat
         "research_rounds": 1,
         "model_calls": 4,
         "output_tokens_per_call": 20000,
-        "maximum_estimated_cost_usd": 0.30,
+        # Versioned method notes legitimately increase the prompt's bounded
+        # cost reserve. Keep the ceiling above four settled fixture calls but
+        # below two simultaneous worst-case output reservations.
+        "maximum_estimated_cost_usd": 0.40,
     }
     research_sessions.save_limits(str(path), limits)
     observed_deferral = []
