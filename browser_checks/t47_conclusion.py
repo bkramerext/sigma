@@ -416,14 +416,6 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(source_toggle).to_be_visible()
                 expect(source_toggle).to_have_attribute("aria-pressed", "false")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
-                # Inline Unicode comparisons must not fuse TeX control words,
-                # and quotients must not replace only the subscript's operand.
-                assert not any(
-                    fragment in annotation
-                    for annotation in annotations
-                    for fragment in ("\\leexp", "\\get", "w_\\frac")
-                ), annotations
-                assert any("\\le exp" in value for value in annotations), annotations
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
@@ -433,6 +425,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 annotations = math_nodes.evaluate_all(
                     'nodes => nodes.map(node => node.querySelector("annotation")?.textContent || "")'
                 )
+                # Inline Unicode comparisons must not fuse TeX control words,
+                # and quotients must not replace only the subscript's operand.
+                assert not any(
+                    fragment in annotation
+                    for annotation in annotations
+                    for fragment in ("\\leexp", "\\get", "w_\\frac")
+                ), annotations
+                assert any("\\le exp" in value for value in annotations), annotations
                 assert math_nodes.count() >= 8, (
                     f"Expected at least eight mathematical spans, got {math_nodes.count()}: "
                     f"{annotations}"
