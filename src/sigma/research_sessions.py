@@ -7474,11 +7474,13 @@ def _select_peer_artifacts(
     )
     mandatory_ids.discard(None)
     if len(mandatory_ids) > MAX_PEER_CONTEXT_ARTIFACTS:
-        raise ResearchContextLimitError(
-            f"{len(mandatory_ids)} material peer sources exceed the "
-            f"{MAX_PEER_CONTEXT_ARTIFACTS}-source peer context bound. No provider call was made; "
-            "saved evidence was preserved. Narrow the portfolio question."
-        )
+        # Peer evidence grows across strategies. Favor the newest material
+        # peers, explicitly retain omitted pointers, and keep research moving.
+        recent_material = [
+            artifact["id"] for artifact in reversed(artifacts)
+            if isinstance(artifact.get("id"), str) and artifact["id"] in mandatory_ids
+        ]
+        mandatory_ids = set(recent_material[:MAX_PEER_CONTEXT_ARTIFACTS])
     selected_ids = set(mandatory_ids)
     for artifact in reversed(artifacts):
         if len(selected_ids) >= MAX_PEER_CONTEXT_ARTIFACTS:
