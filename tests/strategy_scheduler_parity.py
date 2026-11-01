@@ -3,6 +3,7 @@
 All responses are synthetic. This runner is intentionally outside the ordinary
 unit-test suite because CI must execute it with two *different* source trees.
 """
+
 from __future__ import annotations
 
 import asyncio
