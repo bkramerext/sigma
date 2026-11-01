@@ -73,9 +73,7 @@ def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
             excerpt["reasoning_steps_omitted"] = len(steps) - len(selected_steps)
             # Positions refer to the *saved original* (one-based). Review
             # indices in this reduced list still follow the supplied order.
-            excerpt["reasoning_step_original_positions_supplied"] = [
-                index + 1 for index in indices
-            ]
+            excerpt["reasoning_step_original_positions_supplied"] = [index + 1 for index in indices]
             excerpt["reasoning_step_original_positions_omitted"] = [
                 index + 1 for index in range(len(steps)) if index not in indices
             ]
