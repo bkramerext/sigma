@@ -523,7 +523,6 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
 
 
 
-
 def test_tex_proofreader_three_passes_with_early_convergence() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "three-pass.sigma"
@@ -1440,11 +1439,11 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
 
         def fail_diagram_then_compile(tex: str, **kwargs):
             compile_tex.append(tex)
-            if len(compile_tex) == 1:
-                # The pre-proofread temporary compile is intentionally a fixture:
+            if len(compile_tex) <= 2:
+                # Each proofreading pass compiles a temporary diagnostic fixture:
                 # the provider receives the generated source next.
                 return b"%PDF-initial-diagnostic-fixture"
-            if len(compile_tex) == 2:
+            if len(compile_tex) == 3:
                 assert r"$\alpha=3$" in tex
                 assert r"\begin{tikzpicture}" in tex
                 if diagnostics := kwargs.get("diagnostics"):
@@ -1485,9 +1484,11 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         assert len(successful_tex) == 1
         assert r"$\\alpha=3$" in compile_tex[0]
         assert r"$\alpha=3$" in compile_tex[1]
+        assert r"$\alpha=3$" in compile_tex[2]
         assert r"$\alpha=3$" in successful_tex[0]
         assert r"\usepackage{tikz}" in compile_tex[0]
         assert r"\usepackage{tikz}" in compile_tex[1]
+        assert r"\usepackage{tikz}" in compile_tex[2]
         assert r"\usepackage{tikz}" not in successful_tex[0]
         assert all(r"\begin{longtable}" in source for source in compile_tex)
         assert r"\begin{longtable}" in successful_tex[0]
@@ -1499,7 +1500,7 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         assert saved["draft"]["sections"][0]["tables"]
         assert saved["tex_source"] == successful_tex[0]
         assert saved["generation"]["proofreading"]["corrected_tex_sha256"] == (
-            papers.hashlib.sha256(compile_tex[1].encode()).hexdigest()
+            papers.hashlib.sha256(compile_tex[2].encode()).hexdigest()
         )
         assert saved["generation"]["proofreading"]["final_tex_sha256"] == (
             papers.hashlib.sha256(saved["tex_source"].encode()).hexdigest()
