@@ -9567,6 +9567,39 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     assert oversized_investigator == saved_investigator
 
 
+def test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage():
+    """Unused turns after individual strategy limits do not mean no funding."""
+    record = {"calls_used": 14, "call_limit": 18, "cycle": 3, "cycle_limit": 3}
+    runs = [
+        {
+            "status": "ended",
+            "strategy_title": "First strategy",
+            "last_decision": "stop_decisive_counterexample",
+            "cycle": 1,
+            "artifacts": ["a1"],
+        },
+        {
+            "status": "ended",
+            "strategy_title": "Second strategy",
+            "last_decision": "stop_budget_exhausted",
+            "cycle": 3,
+            "artifacts": ["a2", "a3", "a4"],
+        },
+        {
+            "status": "ended",
+            "strategy_title": "Third strategy",
+            "last_decision": "stop_budget_exhausted",
+            "cycle": 3,
+            "artifacts": ["a5", "a6", "a7"],
+        },
+    ]
+    code, message = research_sessions._portfolio_termination(record, runs)
+    assert code == "round_limit_reached"
+    assert "per-strategy round limit" in message
+    assert "fund another" not in message
+    assert "funding shortage" in message
+
+
 async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Path):
     """Three strategies and three rounds continue despite live UI-style edits."""
     view, first, credential, config = await setup(path)
@@ -9595,7 +9628,13 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
             output = investigation(context["cycle"])
             output["method"] += " Saved investigation detail." * 160
         else:
-            output = skeptic(context["cycle"])
+            # Live Session #6: a provisional counterexample ended branch one
+            # after round one, leaving four turns unused in a 3x3 portfolio.
+            output = (
+                skeptic(context["cycle"], "stop", "decisive_counterexample")
+                if context["strategy"]["id"] == first.id and context["cycle"] == 1
+                else skeptic(context["cycle"])
+            )
             output["response"] += " Bounded critical review." * 45
         return httpx.Response(200, json=provider_response(output))
 
@@ -9647,6 +9686,15 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
     assert finished["calls_used"] == 18, (finished["calls_used"], finished["message"])
     assert len(submitted) == 18
     assert len(finished["artifacts"]) == 9
+    first_artifact = next(
+        a for a in finished["artifacts"] if a["strategy_id"] == first.id
+    )
+    assert first_artifact["skeptic_output"]["stop_reason"] == "decisive_counterexample"
+    assert first_artifact["coordinator_decision"] == "revise"
+    assert any(
+        event["kind"] == "coordinator.provisional_stop_reopened"
+        for event in finished["events"]
+    )
     assert len({strategy_id for strategy_id, _, _ in submitted}) == 3
     saved = research_sessions._read(str(path), started["id"])
     assert saved["problem"] == view.project.problem
@@ -9942,6 +9990,7 @@ def main():
             )
         )
         asyncio.run(
+            test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage()
             test_eighteen_turns_survive_project_edits_and_bounded_context(
                 root / "portfolio-eighteen-turns.sigma"
             )
