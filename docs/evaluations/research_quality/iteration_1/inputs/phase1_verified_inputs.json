@@ -1,0 +1,50 @@
+{
+  "iteration": "phase2-green-1",
+  "inputs": [
+    {
+      "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+      "subject": "AI Agent Reliability and Evaluation v1",
+      "phase1_match": "exact",
+      "source": "/Users/admin/sigma_brian/projects/ai-agent-reliability-and-evaluation-v1.json",
+      "source_sha256": "666c96aafcaaec048099f9d25ef57f66fdd284a54fb5e7aad3425fad4fde79e3",
+      "source_bytes": 10281881,
+      "preserved_copy": "ai_agent_reliability_v1_phase1_frozen.bundle.json.gz",
+      "preserved_copy_sha256": "67a5a32e1989a6d7726065c1af31050daab212c9079346e730f391e270dcbcdb",
+      "preserved_copy_bytes": 4466183
+    },
+    {
+      "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+      "subject": "Sovereign AI Federation v2",
+      "phase1_match": "exact",
+      "source": "origin/report-quality-coordination:docs/evaluations/report_quality/iteration_1/exports/sovereign-ai-federation-v2-after-research.bundle.json",
+      "source_sha256": "40cdebb730fb4cef73ea2676e9dba8e6666630ee2ec2976af595365f7b6c5ea5",
+      "source_bytes": 2570814,
+      "preserved_copy": "sovereign_ai_federation_v2_phase1_frozen_after_research.bundle.json.gz",
+      "preserved_copy_sha256": "ced4c641c4161673aa91c2a5f3d10521e6be36ba3ef8d35e8eef5ff0735ec256",
+      "preserved_copy_bytes": 923598
+    },
+    {
+      "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+      "subject": "Xenopus Tadpoles v9",
+      "phase1_match": "unverified",
+      "expected_source": "projects/xenopus-tadpoles-v9-frozen.json (recorded in PR #430 messages/message_in_1.md)",
+      "expected_source_sha256": "a7ff404708327b1e1a8c80c19426b0463ab412c61d37fe0406b4c334d9bc28a6",
+      "expected_source_bytes": 2149128,
+      "candidates": [
+        {
+          "source": "projects/xenopus-tail-regeneration-5.sigma",
+          "export_sha256": "371e3baf395ba3d66508df1a64d12f4e914e4823dd19c8ec3a66447565be46bb",
+          "export_bytes": 2150649,
+          "used": false
+        },
+        {
+          "source": "/private/tmp/sigma-pr430-report-quality/projects/xenopus-tadpoles-v9-frozen.json",
+          "export_sha256": "6b0172a3d66212eecde973821e3dc8237a487e9d0b4ce1704db5ab5320631d19",
+          "export_bytes": 8175751,
+          "used": false
+        }
+      ],
+      "note": "Both candidates have the required project ID and title but differ from the Phase 1 frozen export hash and size. Neither is used as the Phase 2 baseline."
+    }
+  ]
+}
