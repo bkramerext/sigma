@@ -3117,6 +3117,101 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     assert r"\section*{Claim status and evidence}" in math_tex
 
 
+def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
+    """Each project type gets general, evidence-specific genre instructions."""
+    cases = (
+        (
+            "mathematical",
+            "lemmas by logical dependency",
+            "a universal theorem",
+            "chosen metric or field ansatz",
+        ),
+        (
+            "physics",
+            "theoretical derivation",
+            "a chosen metric or field ansatz",
+            "Finite enumeration or numerical pattern matching",
+        ),
+    )
+    for project_type, marker, second_marker, excluded in cases:
+        package, plan = fast_package()
+        package["sources"][0]["data"]["investigation_type"] = project_type
+        package["sources"][0]["data"]["problem"] = "Study the stated research question."
+        seen: dict[str, list[str]] = {}
+
+        async def fake_stage(
+            _input, _binding, _config, *, instructions, schema_name, **_kwargs
+        ):
+            seen.setdefault(schema_name, []).append(instructions)
+            if schema_name == "sigma_long_paper_plan":
+                return plan, "fixture-model"
+            assert schema_name == "sigma_long_paper_section"
+            return papers.LongSectionDraft(
+                paragraphs=["The bounded source analysis supports a conditional result."]
+            ), "fixture-model"
+
+        state = papers._new_work(
+            "a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high"
+        )
+
+        async def write_long() -> None:
+            with patch.object(papers, "_provider_structured", new=fake_stage):
+                draft_value, _calls, _batches = await papers._generate_long_draft(
+                    package,
+                    {"mode": "api_key", "identity": "fixture", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _state: None,
+                    structured_fast_path=True,
+                )
+            assert draft_value.sections
+
+        asyncio.run(write_long())
+        assert set(seen) == {"sigma_long_paper_plan", "sigma_long_paper_section"}
+        for value in seen.values():
+            for instructions in value:
+                assert marker in instructions
+                assert second_marker in instructions
+                assert excluded not in instructions
+
+        requests: list[dict[str, Any]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(json.loads(request.content))
+            return httpx.Response(400, json={"error": {"code": "invalid_json_schema"}})
+
+        real_client = httpx.AsyncClient
+        with patch(
+            "sigma.papers.httpx.AsyncClient",
+            side_effect=lambda **kwargs: real_client(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ):
+            try:
+                asyncio.run(
+                    papers._provider(
+                        package,
+                        {"mode": "api_key", "token": "fixture"},
+                        {"model": "fixture-model", "reasoning_effort": "high"},
+                    )
+                )
+            except ProjectError as exc:
+                assert "HTTP 400" in str(exc)
+            else:
+                raise AssertionError("Mock provider should reject schema")
+
+        assert len(requests) == 1
+        assert marker in requests[0]["instructions"]
+        assert second_marker in requests[0]["instructions"]
+        assert excluded not in requests[0]["instructions"]
+
+        opening, methods, _, _ = papers._paper_style(project_type)
+        tex = papers._tex(draft(), [], "f" * 64, investigation_type=project_type)
+        assert rf"\\section{{{opening}}}" in tex
+        assert rf"\\section{{{methods}}}" in tex
+        assert marker not in papers._paper_style("default")[3]
+
+
 def test_military_style_guidance_reaches_all_authoring_paths() -> None:
     """Genre must guide model writing, not merely TeX section labels."""
     package, plan = fast_package()
@@ -6042,6 +6137,7 @@ def main() -> None:
     test_long_paper_can_retrieve_sources_outside_planner_preview()
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_military_style_guidance_reaches_all_authoring_paths()
+    test_math_and_physics_methodology_reaches_every_authoring_path()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()
