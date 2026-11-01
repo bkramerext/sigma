@@ -45,7 +45,14 @@ def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
         shortened.append("method")
     steps = original.get("reasoning_steps")
     if isinstance(steps, list):
-        selected_steps = steps[:2] + steps[-2:] if len(steps) > 4 else steps
+        # Head/tail-only compaction can omit *every* middle proof premise.
+        # Sample across the whole argument while explicitly preserving the
+        # original positions; this remains incomplete evidence, never a proof.
+        if len(steps) > 4:
+            indices = sorted({0, (len(steps) - 1) // 3, 2 * (len(steps) - 1) // 3, len(steps) - 1})
+        else:
+            indices = list(range(len(steps)))
+        selected_steps = [steps[index] for index in indices]
         selected: list[Any] = []
         for step in selected_steps:
             if not isinstance(step, dict):
@@ -64,6 +71,14 @@ def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
                 shortened.append("reasoning_steps")
             excerpt["reasoning_steps_total"] = len(steps)
             excerpt["reasoning_steps_omitted"] = len(steps) - len(selected_steps)
+            # Positions refer to the *saved original* (one-based). Review
+            # indices in this reduced list still follow the supplied order.
+            excerpt["reasoning_step_original_positions_supplied"] = [
+                index + 1 for index in indices
+            ]
+            excerpt["reasoning_step_original_positions_omitted"] = [
+                index + 1 for index in range(len(steps)) if index not in indices
+            ]
         excerpt["reasoning_steps"] = selected
     for field in ("assumptions", "open_obligations"):
         entries = original.get(field)
