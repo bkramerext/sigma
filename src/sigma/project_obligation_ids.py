@@ -4,6 +4,7 @@ Each normalized obligation identity is mapped to a monotonically allocated
 project-local alias (o1, o2, ...). The mapping is a project member, so JSON
 exports and imports preserve it. Saved legacy 64-digit IDs are never rewritten.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,9 +46,9 @@ def _update(raw: bytes | None, identities: list[str]) -> tuple[bytes, dict[str, 
         if digest not in mapping:
             mapping[digest] = f"o{next_value}"
             next_value += 1
-    return (json.dumps({"next": next_value, "by_digest": mapping}, sort_keys=True) + "\n").encode(), {
-        digest: mapping[digest] for digest in identities
-    }
+    return (
+        json.dumps({"next": next_value, "by_digest": mapping}, sort_keys=True) + "\n"
+    ).encode(), {digest: mapping[digest] for digest in identities}
 
 
 def assign_project_obligation_ids(path: str, digests: list[str]) -> dict[str, str]:
@@ -58,7 +59,7 @@ def assign_project_obligation_ids(path: str, digests: list[str]) -> dict[str, st
     if project.suffix == ".json":
         selected: dict[str, str] = {}
 
-        def change(members: dict[str, bytes]) -> dict[str, bytes]:
+        def change(members: dict[str, bytes]) -> dict[str, bytes | None]:
             updated, assigned = _update(members.get(_MEMBER), digests)
             selected.update(assigned)
             return {_MEMBER: updated}
@@ -66,9 +67,11 @@ def assign_project_obligation_ids(path: str, digests: list[str]) -> dict[str, st
         transform_members(project, change)
         return selected
 
-    directory = Path(project) / "research-sessions"
-    if not directory.is_dir() or directory.is_symlink():
-        raise ProjectError("Research session directory is unavailable")
+    # Use the same safe initialization as research-session storage; a fresh
+    # project has no research-sessions directory until its first session starts.
+    from sigma.research_sessions import _directory
+
+    directory = _directory(project)
     target = directory / "obligation-ids.json"
     with project_write_lock(project):
         if target.is_symlink() or (target.exists() and not target.is_file()):
