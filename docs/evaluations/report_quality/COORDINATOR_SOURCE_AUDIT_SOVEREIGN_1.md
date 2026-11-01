@@ -41,6 +41,18 @@ Thus `n=1800` satisfies that **conditional sufficient bound**, and even `n=1731`
 
 A complete academic presentation should say **“Investigator-derived, independently arithmetic-checked sufficient bound; final SIGMA Skeptic review failed, empirical and independence assumptions unverified.”** It must not call the result independently formally proved, peer-reviewed, or empirically validated.
 
+## Citation-specificity baseline (all three papers)
+
+An offline TeX parser (`analysis/claim_provenance_gate.py`) finds **zero entirely missing Evidence labels**, but several labels are too coarse to identify a specific saved result:
+
+| Paper | Claim count | Claims with only project/session-level locators |
+|---|---:|---|
+| AI Agent | 5 | **C1, C2, C3, C4** |
+| Sovereignty | 19 | **C18** |
+| Xenopus | 12 | **none** |
+
+The exact results are in `COORDINATOR_PROVENANCE_BASELINE.json`. This is **locator specificity**, not a test that the cited source supports the proposition. The Agent's coarse labels compound its metadata-as-claim failure; Sovereignty's C18 lacks the precise Investigator step 14; Xenopus has finer labels but its underlying source bundle was not independently inspected here.
+
 ## Positive fidelity checks
 
 The source records explicitly say the two MindRouter starting URLs were **not retrieved**, no campus workload or current vendor prices were measured, and the architecture/pilot were unimplemented. The manuscript correctly preserves those qualifications. The eighth artifact challenges the aggregate-to-sensitive inference with a hypothetical stratum counterexample, and the manuscript includes that correction. These are genuine evidence-fidelity successes; do not erase them while repairing the omitted session-status limitation.
