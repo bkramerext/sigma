@@ -2788,11 +2788,13 @@ def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
         if not incomplete:
             continue
         steps = session.get("steps")
-        failed = [
-            step
-            for step in steps
-            if isinstance(step, dict) and step.get("status") in {"failed", "interrupted"}
-        ] if isinstance(steps, list) else []
+        failed: list[dict[str, Any]] = []
+        if isinstance(steps, list):
+            failed = [
+                step
+                for step in steps
+                if isinstance(step, dict) and step.get("status") in {"failed", "interrupted"}
+            ]
         last = failed[-1] if failed else {}
         call = last.get("call_number")
         role = last.get("role")
