@@ -57,6 +57,24 @@ def check_sovereign_cost_threshold() -> int:
     return checked
 
 
+def check_sovereign_sensitive_stratum() -> None:
+    # Saved artifact d802474b: aggregate 80% does not imply sensitive coverage.
+    assert F(200 * 0 + 800 * 1, 1000) == F(4, 5)
+    assert 200 * 0 == 0
+    # Repaired hypothetical local plan and 90%-useful API completions.
+    local_sensitive = 200 * F(4, 5)
+    local_total = 1000 * F(4, 5)
+    assert local_sensitive == 160 and local_total == 800
+    # ceil((1400-800)/.9) = 667 additional API admissions.
+    minimum_api = -(-(1400 - local_total) // F(9, 10))
+    assert minimum_api == 667
+    assert local_total + 666 * F(9, 10) < 1400
+    assert local_total + 667 * F(9, 10) >= 1400
+    # A-only can meet the aggregate gate but cannot meet sensitive coverage.
+    assert 1800 * F(9, 10) == 1620
+    assert 0 < 160
+
+
 def check_sovereign_power_certificate() -> int:
     # Sufficient bound for the *specific* conservative CP interval gate,
     # under IID paired episodes, hypothetical Delta=.20 and discordance=.40.
@@ -103,6 +121,7 @@ def main() -> None:
     n_agent = check_agent_outcome_identity()
     check_retry_minimax()
     n_cost = check_sovereign_cost_threshold()
+    check_sovereign_sensitive_stratum()
     min_cert = check_sovereign_power_certificate()
     check_xenopus_model()
     print(f"PASS: {n_agent} exact agent joint distributions, 101 retry policies, "
