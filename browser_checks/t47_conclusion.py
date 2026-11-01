@@ -79,6 +79,25 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             * 12
         )
     )
+    # Exact AI Agents proof excerpt reproducing fused commands and bad fractions.
+    session["outcome"]["conclusion"] += (
+        "\n\n"
+        "Let X_hi=(1/r_h)Σ_j(S_Ahij−S_Bhij), so X_hi∈[−1,1], and D=Σ_h(w_h/n_h)Σ_i "
+        "X_hi. Under independent clusters, E[D]=d. A centered variable supported on an "
+        "interval of length 2 has moment-generating function at most exp(λ²/2). "
+        "Applying this bound to the weighted independent X_hi gives "
+        "E[exp(λ(D−d))]≤exp(λ²V/2), where V=Σ_h w_h²/n_h. Markov's inequality and "
+        "minimization at λ=t/V give Pr(D−d≥t)≤exp(−t²/(2V)). Taking t=sqrt(2V log(1/α)) "
+        "shows d≥D−t with probability at least 1−α. Repetition count r_h does not enter "
+        "the worst-case radius: perfectly correlated repeats cannot create additional "
+        "independent tasks."
+        "\n\n"
+        "**Skeptic review:** accepted — Each cluster average has range length two. The "
+        "centered bounded-variable inequality therefore contributes exp(λ²a_hi²/2) for "
+        "weight a_hi=w_h/n_h. Independence across complete clusters gives Σ_hi "
+        "a_hi²=Σ_h w_h²/n_h and the stated one-sided tail radius. No independence among "
+        "repeated runs is required."
+    )
     session["outcome"]["solution_review"] = {
         "status": "achieved",
         "claim": "Conditional on general position, R(n) = 1 + n(n+1)/2.",
@@ -131,6 +150,18 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
         }
     }
     session["outcome_conclusion_version"] = 1
+    # Realistic saved provider-input payload, never needed for the initial
+    # browser render even if the session details are open.
+    if session.get("steps"):
+        session["steps"][0]["provider_input_audit"] = {
+            "kind": "provider_input",
+            "status": "saved",
+            "headers_included": False,
+            "request_body": {
+                "instructions": "Offline acceptance fixture",
+                "input": "long-input-" * 12000,
+            },
+        }
     (sessions_path / f"{session['id']}.json").write_text(
         json.dumps(session, ensure_ascii=False), encoding="utf-8"
     )
@@ -390,28 +421,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "element => (element.compareDocumentPosition(element.parentElement.querySelector('.outcome-subsections')) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0"
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text("The investigation is paused")
-                toggle = conclusion.get_by_role("button", name="Show saved Conclusion text")
-                toggle.hover()
-                toggle_style = toggle.evaluate(
-                    "e => ({rect:e.getBoundingClientRect().toJSON(), "
-                    "border:getComputedStyle(e).borderTopWidth, "
-                    "background:getComputedStyle(e).backgroundColor, "
-                    "color:getComputedStyle(e).color, "
-                    "icon:e.querySelector('svg').getBoundingClientRect().toJSON()})"
-                )
-                assert toggle_style["rect"]["width"] == 28, toggle_style
-                assert toggle_style["rect"]["height"] == 28, toggle_style
-                assert toggle_style["border"] == "0px", toggle_style
-                assert toggle_style["background"] == "rgba(0, 0, 0, 0)", toggle_style
-                assert toggle_style["color"] == "rgb(241, 197, 141)", toggle_style
-                assert toggle_style["icon"]["width"] == 24, toggle_style
-                assert toggle_style["icon"]["height"] == 20, toggle_style
-                expect(toggle).to_have_attribute("aria-pressed", "true")
+                # Conclusion has no duplicate Markdown action. The Outcome
+                # heading controls formatting for research sections.
+                expect(conclusion.locator(":scope > .sigma-render-toggle")).to_have_count(0)
+                source_toggle = outcome.locator(".outcome-heading-title > .sigma-render-toggle")
+                expect(source_toggle).to_be_visible()
+                expect(source_toggle).to_have_attribute("aria-pressed", "false")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
-                source_toggle = conclusion.locator(":scope > .sigma-render-toggle")
-                expect(source_toggle).to_have_attribute("aria-pressed", "true")
-                expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion text")
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
                 expect(finding).to_have_text("Preliminary finding")
@@ -420,6 +437,14 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 annotations = math_nodes.evaluate_all(
                     'nodes => nodes.map(node => node.querySelector("annotation")?.textContent || "")'
                 )
+                # Inline Unicode comparisons must not fuse TeX control words,
+                # and quotients must not replace only the subscript's operand.
+                assert not any(
+                    fragment in annotation
+                    for annotation in annotations
+                    for fragment in ("\\leexp", "\\get", "w_\\frac")
+                ), annotations
+                assert any("\\le exp" in value for value in annotations), annotations
                 assert math_nodes.count() >= 8, (
                     f"Expected at least eight mathematical spans, got {math_nodes.count()}: "
                     f"{annotations}"
@@ -456,14 +481,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 )
                 page.mouse.move(1300, 900)
                 conclusion.screenshot(path="/tmp/sigma-conclusion-typeset-desktop.png")
+                # First click turns on all research sections; second returns
+                # to saved text, including Conclusion.
+                source_toggle.click()
+                expect(source_toggle).to_have_attribute("aria-pressed", "true")
                 source_toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
                 expect(source_toggle).to_have_attribute("aria-pressed", "false")
-                assert (
-                    source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(170, 180, 186)"
-                ), (
-                    "Plain-text state must remain visibly gray even while the pointer hovers over the toggle"
-                )
                 expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
                     "ζ(s)=s/(s−1)"
                 )
@@ -476,11 +500,28 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(conclusion.locator(".outcome-conclusion-source")).not_to_contain_text("$$")
                 source_toggle.click()
                 expect(source_toggle).to_have_attribute("aria-pressed", "true")
-                assert (
-                    source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(241, 197, 141)"
-                )
                 expect(conclusion.locator(".outcome-markdown h3").first).to_have_text(
                     "Preliminary finding"
+                )
+                # Markdown headings belong inside the compact research
+                # disclosure, not at document-cover typography sizes.
+                reasoning = outcome.locator(".outcome-reasoning-subsection")
+                reasoning.locator(":scope > summary").click()
+                heading = reasoning.locator(".outcome-markdown h1").first
+                subheading = reasoning.locator(".outcome-markdown h2").first
+                expect(heading).to_have_text("Reasoning / proof")
+                expect(subheading).to_have_text("Investigated problem")
+                assert (
+                    heading.evaluate(
+                        "element => Number.parseFloat(getComputedStyle(element).fontSize)"
+                    )
+                    <= 20
+                )
+                assert (
+                    subheading.evaluate(
+                        "element => Number.parseFloat(getComputedStyle(element).fontSize)"
+                    )
+                    <= 17
                 )
                 outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
@@ -521,8 +562,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             )
             mobile_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             mobile_conclusion = mobile_row.locator("details.outcome-conclusion")
-            mobile_toggle = mobile_conclusion.locator(":scope > .sigma-render-toggle")
-            expect(mobile_toggle).to_have_attribute("aria-pressed", "true")
+            expect(mobile_conclusion.locator(":scope > .sigma-render-toggle")).to_have_count(0)
+            expect(
+                mobile_row.locator(".outcome-heading-title > .sigma-render-toggle")
+            ).to_be_visible()
             expect(mobile_conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
             expect(mobile_conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
             for width in (375, 320):
@@ -650,6 +693,64 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 path=str(SCREENSHOT_DIR / "sigma-increment13-timeout-mobile.png"),
                 full_page=True,
             )
+            # The exact provider-input disclosure must also avoid rendering
+            # its large JSON body until the user explicitly opens it.
+            audits = saved_row.locator("details.context-used-disclosure").filter(
+                has_text="Exact provider input"
+            )
+            if audits.count():
+                audit = audits.first
+                expect(audit.locator("pre")).to_have_count(0)
+                audit.locator("summary").click()
+                expect(audit.locator("pre")).to_have_count(2)
+                audit.locator("summary").click()
+                expect(audit.locator("pre")).to_have_count(0)
+
+            # Closed historical sessions must not construct full hidden
+            # provider-input/provenance DOM trees. The real project snapshot
+            # can accumulate many megabytes of saved agent input.
+            if disclosure.get_attribute("aria-expanded") != "false":
+                disclosure.click()
+            expect(disclosure).to_have_attribute("aria-expanded", "false")
+            expect(saved_row.locator(".outcome-provenance-list")).to_have_count(0)
+            disclosure.click()
+            expect(saved_row.get_by_role("region", name="Research outcome")).to_be_visible()
+
+            # One malformed historical Outcome must leave the project shell
+            # and saved session controls accessible, not blank the app.
+            diagnostic = browser.new_page(viewport={"width": 1280, "height": 880})
+
+            def malformed_saved_outcome(route):
+                original = route.fetch()
+                response = original.json()
+                if response.get("sessions"):
+                    item = response["sessions"][0]
+                    item["outcome"]["solution_review"]["strategy_findings"] = [
+                        {
+                            "strategy_title": "Malformed saved review",
+                            "reasoning_steps": None,
+                        }
+                    ]
+                route.fulfill(
+                    status=original.status,
+                    content_type="application/json",
+                    body=json.dumps(response),
+                )
+
+            diagnostic.route("**/api/projects/research-sessions?*", malformed_saved_outcome)
+            diagnostic.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
+            diagnostic_row = diagnostic.locator(f'li[data-session-id="{session["id"]}"]')
+            expect(diagnostic_row).to_be_visible()
+            diagnostic_disclosure = diagnostic_row.locator("button.session-row-disclosure")
+            if diagnostic_disclosure.get_attribute("aria-expanded") != "true":
+                diagnostic_disclosure.click()
+            expect(diagnostic.get_by_role("alert").filter(has_text="Session #")).to_contain_text(
+                "could not be displayed"
+            )
+            expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
+            diagnostic.close()
+
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
             browser.close()

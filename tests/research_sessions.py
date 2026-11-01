@@ -425,6 +425,8 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
         role = payload["text"]["format"]["name"]
         calls.append((strategy_id, role, cycle))
         if strategy_id == first.id and role == "research_skeptic":
+            if cycle == 2:
+                raise httpx.ReadTimeout("final shared turn timed out")
             terminal_review = skeptic(1, "stop", "no_progress")
             terminal_review["remaining_obligations"] = []
             terminal_review["next_question"] = ""
@@ -435,8 +437,6 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
             result = investigation(cycle)
             result["open_obligations"] = []
             return httpx.Response(200, json=provider_response(result))
-        if strategy_id == second.id and role == "research_skeptic" and cycle == 2:
-            raise httpx.ReadTimeout("final shared turn timed out")
         if strategy_id == second.id and role == "research_skeptic":
             return httpx.Response(200, json=provider_response(skeptic(1)))
         return httpx.Response(200, json=provider_response(investigation(cycle)))
@@ -471,16 +471,16 @@ async def test_last_shared_turn_failure_survives_terminal_sibling_finalization(p
         finished["message"],
         branches,
     )
-    assert calls[-1] == (second.id, "research_skeptic", 2), (calls, finished["message"], branches)
-    assert branches[first.id]["status"] == "ended"
+    assert calls[-1] == (first.id, "research_skeptic", 2), (calls, finished["message"], branches)
+    assert branches[first.id]["status"] == "failed"
     assert branches[first.id]["artifacts"]
-    assert branches[second.id]["status"] == "failed"
-    assert branches[second.id]["termination_reason_code"] == "timeout"
+    assert branches[first.id]["termination_reason_code"] == "timeout"
+    assert branches[second.id]["status"] == "ended"
     assert [step["status"] for step in finished["steps"]].count("failed") == 1
     assert finished["steps"][-1]["failure_kind"] == "timeout"
     assert finished["termination_reason_code"] == "provider_or_strategy_failure"
     assert len(finished["artifacts"]) == 2
-    assert "Second route: provider response timed out" in finished["message"]
+    assert "Saved approach: provider response timed out" in finished["message"]
     assert "final available turn" in finished["message"]
     assert "no further agent turn remained for recovery" in finished["message"]
     assert "2 findings were preserved" in finished["message"]
@@ -2675,6 +2675,75 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
         raise AssertionError("UTF-8 over-budget mandatory question was accepted")
 
 
+def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
+    """Project aliases survive recomputation and never rewrite historical IDs."""
+    from sigma.project_obligation_ids import assign_project_obligation_ids
+
+    view = initialize_project(path, "Project obligation aliases", "Prove the claim.")
+    project_id = view.project.id
+    strategy_id = str(uuid4())
+    a = "Check a counterexample under assumption A."
+    b = "Establish the boundary case under assumption B."
+    first_digest = research_sessions._obligation_identity(
+        a, project_id=project_id, strategy_id=strategy_id, assumptions=[]
+    )
+    second_digest = research_sessions._obligation_identity(
+        b, project_id=project_id, strategy_id=strategy_id, assumptions=[]
+    )
+    assert assign_project_obligation_ids(str(path), [first_digest]) == {first_digest: "o1"}
+    assert assign_project_obligation_ids(str(path), [first_digest, second_digest]) == {
+        first_digest: "o1",
+        second_digest: "o2",
+    }
+    assert assign_project_obligation_ids(str(path), [second_digest]) == {second_digest: "o2"}
+
+    old_artifact = {
+        "id": str(uuid4()),
+        "project_id": project_id,
+        "strategy_id": strategy_id,
+        "open_obligations": [a],
+    }
+    original = deepcopy(old_artifact)
+    legacy, _, _ = research_sessions._obligation_ledger(
+        [old_artifact], project_id=project_id, strategy_id=strategy_id
+    )
+    assert legacy[0]["obligation_id"] == first_digest
+    assert old_artifact == original
+
+    new_artifact = {
+        "id": str(uuid4()),
+        "project_id": project_id,
+        "strategy_id": strategy_id,
+        "open_obligations": [b],
+    }
+    compact, _, _ = research_sessions._obligation_ledger(
+        [new_artifact],
+        project_id=project_id,
+        strategy_id=strategy_id,
+        prior_obligations=legacy,
+        identity_path=str(path),
+    )
+    ids = {row["obligation_id"] for row in compact}
+    assert ids == {first_digest, "o2"}, ids
+    assert compact[0]["obligation_id"] == first_digest
+    assert compact[1]["obligation_id"] == "o2"
+    assert new_artifact["open_obligations"] == [b]
+
+    # All three ID families are accepted as references, but an agent cannot
+    # review an ID absent from the supplied ledger.
+    for value in ("o12", first_digest, str(uuid4())):
+        assert (
+            research_sessions.ObligationReview(
+                obligation_id=value,
+                status="unresolved",
+                basis_artifact_ids=[],
+                basis_step_ids=[],
+                rationale="This still requires verification.",
+            ).obligation_id
+            == value
+        )
+
+
 def test_t37_obligation_identity_lifecycle_and_history(path: Path):
     view = initialize_project(path, "Scoped obligation history", "Check an exact claim.")
     strategy = str(uuid4())
@@ -2923,13 +2992,14 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         "strategy_snapshot": [],
         "artifacts": [decisive],
     }
-    try:
-        research_sessions._agent_context(record, "investigator", 1)
-    except research_sessions.ResearchContextLimitError as exc:
-        assert "extract is incomplete" in str(exc)
-        assert "No provider call was made" in str(exc)
-    else:
-        raise AssertionError("A mandatory artifact with truncated decisive content was supplied")
+    context = research_sessions._agent_context(record, "investigator", 1)
+    assert context["prior_artifacts"][0]["extract_truncated_fields"] == ["method"]
+    assert context["prior_artifacts"][0]["evidence_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
+    assert context["obligation_ledger"][0]["source_artifact_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
     assert json.dumps(decisive) == before
 
     # Freeze an ordinary-language obligation ahead of thirteen routine notes,
@@ -3066,6 +3136,8 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
 
 
 async def test_t37_mandatory_context_blocks_before_provider(path: Path):
+    # Many material sources no longer force an otherwise valid session to stop.
+    # Selected sources are bounded; omitted originals remain saved and named.
     view, strategy, _, _ = await setup(path)
     session_id = str(uuid4())
     artifacts = [
@@ -3085,16 +3157,6 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
         }
         for index in range(research_sessions.MAX_CONTEXT_ARTIFACTS + 1)
     ]
-    branch = {
-        "strategy_id": strategy.id,
-        "strategy_title": strategy.title,
-        "strategy_text": strategy.approach,
-        "current_question": "Test one precise consequence.",
-        "status": "queued",
-        "cycle": 0,
-        "calls_used": 0,
-        "artifacts": [],
-    }
     record = {
         "id": session_id,
         "project_path": view.path,
@@ -3103,84 +3165,57 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
         "strategy_title": strategy.title,
         "strategy_text": strategy.approach,
         "problem": view.project.problem,
-        "current_question": branch["current_question"],
+        "current_question": "Test one precise consequence.",
         "strategy_snapshot": [],
         "artifacts": artifacts,
-        "strategy_runs": [branch],
-        "steps": [],
-        "events": [],
-        "status": "running",
-        "calls_used": 0,
-        "call_limit": 6,
     }
-    research_sessions._save(view.path, record)
-    credential_mock = AsyncMock(side_effect=AssertionError("provider preflight must not run"))
-    with (
-        patch.object(research_sessions, "execution_capabilities", return_value=[]),
-        patch.object(research_sessions, "auth_context", new=credential_mock),
-    ):
-        success = await research_sessions._portfolio_role_call(
-            session_id,
-            view.path,
-            strategy.id,
-            "investigator",
-            1,
-            asyncio.Semaphore(1),
-            asyncio.Lock(),
-        )
-    saved = research_sessions._read(view.path, session_id)
-    assert success is False
-    assert credential_mock.await_count == 0
-    assert saved["calls_used"] == 0 and saved["steps"] == []
-    assert saved["strategy_runs"][0]["status"] == "paused"
-    assert (
-        "mandatory current-session evidence sources exceed" in saved["strategy_runs"][0]["reason"]
-    )
-    assert any(event["kind"] == "research.context_blocked" for event in saved["events"])
+    context = research_sessions._agent_context(record, "investigator", 1)
+    assert len(context["prior_artifacts"]) == research_sessions.MAX_CONTEXT_ARTIFACTS
+    assert context["context_manifest"]["mandatory_source_omitted_count"] == 1
+    assert artifacts[0]["id"] in context["context_manifest"]["mandatory_source_omitted_ids"]
+    assert artifacts[0]["id"] not in context["context_artifact_ids"]
+    assert artifacts[-1]["id"] in context["context_artifact_ids"]
+    assert context["context_manifest"]["omitted_count"] == 1
+    assert research_sessions._json_bytes(context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
 
-    # A required obligation whose deterministic text extract would truncate
-    # must also stop at assembly, before the authentication/provider boundary.
-    truncated_session_id = str(uuid4())
-    truncated_branch = {**branch, "status": "queued", "calls_used": 0, "artifacts": []}
-    truncated_record = {
-        **record,
-        "id": truncated_session_id,
-        "strategy_runs": [truncated_branch],
-        "artifacts": [
-            {
-                "id": "long-open-obligation",
-                "sequence": 1,
-                "strategy_id": strategy.id,
-                "open_obligations": ["Resolve " + "x" * 710],
-                "method": "Saved complete source remains in the original artifact.",
-            }
-        ],
-        "status": "running",
-        "calls_used": 0,
-        "steps": [],
-        "events": [],
-    }
-    research_sessions._save(view.path, truncated_record)
-    credential_mock.reset_mock()
-    with (
-        patch.object(research_sessions, "execution_capabilities", return_value=[]),
-        patch.object(research_sessions, "auth_context", new=credential_mock),
-    ):
-        allowed = await research_sessions._portfolio_role_call(
-            truncated_session_id,
-            view.path,
-            strategy.id,
-            "investigator",
-            1,
-            asyncio.Semaphore(1),
-            asyncio.Lock(),
-        )
-    blocked = research_sessions._read(view.path, truncated_session_id)
-    assert allowed is False and credential_mock.await_count == 0
-    assert blocked["calls_used"] == 0 and blocked["steps"] == []
-    assert "obligation exceeds the safe extract bound" in blocked["strategy_runs"][0]["reason"], (
-        blocked["strategy_runs"][0]["reason"]
-    )
+    # A required obligation whose text extract is incomplete must remain
+    # visibly incomplete rather than being sent as complete evidence.
+    record["artifacts"] = [
+        {
+            "id": "long-open-obligation",
+            "sequence": 1,
+            "strategy_id": strategy.id,
+            "open_obligations": ["Resolve " + "x" * 710],
+            "method": "Saved complete source remains in the original artifact.",
+        }
+    ]
+    truncated = research_sessions._agent_context(record, "investigator", 1)
+    open_item = truncated["obligation_ledger"][0]
+    assert open_item["status"] == "unresolved"
+    assert open_item["text_complete"] is False
+    assert truncated["incomplete_unresolved_obligation_count"] == 1
+    assert truncated["context_manifest"]["incomplete_unresolved_obligations"]["count"] == 1
+
+    # Older unresolved items may be excluded from one bounded provider packet,
+    # but their IDs and unresolved status are not erased from saved artifacts.
+    original_obligations = [
+        f"Open problem {index}" for index in range(research_sessions.MAX_CONTEXT_OBLIGATIONS + 3)
+    ]
+    record["artifacts"] = [
+        {
+            "id": "many-open-obligations",
+            "sequence": 1,
+            "strategy_id": strategy.id,
+            "open_obligations": original_obligations,
+        }
+    ]
+    bounded = research_sessions._agent_context(record, "investigator", 1)
+    assert len(bounded["obligation_ledger"]) == research_sessions.MAX_CONTEXT_OBLIGATIONS
+    assert bounded["obligation_ledger_omitted_count"] == 3
+    assert len(bounded["obligation_ledger_omitted_ids"]) == 3
+    assert all(item["status"] == "unresolved" for item in bounded["obligation_ledger"])
+    assert original_obligations[0] not in [item["text"] for item in bounded["obligation_ledger"]]
+    assert original_obligations[-1] in [item["text"] for item in bounded["obligation_ledger"]]
 
 
 async def test_clipped_investigator_automatically_recovers(path: Path):
@@ -5203,7 +5238,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         finished = await wait_for(path, started["id"])
         assert "context manifest explains selection" in provider_requests[1]["instructions"]
         skeptic_context = json.loads(provider_requests[1]["input"])
-        assert skeptic_context["context_manifest"]["policy_version"] == "t37-v1"
+        assert skeptic_context["context_manifest"]["policy_version"] == "continuity-v2"
         assert "prior_artifacts" in skeptic_context
         assert skeptic_context["investigator_output"]["claim"] == proof["claim"]
         assert all(isinstance(step.get("context_manifest"), dict) for step in finished["steps"])
@@ -5214,7 +5249,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             for item in export_project_view(str(path))["research_sessions"]
             if item["id"] == finished["id"]
         )
-        assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "t37-v1"
+        assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "continuity-v2"
         assert (
             exported_session["outcome"]["solution_review"]["argument_steps"]
             == finished["outcome"]["solution_review"]["argument_steps"]
@@ -6171,6 +6206,96 @@ async def test_concurrent_strategy_portfolio(path: Path):
     assert finished["portfolio_decision"]["status"] == "model_reported_unverified"
 
 
+async def test_session7_context_pause_recovers_original_18_turn_research(path: Path):
+    """An old context guard at approximately turn 11 must not destroy the session.
+
+    Restart the *same* research after its preflight context interruption and
+    preserve every committed artifact. The provider is a deterministic mock.
+    """
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent reliability route", "Test failure isolation."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Independent recovery route", "Test recovery safety."
+    ).project.strategies[-1]
+    limits = research_sessions.save_limits(
+        str(path),
+        {
+            **research_sessions.get_limits(str(path)),
+            "research_rounds": 3,
+            "model_calls": 18,
+            "session_duration_minutes": None,
+        },
+    )
+    requests = 0
+    old_guard_active = False
+    original_context = research_sessions._agent_context
+
+    def context_with_reproduction(record, role, cycle):
+        if old_guard_active:
+            raise research_sessions.ResearchContextLimitError(
+                "Synthetic old 256 KB context guard; saved original is intact."
+            )
+        return original_context(record, role, cycle)
+
+    async def handler(request):
+        nonlocal requests, old_guard_active
+        requests += 1
+        # Reproduce the observable boundary of Session #7 after eleven turns.
+        # The guard rejects *new* context assembly, never an in-flight call.
+        if requests == 11:
+            old_guard_active = True
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        result = (
+            investigation(context["cycle"])
+            if payload["text"]["format"]["name"] == "research_investigator"
+            else skeptic(context["cycle"])
+        )
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "_agent_context", side_effect=context_with_reproduction),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        interrupted = await wait_for(path, started["id"])
+        assert interrupted["status"] in {"paused", "stopped"}, interrupted["message"]
+        assert 11 <= interrupted["calls_used"] < 18, interrupted["calls_used"]
+        assert interrupted["artifacts"], "Context interruption must retain completed work"
+        assert any(e["kind"] == "research.context_blocked" for e in interrupted["events"])
+        committed = {a["id"]: deepcopy(a) for a in interrupted["artifacts"]}
+        old_guard_active = False
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["id"] == started["id"]
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] in {"ended", "completed"}, finished["message"]
+    assert finished["calls_used"] == 18, finished["message"]
+    assert requests == 18
+    assert len(finished["artifacts"]) == 9
+    saved = {a["id"]: a for a in finished["artifacts"]}
+    assert all(saved[item_id] == source for item_id, source in committed.items())
+    assert len(saved) == len({a["id"] for a in finished["artifacts"]})
+    assert len([step for step in finished["steps"] if step["status"] == "completed"]) == 18
+
+
 async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
     path: Path,
 ):
@@ -6198,6 +6323,8 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         },
     )
     requests = 0
+    dispatched_contexts = []
+    dispatch_limit = 65_000  # Force compaction before and after turn eleven.
 
     async def handler(request):
         nonlocal requests
@@ -6206,12 +6333,29 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
             raise httpx.ReadError("Synthetic transport interruption at turn fourteen")
         payload = json.loads(request.content)
         context = json.loads(payload["input"])
+        dispatched_contexts.append(context)
+        assert research_sessions._json_bytes(context) <= dispatch_limit
         cycle = context["cycle"]
         response = (
             investigation(cycle)
             if payload["text"]["format"]["name"] == "research_investigator"
             else skeptic(cycle)
         )
+        if payload["text"]["format"]["name"] == "research_investigator":
+            # Valid maximum-sized provider fields, not a malformed 20 KB
+            # method that fails schema validation before context is tested.
+            response["method"] += " Long saved method detail." * 170
+            response["reasoning_steps"].extend(
+                {
+                    "title": f"Additional consideration {i}",
+                    "argument": "Substantial but unresolved derivation. " * 150,
+                    "epistemic_status": "conjecture",
+                    "basis_artifact_ids": [],
+                }
+                for i in range(3)
+            )
+        else:
+            response["response"] += " Long saved Skeptic objection." * 155
         if (
             context["strategy"]["id"] == first.id
             and cycle == 1
@@ -6224,6 +6368,7 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         return httpx.Response(200, json=provider_response(response))
 
     with (
+        patch.object(research_sessions, "MAX_AGENT_CONTEXT_BYTES", dispatch_limit),
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch(
@@ -6264,6 +6409,18 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     )
     assert finished.get("termination_reason_code") != "research_completed_early"
     assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
+    # Attempt fourteen fails before its request body is inspected by the mock.
+    assert len(dispatched_contexts) == 54
+    # The source-selector may bound history before the dispatch-only compactor
+    # runs. Test the invariant rather than requiring a particular algorithm
+    # or provenance marker: cumulative saved research greatly exceeds the
+    # allowable request, but every submitted packet remains under budget.
+    assert research_sessions._json_bytes(finished["artifacts"]) > dispatch_limit * 5
+    assert all(
+        len(a["investigator_output"]["method"]) > 4_000
+        and len(a["investigator_output"]["reasoning_steps"]) == 4
+        for a in finished["artifacts"]
+    ), "Dispatch compaction must preserve original saved evidence"
 
 
 async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(path: Path):
@@ -10329,6 +10486,298 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
     assert ledger["calls"] == []
 
 
+def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
+    """Regression for Session #5: portfolio coordination must not KeyError."""
+    from copy import deepcopy
+
+    ledger = [
+        {"obligation_id": "open-a", "status": "unresolved", "text": "First open question."},
+        {"obligation_id": "closed-b", "status": "resolved", "text": "Previously resolved."},
+        {"obligation_id": "open-c", "status": "unresolved", "text": "Second open question."},
+    ]
+    original_ledger = deepcopy(ledger)
+    context = {
+        "problem": "Test context growth without losing active research.",
+        "obligation_ledger": ledger,
+        "outstanding_obligations": ["Large duplicated text " * 900, "Another open obligation"],
+        "context_manifest": {"sources": []},
+    }
+    assert research_sessions._json_bytes(context) > 2048
+    assert research_sessions.compact_dispatch_context(context, limit=2048)
+    assert "outstanding_obligations" not in context
+    assert context["context_manifest"]["outstanding_obligations_location"] == "obligation_ledger"
+    assert research_sessions._context_obligation_count(context) == 2
+    assert context["obligation_ledger"] == original_ledger
+
+    # Older saved dispatch records may have only the legacy flat list.
+    assert (
+        research_sessions._context_obligation_count(
+            {"outstanding_obligations": ["first", "second"]}
+        )
+        == 2
+    )
+    assert (
+        research_sessions._context_obligation_count(
+            {"outstanding_obligations": ["stale"], "obligation_ledger": []}
+        )
+        == 0
+    )
+    assert research_sessions._context_obligation_count({}) == 0
+
+
+def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
+    """Long runs preserve provenance while dropping redundant prompt bytes."""
+    from copy import deepcopy
+
+    original_evidence = [
+        {
+            "id": f"saved-{index}",
+            "strategy_id": "strategy-a",
+            "method": f"Older saved argument {index}. " + ("x" * 18000),
+            "evidence_status": "Unverified",
+        }
+        for index in range(18)
+    ]
+    context = {
+        "problem": "Investigate whether this agent architecture is reliable.",
+        "strategy": {"id": "strategy-a", "approach": "Test competing hypotheses."},
+        "question": "Continue the next research turn.",
+        "prior_artifacts": deepcopy(original_evidence),
+        "obligation_ledger": [
+            {
+                "obligation_id": "open-one",
+                "text": "Check the counterexample before claiming a result.",
+                "status": "unresolved",
+                "source_artifact_ids": ["saved-1"],
+                "supplied_source_artifact_ids": ["saved-1"],
+                "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+            }
+        ],
+        "outstanding_obligations": ["Check the counterexample before claiming a result."],
+        "context_manifest": {
+            "sources": [
+                {
+                    "category": "current_session_material_evidence",
+                    "source_ids": ["saved-0", "saved-17"],
+                    "status": "selected",
+                    "representation": "deterministic_extract",
+                }
+            ]
+        },
+    }
+    assert research_sessions._json_bytes(context) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert research_sessions.compact_dispatch_context(
+        context, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert research_sessions._json_bytes(context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert context["problem"] == "Investigate whether this agent architecture is reliable."
+    assert context["question"] == "Continue the next research turn."
+    assert context["obligation_ledger"][0]["status"] == "unresolved"
+    assert context["obligation_ledger"][0]["text"] == (
+        "Check the counterexample before claiming a result."
+    )
+    assert context["obligation_ledger"][0]["source_artifact_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
+    assert context["prior_artifacts"][0]["id"] == "saved-0"
+    assert context["prior_artifacts"][0]["method"] == original_evidence[0]["method"]
+    assert context["prior_artifacts"][1]["evidence_availability"] == (
+        "pointer_only_original_not_supplied"
+    )
+    assert original_evidence[0]["method"].endswith("x" * 18000)
+    assert (
+        context["context_manifest"]["dispatch_budget_compaction"]["counts"]["prior_artifacts"] > 0
+    )
+
+    # Do not truncate the active problem and pretend a request can continue.
+    huge_question = {
+        "problem": "p" * (research_sessions.MAX_AGENT_CONTEXT_BYTES + 1),
+        "context_manifest": {"sources": []},
+        "prior_artifacts": [],
+    }
+    assert not research_sessions.compact_dispatch_context(
+        huge_question, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert len(huge_question["problem"]) == research_sessions.MAX_AGENT_CONTEXT_BYTES + 1
+
+    # One valid Investigator may contain 24 reasoning steps with 12 KB each:
+    # a Skeptic must still receive an honestly incomplete bounded extract,
+    # and the exact full Investigator response must remain untouched.
+    oversized_investigator = {
+        "claim": "A provisional local result, not a proof.",
+        "method": "Method detail " * 400,
+        "reasoning_steps": [
+            {
+                "title": f"Step {i}",
+                "argument": "Reasoning detail " * 650,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+            for i in range(24)
+        ],
+        "open_obligations": ["Resolve the remaining counterexample"],
+        "evidence_status": "Unverified model reasoning.",
+    }
+    saved_investigator = deepcopy(oversized_investigator)
+    skeptic_context = {
+        "problem": "Evaluate the provisional result without inventing proof.",
+        "investigator_output": oversized_investigator.copy(),
+        "investigator_step_id": "saved-investigator-step",
+        "context_manifest": {"sources": []},
+    }
+    assert (
+        research_sessions._json_bytes(skeptic_context) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert research_sessions.compact_dispatch_context(
+        skeptic_context, limit=research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert (
+        research_sessions._json_bytes(skeptic_context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    assert skeptic_context["investigator_output_extract_complete"] is False
+    excerpt = skeptic_context["investigator_output"]
+    assert excerpt["extract_complete"] is False
+    assert excerpt["evidence_availability"] == "incomplete_extract_original_not_supplied"
+    assert excerpt["reasoning_steps_total"] == 24
+    assert excerpt["reasoning_steps_omitted"] == 20
+    assert "reasoning_steps" in excerpt["extract_truncated_fields"]
+    assert skeptic_context["context_manifest"]["inflight_investigator_extract"][
+        "source_step_id"
+    ] == ("saved-investigator-step")
+    assert oversized_investigator == saved_investigator
+
+
+def test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage():
+    """Unused turns after individual strategy limits do not mean no funding."""
+    record = {"calls_used": 14, "call_limit": 18, "cycle": 3, "cycle_limit": 3}
+    runs = [
+        {
+            "status": "ended",
+            "strategy_title": "First strategy",
+            "last_decision": "stop_decisive_counterexample",
+            "cycle": 1,
+            "artifacts": ["a1"],
+        },
+        {
+            "status": "ended",
+            "strategy_title": "Second strategy",
+            "last_decision": "stop_budget_exhausted",
+            "cycle": 3,
+            "artifacts": ["a2", "a3", "a4"],
+        },
+        {
+            "status": "ended",
+            "strategy_title": "Third strategy",
+            "last_decision": "stop_budget_exhausted",
+            "cycle": 3,
+            "artifacts": ["a5", "a6", "a7"],
+        },
+    ]
+    code, message = research_sessions._portfolio_termination(record, runs)
+    assert code == "round_limit_reached"
+    assert "per-strategy round limit" in message
+    assert "fund another" not in message
+    assert "funding shortage" in message
+
+
+async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Path):
+    """Three strategies and three rounds continue despite live UI-style edits."""
+    view, first, credential, config = await setup(path)
+    next_view = create_strategy(path, "Independent second approach", "Check a second route.")
+    second = next(row for row in next_view.project.strategies if row.id != first.id)
+    third_view = create_strategy(path, "Independent third approach", "Check a third route.")
+    third = next(
+        row for row in third_view.project.strategies if row.id not in {first.id, second.id}
+    )
+    limits = research_sessions.get_limits(str(path))
+    limits.update({"research_rounds": 3, "model_calls": 18})
+    limits = research_sessions.save_limits(str(path), limits)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    submitted = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        submitted.append((context["strategy"]["id"], role, context["cycle"]))
+        if len(submitted) == 1:
+            entered.set()
+            await release.wait()
+        if role == "research_investigator":
+            output = investigation(context["cycle"])
+            output["method"] += " Saved investigation detail." * 160
+        else:
+            # Live Session #6: a provisional counterexample ended branch one
+            # after round one, leaving four turns unused in a 3x3 portfolio.
+            output = (
+                skeptic(context["cycle"], "stop", "decisive_counterexample")
+                if context["strategy"]["id"] == first.id and context["cycle"] == 1
+                else skeptic(context["cycle"])
+            )
+            output["response"] += " Bounded critical review." * 45
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "MAX_AGENT_CONTEXT_BYTES", 45_000),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        edit_strategy(str(path), first.id, first.title, first.approach + " Edited while playing.")
+        set_strategy_enabled(str(path), second.id, False)
+        current = inspect_project(path).project
+        update_project(
+            str(path),
+            current.title,
+            current.problem + " (edited while playing)",
+            current.investigation_type.value,
+            current.ai_model,
+            current.reasoning_effort,
+            {
+                "title": current.title,
+                "problem": current.problem,
+                "investigation_type": current.investigation_type.value,
+                "ai_model": current.ai_model,
+                "reasoning_effort": current.reasoning_effort,
+                "difficulty": current.difficulty.value if current.difficulty else None,
+                "show_advanced_outcome_details": False,
+            },
+            show_advanced_outcome_details=True,
+        )
+        release.set()
+        finished = await wait_for(path, started["id"])
+    assert finished["status"] in {"ended", "completed"}, finished["message"]
+    assert finished["calls_used"] == 18, (finished["calls_used"], finished["message"])
+    assert len(submitted) == 18
+    assert len(finished["artifacts"]) == 9
+    first_artifact = next(a for a in finished["artifacts"] if a["strategy_id"] == first.id)
+    assert first_artifact["skeptic_output"]["stop_reason"] == "decisive_counterexample"
+    assert first_artifact["coordinator_decision"] == "revise"
+    assert any(
+        event["kind"] == "coordinator.provisional_stop_reopened" for event in finished["events"]
+    )
+    assert len({strategy_id for strategy_id, _, _ in submitted}) == 3
+    saved = research_sessions._read(str(path), started["id"])
+    assert saved["problem"] == view.project.problem
+    assert saved["strategy_runs"][0]["strategy_text"] == first.approach
+
+
 def main():
     test_backend_build_is_pinned_at_backend_start()
     test_project_cost_denial_reports_affordable_first_call()
@@ -10341,6 +10790,8 @@ def main():
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
+    test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
+    test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_parallel_funding_uses_estimates_without_changing_provider_request()
     test_portfolio_capacity_tracks_strategies_not_billing_mode()
@@ -10416,6 +10867,9 @@ def main():
         )
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         test_t37_context_selection_is_stable_and_loss_visible(root / "t37-context.sigma")
+        test_project_compact_obligation_ids_preserve_legacy_references(
+            root / "compact-obligation-ids.sigma"
+        )
         test_t37_obligation_identity_lifecycle_and_history(root / "t37-obligation-review.sigma")
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
@@ -10535,10 +10989,16 @@ def main():
         asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
         asyncio.run(
+            test_session7_context_pause_recovers_original_18_turn_research(
+                root / "session7-context-resume.sigma"
+            )
+        )
+        asyncio.run(
             test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
                 root / "portfolio-54-turns.sigma"
             )
         )
+        asyncio.run(
         asyncio.run(
             test_parallel_budget_pressure_defers_without_ending_research(
                 root / "budget-pressure-deferral.sigma"
@@ -10648,6 +11108,12 @@ def main():
         asyncio.run(
             test_three_strategies_launch_under_three_turn_shared_ceiling(
                 root / "portfolio-three-turns.sigma"
+            )
+        )
+        test_portfolio_round_ceiling_not_mislabeled_as_funding_shortage()
+        asyncio.run(
+            test_eighteen_turns_survive_project_edits_and_bounded_context(
+                root / "portfolio-eighteen-turns.sigma"
             )
         )
         asyncio.run(
