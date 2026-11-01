@@ -52,9 +52,9 @@ h1 {{ margin: 0 0 20px; color: #efc28a; font-size: 22px; }}
                 "Project",
                 "Strategies",
                 "Research",
-                "Review and refine",
+                "Refine",
                 "Optional paper",
-                "Review and export",
+                "Review/export",
             ]
             normalized_labels = " ".join(" ".join(label.split()) for label in labels)
             assert len(nodes.all()) == 6, normalized_labels
@@ -70,7 +70,7 @@ h1 {{ margin: 0 0 20px; color: #efc28a; font-size: 22px; }}
                 "Flowchart should fit common desktop widths without excessive scrolling"
             )
             source = blocks[0]
-            assert source.lstrip().startswith("flowchart LR"), source[:100]
+            assert "flowchart LR" in source, source[:150]
             assert "-." not in source and "|" not in source, (
                 "Flowchart must not contain special/branch edges"
             )
