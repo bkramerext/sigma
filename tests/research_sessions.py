@@ -7420,7 +7420,19 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
         finished = await wait_for(path, started["id"])
 
     assert finished["status"] == "ended"
-    assert len(finished["artifacts"]) == 1
+    assert len(finished["artifacts"]) == 1, {
+        "status": finished["status"],
+        "calls_used": finished["calls_used"],
+        "branches": [
+            (item["strategy_id"], item["status"], item.get("current_action"), item.get("reason"))
+            for item in finished["strategy_runs"]
+        ],
+        "steps": [
+            (step.get("strategy_id"), step.get("role"), step.get("status"), step.get("failure_kind"))
+            for step in finished["steps"]
+        ],
+        "events": [event["kind"] for event in finished["events"][-15:]],
+    }
     assert finished["calls_used"] == 2
     failed_events = [
         event for event in finished["events"] if event["kind"] == "call.preflight_failed"
