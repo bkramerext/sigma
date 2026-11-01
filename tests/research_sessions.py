@@ -5063,7 +5063,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         finished = await wait_for(path, started["id"])
         assert "context manifest explains selection" in provider_requests[1]["instructions"]
         skeptic_context = json.loads(provider_requests[1]["input"])
-        assert skeptic_context["context_manifest"]["policy_version"] == "t37-v1"
+        assert skeptic_context["context_manifest"]["policy_version"] == "continuity-v2"
         assert "prior_artifacts" in skeptic_context
         assert skeptic_context["investigator_output"]["claim"] == proof["claim"]
         assert all(isinstance(step.get("context_manifest"), dict) for step in finished["steps"])
@@ -5074,7 +5074,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             for item in export_project_view(str(path))["research_sessions"]
             if item["id"] == finished["id"]
         )
-        assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "t37-v1"
+        assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "continuity-v2"
         assert (
             exported_session["outcome"]["solution_review"]["argument_steps"]
             == finished["outcome"]["solution_review"]["argument_steps"]
@@ -9316,7 +9316,6 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
     assert ledger["calls"] == []
 
 
-
 def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     """Long runs preserve provenance while dropping redundant prompt bytes."""
     from copy import deepcopy
@@ -9377,7 +9376,9 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
         "pointer_only_original_not_supplied"
     )
     assert original_evidence[0]["method"].endswith("x" * 18000)
-    assert context["context_manifest"]["dispatch_budget_compaction"]["counts"]["prior_artifacts"] > 0
+    assert (
+        context["context_manifest"]["dispatch_budget_compaction"]["counts"]["prior_artifacts"] > 0
+    )
 
     # Do not truncate the active problem and pretend a request can continue.
     huge_question = {
@@ -9397,7 +9398,9 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
     next_view = create_strategy(path, "Independent second approach", "Check a second route.")
     second = next(row for row in next_view.project.strategies if row.id != first.id)
     third_view = create_strategy(path, "Independent third approach", "Check a third route.")
-    third = next(row for row in third_view.project.strategies if row.id not in {first.id, second.id})
+    third = next(
+        row for row in third_view.project.strategies if row.id not in {first.id, second.id}
+    )
     limits = research_sessions.get_limits(str(path))
     limits.update({"research_rounds": 3, "model_calls": 18})
     limits = research_sessions.save_limits(str(path), limits)
@@ -9427,20 +9430,31 @@ async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Pa
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
-            side_effect=lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs),
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
         ),
     ):
         started = await research_sessions.start_session(
-            str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
-            expected_limits=limits, strategy_ids=[first.id, second.id, third.id],
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
         )
         await asyncio.wait_for(entered.wait(), 2)
         edit_strategy(str(path), first.id, first.title, first.approach + " Edited while playing.")
         set_strategy_enabled(str(path), second.id, False)
         current = inspect_project(path).project
         update_project(
-            str(path), current.title, current.problem + " (edited while playing)",
-            current.investigation_type.value, current.ai_model, current.reasoning_effort,
+            str(path),
+            current.title,
+            current.problem + " (edited while playing)",
+            current.investigation_type.value,
+            current.ai_model,
+            current.reasoning_effort,
             {
                 "title": current.title,
                 "problem": current.problem,
