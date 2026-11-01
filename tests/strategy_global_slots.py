@@ -95,20 +95,31 @@ asyncio.run(main())
             patch.object(research_sessions.cloud_workspaces, "enabled", return_value=False),
             patch.dict(os.environ, {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": "32"}),
         ):
-            async with AsyncExitStack() as held:
-                for index in range(32):
-                    await held.enter_async_context(
-                        research_sessions._portfolio_global_gate(f"owner-{index}")
+            # The caller's bound guest/member workspace must NOT select a
+            # private per-user provider capacity directory.
+            private_workspace = root / "guest-workspace"
+            private_workspace.mkdir(mode=0o700)
+            guest = research_sessions.cloud_workspaces.Workspace(
+                "a" * 32, "guest", private_workspace, guest=True
+            )
+            binding = research_sessions.cloud_workspaces._CURRENT.set(guest)
+            try:
+                async with AsyncExitStack() as held:
+                    for index in range(32):
+                        await held.enter_async_context(
+                            research_sessions._portfolio_global_gate(f"owner-{index}")
+                        )
+                    blocked = await asyncio.to_thread(
+                        subprocess.run,
+                        [sys.executable, "-c", child, str(root)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=8,
                     )
-                blocked = await asyncio.to_thread(
-                    subprocess.run,
-                    [sys.executable, "-c", child, str(root)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=8,
-                )
-                assert blocked.stdout.strip() == "blocked", blocked.stdout
+                    assert blocked.stdout.strip() == "blocked", blocked.stdout
+            finally:
+                research_sessions.cloud_workspaces._CURRENT.reset(binding)
             admitted = await asyncio.to_thread(
                 subprocess.run,
                 [sys.executable, "-c", child, str(root)],
