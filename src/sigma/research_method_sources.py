@@ -146,24 +146,44 @@ BY_ID = {row["id"]: row for row in CATALOG}
 # Only identify problem branch to select a *method reference*, never treat
 # branch-keyword matches as verified scientific facts or pre-solved results.
 BRANCH_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
-    ("mathematical", "combinatorics", re.compile(
-        r"\b(subsets?|combinatoric\w*|counting|generating function|recurrence|modulo|fibonacci|graph enumerat\w*)\b", re.IGNORECASE
-    )),
-    ("physics", "relativity", re.compile(
-        r"\b(warp|spacetime|metric|relativit\w*|einstein|superluminal|ftl|stress.energy)\b", re.IGNORECASE
-    )),
-    ("biology", "animal-regeneration", re.compile(
-        r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b", re.IGNORECASE
-    )),
-    ("computer_science", "federation", re.compile(
-        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE
-    )),
-    ("computer_science", "ai-reliability", re.compile(
-        r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b", re.IGNORECASE
-    )),
-    ("engineering", "federation", re.compile(
-        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE
-    )),
+    (
+        "mathematical",
+        "combinatorics",
+        re.compile(
+            r"\b(subsets?|combinatoric\w*|counting|generating function|recurrence|modulo|fibonacci|graph enumerat\w*)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "physics",
+        "relativity",
+        re.compile(
+            r"\b(warp|spacetime|metric|relativit\w*|einstein|superluminal|ftl|stress.energy)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "biology",
+        "animal-regeneration",
+        re.compile(r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b", re.IGNORECASE),
+    ),
+    (
+        "computer_science",
+        "federation",
+        re.compile(r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE),
+    ),
+    (
+        "computer_science",
+        "ai-reliability",
+        re.compile(
+            r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b", re.IGNORECASE
+        ),
+    ),
+    (
+        "engineering",
+        "federation",
+        re.compile(r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE),
+    ),
 )
 
 
@@ -171,9 +191,12 @@ def _usable(row: Mapping[str, Any]) -> bool:
     """Never select a broken/unreadable or metadata-only catalog record."""
     return (
         isinstance(row.get("id"), str)
-        and isinstance(row.get("title"), str) and len(row["title"]) >= 10
-        and isinstance(row.get("url"), str) and row["url"].startswith("https://")
-        and isinstance(row.get("notes"), str) and len(row["notes"]) >= 50
+        and isinstance(row.get("title"), str)
+        and len(row["title"]) >= 10
+        and isinstance(row.get("url"), str)
+        and row["url"].startswith("https://")
+        and isinstance(row.get("notes"), str)
+        and len(row["notes"]) >= 50
         and len(row["notes"]) <= 900
     )
 
@@ -220,8 +243,7 @@ def _complete(ids: list[str], mode: str, branch: str | None) -> bool:
     ):
         return False
     if branch and any(
-        row["tier"] == "branch" and row.get("branch") == branch and _usable(row)
-        for row in CATALOG
+        row["tier"] == "branch" and row.get("branch") == branch and _usable(row) for row in CATALOG
     ):
         return "branch" in levels
     return True
@@ -265,8 +287,9 @@ def select_method_sources(
         # Retain the previous *readable content*, not only source IDs:
         # later catalog copy edits must not silently change a controlled
         # multi-session research comparison. Reject unsafe/empty old rows.
-        if not all(_usable(row) and row.get("tier") == BY_ID[row["id"]]["tier"]
-                   for row in source_rows):
+        if not all(
+            _usable(row) and row.get("tier") == BY_ID[row["id"]]["tier"] for row in source_rows
+        ):
             continue
         rows = [dict(row) for row in source_rows]
         return {
@@ -282,10 +305,19 @@ def select_method_sources(
     rows = [r for r in CATALOG if _usable(r)]
     selected = []
     general = next((r for r in rows if r.get("tier") == "general"), None)
-    discipline = next((r for r in rows if r.get("tier") == "discipline" and r.get("mode") == mode), None)
+    discipline = next(
+        (r for r in rows if r.get("tier") == "discipline" and r.get("mode") == mode), None
+    )
     if discipline is None:
         discipline = next((r for r in rows if r.get("id") == "stanford-abduction"), None)
-    specialty = next((r for r in rows if r.get("tier") == "branch" and r.get("branch") == branch and r.get("mode") == mode), None)
+    specialty = next(
+        (
+            r
+            for r in rows
+            if r.get("tier") == "branch" and r.get("branch") == branch and r.get("mode") == mode
+        ),
+        None,
+    )
     for row in (general, discipline, specialty):
         if row and row["id"] not in {item["id"] for item in selected}:
             selected.append(_source(row))
@@ -306,5 +338,7 @@ def select_method_sources(
 
 
 def methodology_digest(selection: Mapping[str, Any]) -> str:
-    payload = json.dumps(selection.get("sources", []), sort_keys=True, ensure_ascii=False).encode("utf-8")
+    payload = json.dumps(selection.get("sources", []), sort_keys=True, ensure_ascii=False).encode(
+        "utf-8"
+    )
     return hashlib.sha256(payload).hexdigest()
