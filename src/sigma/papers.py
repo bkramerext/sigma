@@ -1557,9 +1557,7 @@ def _evidence_based_long_plan(
     groups: list[tuple[str, str, list[str], list[EvidenceNote]]] = []
     for heading, purpose, kinds in categories:
         relevant = [
-            note
-            for note in notes
-            if note.kind in kinds and ranked_candidates[id(note)][0] >= 0
+            note for note in notes if note.kind in kinds and ranked_candidates[id(note)][0] >= 0
         ]
         refs = list(
             dict.fromkeys(
@@ -1753,9 +1751,7 @@ def _evidence_based_long_plan(
     # Synthesize an answer to the question, a counterweight, and the
     # remaining verification burden. Reprinting the claim register here
     # produces a paper-shaped log, not a research conclusion.
-    result_claim = next(
-        (c for c in conclusion_claims if claim_kinds.get(c.id) == "result"), None
-    )
+    result_claim = next((c for c in conclusion_claims if claim_kinds.get(c.id) == "result"), None)
     negative_claim = next(
         (c for c in conclusion_claims if claim_kinds.get(c.id) == "negative"), None
     )
@@ -1781,13 +1777,25 @@ def _evidence_based_long_plan(
         if claim_kinds.get(claim.id) == "result" and claim is not result_claim
     ]
     if other_results:
+        # Contradictory-looking observations must not disappear merely
+        # because a longer unrelated proof ranked higher in the index.
+        contrasting = [
+            claim
+            for claim in other_results
+            if re.search(r"\b(?:no|not|cannot|failed|contrary|opposite|disagree)\b",
+                         claim.statement, re.IGNORECASE)
+        ]
+        qualifying = list(dict.fromkeys(claim.id for claim in [*contrasting, *other_results]))
+        by_id = {claim.id: claim for claim in other_results}
+        selected = [by_id[claim_id] for claim_id in qualifying[:3]]
         conclusions.append(
-            "A separate source-linked finding must also be accounted for: "
-            + other_results[0].statement
-            + " Its relationship to the first finding requires explicit assessment."
+            "Other recorded findings could qualify or conflict with this interpretation: "
+            + " ".join(claim.statement for claim in selected)
+            + " Their compatibility is not independently established."
         )
-        if other_results[0] not in conclusion_claims:
-            conclusion_claims.append(other_results[0])
+        for claim in selected:
+            if claim not in conclusion_claims:
+                conclusion_claims.append(claim)
     if negative_claim is not None:
         conclusions.append(
             f"This interpretation must also account for the recorded "
@@ -1795,13 +1803,10 @@ def _evidence_based_long_plan(
         )
     if limitation_claim is not None:
         conclusions.append(
-            f"The principal remaining evidence boundary is: "
-            f"{limitation_claim.statement}"
+            f"The principal remaining evidence boundary is: {limitation_claim.statement}"
         )
     if questions:
-        conclusions.append(
-            "The next unresolved question is: " + questions[0]
-        )
+        conclusions.append("The next unresolved question is: " + questions[0])
     conclusions.append(
         "A stronger conclusion requires resolving the identified objections, "
         "checking the exact archived evidence and conducting any proposed "
