@@ -1,5 +1,8 @@
 # Coordinator unblock addendum for Green — Phase 2 I2 research context references
 
+
+> **Current owner override (Nov 1, 2026):** [Phase 2 consolidation instructions](phase2_green_out_2_consolidation.md) supersede this document's separate-#434 publication and all-five-12/12-before-paper-consumption rules. PR #434 was merged into the feature branch of PR #433, and best scientifically reviewed research is selected per project. Historical protocol counts and research-quality requirements remain intact.
+
 **Read this after** `messages/phase2_green_in_2_completion.md`. It is a bounded engineering addendum to the existing I2 assignment, **not** a new iteration or license to restart near-finished research. Runtime and tests are on PR #433. The full source/export lane stays PR #434 STAGING.
 
 ## Latest Green handoff synchronized
