@@ -28,6 +28,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from sigma import cloud_research, cloud_workspaces, session_log
+from sigma.research_method_sources import methodology_digest, select_method_sources
 from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
@@ -2162,6 +2163,10 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
 
 def _outcome(record: dict[str, Any]) -> dict[str, Any]:
     outcome = _outcome_without_metrics(record)
+    # Source Material is a separate methodology disclosure, never a claim that
+    # an Investigator retrieved a domain source or independently checked it.
+    if isinstance(record.get("research_method_sources"), dict):
+        outcome["source_material"] = record["research_method_sources"]
     review = outcome.get("solution_review")
     outcome["verification_label"] = verification_label(review)
     outcome["argument_availability"] = argument_availability(review, record.get("artifacts", []))
@@ -2834,6 +2839,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + " "
         + RESEARCH_DISCOVERY_GUIDANCE
         + RESEARCH_SHARED_VALIDATION_GUIDANCE
+        + " Use the session's methodology_source_material as optional, source-attributed research-method guidance, not as evidence about the project subject. Do not pretend those websites were inspected by this agent or cite them as domain findings. A failed or missing methodology reference never blocks the research task. "
         + (RESEARCH_SKEPTIC_METHOD_GUIDANCE if role == "skeptic" else "")
         + _research_mode_guidance(context)
         + " "
@@ -5084,6 +5090,21 @@ async def start_session(
             # research admission. Omitted IDs/counts remain frozen in the session
             # and are disclosed to every agent in its context manifest.
             record["session_number"] = _allocate_session_number(view.path, records)
+            # Deterministic source-discovery step *before* either agent turn.
+            # Frozen in the saved session; reuse the last sufficiently
+            # comprehensive set and never block on unavailable web material.
+            record["research_method_sources"] = select_method_sources(
+                view.project.investigation_type.value,
+                view.project.title,
+                view.project.problem,
+                (item.approach for item in selected_strategies if item is not None),
+                records,
+            )
+            record["research_method_sources"]["sha256"] = methodology_digest(
+                record["research_method_sources"]
+            )
+            # _outcome was initialized before all session metadata existed.
+            record["outcome"] = _outcome(record)
             obligation_source_ids = {
                 artifact_id
                 for item in record["prior_session_obligations"]
@@ -6199,6 +6220,14 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "problem": record["problem"],
         "investigation_type": record.get("investigation_type"),
         "research_method_version": RESEARCH_METHOD_VERSION,
+        "methodology_source_material": (
+            record.get("research_method_sources", {}).get("sources", [])
+            if isinstance(record.get("research_method_sources"), dict) else []
+        ),
+        "methodology_source_status": (
+            record.get("research_method_sources", {}).get("status", "unavailable")
+            if isinstance(record.get("research_method_sources"), dict) else "unavailable"
+        ),
         "strategy": {
             "id": record["strategy_id"],
             "title": record["strategy_title"],
