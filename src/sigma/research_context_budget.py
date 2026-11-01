@@ -45,8 +45,26 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
         entries = context.get(field)
         if not isinstance(entries, list):
             continue
-        # Earlier entries are the oldest within their selection groups.
-        for index, entry in enumerate(entries):
+        # Compact optional extracts before material evidence, then older
+        # entries before newer ones within each priority class.
+        material_ids = {
+            source_id
+            for group in manifest.get("sources", [])
+            if isinstance(group, dict)
+            and group.get("category") == "current_session_material_evidence"
+            and group.get("status") == "selected"
+            for source_id in group.get("source_ids", [])
+            if isinstance(source_id, str)
+        } if field == "prior_artifacts" else set()
+        indices = sorted(
+            range(len(entries)),
+            key=lambda i: (
+                isinstance(entries[i], dict) and entries[i].get(id_field) in material_ids,
+                i,
+            ),
+        )
+        for index in indices:
+            entry = entries[index]
             if _bytes(context) <= limit:
                 break
             if not isinstance(entry, dict) or not isinstance(entry.get(id_field), str):
