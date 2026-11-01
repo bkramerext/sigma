@@ -8475,12 +8475,12 @@ async def _portfolio_role_call(
                 _role_request_payload(record, role, context)
             )
             request_token_bound = len(serialized_request) + 8192
-            # Hard token quotas hold the model's actual maximum output
-            # exposure; user-visible USD estimates remain separate and do
-            # not change the provider request or research response limit.
+            # Hard input/cost budgets reserve the full model output bound.
+            # Sponsored user token allowances remain estimated; global dollar
+            # exposure is independently reserved at the maximum output bound.
             estimated_output_tokens = (
                 output_bound
-                if isinstance(hard_ledger, dict) or cloud_research.billing_enabled()
+                if isinstance(hard_ledger, dict)
                 else min(output_bound, max(1, int(record.get("output_token_limit") or 4000)))
             )
             token_reserve = request_token_bound + estimated_output_tokens
