@@ -531,9 +531,9 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
             "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
         )
         tex = (
-            "\\documentclass{article}\\n\\begin{document}\\n"
+            r"\documentclass{article}" + "\n" + r"\begin{document}" + "\n"
             + r"$\\\\alpha+\\\\beta=3$"
-            + "\\n\\end{document}\\n"
+            + "\n" + r"\end{document}" + "\n"
         )
         calls = 0
 
