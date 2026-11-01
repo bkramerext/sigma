@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sqlite3
 import subprocess
 import sys
 from contextlib import AsyncExitStack
@@ -11,7 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from sigma import research_sessions
+from sigma import cloud_research, research_sessions
 
 
 def main() -> None:
@@ -120,6 +121,28 @@ asyncio.run(main())
     print("PASS: local real gate never exceeds 32 across backend processes.")
 
 
+def test_global_spend_holds_full_provider_exposure() -> None:
+    """The global cap must not mistake a soft user estimate for worst-case usage."""
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.execute(
+        "CREATE TABLE calls (amount_usd REAL, maximum_liability_usd REAL, "
+        "status TEXT, created_at TEXT)"
+    )
+    db.execute(
+        "INSERT INTO calls VALUES (0.04, 1.28, 'reserved', '2026-01-01')"
+    )
+    with patch.object(cloud_research, "_global_window_start", return_value=None):
+        assert cloud_research._global_call_amount_units(db) == 1_280_000_000
+        assert cloud_research._call_amount_units(db, "") == 40_000_000
+        db.execute(
+            "UPDATE calls SET amount_usd=0.08, status='usage_estimated'"
+        )
+        assert cloud_research._global_call_amount_units(db) == 80_000_000
+    db.close()
+
+
 if __name__ == "__main__":
     main()
     asyncio.run(test_real_local_admission_gate())
+    test_global_spend_holds_full_provider_exposure()
