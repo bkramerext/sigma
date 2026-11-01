@@ -10229,17 +10229,56 @@ async def _portfolio_strategy_pipeline(
     """Complete one branch's next dependency-ordered turn or turn pair."""
     strategy_id = branch["strategy_id"]
     cycle = branch["cycle"]
-    if branch.get("pending_investigation") is not None:
+    role = "skeptic" if branch.get("pending_investigation") is not None else "investigator"
+    try:
+        if role == "skeptic":
+            return await _portfolio_role_call_with_recovery(
+                session_id, path, strategy_id, role, cycle, semaphore, state_lock
+            )
+        if not await _portfolio_role_call_with_recovery(
+            session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
+        ):
+            return False
+        role = "skeptic"
         return await _portfolio_role_call_with_recovery(
-            session_id, path, strategy_id, "skeptic", cycle, semaphore, state_lock
+            session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         )
-    if not await _portfolio_role_call_with_recovery(
-        session_id, path, strategy_id, "investigator", cycle + 1, semaphore, state_lock
-    ):
+    except Exception as exc:  # A single branch must never discard completed sibling output.
+        async with state_lock:
+            record = _read(path, session_id)
+            if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
+                return False
+            saved = next(
+                item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
+            )
+            _record_preflight_failure(record, saved, role, "branch_execution", exc)
+            # Conservatively retain any uncertainty about a dispatched attempt.
+            for step in record.get("steps", []):
+                if step.get("strategy_id") != strategy_id or step.get("status") != "running":
+                    continue
+                step["status"] = "interrupted"
+                step["failure_kind"] = "branch_execution_failure"
+                step["token_usage_status"] = "unavailable"
+                step["finished_at"] = _now()
+                if isinstance(record.get("hard_budget_ledger"), dict):
+                    mark_unknown(record["hard_budget_ledger"], call_id=step["id"])
+                if cloud_research.billing_enabled() and step.get("attempt_id"):
+                    try:
+                        cloud_research.mark_call_unknown(session_id, step["attempt_id"])
+                    except cloud_research.CloudResearchUnavailable:
+                        pass  # Retain the original spending reservation.
+            guarded = _is_guard_failure(str(exc))
+            saved["status"] = "paused" if guarded else "failed"
+            saved["current_action"] = "Paused · preflight" if guarded else "Failed · strategy"
+            saved["reason"] = str(exc).strip()[:1000] or "Strategy execution failed."
+            saved["termination_reason_code"] = (
+                "preflight_error" if guarded else "strategy_execution_failure"
+            )
+            _refresh_token_accounting(record)
+            _event(record, "strategy.paused" if guarded else "strategy.failed",
+                   f"{saved['strategy_title']}: {saved['reason']}")
+            _save(path, record)
         return False
-    return await _portfolio_role_call_with_recovery(
-        session_id, path, strategy_id, "skeptic", cycle + 1, semaphore, state_lock
-    )
 
 
 def _bounded_concurrency_env(name: str, default: int, maximum: int) -> int:
