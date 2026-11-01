@@ -186,13 +186,13 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
 }
 
 function parallelSessionActivity(session: ResearchSession): string | null {
-  if (session.status !== 'running' && session.status !== 'queued') return null;
+  if (session.status !== 'running') return null;
   if (!session.strategy_runs || session.strategy_runs.length <= 1) return null;
   const active = new Set((session.steps ?? []).filter(step => step.status === 'running').map(step => step.strategy_id));
   const waiting = session.strategy_runs.filter(branch =>
     (branch.status === 'queued' || branch.status === 'running') && !active.has(branch.strategy_id),
   ).length;
-  return `${active.size} in flight · ${waiting} waiting · ${session.artifacts.length} findings saved`;
+  return `${active.size} in flight · ${waiting} waiting`;
 }
 
 function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
@@ -212,29 +212,23 @@ function strategyLiveStatusLines(session: ResearchSession): { id: string; label:
               : branch.status === 'failed' ? 'Failed'
                 : branch.status === 'ended' ? 'Ended' : 'Waiting';
     const detail = step
-      ? (role === 'Investigator' ? 'Investigating' : 'Reviewing') + (branch.current_question ? `: ${branch.current_question}` : ' current research')
-      : branch.status === 'queued' && branch.current_question ? `Next: ${branch.current_question}`
-        : branch.reason || (action && !['Investigator', 'Skeptic'].includes(action) ? action : branch.status);
-    const compact = detail.replace(/\s+/g, ' ').trim();
+      ? branch.current_question || 'In progress'
+      : branch.status === 'queued' && branch.current_question ? branch.current_question
+        : branch.reason || (action && !['Investigator', 'Skeptic'].includes(action) ? action : 'In progress');
+    // The label already identifies the activity. Do not echo it in the detail.
+    const redundantPrefix = role === 'Coordinator' ? /^Coordinat(?:ing|or)\b[\s:·–—-]*/i
+      : role === 'Waiting' ? /^Waiting(?: for)?\b[\s:·–—-]*/i
+        : role === 'Paused' ? /^(?:Paused|Pausing)\b[\s:·–—-]*/i
+          : role === 'Failed' ? /^Failed\b[\s:·–—-]*/i
+            : role === 'Ended' ? /^Ended\b[\s:·–—-]*/i
+              : role === 'Queued' ? /^Queued\b[\s:·–—-]*/i : null;
+    const compact = (redundantPrefix ? detail.replace(redundantPrefix, '') : detail).replace(/\s+/g, ' ').trim() || 'In progress';
     return { id: branch.strategy_id, label: `S${index + 1}/${role}`, detail: compact.length > 150 ? `${compact.slice(0, 147)}…` : compact };
   });
 }
 
-function liveResearchSummary(session: ResearchSession): string | null {
-  if (session.status !== 'running') return null;
-  const activity = parallelSessionActivity(session);
-  if (activity) return activity;
-  const action = session.current_action?.trim();
-  const question = session.current_question?.trim();
-  const source = [action, question].filter(Boolean).join(': ');
-  if (!source) return null;
-  const words = source.replace(/\s+/g, ' ').split(' ');
-  return words.length > 50 ? `${words.slice(0, 50).join(' ')}…` : source.replace(/\s+/g, ' ');
-}
-
 function outcomeDisplayLabel(session: ResearchSession): string {
-  const liveSummary = liveResearchSummary(session);
-  return liveSummary ?? `${session.outcome.label}${session.outcome.provisional ? ' · provisional' : ''}`;
+  return `${session.outcome.label}${session.outcome.provisional ? ' · provisional' : ''}`;
 }
 
 function stoppedSessionGuidance(session: ResearchSession): { cause: string; next: string } {
@@ -1562,13 +1556,13 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {(item.status === 'stopped' || item.status === 'paused' || item.recoverable_clipped_response) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} title={`Resume session #${item.session_number}`} data-tooltip={`Resume session #${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={() => requestResume(item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
                   {['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} title={`Stop Session ${item.session_number}; it can be resumed later`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>
-                  <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>
-                  {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                  {!['running', 'queued'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
+                  {confirmRemoveId === item.id && !['running', 'queued'].includes(item.status) && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
-                <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
-                <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {sessionEstimatedCostLabel(item)}</small>
+                {!['running', 'stopped', 'paused'].includes(item.status) && <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>}
+                <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</small>
                 {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
               </div>
             </div>
