@@ -11188,7 +11188,9 @@ async def _worker(session_id: str, path: str) -> None:
                     guidance=guidance,
                 )
                 _save(path, record)
-                output, usage = await _call(record, role, context, step_id=step["id"])
+                # Legacy sessions share the same backend-wide provider capacity.
+                async with _portfolio_global_gate(session_id):
+                    output, usage = await _call(record, role, context, step_id=step["id"])
             finally:
                 for gate in reversed(gates):
                     gate.release()
