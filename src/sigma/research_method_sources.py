@@ -147,22 +147,22 @@ BY_ID = {row["id"]: row for row in CATALOG}
 # branch-keyword matches as verified scientific facts or pre-solved results.
 BRANCH_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ("mathematical", "combinatorics", re.compile(
-        r"\b(subsets?|combinatoric\w*|counting|generating function|recurrence|modulo|fibonacci|graph enumerat\w*)\b", re.I
+        r"\b(subsets?|combinatoric\w*|counting|generating function|recurrence|modulo|fibonacci|graph enumerat\w*)\b", re.IGNORECASE
     )),
     ("physics", "relativity", re.compile(
-        r"\b(warp|spacetime|metric|relativit\w*|einstein|superluminal|ftl|stress.energy)\b", re.I
+        r"\b(warp|spacetime|metric|relativit\w*|einstein|superluminal|ftl|stress.energy)\b", re.IGNORECASE
     )),
     ("biology", "animal-regeneration", re.compile(
-        r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b", re.I
+        r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b", re.IGNORECASE
     )),
     ("computer_science", "federation", re.compile(
-        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.I
+        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE
     )),
     ("computer_science", "ai-reliability", re.compile(
-        r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b", re.I
+        r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b", re.IGNORECASE
     )),
     ("engineering", "federation", re.compile(
-        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.I
+        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE
     )),
 )
 
@@ -204,10 +204,12 @@ def _source(row: Mapping[str, str]) -> dict[str, str]:
 def _complete(ids: list[str], mode: str, branch: str | None) -> bool:
     if not 2 <= len(ids) <= MAX_SOURCES or len(set(ids)) != len(ids):
         return False
-    rows = [BY_ID.get(i) for i in ids]
-    if any(row is None or not _usable(row) for row in rows):
-        return False
-    assert all(row is not None for row in rows)
+    rows: list[dict[str, str]] = []
+    for identifier in ids:
+        row = BY_ID.get(identifier)
+        if row is None or not _usable(row):
+            return False
+        rows.append(row)
     levels = {r["tier"] for r in rows}
     if not {"general", "discipline"} <= levels:
         return False
@@ -254,8 +256,11 @@ def select_method_sources(
         source_rows = old.get("sources")
         if not isinstance(source_rows, list):
             continue
-        ids = [s.get("id") for s in source_rows if isinstance(s, Mapping)]
-        if not all(isinstance(i, str) for i in ids) or not _complete(ids, mode, branch):
+        if not all(isinstance(row, Mapping) and isinstance(row.get("id"), str)
+                   for row in source_rows):
+            continue
+        ids: list[str] = [str(row["id"]) for row in source_rows]
+        if not _complete(ids, mode, branch):
             continue
         # Retain the previous *readable content*, not only source IDs:
         # later catalog copy edits must not silently change a controlled
