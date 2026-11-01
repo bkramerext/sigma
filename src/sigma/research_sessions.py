@@ -10264,7 +10264,14 @@ async def _portfolio_strategy_pipeline(
             saved = next(
                 item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
             )
-            _record_preflight_failure(record, saved, role, "branch_execution", exc)
+            stage = (
+                "model_configuration"
+                if "selected model is no longer available" in str(exc).lower()
+                else "account_verification"
+                if "account or billing" in str(exc).lower()
+                else "branch_execution"
+            )
+            _record_preflight_failure(record, saved, role, stage, exc)
             # Conservatively retain any uncertainty about a dispatched attempt.
             for step in record.get("steps", []):
                 if step.get("strategy_id") != strategy_id or step.get("status") != "running":
