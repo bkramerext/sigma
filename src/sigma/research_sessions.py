@@ -14,6 +14,7 @@ import stat
 import threading
 import weakref
 import zlib
+from collections import deque
 from collections.abc import Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
@@ -117,7 +118,7 @@ _manager_lock = asyncio.Lock()
 _gate = threading.Lock()
 _python_gate = threading.Lock()
 # In-process admission gates; hosted calls also acquire cross-process OS slots.
-_portfolio_global_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+_portfolio_global_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _FairProviderGate] = (
     weakref.WeakKeyDictionary()
 )
 _portfolio_global_gates_lock = threading.Lock()
@@ -8232,7 +8233,7 @@ async def _portfolio_role_call(
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
     # Acquire session capacity first, then a process-wide provider slot.
     # Budget reservations are created only after both slots are available.
-    async with semaphore, _portfolio_global_gate():
+    async with semaphore, _portfolio_global_gate(session_id):
         tools = await asyncio.to_thread(execution_capabilities)
         async with state_lock:
             record = _read(path, session_id)
@@ -10091,6 +10092,67 @@ def _portfolio_call_concurrency(strategy_count: int) -> int:
     return max(1, strategy_count)
 
 
+class _FairProviderGate:
+    """Bounded, FIFO-within-owner, round-robin-between-owner provider queue.
+
+    This object is owned by a single event loop. A session may have multiple
+    waiting strategies, but cannot crowd out another user's pending requests.
+    Filesystem slots additionally enforce the backend-wide cap across processes.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.active = 0
+        self.waiting: dict[str, deque[asyncio.Future[None]]] = {}
+        self.owners: deque[str] = deque()
+
+    def _dispatch(self) -> None:
+        while self.active < self.limit and self.owners:
+            owner = self.owners.popleft()
+            waiting = self.waiting[owner]
+            future = waiting.popleft()
+            if waiting:
+                self.owners.append(owner)
+            else:
+                del self.waiting[owner]
+            if future.cancelled():
+                continue
+            self.active += 1
+            future.set_result(None)
+
+    async def acquire(self, owner: str) -> None:
+        future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        waiting = self.waiting.get(owner)
+        if waiting is None:
+            waiting = deque()
+            self.waiting[owner] = waiting
+            self.owners.append(owner)
+        waiting.append(future)
+        self._dispatch()
+        try:
+            await future
+        except BaseException:
+            if future.done() and not future.cancelled():
+                # Cancellation may race with delivery of a provider slot.
+                self.release()
+            else:
+                future.cancel()
+                waiting = self.waiting.get(owner)
+                if waiting is not None:
+                    waiting.remove(future)
+                    if not waiting:
+                        del self.waiting[owner]
+                        self.owners.remove(owner)
+                self._dispatch()
+            raise
+
+    def release(self) -> None:
+        if self.active <= 0:
+            raise RuntimeError("Provider capacity was released without a matching claim.")
+        self.active -= 1
+        self._dispatch()
+
+
 def _portfolio_global_limit() -> int:
     """Total in-flight research provider requests on this backend: 32."""
     return _bounded_concurrency_env("SIGMA_RESEARCH_GLOBAL_INFLIGHT", 32, 32)
@@ -10141,28 +10203,31 @@ def _shared_provider_slot() -> int | None:
 
 
 @asynccontextmanager
-async def _portfolio_global_gate():
+async def _portfolio_global_gate(session_id: str):
     loop = asyncio.get_running_loop()
     with _portfolio_global_gates_lock:
         gate = _portfolio_global_gates.get(loop)
         if gate is None:
-            gate = asyncio.Semaphore(_portfolio_global_limit())
+            gate = _FairProviderGate(_portfolio_global_limit())
             _portfolio_global_gates[loop] = gate
-    async with gate:
-        fd: int | None = None
-        # On the hosted backend, flock also enforces capacity across multiple
-        # server processes using the same private persistent volume.
+    workspace = cloud_workspaces.current()
+    owner = workspace.workspace_id if workspace is not None else session_id
+    await gate.acquire(owner)
+    fd: int | None = None
+    try:
+        # Cross-process provider cap is enforced through durable private OS
+        # slots; waiters do not own project/session state locks.
         if cloud_workspaces.enabled():
             while fd is None:
                 fd = _shared_provider_slot()
                 if fd is None:
                     await asyncio.sleep(0.05)
-        try:
-            yield
-        finally:
-            if fd is not None:
-                fcntl.flock(fd, fcntl.LOCK_UN)
-                os.close(fd)
+        yield
+    finally:
+        if fd is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+        gate.release()
 
 
 def _bounded_note(value: Any, limit: int) -> str:
