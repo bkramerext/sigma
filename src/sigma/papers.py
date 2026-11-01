@@ -1782,6 +1782,8 @@ def _evidence_based_long_plan(
             + other_results[0].statement
             + " Its relationship to the first finding requires explicit assessment."
         )
+        if other_results[0] not in conclusion_claims:
+            conclusion_claims.append(other_results[0])
     if negative_claim is not None:
         conclusions.append(
             f"This interpretation must also account for the recorded "
