@@ -5661,9 +5661,7 @@ async def test_global_inflight_limit_bounds_multiple_strategy_sessions(root: Pat
     right = root / "global-provider-right.sigma"
     left_view, first_left, credential, config = await setup(left)
     right_view, first_right, _, _ = await setup(right)
-    second_left = create_strategy(
-        left, "Left peer", "Independent second route."
-    ).project.strategies[-1]
+    second_left = create_strategy(left, "Left peer", "Independent second route.").project.strategies[-1]
     second_right = create_strategy(
         right, "Right peer", "Independent second route."
     ).project.strategies[-1]
@@ -6635,8 +6633,10 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
             raise ProjectError("temporary project snapshot service failure")
         return real_snapshot(target)
 
-    async def handler(_request):
-        return httpx.Response(200, json=provider_response(investigation(1)))
+    async def handler(request):
+        role = json.loads(request.content)["text"]["format"]["name"]
+        output = investigation(1) if role == "research_investigator" else skeptic(1, "stop")
+        return httpx.Response(200, json=provider_response(output))
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -6660,7 +6660,7 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
         finished = await wait_for(path, started["id"])
 
     assert finished["status"] == "failed"
-    assert finished["calls_used"] == 1
+    assert finished["calls_used"] == 2
     failed_events = [
         event for event in finished["events"] if event["kind"] == "call.preflight_failed"
     ]
@@ -6675,10 +6675,10 @@ async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path
     assert failure["dispatched"] is False
     assert "temporary project snapshot service failure" not in failure["message"]
     completed_steps = [step for step in finished["steps"] if step["status"] == "completed"]
-    assert len(completed_steps) == 1
+    assert len(completed_steps) == 2
     assert completed_steps[0]["strategy_id"] in expected_titles
     assert completed_steps[0]["strategy_id"] != failure["strategy_id"]
-    assert completed_steps[0]["role"] == "investigator"
+    assert {step["role"] for step in completed_steps} == {"investigator", "skeptic"}
     assert completed_steps[0]["output"]["claim"].startswith("Claim 1:")
     assert all(step.get("strategy_id") != failure["strategy_id"] for step in finished["steps"])
 
