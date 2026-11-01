@@ -31,7 +31,7 @@ The printed excerpt is a JSON Schema fragment containing `items`, `$ref`, `maxIt
 
 - **Sovereignty:** TeX line **526** includes a long raw escaped MindRouter PEARC PDF URL; metadata reports `Overfull \hbox` ~100 pt at line 526 and page 31 extends horizontally. Breakable URL rendering is a plausible targeted remedy.
 - **Xenopus:** TeX line **340** contains the provider JSON Schema fragment above; metadata reports `Overfull \hbox` ~167 pt at line 340 and page 22 extends horizontally. Removing irrelevant excerpts when explicitly disabled would remove this trigger; do not conflate that with general TeX line breaking.
-- **AI Agent:** TeX line **300** is an unusually long open-obligation item with two 40-character hex ledger IDs; metadata reports ~115 pt overflow around page 16. Robust formatting for long identifiers and obligation prose may be required even after excerpt filtering.
+- **AI Agent:** metadata reports an overfull box near TeX line **298** (~115 pt, PDF page 16). The nearby open-obligation items at lines **295–300** include long unbreakable hex ledger IDs (line 300 has two) and dense raw field paths; the exact offending token at the line-298 paragraph boundary is **not independently localized**. Robust formatting may be required even after excerpt filtering.
 
 These are **observed correlations between exact TeX lines and compiler warnings**, not yet independently confirmed via matched TeX recompilation. The causes differ, so a single blanket layout patch should not be assumed to fix all three. Tests should retain the exact text, avoid unsafe TeX injection, preserve source IDs and report warning counts separately.
 
