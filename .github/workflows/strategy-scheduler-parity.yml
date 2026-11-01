@@ -32,10 +32,10 @@ jobs:
         with:
           path: candidate
           persist-credentials: false
-      - name: Check out immutable baseline (main for #423; #425 for #426)
+      - name: Check out immutable sequential baseline (original main for #423; current main for #426)
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.number == 426 && 'd489a44e4c7bd28ee78c0c749c33bb4b0d50fb57' || '48c1fb2322a95ddcb5a218cca29fcba59c4f8108' }}
+          ref: ${{ github.event.pull_request.number == 426 && 'a49c17f4bb7f30256d90a522422d3979e694c126' || '48c1fb2322a95ddcb5a218cca29fcba59c4f8108' }}
           path: research-baseline
           persist-credentials: false
       - name: Set up Python
