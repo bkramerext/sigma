@@ -29,8 +29,8 @@ from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
-from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.project_obligation_ids import assign_project_obligation_ids
+from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_budget import (
@@ -6606,7 +6606,9 @@ def _obligation_ledger(
                     strategy_id=source_strategy_id,
                     assumptions=assumptions,
                 )
-                target_ids.add(assigned.get(digest, digest) if identity_path is not None else digest)
+                target_ids.add(
+                    assigned.get(digest, digest) if identity_path is not None else digest
+                )
             elif isinstance(key, str):
                 # Historical reviews cite 64-hex identities; newer ones cite
                 # compact oN aliases. Resolve old IDs without mutating the
