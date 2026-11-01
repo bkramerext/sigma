@@ -3,6 +3,7 @@
 import codecs
 import email.utils
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -69,10 +70,14 @@ class ChatGPTProviderRejection(ProjectError):
         streamed: bool,
         stream_event: str | None = None,
         retry_after_seconds: float | None = None,
+        provider_request_id: str | None = None,
+        response_shape: str | None = None,
     ) -> None:
         super().__init__(message)
         self.state = state
-        self.code = code if code in KNOWN_ERRORS else None
+        self.code = (
+            code if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code) else None
+        )
         self.http_status = http_status
         self.streamed = streamed
         # Only local parser event types are stored, never untrusted provider text.
@@ -80,6 +85,8 @@ class ChatGPTProviderRejection(ProjectError):
             stream_event if streamed and stream_event in {"error", "response.failed"} else None
         )
         self.retry_after_seconds = retry_after_seconds
+        self.provider_request_id = provider_request_id
+        self.response_shape = response_shape
 
 
 def failure(
@@ -91,6 +98,7 @@ def failure(
     streamed: bool = False,
     stream_event: str | None = None,
     retry_after: str | None = None,
+    provider_request_id: str | None = None,
 ) -> None:
     retry_after_seconds = None
     if retry_after is not None:
@@ -122,6 +130,12 @@ def failure(
             shape = "top-level-error"
         else:
             shape = "other-object"
+    safe_request_id = (
+        provider_request_id
+        if isinstance(provider_request_id, str)
+        and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", provider_request_id)
+        else None
+    )
     if mode == "chatgpt":
         # Strict-schema rejection is an actionable request defect, not an
         # account/plan failure. Expose only a locally allowlisted provider
@@ -139,6 +153,8 @@ def failure(
                 streamed=streamed,
                 stream_event=stream_event,
                 retry_after_seconds=retry_after_seconds,
+                provider_request_id=safe_request_id,
+                response_shape=shape,
             )
         state, message = KNOWN_ERRORS.get(
             code if isinstance(code, str) else "",
@@ -182,6 +198,8 @@ def failure(
                 streamed=streamed,
                 stream_event=stream_event,
                 retry_after_seconds=retry_after_seconds,
+                provider_request_id=safe_request_id,
+                response_shape=shape,
             )
         # A Responses stream is admitted at the outer HTTP status and can then
         # fail in-band; the provider error code is not a second HTTP response.
@@ -206,11 +224,17 @@ def failure(
         raise ChatGPTProviderRejection(
             f"{message}{provenance} No strategy was saved.",
             state=state,
-            code=safe_code,
+            code=(
+                code
+                if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code)
+                else None
+            ),
             http_status=status,
             streamed=streamed,
             stream_event=stream_event,
             retry_after_seconds=retry_after_seconds,
+            provider_request_id=safe_request_id,
+            response_shape=shape,
         )
     # Provider error bodies can contain request context or other sensitive
     # values. Surface only a small allowlist of machine fields; never echo the
@@ -354,6 +378,7 @@ async def completed(
                     streamed=True,
                     stream_event="error",
                     retry_after=retry_after,
+                    provider_request_id=response.headers.get("x-request-id"),
                 )
             if kind == "response.created":
                 if response_id is not None or not isinstance(
@@ -376,6 +401,7 @@ async def completed(
                         streamed=True,
                         stream_event="response.failed",
                         retry_after=retry_after,
+                        provider_request_id=response.headers.get("x-request-id"),
                     )
                 if kind == "response.incomplete":
                     raise ProjectError(
