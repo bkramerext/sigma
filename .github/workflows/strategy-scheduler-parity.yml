@@ -75,6 +75,40 @@ jobs:
           print("PASS: original-main and candidate have identical canonical provider requests, "
                 "peer handoffs, reviewed artifacts, coordinator decisions, and outcomes.")
           PY
+      - name: Validate stop/resume handoff and timeout recovery on actual original main
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/original-main/src:$GITHUB_WORKSPACE/candidate/tests" \\
+            uv run --project candidate --locked --no-sync python - <<'PY'
+          import asyncio
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from research_sessions import (
+              test_peer_finding_changes_target_investigator_after_stop_and_resume,
+              test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers,
+          )
+          with TemporaryDirectory() as root:
+              base = Path(root)
+              asyncio.run(test_peer_finding_changes_target_investigator_after_stop_and_resume(base / "peer.sigma"))
+              asyncio.run(test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(base / "timeout.sigma"))
+          print("Original main: stop/resume and timeout recovery passed.")
+          PY
+      - name: Validate stop/resume handoff and timeout recovery on parallel branch
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src:$GITHUB_WORKSPACE/candidate/tests" \\
+            uv run --project candidate --locked --no-sync python - <<'PY'
+          import asyncio
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from research_sessions import (
+              test_peer_finding_changes_target_investigator_after_stop_and_resume,
+              test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers,
+          )
+          with TemporaryDirectory() as root:
+              base = Path(root)
+              asyncio.run(test_peer_finding_changes_target_investigator_after_stop_and_resume(base / "peer.sigma"))
+              asyncio.run(test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(base / "timeout.sigma"))
+          print("Parallel branch: stop/resume and timeout recovery passed.")
+          PY
       - name: Upload synthetic diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
