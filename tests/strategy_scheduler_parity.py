@@ -272,12 +272,9 @@ if __name__ == "__main__":
     assert canonicalize(baseline, {}) != canonicalize(
         {**reordered, "referenced_obligation": "o2"}, {}
     )
-    assert canonicalize(baseline, {}) != canonicalize(
-        {**reordered, "obligations": [
-            {**reordered["obligations"][0], "claim": "Changed proof obligation"},
-            reordered["obligations"][1],
-        ]}, {}
-    )
+    changed_claim = json.loads(json.dumps(reordered))
+    changed_claim["obligations"][0]["claim"] = "Changed proof obligation"
+    assert canonicalize(baseline, {}) != canonicalize(changed_claim, {})
     output = asyncio.run(snapshot())
     Path(sys.argv[2]).write_text(json.dumps(output, sort_keys=True, indent=2) + "\n")
     print(
