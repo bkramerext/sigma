@@ -27,6 +27,8 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const selected = options.find(option => option.id === value);
+  const widestLabel = Math.max(4, ...options.map(option => option.name.length));
+  const pickerWidth = `min(100%, ${Math.ceil(widestLabel * 0.7 + 7)}ch)`;
   useEffect(() => {
     if (!expanded) return;
     const outside = (event: PointerEvent) => {
@@ -35,7 +37,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, [expanded]);
-  return <div className="research-type-picker pt-based-on-picker" ref={root}>
+  return <div className="research-type-picker pt-based-on-picker" ref={root} style={{ width: pickerWidth }}>
     <button ref={trigger} type="button" role="combobox" aria-label="Based on project type" aria-expanded={expanded}
       aria-haspopup="listbox" onClick={() => setExpanded(open => !open)}
       onKeyDown={event => {
@@ -102,6 +104,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   function edit(id: string, patch: Partial<ProjectTypeRecord>) {
     setDrafts(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
   }
+  const isDuplicateName = (item: ProjectTypeRecord) => {
+    const normalized = item.name.normalize("NFKC").trim().toLocaleLowerCase();
+    return !!normalized && [...builtins, ...drafts].some(other => other.id !== item.id && other.name.normalize("NFKC").trim().toLocaleLowerCase() === normalized);
+  };
   function add() {
     if (!placeholderIcon) return;
     const item = blank(placeholderIcon);
@@ -167,7 +173,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id} onToggle={event => { if (event.currentTarget.open) setOpen(item.id); }}>
     <summary><span className="project-type-card-icon">{renderIcon(item)}</span><strong>{item.name || 'New project type'}</strong><small>{readonly ? 'Built-in' : 'Custom'}</small></summary>
     <div className="project-type-card-body">
-      <label>Name<input value={item.name} disabled={readonly} onChange={event => edit(item.id, { name: event.target.value })}/></label>
+      <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">A project type with this name already exists.</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
       {!readonly && <div className="project-type-icon-edit" aria-label={`Icon for ${item.name || 'new project type'}`}>{renderIcon(item)}<button type="button" disabled={busy || !!generatingId || !item.name.trim() || !item.scope.trim()} onClick={() => void generateIcon(item)}>{generatingId === item.id ? 'Generating icon…' : item.icon.kind === 'data' ? 'Regenerate icon' : 'Generate icon'}</button><small aria-live="polite">{generatingId === item.id ? 'AI is generating a preview from SIGMA’s icon style reference.' : 'Uses the selected API-key connection. A generation request may incur API charges.'}</small></div>}
@@ -177,7 +183,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     </div>
   </details>;
   const hasChanges = JSON.stringify(drafts) !== initialDrafts.current;
-  const invalidDraft = drafts.some(item => !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin' || !item.research_standards_references.every(Boolean) || !item.publication_standards_references.every(Boolean));
+  const invalidDraft = drafts.some(item => isDuplicateName(item) || !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin' || !item.research_standards_references.every(Boolean) || !item.publication_standards_references.every(Boolean));
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy && !generatingId) close(); }} onClick={event => { if (event.target === dialog.current && !busy && !generatingId) close(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
     const element = dialog.current;
@@ -193,7 +199,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   }}>
     <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !!generatingId || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button></div></header>
     <div className="project-types-body">
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim()} onClick={() => setAddingId(null)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim() || !!drafts.find(d => d.id === addingId && isDuplicateName(d))} onClick={() => setAddingId(null)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       {error && <p role="alert">{error}</p>}
     </div>
