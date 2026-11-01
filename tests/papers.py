@@ -1473,7 +1473,7 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         result = asyncio.run(run())
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert len(compile_tex) == 3
+        assert len(compile_tex) == 4
         assert len(successful_tex) == 1
         assert r"$\\alpha=3$" in compile_tex[0]
         assert r"$\alpha=3$" in compile_tex[1]
@@ -1484,8 +1484,8 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         assert all(r"\begin{longtable}" in source for source in compile_tex)
         assert r"\begin{longtable}" in successful_tex[0]
         assert saved["snapshot_sha256"] == snapshot_hash
-        assert saved["generation"]["provider_calls_attempted"] == 2
-        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 3
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
         assert saved["generation"]["proofreading"]["correction_categories"] == ["math_notation"]
         assert saved["draft"]["diagrams"] == []
         assert saved["draft"]["sections"][0]["tables"]
