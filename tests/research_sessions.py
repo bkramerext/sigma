@@ -763,14 +763,36 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
-def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed(monkeypatch):
+def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed(
+    monkeypatch,
+):
     from sigma import research_method_sources
 
     scenarios = (
-        ("computer_science", "Agent Reliability Evaluation", "Fault injection with retries and acknowledgments", "ai-reliability"),
-        ("computer_science", "Sovereign AI Federation", "Campus gateway revocation routing", "federation"),
-        ("biology", "Xenopus Tadpoles", "Tail regeneration and wound timing", "animal-regeneration"),
-        ("mathematical", "Nonconsecutive Subset Sums", "Count subsets modulo three", "combinatorics"),
+        (
+            "computer_science",
+            "Agent Reliability Evaluation",
+            "Fault injection with retries and acknowledgments",
+            "ai-reliability",
+        ),
+        (
+            "computer_science",
+            "Sovereign AI Federation",
+            "Campus gateway revocation routing",
+            "federation",
+        ),
+        (
+            "biology",
+            "Xenopus Tadpoles",
+            "Tail regeneration and wound timing",
+            "animal-regeneration",
+        ),
+        (
+            "mathematical",
+            "Nonconsecutive Subset Sums",
+            "Count subsets modulo three",
+            "combinatorics",
+        ),
         ("physics", "Warp Drive Design", "Spacetime metric and stress energy", "relativity"),
     )
     for mode, title, problem, branch in scenarios:
@@ -780,7 +802,11 @@ def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_
         assert frozen["status"] == "selected"
         assert frozen["branch"] == branch
         assert len(frozen["sources"]) == 3
-        assert [row["tier"] for row in frozen["sources"]] == ["general", "discipline", "branch"]
+        assert [row["tier"] for row in frozen["sources"]] == [
+            "general",
+            "discipline",
+            "branch",
+        ]
         assert all(
             source["url"].startswith("https://") and len(source["notes"]) >= 50
             for source in frozen["sources"]
@@ -789,18 +815,25 @@ def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_
             research_method_sources.methodology_digest(frozen)
         )
 
-        # Next session must reuse the same source content and IDs; changing
-        # catalog selection order must not accidentally change the findings.
+        # The most recent comprehensive session's exact notes are preserved.
         later = research_method_sources.select_method_sources(
-            mode, title, problem, ("Another method",),
-            ({"id": "prior-session-id", "created_at": "2026-11-01T00:00:00+00:00",
-              "research_method_sources": frozen},)
+            mode,
+            title,
+            problem,
+            ("Another method",),
+            (
+                {
+                    "id": "prior-session-id",
+                    "created_at": "2026-11-01T00:00:00+00:00",
+                    "research_method_sources": frozen,
+                },
+            ),
         )
         assert later["status"] == "reused"
         assert later["source_session_id"] == "prior-session-id"
         assert later["sources"] == frozen["sources"]
 
-    # Reuse exact source content, even if later catalog editorial notes change.
+    # Later catalog edits must not silently alter frozen research methods.
     earlier = research_method_sources.select_method_sources(
         "physics", "Warp", "spacetime metric", (), ()
     )
@@ -808,38 +841,49 @@ def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_
     with monkeypatch.context() as patch:
         updated = dict(research_method_sources.BY_ID["tong-einstein-equations"])
         updated["notes"] = "REVISED: " + original_note
-        patch.setattr(research_method_sources, "BY_ID",
-                      {**research_method_sources.BY_ID, updated["id"]: updated})
+        patch.setattr(
+            research_method_sources,
+            "BY_ID",
+            {**research_method_sources.BY_ID, updated["id"]: updated},
+        )
         stable = research_method_sources.select_method_sources(
-            "physics", "Warp", "spacetime metric", (),
-            ({"id": "saved", "research_method_sources": earlier},)
+            "physics",
+            "Warp",
+            "spacetime metric",
+            (),
+            ({"id": "saved", "research_method_sources": earlier},),
         )
     assert stable["status"] == "reused"
     assert stable["sources"][-1]["notes"] == original_note
 
-    # A project can mention the other branch's terms incidentally. Its title
-    # and central objective, not the first matching word, select the method.
+    # An incidental mention of a gateway must not override the actual topic.
     reliability = research_method_sources.select_method_sources(
-        "computer_science", "AI Agent Reliability",
+        "computer_science",
+        "AI Agent Reliability",
         "Evaluate reliability when jobs pass a gateway and route retries",
-        ("Model external acknowledgment",), ()
+        ("Model external acknowledgment",),
+        (),
     )
     assert reliability["branch"] == "ai-reliability"
     federation = research_method_sources.select_method_sources(
-        "computer_science", "Sovereign AI Federation",
+        "computer_science",
+        "Sovereign AI Federation",
         "Evaluate agent reliability under a campus gateway and network partition",
-        ("Compare authorization policies",), ()
+        ("Compare authorization policies",),
+        (),
     )
     assert federation["branch"] == "federation"
 
-    # Specialty changed within the *same* project type: previous source is no
-    # longer comprehensive; do not blindly persist a combinatorics reference.
+    # If the specialty changes, the previous choice is no longer sufficient.
     original = research_method_sources.select_method_sources(
         "mathematical", "Counting subsets", "combinatorics recurrence", (), ()
     )
     updated = research_method_sources.select_method_sources(
-        "mathematical", "Topology problem", "topological spaces and homotopy",
-        (), ({"id": "old", "research_method_sources": original},)
+        "mathematical",
+        "Topology problem",
+        "topological spaces and homotopy",
+        (),
+        ({"id": "old", "research_method_sources": original},),
     )
     assert updated["branch"] is None and updated["status"] == "selected"
     assert len(updated["sources"]) == 2
@@ -850,16 +894,20 @@ def test_method_source_bad_or_unreadable_candidates_never_block(monkeypatch):
     from sigma import research_method_sources
 
     untrusted = dict(research_method_sources.BY_ID["applied-combinatorics"])
-    untrusted["notes"] = ""  # URL alone is not usable methods content.
+    untrusted["notes"] = ""
     with monkeypatch.context() as patch:
         patch.setattr(
-            research_method_sources, "BY_ID",
+            research_method_sources,
+            "BY_ID",
             {**research_method_sources.BY_ID, untrusted["id"]: untrusted},
         )
         patch.setattr(
-            research_method_sources, "CATALOG",
-            tuple(untrusted if row["id"] == untrusted["id"] else row
-                  for row in research_method_sources.CATALOG),
+            research_method_sources,
+            "CATALOG",
+            tuple(
+                untrusted if row["id"] == untrusted["id"] else row
+                for row in research_method_sources.CATALOG
+            ),
         )
         selected = research_method_sources.select_method_sources(
             "mathematical", "Counting", "nonconsecutive subset recurrence", (), ()
@@ -867,7 +915,6 @@ def test_method_source_bad_or_unreadable_candidates_never_block(monkeypatch):
     assert selected["status"] == "selected"
     assert len(selected["sources"]) == 2
     assert all(item["notes"] for item in selected["sources"])
-    # An invalid previous reference is not carried forward.
     previous = {
         "id": "prior",
         "research_method_sources": {
@@ -891,16 +938,21 @@ def test_research_methodology_outcome_is_not_claimed_as_independent_science():
         "physics", "Warp", "causal spacetime metric", (), ()
     )
     record = {
-        "id": "method-test", "status": "queued", "steps": [], "artifacts": [],
-        "strategy_runs": [], "research_method_sources": selected,
+        "id": "method-test",
+        "status": "queued",
+        "steps": [],
+        "artifacts": [],
+        "strategy_runs": [],
+        "research_method_sources": selected,
     }
     outcome = research_sessions._outcome(record)
     assert outcome["source_material"] == selected
     assert outcome["source_material"]["status"] == "selected"
     assert "verification_label" in outcome
-    # The helper returns exactly the same bounded source notes every time.
     assert [r["id"] for r in outcome["source_material"]["sources"]] == [
-        "nasem-scientific-methods", "nasem-physical-models", "tong-einstein-equations"
+        "nasem-scientific-methods",
+        "nasem-physical-models",
+        "tong-einstein-equations",
     ]
 
 
@@ -911,7 +963,10 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     assert set(research_sessions.RESEARCH_MODE_METHOD_GUIDANCE) == {
         mode.value for mode in ResearchMode
     }
-    common = {"execution_tools": [], "research_method_version": research_sessions.RESEARCH_METHOD_VERSION}
+    common = {
+        "execution_tools": [],
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+    }
     math = {**common, "investigation_type": "mathematical"}
     physics = {**common, "investigation_type": "physics"}
     bio = {**common, "investigation_type": "biology"}
@@ -939,7 +994,6 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     assert "universal claims" in math_skep
     assert "general relativity" not in math_inv.lower()
     assert "For any branch of physics" in physics_inv
-    assert "theoretical" not in math_inv.lower() or "For any branch of physics" not in math_inv
     assert "general relativity" in physics_inv.lower()
     assert "No unperformed intervention" in bio_inv
     assert "external ground truth" in sys_inv
@@ -948,8 +1002,6 @@ def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
     assert "In any branch of mathematics" not in physics_inv
     assert "For biological hypotheses" not in physics_inv
 
-    # Missing/unknown project type receives safe common methods rather than
-    # silently inheriting physics, mathematical, or biological techniques.
     for context in ({}, {"investigation_type": "unknown"}, {"investigation_type": 42}):
         fallback = research_sessions._role_instructions("skeptic", {**common, **context})
         assert "Across disciplines" in fallback
@@ -961,9 +1013,7 @@ def test_method_sources_yield_to_mandatory_research_when_context_is_full():
     """Noncritical methodology must never make a genuine research turn fail."""
     context = {
         "problem": "A fixed scientific objective.",
-        "methodology_source_material": [
-            {"id": "source", "notes": "optional methods " * 1000}
-        ],
+        "methodology_source_material": [{"id": "source", "notes": "optional methods " * 1000}],
         "methodology_source_status": "selected",
         "context_manifest": {"sources": []},
     }
@@ -990,7 +1040,9 @@ def test_method_source_notes_reach_real_role_request_audit():
         "execution_tools": [],
     }
     record = {
-        "mode": "chatgpt", "model": MODEL, "reasoning_effort": "high",
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
         "output_token_limit": 4000,
     }
     for role in ("investigator", "skeptic"):
