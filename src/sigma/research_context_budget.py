@@ -67,8 +67,9 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
         field_name = id_field
         material: set[str] = material_ids
 
-        def is_material(index: int, *, items: list[Any] = rows,
-                        key: str = field_name, ids: set[str] = material) -> bool:
+        def is_material(
+            index: int, *, items: list[Any] = rows, key: str = field_name, ids: set[str] = material
+        ) -> bool:
             item = items[index]
             return isinstance(item, dict) and item.get(key) in ids
 
