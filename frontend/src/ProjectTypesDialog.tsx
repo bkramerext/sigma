@@ -70,6 +70,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const [addingId, setAddingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [iconErrors, setIconErrors] = useState<Record<string, string>>({});
   const [revision, setRevision] = useState('');
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(null);
@@ -123,7 +124,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   async function generateIcon(item: ProjectTypeRecord) {
     if (generatingId || busy || !item.name.trim() || !item.scope.trim()) return;
     setGeneratingId(item.id);
-    setError('');
+    setIconErrors(previous => ({ ...previous, [item.id]: '' }));
     try {
       const response = await fetch('/api/project-types/icon', {
         method: 'POST',
@@ -133,8 +134,10 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       const data = await response.json() as { icon?: ProjectTypeRecord['icon']; detail?: string };
       if (!response.ok || !data.icon) throw new Error(typeof data.detail === 'string' ? data.detail : 'Icon generation failed.');
       edit(item.id, { icon: data.icon });
+      setIconErrors(previous => ({ ...previous, [item.id]: '' }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setIconErrors(previous => ({ ...previous, [item.id]: message }));
     } finally {
       setGeneratingId(null);
     }
@@ -176,7 +179,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">A project type with this name already exists.</span>}</label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
       {!readonly && <label>Based on<BasedOnPicker value={item.based_on} options={[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)]} renderIcon={renderIcon} onChoose={id => id ? basedOn(item.id, id) : edit(item.id, { based_on: null })}/></label>}
-      {!readonly && <div className="project-type-icon-edit" aria-label={`Icon for ${item.name || 'new project type'}`}>{renderIcon(item)}<button type="button" disabled={busy || !!generatingId || !item.name.trim() || !item.scope.trim()} onClick={() => void generateIcon(item)}>{generatingId === item.id ? 'Generating icon…' : item.icon.kind === 'data' ? 'Regenerate icon' : 'Generate icon'}</button><small aria-live="polite">{generatingId === item.id ? 'AI is generating a preview from SIGMA’s icon style reference.' : 'Uses the selected API-key connection. A generation request may incur API charges.'}</small></div>}
+      {!readonly && <div className="project-type-icon-edit" aria-label={`Icon for ${item.name || 'new project type'}`} aria-busy={generatingId === item.id}>{renderIcon(item)}<button type="button" disabled={busy || !!generatingId || !item.name.trim() || !item.scope.trim()} onClick={() => void generateIcon(item)}>{generatingId === item.id ? 'Generating icon…' : item.icon.kind === 'data' ? 'Regenerate icon' : 'Generate icon'}</button><small aria-live="polite">{generatingId === item.id ? 'Generating with SIGMA’s icon style reference…' : 'Requires a directly selected local OpenAI API key. Hosted and sponsored generation are not yet enabled. API charges may apply.'}</small>{iconErrors[item.id] && <p className="pt-validation-error pt-icon-error" role="alert">Icon not generated: {iconErrors[item.id]} The previous icon is unchanged.</p>}</div>
       <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>
       <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>
       {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy || !!generatingId} onClick={() => setDrafts(previous => previous.filter(candidate => candidate.id !== item.id))}>Remove</button></div>}
