@@ -2297,6 +2297,26 @@ RESEARCH_MATH_METHOD_GUIDANCE = (
     "establish it. Prove a proposed recurrence for all required indices and prove "
     "any asymptotic rate separately; otherwise label each as unproved. "
 )
+RESEARCH_BIOLOGY_METHOD_GUIDANCE = (
+    "For biological hypotheses, distinguish organism or sample as the experimental "
+    "unit from cells, pooled material and observations. Test whether measured "
+    "marginals identify the proposed individual-level mechanism; compare plausible "
+    "alternatives with sham, timing, measurement-latency and batch controls. "
+    "No unperformed intervention or uninspected accession is empirical support. "
+)
+RESEARCH_SYSTEMS_METHOD_GUIDANCE = (
+    "For systems and software research, distinguish observed output from external "
+    "ground truth, declared guarantees from the precise delivery/failure contract, "
+    "and bounded state exploration from proof for every schedule. Construct the "
+    "minimal indistinguishable history or changed-assumption counterexample and "
+    "identify a feasible observation oracle before claiming effectiveness. "
+)
+RESEARCH_TRADE_STUDY_METHOD_GUIDANCE = (
+    "For economic or engineering trade studies, compare feasible alternatives on "
+    "the same authorized task unit, with identical outcome and cost definitions. "
+    "Check failure/partition conditions, liabilities and subgroup effects before "
+    "asserting a benefit. State which inputs are measured versus hypothetical. "
+)
 
 INVESTIGATOR_GUIDANCE = (
     "Examine the exact project objective and the selected strategy as a proposed approach. "
@@ -2729,6 +2749,9 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + RESEARCH_DISCOVERY_GUIDANCE
         + (RESEARCH_SKEPTIC_METHOD_GUIDANCE if role == "skeptic" else "")
         + (RESEARCH_MATH_METHOD_GUIDANCE if context.get("investigation_type") == "mathematical" else "")
+        + (RESEARCH_BIOLOGY_METHOD_GUIDANCE if context.get("investigation_type") == "biology" else "")
+        + (RESEARCH_SYSTEMS_METHOD_GUIDANCE if context.get("investigation_type") == "computer_science" else "")
+        + (RESEARCH_TRADE_STUDY_METHOD_GUIDANCE if context.get("investigation_type") in {"engineering", "economics"} else "")
         + " "
         + AMBIENT_RESEARCH_RUBRIC
         + " Keep responses compact: do not duplicate open obligations or lengthy source text; "
