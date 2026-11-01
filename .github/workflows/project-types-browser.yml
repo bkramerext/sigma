@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           export SIGMA_PROJECTS_ROOT="$(mktemp -d)"
-          uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8026 > /tmp/project-types-api.log 2>&1 &
+          uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8026 > /tmp/project-types-api.log 2>&1 &
           api_pid=$!
           npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort > /tmp/project-types-ui.log 2>&1 &
           ui_pid=$!
