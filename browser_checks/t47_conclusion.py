@@ -150,6 +150,18 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
         }
     }
     session["outcome_conclusion_version"] = 1
+    # Realistic saved provider-input payload, never needed for the initial
+    # browser render even if the session details are open.
+    if session.get("steps"):
+        session["steps"][0]["provider_input_audit"] = {
+            "kind": "provider_input",
+            "status": "saved",
+            "headers_included": False,
+            "request_body": {
+                "instructions": "Offline acceptance fixture",
+                "input": "long-input-" * 12000,
+            },
+        }
     (sessions_path / f"{session['id']}.json").write_text(
         json.dumps(session, ensure_ascii=False), encoding="utf-8"
     )
@@ -681,6 +693,19 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 path=str(SCREENSHOT_DIR / "sigma-increment13-timeout-mobile.png"),
                 full_page=True,
             )
+            # The exact provider-input disclosure must also avoid rendering
+            # its large JSON body until the user explicitly opens it.
+            audits = saved_row.locator("details.context-used-disclosure").filter(
+                has_text="Exact provider input"
+            )
+            if audits.count():
+                audit = audits.first
+                expect(audit.locator("pre")).to_have_count(0)
+                audit.locator("summary").click()
+                expect(audit.locator("pre")).to_have_count(2)
+                audit.locator("summary").click()
+                expect(audit.locator("pre")).to_have_count(0)
+
             # Closed historical sessions must not construct full hidden
             # provider-input/provenance DOM trees. The real project snapshot
             # can accumulate many megabytes of saved agent input.
