@@ -5802,6 +5802,8 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         },
     )
     requests = 0
+    dispatched_contexts = []
+    dispatch_limit = 65_000  # Force compaction before and after turn eleven.
 
     async def handler(request):
         nonlocal requests
@@ -5810,12 +5812,18 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
             raise httpx.ReadError("Synthetic transport interruption at turn fourteen")
         payload = json.loads(request.content)
         context = json.loads(payload["input"])
+        dispatched_contexts.append(context)
+        assert research_sessions._json_bytes(context) <= dispatch_limit
         cycle = context["cycle"]
         response = (
             investigation(cycle)
             if payload["text"]["format"]["name"] == "research_investigator"
             else skeptic(cycle)
         )
+        if payload["text"]["format"]["name"] == "research_investigator":
+            response["method"] += " Long saved method detail." * 900
+        else:
+            response["response"] += " Long saved Skeptic objection." * 450
         if (
             context["strategy"]["id"] == first.id
             and cycle == 1
@@ -5828,6 +5836,7 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         return httpx.Response(200, json=provider_response(response))
 
     with (
+        patch.object(research_sessions, "MAX_AGENT_CONTEXT_BYTES", dispatch_limit),
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch(
@@ -5868,6 +5877,16 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     )
     assert finished.get("termination_reason_code") != "research_completed_early"
     assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
+    assert len(dispatched_contexts) == 55
+    assert any(
+        c.get("context_manifest", {}).get("dispatch_budget_compaction")
+        or c.get("context_manifest", {}).get("inflight_investigator_extract")
+        for c in dispatched_contexts
+    ), "The 54-turn fixture must exercise dispatch compaction"
+    assert all(
+        len(a["investigator_output"]["method"]) > 19_000
+        for a in finished["artifacts"]
+    ), "Dispatch compaction must preserve original saved evidence"
 
 
 async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(path: Path):
