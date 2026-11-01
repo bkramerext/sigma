@@ -14,14 +14,18 @@
 
 1. Run each selected branch's required role transitions as a **single coroutine**; `investigator` must complete before its corresponding `skeptic`, while other branches progress independently.
 2. Remove the cross-branch Investigator→Skeptic barrier; retain deterministic per-branch commits and existing peer-evidence context snapshots at step boundaries.
-3. Add bounded provider request admission with tunable concurrency. A provider request slot covers the remote call only, never a session-wide state lock. Maintain conservative hosted funding admission.
+3. Admit up to **32 provider requests globally** across users, projects, and sessions, with one active role per strategy. Hosted requests may overlap when separately funded by atomic durable reservations. In-process fair admission is owner-grouped; private OS file-lock slots bound multiple backend processes sharing storage. The slot currently also covers preflight and settlement, not just remote I/O.
 4. Test overlap, stalled sibling, I/S ordering, fairness, cancellation, retries, cost reservations, and persisted artifacts, including old sequential behavior.
-5. Coordinate general cross-process, per-user fairness and adaptive limits with #419. This PR must not silently claim distributed global guarantees from an in-process semaphore.
+5. Preserve cross-strategy shared knowledge: provider inputs contain a frozen, persisted snapshot of completed peer evidence and explicit handoffs available at each turn boundary. In-flight outputs cannot retroactively alter another prompt. Existing cross-strategy evidence and handoff regression tests remain part of acceptance. Cross-host coordination, provider-specific throttling, and adaptive limits remain #419.
 
-## Non-overlapping worker assignments (when available)
+## Integration ownership
 
-- **Execution:** targeted `_portfolio_worker` branch-pipeline change; owns only `src/sigma/research_sessions.py`.
-- **Tests:** deterministic fake-provider tests; owns a new isolated test module.
-- **Adversarial review:** inspect funding reservation, stop/resume, double dispatch, peer handoff, and provider-limit paths; report findings without editing main code.
+One implementer owns the backend scheduler, reservation/safety tests, UI status, and integration in this branch. No parallel Codex workers or conflicting edits. Regression tests cover fanout, turn ordering, fair admission, duplicated dispatch, cancellation, peer evidence, and handoffs.
 
 No merge or deployment without approval.
+## Open validation and architectural limitations
+
+- The dispatcher remains session-worker driven rather than a centralized persisted ready-turn queue. This is intentional scope control but allows coordinator synchronization at round boundaries; full cross-round dynamic dispatch is not yet provided.
+- File-lock global capacity is enforced only for backend processes sharing the same private storage directory. It is not a multi-host distributed lease service. The default value is 32 and the environment override is bounded to 32; some lower operational ceilings may be configured.
+- Existing per-project session admission and sponsored per-workspace budgets remain independently enforced; extra strategy parallelism is allowed only when reservations fit.
+- Full test suite and browser acceptance must pass on the final commit before review-ready status.
