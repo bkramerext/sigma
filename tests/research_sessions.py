@@ -5658,6 +5658,115 @@ async def test_strategy_skeptic_does_not_wait_for_sibling_investigator(path: Pat
         assert roles == ["research_investigator", "research_skeptic"], roles
 
 
+async def test_duplicate_strategy_dispatch_is_fenced_during_provider_call(path: Path):
+    """Two dispatchers must not run the same strategy turn concurrently."""
+    view, first, credential, config = await setup(path)
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "research_rounds": 1,
+        "model_calls": 2,
+    }
+    research_sessions.save_limits(str(path), limits)
+    investigator_started = asyncio.Event()
+    release_investigator = asyncio.Event()
+    requests: list[str] = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        requests.append(role)
+        if role == "research_investigator":
+            investigator_started.set()
+            await release_investigator.wait()
+        output = investigation(1) if role == "research_investigator" else skeptic(1, "stop")
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        await asyncio.wait_for(investigator_started.wait(), timeout=5)
+        try:
+            duplicate = await asyncio.wait_for(
+                research_sessions._portfolio_role_call(
+                    started["id"],
+                    str(path),
+                    first.id,
+                    "investigator",
+                    1,
+                    asyncio.Semaphore(2),
+                    research_sessions._session_state_lock(started["id"]),
+                ),
+                timeout=5,
+            )
+            assert duplicate is False
+            saved = research_sessions.get_session(str(path), started["id"])
+            assert len([step for step in saved["steps"] if step["status"] == "running"]) == 1
+        finally:
+            release_investigator.set()
+        finished = await asyncio.wait_for(wait_for(path, started["id"]), timeout=8)
+
+    assert requests == ["research_investigator", "research_skeptic"], requests
+    assert finished["calls_used"] == 2
+    assert len(finished["steps"]) == 2
+    assert len(finished["artifacts"]) == 1
+
+
+async def test_provider_gate_fairness_and_cancelled_waiter() -> None:
+    """A busy session cannot starve another owner; cancellation leaks no slot."""
+    gate = research_sessions._FairProviderGate(1)
+    await gate.acquire("user-a")
+    order: list[str] = []
+
+    async def queue(owner: str, label: str) -> None:
+        await gate.acquire(owner)
+        order.append(label)
+
+    first_a = asyncio.create_task(queue("user-a", "a1"))
+    second_a = asyncio.create_task(queue("user-a", "a2"))
+    first_b = asyncio.create_task(queue("user-b", "b1"))
+    await asyncio.sleep(0)
+    gate.release()
+    await first_a
+    assert order == ["a1"]
+    gate.release()
+    await first_b
+    assert order == ["a1", "b1"], order
+    gate.release()
+    await second_a
+    assert order == ["a1", "b1", "a2"], order
+    gate.release()
+    assert gate.active == 0
+
+    await gate.acquire("user-a")
+    cancelled = asyncio.create_task(queue("user-b", "cancelled"))
+    await asyncio.sleep(0)
+    cancelled.cancel()
+    try:
+        await cancelled
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError("Cancelled capacity waiter unexpectedly completed")
+    gate.release()
+    assert gate.active == 0 and not gate.waiting and not gate.owners
+
+
 async def test_global_inflight_limit_bounds_multiple_strategy_sessions(root: Path):
     """Concurrent sessions share the process-level provider admission limit."""
     left = root / "global-provider-left.sigma"
@@ -9720,6 +9829,10 @@ def main():
                 root / "strategy-parallel-421.sigma"
             )
         )
+        asyncio.run(test_duplicate_strategy_dispatch_is_fenced_during_provider_call(
+            root / "duplicate-strategy-dispatch.sigma"
+        ))
+        asyncio.run(test_provider_gate_fairness_and_cancelled_waiter())
         asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
         asyncio.run(
