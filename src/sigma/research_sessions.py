@@ -8277,6 +8277,15 @@ def _commit_portfolio_review(
             "stop_productive_conclusion",
         }
         and not objective_candidate
+        # An explicit unproductive/no-next-step assessment is a substantive
+        # research decision, not a provisional success claim. Respect it
+        # rather than inventing another path solely to consume spare calls.
+        and not (
+            decision == "stop_no_progress"
+            and output.get("strategy_contribution") == "unproductive"
+            and not output["next_question"].strip()
+            and not any(item.strip() for item in output["remaining_obligations"])
+        )
     ):
         proposed_stop = decision
         next_question = (
