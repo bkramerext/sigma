@@ -10,7 +10,26 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 ## Using SIGMA
 
-Create a project or copy a sample, write or generate strategies, and select strategies for a research session. Configure research rounds, a shared maximum number of agent turns, duration, and optional spending limits. A round is an Investigator–Skeptic exchange for one strategy; the turn limit bounds the total agent contributions across strategies. A session can be stopped and its saved record reviewed or resumed where supported. Review its Outcome alongside findings, objections, experiments, and open questions. Reports and exports preserve records for inspection; they do not verify conclusions.
+Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
+
+### The SIGMA workflow
+
+```mermaid
+flowchart TD
+    A[Create a project] --> B[Explore research strategies]
+    B --> C[Run Investigator and Skeptic research]
+    C --> D[Review findings and refine understanding]
+    D -->|research records and reports| F[Review and export]
+    D -. optional paper .-> E[Draft an academic paper]
+    E -->|paper review and export| F
+```
+
+- **Create a project:** Choose a subject or sample and frame the question.
+- **Explore strategies:** Develop approaches to the question and select which to investigate.
+- **Run research:** Investigator and Skeptic examine selected strategies; SIGMA saves findings, evidence, objections, and open questions.
+- **Review and refine:** Inspect sessions, the Outcome, and Current Understanding. Revise strategies or run more sessions when useful; research can be iterative.
+- **Draft a paper (optional):** SIGMA can synthesize saved research into an academic draft. A draft is not proof or independent verification.
+- **Review and export:** Export research records and reports for inspection or sharing, with no paper required. If you create a paper, review its claims, evidence, citations, and limitations before exporting PDF or TeX. You decide whether and where to share or publish a paper; SIGMA does not submit papers to journals.
 
 SIGMA supports ordinary local use without a Google account, local testing of Google-authenticated access, and a separately configured hosted deployment. Hosted access, membership, and provider funding depend on the deployment's configuration; a local launch does not automatically connect to the hosted service.
 
