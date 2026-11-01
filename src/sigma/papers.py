@@ -6183,6 +6183,35 @@ async def _generate_impl(
             }:
                 work["planning_fallback_pending"] = True
                 _save_work(path, work)
+        # Choose sources before authoring; never modify the frozen research.
+        await report("source_material", None, None, "active")
+        if "writing_sources" in work:
+            writing_sources = list(work["writing_sources"])
+            writing_selection = str(work.get("writing_source_selection", "checkpoint"))
+        else:
+            previous = next(
+                (
+                    paper.get("generation", {}).get("writing_sources", [])
+                    for paper in list_papers(path)
+                    if paper.get("generation", {}).get("writing_sources")
+                ),
+                [],
+            )
+            project_source = next(
+                (item.get("data", {}) for item in package["sources"]
+                 if item.get("kind") == "project"),
+                {},
+            )
+            writing_sources, writing_selection = await paper_writing_sources.select(
+                project_source if isinstance(project_source, dict) else {},
+                previous,
+            )
+            work["writing_sources"] = writing_sources
+            work["writing_source_selection"] = writing_selection
+            if checkpoint is not None:
+                _save_work(path, work)
+        await report("source_material", None, None, "milestone")
+
         one_shot_validation_started = False
         if not long_form:
             # A one-shot request can consume allowance even when its response
