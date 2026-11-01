@@ -8220,6 +8220,16 @@ def _commit_portfolio_review(
     return artifact
 
 
+def _portfolio_has_pending_reservation(
+    record: dict[str, Any], exclude_step_id: str | None = None
+) -> bool:
+    """Transient funding pressure must not terminate work that can settle."""
+    return any(
+        step.get("status") == "running" and step.get("id") != exclude_step_id
+        for step in record.get("steps", [])
+    )
+
+
 async def _portfolio_role_call(
     session_id: str,
     path: str,
@@ -8228,7 +8238,7 @@ async def _portfolio_role_call(
     cycle: int,
     semaphore: asyncio.Semaphore,
     state_lock: asyncio.Lock,
-) -> bool | Literal["retry"]:
+) -> bool | Literal["retry", "funding_wait"]:
     if role == "skeptic":
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
     # Acquire session capacity first, then a process-wide provider slot.
@@ -8441,6 +8451,10 @@ async def _portfolio_role_call(
                         output_token_reservation=output_bound,
                     )
                 except BudgetExceeded as exc:
+                    if _portfolio_has_pending_reservation(record):
+                        branch["current_action"] = "Waiting for funding settlement"
+                        _save(path, record)
+                        return "funding_wait"
                     branch["status"] = "ended"
                     branch["reason"] = str(exc)
                     branch["current_action"] = "Budget limit"
@@ -8496,6 +8510,10 @@ async def _portfolio_role_call(
                     record["tokens_reserved"] = max(
                         0, int(record.get("tokens_reserved", 0)) - token_reserve
                     )
+                if _portfolio_has_pending_reservation(record):
+                    branch["current_action"] = "Waiting for funding settlement"
+                    _save(path, record)
+                    return "funding_wait"
                 branch["status"] = "ended"
                 branch["reason"] = (
                     "The bounded session token budget cannot reserve another provider call."
@@ -8519,6 +8537,16 @@ async def _portfolio_role_call(
                         record["tokens_reserved"] = max(
                             0, int(record.get("tokens_reserved", 0)) - token_reserve
                         )
+                    if (
+                        reserve is not None
+                        and record.get("cost_status") == "available"
+                        and isinstance(current_cost, (int, float))
+                        and current_cost + reserve <= record["maximum_estimated_cost_usd"]
+                        and _portfolio_has_pending_reservation(record)
+                    ):
+                        branch["current_action"] = "Waiting for funding settlement"
+                        _save(path, record)
+                        return "funding_wait"
                     branch["status"] = "paused"
                     branch["reason"] = (
                         "A conservative cost reserve prevented another provider call."
@@ -8656,7 +8684,33 @@ async def _portfolio_role_call(
                         }
                     )
                     # The cloud ledger refused this reservation before dispatch.
-                    # Keep it retryable after allowance/ceiling replenishment.
+                    # If concurrent requests have unsettled reservations, defer
+                    # without consuming an agent turn. Their eventual settlements
+                    # may release sufficient headroom for this exact next turn.
+                    if (
+                        _portfolio_has_pending_reservation(record, step_id)
+                        and any(
+                            term in str(exc).casefold()
+                            for term in (
+                                "capacity", "allowance", "spend ceiling",
+                                "token budget", "token reservation",
+                            )
+                        )
+                    ):
+                        step["failure_kind"] = "funding_wait_pre_dispatch"
+                        branch["status"] = "queued"
+                        branch["current_action"] = "Waiting for funding settlement"
+                        record["current_steps"] = [
+                            item["id"] for item in record["steps"] if item.get("status") == "running"
+                        ]
+                        record["current_step"] = (
+                            record["current_steps"][-1] if record["current_steps"] else None
+                        )
+                        _refresh_token_accounting(record)
+                        _save(path, record)
+                        return "funding_wait"
+                    # Keep permanent funding rejection retryable only after
+                    # allowance/ceiling replenishment by explicit resume.
                     branch["status"] = "paused"
                     branch["funding_resume_allowed"] = True
                     branch["current_action"] = "Budget limit"
@@ -9545,9 +9599,15 @@ async def _portfolio_role_call_with_recovery(
     """Retry only explicitly bounded clipped or transient attempts."""
     max_attempts = MAX_CLIPPED_AUTO_RETRIES + MAX_TRANSIENT_AUTO_RETRIES + 1
     for attempt in range(max_attempts):
-        result = await _portfolio_role_call(
-            session_id, path, strategy_id, role, cycle, semaphore, state_lock
-        )
+        # Funding deferrals are not paid attempts or recovery retries. Wait
+        # outside all locks and provider slots until an earlier call settles.
+        while True:
+            result = await _portfolio_role_call(
+                session_id, path, strategy_id, role, cycle, semaphore, state_lock
+            )
+            if result != "funding_wait":
+                break
+            await asyncio.sleep(0.2)
         if result != "retry":
             return result
         record = _read(path, session_id)
