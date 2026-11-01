@@ -4001,7 +4001,7 @@ def test_limits_validation(path: Path):
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
     research_sessions.save_limits(str(path), before)
     assert research_sessions.get_limits(str(path)) == before
-    older_saved = {**before, "research_rounds": 61, "model_calls": 20}
+    older_saved = {**before, "research_rounds": 3, "model_calls": 1}
     limits_file = path / "research-sessions" / "limits.json"
     limits_file.write_text(json.dumps(older_saved), encoding="utf-8")
     assert research_sessions.get_limits(str(path)) == older_saved
@@ -4015,12 +4015,24 @@ def test_limits_validation(path: Path):
 
 def test_contradictory_skeptic_counterexample_does_not_cancel_continuation():
     assert research_sessions.coordinate_decision(
-        "continue", "decisive_counterexample",
-        "Proceed with a bounded next test", ["One gap remains"],
-        1, 9, 2, 54,
+        "continue",
+        "decisive_counterexample",
+        "Proceed with a bounded next test",
+        ["One gap remains"],
+        1,
+        9,
+        2,
+        54,
     ) == ("continue", "Proceed with a bounded next test")
     assert research_sessions.coordinate_decision(
-        "stop", "decisive_counterexample", "", [], 1, 9, 2, 54,
+        "stop",
+        "decisive_counterexample",
+        "",
+        [],
+        1,
+        9,
+        2,
+        54,
     ) == ("stop_decisive_counterexample", "")
 
 
@@ -5692,7 +5704,6 @@ async def test_concurrent_strategy_portfolio(path: Path):
     assert finished["portfolio_decision"]["status"] == "model_reported_unverified"
 
 
-
 async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
     path: Path,
 ):
@@ -5776,12 +5787,17 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     assert all(branch["cycle"] == 9 for branch in branches), branches
     assert all(len(branch["artifacts"]) == 9 for branch in branches), branches
     assert all(branch["status"] == "ended" for branch in branches), branches
-    assert next(
-        artifact for artifact in finished["artifacts"]
-        if artifact["strategy_id"] == first.id and artifact["strategy_cycle"] == 1
-    )["coordinator_decision"] == "continue"
+    assert (
+        next(
+            artifact
+            for artifact in finished["artifacts"]
+            if artifact["strategy_id"] == first.id and artifact["strategy_cycle"] == 1
+        )["coordinator_decision"]
+        == "continue"
+    )
     assert finished.get("termination_reason_code") != "research_completed_early"
     assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
+
 
 async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(path: Path):
     view, first, credential, config = await setup(path)
@@ -9604,6 +9620,7 @@ def main():
             )
         )
         test_limits_validation(root / "invalid-limits.sigma")
+        test_contradictory_skeptic_counterexample_does_not_cancel_continuation()
         test_shared_turn_schedule_accepts_strategy_count_changes()
         asyncio.run(
             test_pending_skeptic_uses_final_turn_and_deferred_outcome_is_specific(
@@ -9651,6 +9668,11 @@ def main():
             )
         )
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        asyncio.run(
+            test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
+                root / "portfolio-54-turns.sigma"
+            )
+        )
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
                 root / "portfolio-cross-review.sigma"
