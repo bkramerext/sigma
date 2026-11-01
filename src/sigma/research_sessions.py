@@ -29,6 +29,7 @@ from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
+from sigma.project_obligation_ids import assign_project_obligation_ids
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
@@ -41,6 +42,7 @@ from sigma.research_budget import (
     settle_after_response,
     settle_rejected,
 )
+from sigma.research_context_budget import compact_dispatch_context
 from sigma.research_epistemics import (
     argument_availability,
     execution_provenance,
@@ -218,7 +220,9 @@ class PeerHandoffReview(BaseModel):
 
 class ObligationReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    obligation_id: str = Field(min_length=64, max_length=64)
+    # Opaque references: compact local IDs, saved SHA-256 IDs and UUIDs
+    # share one namespace. Exact context membership is checked separately.
+    obligation_id: str = Field(min_length=1, max_length=128)
     status: str = Field(pattern="^(unresolved|addressed|superseded|retracted|unknown)$")
     basis_artifact_ids: list[str] = Field(max_length=8)
     basis_step_ids: list[str] = Field(max_length=4)
@@ -2426,7 +2430,11 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
             for name, data in members.items():
                 if not name.startswith("research-sessions/") or not name.endswith(".json"):
                     continue
-                if name in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
+                if name in {
+                    "research-sessions/limits.json",
+                    "research-sessions/sequence.json",
+                    "research-sessions/obligation-ids.json",
+                }:
                     continue
                 try:
                     if str(
@@ -3125,6 +3133,7 @@ def _save_unlocked(path: str, record: dict[str, Any]) -> None:
                 if name.startswith("research-sessions/")
                 and name.endswith(".json")
                 and name != member
+                and name != "research-sessions/obligation-ids.json"
             )
             if total + len(encoded) > MAX_TOTAL:
                 raise ProjectError(
@@ -3266,7 +3275,7 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
             if not name.startswith("research-sessions/") or not name.endswith(".json"):
                 continue
             stem = name.removeprefix("research-sessions/").removesuffix(".json")
-            if stem in {"limits", "sequence"} or "/" in stem:
+            if stem in {"limits", "sequence", "obligation-ids"} or "/" in stem:
                 continue
             try:
                 data = base64.b64decode(encoded, validate=True)
@@ -3298,7 +3307,7 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     records: list[dict[str, Any]] = []
     unavailable = 0
     for file in sorted(directory.glob("*.json")):
-        if file.name in {"limits.json", "sequence.json"}:
+        if file.name in {"limits.json", "sequence.json", "obligation-ids.json"}:
             continue
         try:
             if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_RECORD:
@@ -4780,6 +4789,7 @@ async def start_session(
             record = {
                 "schema_version": 1,
                 "backend_build_commit": build_commit(),
+                "obligation_id_format": "compact-v1",
                 "id": str(uuid4()),
                 "session_number": 0,
                 "project_path": view.path,
@@ -5631,9 +5641,11 @@ async def _call_provider(
     supplied_reasoning_sources = set(context.get("context_artifact_ids", []))
     supplied_reasoning_sources.update(context.get("prior_session_artifact_ids", []))
     supplied_reasoning_sources.update(
-        item.get("artifact_id")
+        item["artifact_id"]
         for item in context.get("other_strategy_evidence", [])
-        if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+        if isinstance(item, dict)
+        and isinstance(item.get("artifact_id"), str)
+        and item.get("evidence_availability") != "pointer_only_original_not_supplied"
     )
     reasoning_items = (
         validated.get("reasoning_steps", [])
@@ -5659,6 +5671,7 @@ async def _call_provider(
             (item.get("strategy_id"), item.get("artifact_id"))
             for item in context.get("other_strategy_evidence", [])
             if isinstance(item, dict)
+            and item.get("evidence_availability") != "pointer_only_original_not_supplied"
         }
         seen: set[tuple[str, str]] = set()
         for relation in validated["cross_strategy_relations"]:
@@ -5963,15 +5976,16 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         project_id=record.get("project_id"),
         strategy_id=strategy_id,
         prior_obligations=prior_session_obligations,
+        identity_path=record.get("project_path")
+        if record.get("obligation_id_format") == "compact-v1"
+        else None,
     )
-    if any(
+    incomplete_unresolved_count = sum(
         item.get("status") == "unresolved" and not item.get("text_complete", True)
         for item in obligations
-    ):
-        raise ResearchContextLimitError(
-            "An unresolved obligation exceeds the safe extract bound. No provider call was made; "
-            "the original obligation remains saved and must be reviewed before continuing."
-        )
+    )
+    # The full text remains in saved research; text_complete=False explicitly
+    # prohibits treating a bounded extract as a complete obligation.
     strategy_snapshot, omitted_strategy_count, omitted_strategy_ids = _compact_strategy_snapshot(
         record.get("strategy_snapshot"), record.get("strategy_id")
     )
@@ -5997,13 +6011,21 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         supplied = [
             item
             for item in source_ids
-            if item in artifact_availability or item in prior_finding_by_id
+            if (
+                item in artifact_availability
+                and artifact_availability[item] != "pointer_only_original_not_supplied"
+            )
+            or item in prior_finding_by_id
         ]
         obligation["supplied_source_artifact_ids"] = supplied
         if not supplied:
             obligation["source_artifact_availability"] = "pointer_only_original_not_supplied"
         elif any(
-            artifact_availability.get(item) == "incomplete_extract_original_not_supplied"
+            artifact_availability.get(item)
+            in {
+                "incomplete_extract_original_not_supplied",
+                "pointer_only_original_not_supplied",
+            }
             or prior_finding_by_id.get(item, {}).get("extract_truncated_fields")
             for item in supplied
         ):
@@ -6042,12 +6064,17 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             item["attempt_id"] for item in prior_session_failures
         ],
         "obligation_ledger": obligations,
+        "incomplete_unresolved_obligation_count": incomplete_unresolved_count,
         "obligation_ledger_omitted_count": omitted_obligation_count,
         "obligation_ledger_omitted_ids": omitted_obligation_ids,
         "outstanding_obligations": [
             item["text"] for item in obligations if item["status"] == "unresolved"
         ],
-        "context_artifact_ids": [a["id"] for a in selected],
+        "context_artifact_ids": [
+            a["id"]
+            for a in selected
+            if a.get("evidence_availability") != "pointer_only_original_not_supplied"
+        ],
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
@@ -6160,7 +6187,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     manifest["omitted_obligations"] = {
         "count": omitted_obligation_count,
         "obligation_ids": omitted_obligation_ids,
-        "reason": "lower-priority dispositions exceeded the fixed 64-obligation ledger bound; unresolved obligations are never omitted",
+        "reason": "recent unresolved obligations take priority; older unresolved and lower-priority dispositions may be omitted from this packet but remain open in saved research",
+    }
+    manifest["incomplete_unresolved_obligations"] = {
+        "count": incomplete_unresolved_count,
+        "reason": "bounded extracts omit parts of the original text; no truncated item is a complete reviewed obligation",
     }
     if role == "skeptic":
         pending = pending_investigation
@@ -6196,6 +6227,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
                 "qualification": "researcher-selected, unverified; delivery is not use or proof",
             }
         )
+    compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -6209,6 +6241,22 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "or start a narrower session. Saved research records were preserved."
         )
     return context
+
+
+def _context_obligation_count(context: dict[str, Any]) -> int:
+    """Count the unresolved obligations actually supplied to an agent turn.
+
+    Dispatch compaction can remove the redundant outstanding_obligations list.
+    The obligation ledger is authoritative and survives that compaction. Keep
+    compatibility with earlier contexts that only supplied the legacy list.
+    """
+    ledger = context.get("obligation_ledger")
+    if isinstance(ledger, list):
+        return sum(
+            1 for item in ledger if isinstance(item, dict) and item.get("status") == "unresolved"
+        )
+    outstanding = context.get("outstanding_obligations")
+    return len(outstanding) if isinstance(outstanding, list) else 0
 
 
 def _json_bytes(value: Any) -> int:
@@ -6344,25 +6392,29 @@ def _obligation_ledger(
     strategy_id: Any = None,
     prior_obligations: list[dict[str, Any]] | None = None,
     unbounded_for_admission: bool = False,
+    identity_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
     """Apply obligation events chronologically; missing later notes do not resolve."""
     entries: dict[str, dict[str, Any]] = {}
     legacy_ids: dict[str, set[str]] = {}
+    assigned: dict[str, str] = {}
 
     def entry_for(
         text: str, *, source_project_id: Any, source_strategy_id: Any, assumptions: list[str]
     ) -> dict[str, Any]:
-        obligation_id = _obligation_identity(
+        digest = _obligation_identity(
             text,
             project_id=source_project_id,
             strategy_id=source_strategy_id,
             assumptions=assumptions,
         )
+        obligation_id = assigned[digest] if identity_path is not None else digest
+        legacy_id = _legacy_obligation_identity(text)
         item = entries.setdefault(
             obligation_id,
             {
                 "obligation_id": obligation_id,
-                "legacy_obligation_id": _legacy_obligation_identity(text),
+                "legacy_obligation_id": legacy_id if identity_path is None else None,
                 "text": _bounded_note(text.strip(), 700),
                 "text_complete": len(text.strip()) <= 700,
                 "scope_assumptions": assumptions,
@@ -6376,7 +6428,7 @@ def _obligation_ledger(
                 "rationale": "",
             },
         )
-        legacy_ids.setdefault(_legacy_obligation_identity(text), set()).add(obligation_id)
+        legacy_ids.setdefault(legacy_id, set()).add(obligation_id)
         return item
 
     def add_source(item: dict[str, Any], artifact: dict[str, Any]) -> None:
@@ -6418,6 +6470,61 @@ def _obligation_ledger(
         source_project_id = artifact.get("project_id", project_id)
         source_strategy_id = artifact.get("strategy_id", strategy_id)
         return source_project_id, source_strategy_id, list(dict.fromkeys(assumptions))
+
+    # Allocate all new obligation aliases in ONE project transaction. A
+    # project may contain hundreds of notes; allocating separately for each
+    # would repeatedly rewrite the project bundle during every agent turn.
+    if identity_path is not None:
+        required: list[str] = []
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            objective_review = artifact.get("objective_review")
+            objective_review = objective_review if isinstance(objective_review, dict) else {}
+            skeptic = artifact.get("skeptic_output")
+            skeptic = skeptic if isinstance(skeptic, dict) else {}
+            investigator = artifact.get("investigator_output")
+            investigator = investigator if isinstance(investigator, dict) else {}
+            source_project, source_strategy, assumptions = note_scope(
+                artifact, objective_review, skeptic
+            )
+            for notes in (
+                investigator.get("open_obligations"),
+                artifact.get("open_obligations"),
+                artifact.get("objections"),
+                objective_review.get("unresolved_objections"),
+                skeptic.get("unresolved_objections"),
+                skeptic.get("remaining_obligations"),
+            ):
+                for note in notes if isinstance(notes, list) else []:
+                    if isinstance(note, str) and note.strip():
+                        required.append(
+                            _obligation_identity(
+                                note,
+                                project_id=source_project,
+                                strategy_id=source_strategy,
+                                assumptions=assumptions,
+                            )
+                        )
+        if isinstance(pending_investigation, dict):
+            assumptions = pending_investigation.get("assumptions", [])
+            assumptions = (
+                [item for item in assumptions if isinstance(item, str)]
+                if isinstance(assumptions, list)
+                else []
+            )
+            for note in pending_investigation.get("open_obligations", []):
+                if isinstance(note, str) and note.strip():
+                    required.append(
+                        _obligation_identity(
+                            note,
+                            project_id=project_id,
+                            strategy_id=strategy_id,
+                            assumptions=assumptions,
+                        )
+                    )
+        if required:
+            assigned.update(assign_project_obligation_ids(identity_path, required))
 
     # Prior-session obligations are frozen at session creation and seed the
     # current ledger. A later current-session note can explicitly reopen one.
@@ -6526,16 +6633,23 @@ def _obligation_ledger(
             if isinstance(key, str) and key in entries:
                 target_ids.add(key)
             elif isinstance(disposition.get("text"), str):
+                digest = _obligation_identity(
+                    disposition["text"],
+                    project_id=source_project_id,
+                    strategy_id=source_strategy_id,
+                    assumptions=assumptions,
+                )
                 target_ids.add(
-                    _obligation_identity(
-                        disposition["text"],
-                        project_id=source_project_id,
-                        strategy_id=source_strategy_id,
-                        assumptions=assumptions,
-                    )
+                    assigned.get(digest, digest) if identity_path is not None else digest
                 )
             elif isinstance(key, str):
-                target_ids.update(legacy_ids.get(key, set()))
+                # Historical reviews cite 64-hex identities; newer ones cite
+                # compact oN aliases. Resolve old IDs without mutating the
+                # saved source artifact or falsely closing another obligation.
+                if identity_path is not None and key in assigned:
+                    target_ids.add(assigned[key])
+                else:
+                    target_ids.update(legacy_ids.get(key, set()))
                 if len(target_ids) != 1:
                     for candidate_id in target_ids:
                         entries[candidate_id].setdefault(
@@ -6592,13 +6706,10 @@ def _obligation_ledger(
         item.pop("_seen_source_ids", None)
     if unbounded_for_admission or len(result) <= MAX_CONTEXT_OBLIGATIONS:
         return result, 0, []
-    mandatory = [item for item in result if item["status"] == "unresolved"]
-    if len(mandatory) > MAX_CONTEXT_OBLIGATIONS:
-        raise ResearchContextLimitError(
-            f"{len(mandatory)} unresolved obligations exceed the "
-            f"{MAX_CONTEXT_OBLIGATIONS}-item context bound. No provider call was made; "
-            "saved research history was preserved. Narrow the current question."
-        )
+    # Preserve the original ledger, but a long-running session can accumulate
+    # more unresolved obligations than the dispatch bound. Send the newest ones
+    # and report omitted older IDs/counts rather than terminating the session.
+    # Omission never constitutes an addressed or superseded disposition.
     priority = {"unresolved": 0, "addressed": 1, "superseded": 1, "retracted": 1, "unknown": 2}
     source_order = {item.get("obligation_id"): index for index, item in enumerate(result)}
     ordered = sorted(
@@ -6625,6 +6736,10 @@ def _reconcile_artifact_open_obligations(record: dict[str, Any], artifact: dict[
         project_id=record.get("project_id"),
         strategy_id=artifact.get("strategy_id"),
         prior_obligations=record.get("prior_session_obligations", []),
+        unbounded_for_admission=True,
+        identity_path=record.get("project_path")
+        if record.get("obligation_id_format") == "compact-v1"
+        else None,
     )
     strategy_id = artifact.get("strategy_id")
     unresolved = []
@@ -6672,6 +6787,10 @@ def _reconcile_skeptic_obligations(
         project_id=record.get("project_id"),
         strategy_id=strategy_id,
         prior_obligations=record.get("prior_session_obligations", []),
+        unbounded_for_admission=True,
+        identity_path=record.get("project_path")
+        if record.get("obligation_id_format") == "compact-v1"
+        else None,
     )
     review_status = {
         item.get("obligation_id"): item.get("status")
@@ -6993,16 +7112,15 @@ def _select_context_artifacts(
         for item_id, item in by_id.items()
         if item_id in unresolved_source_ids or _artifact_is_critical(item)
     }
-    protected_extract_ids = set(critical_ids)
     mandatory_ids = set(critical_ids)
     if artifacts and isinstance(artifacts[-1].get("id"), str):
         mandatory_ids.add(artifacts[-1]["id"])
+    all_mandatory_ids = set(mandatory_ids)
     if len(mandatory_ids) > MAX_CONTEXT_ARTIFACTS:
-        raise ResearchContextLimitError(
-            f"{len(mandatory_ids)} mandatory current-session evidence sources exceed the "
-            f"{MAX_CONTEXT_ARTIFACTS}-source context bound. No provider call was made; "
-            "saved research records were preserved. Narrow the question or inspect the evidence."
-        )
+        # Preserve the newest material evidence and carry older sources as
+        # omission pointers instead of terminating a long-running session.
+        recent_material = [item_id for item_id in reversed(list(by_id)) if item_id in mandatory_ids]
+        mandatory_ids = set(recent_material[:MAX_CONTEXT_ARTIFACTS])
     ordered_ids = [item_id for item_id in by_id if item_id in mandatory_ids]
     optional_ids = [item_id for item_id in reversed(list(by_id)) if item_id not in mandatory_ids]
     selected: list[dict[str, Any]] = []
@@ -7015,19 +7133,33 @@ def _select_context_artifacts(
             if item.get("extract_truncated_fields")
             else "bounded_deterministic_extract_original_not_supplied"
         )
-        if item_id in protected_extract_ids and item.get("extract_truncated_fields"):
-            raise ResearchContextLimitError(
-                "A mandatory research evidence extract is incomplete "
-                f"({', '.join(item['extract_truncated_fields'])}). No provider call was made; "
-                "the original artifact remains saved and must be inspected before continuing."
-            )
+        # If an extract is incomplete, its evidence_availability and source
+        # readiness explicitly say so. Other branches must still be allowed
+        # to continue; the original source remains intact in saved research.
         selected.append(item)
         mandatory_bytes += _json_bytes(item)
     if mandatory_bytes > MAX_AGENT_CONTEXT_BYTES // 2:
-        raise ResearchContextLimitError(
-            "Mandatory research context exceeds the safe input limit. No provider call was made; "
-            "saved artifacts were preserved. Narrow the question or reduce the critical evidence."
-        )
+        # Keep recent decisive material in full where possible. Older sources
+        # become pointer-only, not silently truncated or treated as reviewed.
+        for index, item in enumerate(selected):
+            if mandatory_bytes <= MAX_AGENT_CONTEXT_BYTES // 2:
+                break
+            pointer = {
+                key: item[key]
+                for key in ("id", "strategy_id", "session_id", "sequence")
+                if key in item
+            }
+            pointer.update(
+                {
+                    "evidence_availability": "pointer_only_original_not_supplied",
+                    "extract_truncated_fields": ["budget_compacted_original_not_supplied"],
+                    "note": "Saved original intact; this pointer is not a supplied proof or verified source.",
+                }
+            )
+            saved_bytes = _json_bytes(item) - _json_bytes(pointer)
+            if saved_bytes > 0:
+                selected[index] = pointer
+                mandatory_bytes -= saved_bytes
     optional_bytes = mandatory_bytes
     for item_id in optional_ids:
         if not isinstance(item_id, str):
@@ -7063,8 +7195,8 @@ def _select_context_artifacts(
             _manifest_source_group(
                 "current_session_material_evidence",
                 ordered_ids,
-                "representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history",
-                "deterministic_extract",
+                "recent material sources for unresolved obligations, decisive outcomes and the latest artifact; omitted older originals are retained",
+                "bounded_extract_or_explicit_pointer",
             ),
             _manifest_source_group(
                 "current_session_history",
@@ -7083,8 +7215,12 @@ def _select_context_artifacts(
         if item is not None
     ]
     manifest = {
-        "policy_version": "t37-v1",
+        "policy_version": "continuity-v2",
         "byte_limit": MAX_AGENT_CONTEXT_BYTES,
+        "mandatory_source_omitted_count": len(all_mandatory_ids - mandatory_ids),
+        "mandatory_source_omitted_ids": [
+            item_id for item_id in by_id if item_id in all_mandatory_ids - mandatory_ids
+        ][:MAX_CONTEXT_OMISSION_POINTERS],
         "selection_order": "unresolved obligations and marked counterexamples, newest artifact, then newest optional history; stable source order in prompt",
         "selected_count": len(selected),
         "omitted_count": len(omitted),
@@ -7450,6 +7586,7 @@ def _portfolio_context(
         )
         if handoff_group is not None:
             context["context_manifest"]["sources"].append(handoff_group)
+    compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -7487,11 +7624,14 @@ def _select_peer_artifacts(
     )
     mandatory_ids.discard(None)
     if len(mandatory_ids) > MAX_PEER_CONTEXT_ARTIFACTS:
-        raise ResearchContextLimitError(
-            f"{len(mandatory_ids)} material peer sources exceed the "
-            f"{MAX_PEER_CONTEXT_ARTIFACTS}-source peer context bound. No provider call was made; "
-            "saved evidence was preserved. Narrow the portfolio question."
-        )
+        # Peer evidence grows across strategies. Favor the newest material
+        # peers, explicitly retain omitted pointers, and keep research moving.
+        recent_material = [
+            artifact["id"]
+            for artifact in reversed(artifacts)
+            if isinstance(artifact.get("id"), str) and artifact["id"] in mandatory_ids
+        ]
+        mandatory_ids = set(recent_material[:MAX_PEER_CONTEXT_ARTIFACTS])
     selected_ids = set(mandatory_ids)
     for artifact in reversed(artifacts):
         if len(selected_ids) >= MAX_PEER_CONTEXT_ARTIFACTS:
@@ -8122,6 +8262,43 @@ def _commit_portfolio_review(
             f"The Skeptic's decisive-counterexample stop for {branch['strategy_title']} conflicted with its evidence; the unsupported stop signal was not accepted.",
         )
 
+    # A portfolio's scheduled rounds are an investigation budget, not a
+    # license for one model to terminate its strategy on a provisional claim.
+    # Keep a contested counterexample or locally exhausted path under review
+    # until its configured rounds run, without inventing provider allowance.
+    if (
+        len(record.get("strategy_runs", [])) > 1
+        and cycle < int(record.get("cycle_limit", 3))
+        and int(record.get("calls_used", 0)) + 2 <= int(record.get("call_limit", CALL_LIMIT))
+        and decision in {
+            "stop_decisive_counterexample",
+            "stop_no_progress",
+            "stop_productive_conclusion",
+        }
+        and not objective_candidate
+    ):
+        proposed_stop = decision
+        next_question = (
+            output["next_question"].strip()
+            or next((item.strip() for item in output["remaining_obligations"] if item.strip()), "")
+            or (
+                "Independently test the reported counterexample against the exact project objective, "
+                "check the assumptions, and seek a falsifying case."
+                if proposed_stop == "stop_decisive_counterexample"
+                else "Adversarially test the proposed conclusion against the original objective and "
+                "identify a new discriminating test."
+                if proposed_stop == "stop_productive_conclusion"
+                else "Find a different falsifiable approach to this strategy's objective and report "
+                "what the previous attempt failed to establish."
+            )
+        )
+        decision = "revise"
+        _event(
+            record,
+            "coordinator.provisional_stop_reopened",
+            f"{branch['strategy_title']}: {proposed_stop} was provisional; continuing to independently test the claim within the configured rounds.",
+        )
+
     artifact_id = str(uuid4())
     valid_cycles = {
         item.get("strategy_cycle", item["sequence"]): item["id"] for item in branch_artifacts
@@ -8289,6 +8466,7 @@ async def _portfolio_role_call(
                 )
                 if guidance_group is not None:
                     context["context_manifest"]["sources"].append(guidance_group)
+                compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
                 context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
                 _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -8581,7 +8759,7 @@ async def _portfolio_role_call(
                 "peer_handoff_ids": [
                     item["handoff_id"] for item in context.get("peer_handoffs", [])
                 ],
-                "context_obligation_count": len(context["outstanding_obligations"]),
+                "context_obligation_count": _context_obligation_count(context),
                 "human_intervention_ids": [item["intervention_id"] for item in human_guidance],
                 "computation_inspections": _context_computation_inspections(context),
                 "cost_reserve": reserve,
@@ -10426,6 +10604,7 @@ def _prior_session_obligations_index(
             project_id=None,
             strategy_id=strategy_id,
             unbounded_for_admission=True,
+            identity_path=project_path,
         )
         unresolved = [item for item in ledger if item.get("status") == "unresolved"]
         unresolved.sort(
@@ -10738,6 +10917,7 @@ async def _worker(session_id: str, path: str) -> None:
             )
             if guidance_group is not None:
                 context["context_manifest"]["sources"].append(guidance_group)
+            compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
             context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
             _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -10850,7 +11030,7 @@ async def _worker(session_id: str, path: str) -> None:
                     "context_artifact_ids": context["context_artifact_ids"],
                     "prior_session_artifact_ids": context.get("prior_session_artifact_ids", []),
                     "context_manifest": context["context_manifest"],
-                    "context_obligation_count": len(context["outstanding_obligations"]),
+                    "context_obligation_count": _context_obligation_count(context),
                     "human_intervention_ids": [item["intervention_id"] for item in guidance],
                 }
                 step["provider_input_audit"] = request_audit
