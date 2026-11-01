@@ -10142,9 +10142,15 @@ class _FairProviderGate:
         self.active = 0
         self.waiting: dict[str, deque[asyncio.Future[None]]] = {}
         self.owners: deque[str] = deque()
+        self.last_owner: str | None = None
 
     def _dispatch(self) -> None:
         while self.active < self.limit and self.owners:
+            # Give another waiting owner priority over the one last served.
+            # Merely appending a late arrival behind a busy owner's backlog
+            # would otherwise let one session monopolize released capacity.
+            if len(self.owners) > 1 and self.owners[0] == self.last_owner:
+                self.owners.rotate(-1)
             owner = self.owners.popleft()
             waiting = self.waiting[owner]
             future = waiting.popleft()
@@ -10155,6 +10161,7 @@ class _FairProviderGate:
             if future.cancelled():
                 continue
             self.active += 1
+            self.last_owner = owner
             future.set_result(None)
 
     async def acquire(self, owner: str) -> None:
