@@ -5595,6 +5595,166 @@ async def test_maximum_regions_false_candidate_is_rejected(path: Path):
     assert persisted["artifacts"][0]["skeptic_response"] == genuine_objection["response"]
 
 
+async def test_strategy_skeptic_does_not_wait_for_sibling_investigator(path: Path):
+    """A fast branch can reach Skeptic while a sibling Investigator is stalled."""
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent fast route", "Complete an unrelated argument."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=1, model_calls=4)
+    research_sessions.save_limits(str(path), limits)
+    fast_skeptic_seen = asyncio.Event()
+    started_roles: dict[str, list[str]] = {first.id: [], second.id: []}
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        strategy_id = context["strategy"]["id"]
+        role = payload["text"]["format"]["name"]
+        started_roles[strategy_id].append(role)
+        if strategy_id == first.id and role == "research_investigator":
+            # The original global Investigator wave barrier deadlocks here.
+            await asyncio.wait_for(fast_skeptic_seen.wait(), timeout=3)
+        if strategy_id == second.id and role == "research_skeptic":
+            fast_skeptic_seen.set()
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"], "stop")
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await asyncio.wait_for(wait_for(path, started["id"]), timeout=8)
+
+    assert fast_skeptic_seen.is_set()
+    assert finished["status"] == "ended", finished["message"]
+    assert finished["calls_used"] == 4
+    assert len(finished["artifacts"]) == 2
+    for roles in started_roles.values():
+        assert roles == ["research_investigator", "research_skeptic"], roles
+
+
+async def test_global_inflight_limit_bounds_multiple_strategy_sessions(root: Path):
+    """Concurrent sessions share the process-level provider admission limit."""
+    left = root / "global-provider-left.sigma"
+    right = root / "global-provider-right.sigma"
+    left_view, first_left, credential, config = await setup(left)
+    right_view, first_right, _, _ = await setup(right)
+    second_left = create_strategy(
+        left, "Left peer", "Independent second route."
+    ).project.strategies[-1]
+    second_right = create_strategy(
+        right, "Right peer", "Independent second route."
+    ).project.strategies[-1]
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "model_calls": 4,
+        "research_rounds": 1,
+    }
+    research_sessions.save_limits(str(left), limits)
+    research_sessions.save_limits(str(right), limits)
+    state: dict[str, Any] = {"active": 0, "maximum": 0, "seen": set()}
+    sequences: dict[str, list[str]] = {}
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        strategy_id = context["strategy"]["id"]
+        role = payload["text"]["format"]["name"]
+        sequences.setdefault(strategy_id, []).append(role)
+        state["seen"].add(strategy_id)
+        state["active"] += 1
+        state["maximum"] = max(state["maximum"], state["active"])
+        try:
+            await asyncio.sleep(0.025)
+            output = (
+                investigation(context["cycle"])
+                if role == "research_investigator"
+                else skeptic(context["cycle"], "stop")
+            )
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            state["active"] -= 1
+
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "SIGMA_RESEARCH_GLOBAL_INFLIGHT": "2",
+                "SIGMA_RESEARCH_SESSION_INFLIGHT": "3",
+            },
+        ),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started_left, started_right = await asyncio.gather(
+            research_sessions.start_session(
+                str(left),
+                first_left.id,
+                str(uuid4()),
+                left_view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+                strategy_ids=[first_left.id, second_left.id],
+            ),
+            research_sessions.start_session(
+                str(right),
+                first_right.id,
+                str(uuid4()),
+                right_view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+                strategy_ids=[first_right.id, second_right.id],
+            ),
+        )
+        finished = await asyncio.wait_for(
+            asyncio.gather(
+                wait_for(left, started_left["id"]),
+                wait_for(right, started_right["id"]),
+            ),
+            timeout=10,
+        )
+
+    assert state["maximum"] == 2, state
+    assert state["active"] == 0
+    assert len(state["seen"]) == 4
+    assert all(item["status"] == "ended" for item in finished), finished
+    assert all(item["calls_used"] == 4 for item in finished)
+    assert all(len(item["artifacts"]) == 2 for item in finished)
+    assert all(
+        roles == ["research_investigator", "research_skeptic"]
+        for roles in sequences.values()
+    )
+
+
 async def test_concurrent_strategy_portfolio(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -9548,6 +9708,12 @@ def main():
                 root / "maximum-regions-counterexample.sigma"
             )
         )
+        asyncio.run(
+            test_strategy_skeptic_does_not_wait_for_sibling_investigator(
+                root / "strategy-parallel-421.sigma"
+            )
+        )
+        asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
