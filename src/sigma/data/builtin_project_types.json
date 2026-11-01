@@ -9,12 +9,23 @@
         {
           "tag": "path",
           "attrs": {
-            "d": "M5 3h14v18H5zM8 7h8M8 11h8M8 15h5",
-            "fill": "none",
+            "d": "M12 2.8 19.9 7.4v9.2L12 21.2 4.1 16.6V7.4L12 2.8Z",
             "stroke": "currentColor",
             "strokeWidth": 1.6,
             "strokeLinecap": "round",
-            "strokeLinejoin": "round"
+            "strokeLinejoin": "round",
+            "fill": "none"
+          }
+        },
+        {
+          "tag": "path",
+          "attrs": {
+            "d": "M12 8.1v7.8M8.1 12h7.8",
+            "stroke": "currentColor",
+            "strokeWidth": 1.35,
+            "strokeLinecap": "round",
+            "strokeLinejoin": "round",
+            "fill": "none"
           }
         }
       ]
