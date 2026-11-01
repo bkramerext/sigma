@@ -30,6 +30,7 @@ from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import ChatGPTProviderRejection, completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
+from sigma.project_obligation_ids import assign_project_obligation_ids
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_budget import (
@@ -215,7 +216,7 @@ class PeerHandoffReview(BaseModel):
 
 class ObligationReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    obligation_id: str = Field(min_length=64, max_length=64)
+    obligation_id: str = Field(pattern=r"^(o[1-9][0-9]*|[0-9a-f]{64})$")
     status: str = Field(pattern="^(unresolved|addressed|superseded|retracted|unknown)$")
     basis_artifact_ids: list[str] = Field(max_length=8)
     basis_step_ids: list[str] = Field(max_length=4)
@@ -4773,6 +4774,7 @@ async def start_session(
             record = {
                 "schema_version": 1,
                 "backend_build_commit": build_commit(),
+                "obligation_id_format": "compact-v1",
                 "id": str(uuid4()),
                 "session_number": 0,
                 "project_path": view.path,
@@ -5959,6 +5961,9 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         project_id=record.get("project_id"),
         strategy_id=strategy_id,
         prior_obligations=prior_session_obligations,
+        identity_path=record.get("project_path")
+        if record.get("obligation_id_format") == "compact-v1"
+        else None,
     )
     incomplete_unresolved_count = sum(
         item.get("status") == "unresolved" and not item.get("text_complete", True)
@@ -6372,25 +6377,34 @@ def _obligation_ledger(
     strategy_id: Any = None,
     prior_obligations: list[dict[str, Any]] | None = None,
     unbounded_for_admission: bool = False,
+    identity_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
     """Apply obligation events chronologically; missing later notes do not resolve."""
     entries: dict[str, dict[str, Any]] = {}
     legacy_ids: dict[str, set[str]] = {}
+    assigned: dict[str, str] = {}
 
     def entry_for(
         text: str, *, source_project_id: Any, source_strategy_id: Any, assumptions: list[str]
     ) -> dict[str, Any]:
-        obligation_id = _obligation_identity(
+        digest = _obligation_identity(
             text,
             project_id=source_project_id,
             strategy_id=source_strategy_id,
             assumptions=assumptions,
         )
+        if identity_path is not None:
+            if digest not in assigned:
+                assigned.update(assign_project_obligation_ids(identity_path, [digest]))
+            obligation_id = assigned[digest]
+        else:
+            obligation_id = digest
+        legacy_id = _legacy_obligation_identity(text)
         item = entries.setdefault(
             obligation_id,
             {
                 "obligation_id": obligation_id,
-                "legacy_obligation_id": _legacy_obligation_identity(text),
+                "legacy_obligation_id": legacy_id if identity_path is None else None,
                 "text": _bounded_note(text.strip(), 700),
                 "text_complete": len(text.strip()) <= 700,
                 "scope_assumptions": assumptions,
@@ -6404,7 +6418,7 @@ def _obligation_ledger(
                 "rationale": "",
             },
         )
-        legacy_ids.setdefault(_legacy_obligation_identity(text), set()).add(obligation_id)
+        legacy_ids.setdefault(legacy_id, set()).add(obligation_id)
         return item
 
     def add_source(item: dict[str, Any], artifact: dict[str, Any]) -> None:
@@ -6530,12 +6544,12 @@ def _obligation_ledger(
                 target_ids.add(key)
             elif isinstance(disposition.get("text"), str):
                 target_ids.add(
-                    _obligation_identity(
+                    entry_for(
                         disposition["text"],
-                        project_id=source_project_id,
-                        strategy_id=source_strategy_id,
+                        source_project_id=source_project_id,
+                        source_strategy_id=source_strategy_id,
                         assumptions=assumptions,
-                    )
+                    )["obligation_id"]
                 )
             elif isinstance(key, str):
                 target_ids.update(legacy_ids.get(key, set()))
@@ -6626,6 +6640,9 @@ def _reconcile_artifact_open_obligations(record: dict[str, Any], artifact: dict[
         strategy_id=artifact.get("strategy_id"),
         prior_obligations=record.get("prior_session_obligations", []),
         unbounded_for_admission=True,
+        identity_path=record.get("project_path")
+        if record.get("obligation_id_format") == "compact-v1"
+        else None,
     )
     strategy_id = artifact.get("strategy_id")
     unresolved = []
@@ -6674,6 +6691,9 @@ def _reconcile_skeptic_obligations(
         strategy_id=strategy_id,
         prior_obligations=record.get("prior_session_obligations", []),
         unbounded_for_admission=True,
+        identity_path=record.get("project_path")
+        if record.get("obligation_id_format") == "compact-v1"
+        else None,
     )
     review_status = {
         item.get("obligation_id"): item.get("status")
@@ -10443,6 +10463,7 @@ def _prior_session_obligations_index(
             project_id=None,
             strategy_id=strategy_id,
             unbounded_for_admission=True,
+            identity_path=project_path,
         )
         unresolved = [item for item in ledger if item.get("status") == "unresolved"]
         unresolved.sort(
