@@ -2,8 +2,8 @@ R4R handoff — Issue #437: High-level SIGMA workflow diagrams
 
 Branch: gray/issue-437-workflow
 Base: main at 92bc34eda4c53decd6de29af315100251a5fde62
-Head: pending commit
-PR: pending
+Implementation/tested head: cffe32b2a9a377d9befc42a1c52767c7bb7bc6aa
+PR: https://github.com/bkramerext/sigma/pull/439
 
 Changes
 - Added a first, expanded-by-default “How SIGMA works” disclosure with six short, connected stages and concise stage notes. Paper creation is marked optional; publication is explicitly the user's choice.
@@ -20,11 +20,11 @@ Verification actually run
 - `npm --prefix frontend run typecheck` — passed after the final UI helper change.
 - Ruff check/format for the three changed browser checks and `git diff --check` — passed.
 - Screenshots: docs/evaluations/issue437/about-workflow-desktop.png and docs/evaluations/issue437/about-workflow-mobile.png.
-- README uses GitHub Mermaid syntax and is inline, but visual rendering on the pushed GitHub PR remains UNVERIFIED pending a rendered-page check.
+- GitHub README browser check: HTTP 200; the Markdown page labeled the block as `data-type="mermaid"` and exposed the flowchart source. Real Chrome displayed a loading spinner without a completed diagram after 15 seconds. Completed GitHub rendering remains UNVERIFIED.
 
 Acceptance
 - MET: About workflow structure, introductory accuracy, first-visit default, persistent states, desktop/mobile layout, existing architecture content, inline README source, Welcome sentence, and publication/proof wording.
-- UNVERIFIED: README's actual GitHub Mermaid rendering pending inspection of the pushed PR page.
+- UNVERIFIED: README Mermaid rendering was inspected on the pushed GitHub page but the viewer did not finish rendering (loading spinner persisted for 15 seconds).
 - No research scheduler, agent behavior, paper-generation system, or project API changed. No paid provider calls and no deployment occurred.
 
 Coordination and preserved work
