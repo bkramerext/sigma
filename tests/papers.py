@@ -546,8 +546,8 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
                 corrections = [
                     papers.TeXCorrection(
                         category="math_notation",
-                        find="\\\\\\\\" + symbol,
-                        replace="\\\\" + symbol,
+                        find=r"\\" + symbol,
+                        replace="\\" + symbol,
                         rationale="Correct a double TeX escape.",
                     )
                 ]
