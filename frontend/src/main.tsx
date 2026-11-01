@@ -124,16 +124,36 @@ function sessionForDisplay(value: unknown): ResearchSession | null {
   if (typeof raw.id !== 'string' || !raw.id) return null;
   const missing = ['steps', 'events', 'artifacts', 'outcome'].filter(key => !(key in raw));
   if (missing.length) console.warn('Research session has incomplete display fields', { id: raw.id, missing });
+  const statuses = ['queued', 'running', 'paused', 'stopped', 'completed', 'ended', 'failed'] as const;
+  const assessments = ['pending', 'positive', 'mixed', 'negative'] as const;
+  const outcome = raw.outcome && typeof raw.outcome === 'object' && !Array.isArray(raw.outcome)
+    ? raw.outcome : null;
+  const branches = Array.isArray(raw.strategy_runs) ? raw.strategy_runs.filter(branch =>
+    !!branch && typeof branch === 'object' && !Array.isArray(branch))
+    .map(branch => ({ ...branch, artifacts: Array.isArray(branch.artifacts) ? branch.artifacts : [] })) : undefined;
   return {
     ...raw,
+    session_number: typeof raw.session_number === 'number' && Number.isFinite(raw.session_number) ? raw.session_number : 0,
+    strategy_id: typeof raw.strategy_id === 'string' ? raw.strategy_id : '',
+    strategy_title: typeof raw.strategy_title === 'string' ? raw.strategy_title : 'Saved session',
+    status: statuses.includes(raw.status as typeof statuses[number]) ? raw.status as ResearchSession['status'] : 'failed',
+    current_question: typeof raw.current_question === 'string' ? raw.current_question : '',
+    current_action: typeof raw.current_action === 'string' ? raw.current_action : 'Saved activity unavailable',
+    message: typeof raw.message === 'string' ? raw.message : '',
+    calls_used: typeof raw.calls_used === 'number' && Number.isFinite(raw.calls_used) ? raw.calls_used : 0,
+    call_limit: typeof raw.call_limit === 'number' && Number.isFinite(raw.call_limit) ? raw.call_limit : 0,
+    cycle: typeof raw.cycle === 'number' && Number.isFinite(raw.cycle) ? raw.cycle : 0,
     steps: Array.isArray(raw.steps) ? raw.steps : [],
     events: Array.isArray(raw.events) ? raw.events : [],
     artifacts: Array.isArray(raw.artifacts) ? raw.artifacts : [],
-    strategy_runs: Array.isArray(raw.strategy_runs) ? raw.strategy_runs.map(branch => ({
-      ...branch, artifacts: Array.isArray(branch.artifacts) ? branch.artifacts : [],
-    })) : undefined,
-    outcome: raw.outcome && typeof raw.outcome === 'object'
-      ? raw.outcome : { assessment: 'pending', label: 'Outcome unavailable', provisional: true },
+    strategy_runs: branches,
+    outcome: {
+      ...(outcome ?? {}),
+      assessment: assessments.includes(outcome?.assessment as typeof assessments[number])
+        ? outcome?.assessment as ResearchOutcome['assessment'] : 'pending',
+      label: typeof outcome?.label === 'string' ? outcome.label : 'Outcome unavailable',
+      provisional: typeof outcome?.provisional === 'boolean' ? outcome.provisional : true,
+    },
   } as ResearchSession;
 }
 
@@ -451,7 +471,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
 
 type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
 
-type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; children: ReactNode; fallback?: ReactNode };
+type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; revision?: string; children: ReactNode; fallback?: ReactNode };
 type SessionRenderBoundaryState = { error: Error | null };
 
 /** A single corrupt historical record must not take down the project workspace. */
@@ -472,12 +492,14 @@ class SessionRenderBoundary extends Component<SessionRenderBoundaryProps, Sessio
   }
 
   componentDidUpdate(previous: SessionRenderBoundaryProps) {
-    if (previous.sessionId !== this.props.sessionId && this.state.error) this.setState({ error: null });
+    if ((previous.sessionId !== this.props.sessionId || previous.revision !== this.props.revision) && this.state.error) {
+      this.setState({ error: null });
+    }
   }
 
   render() {
     if (this.state.error) return this.props.fallback ?? <li className="session-row session-render-error" data-session-id={this.props.sessionId}>
-      <p role="alert"><strong>Session #{this.props.sessionNumber} could not be displayed.</strong> Its saved record remains available in the project export. Details: {this.state.error.message}</p>
+      <p role="alert"><strong>Session #{this.props.sessionNumber} could not be displayed.</strong> Its saved record remains available in the project export.</p>
     </li>;
     return this.props.children;
   }
@@ -1114,6 +1136,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const mockResearch = cloud?.mock_auth === true;
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
+  const [invalidSessionCount, setInvalidSessionCount] = useState(0);
   const [maxConcurrentSessions, setMaxConcurrentSessions] = useState(1);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
@@ -1176,9 +1199,20 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     if (!Array.isArray(data.sessions)) throw new Error('Research sessions response is missing its sessions array');
-    const nextSessions: ResearchSession[] = (data.sessions as unknown[])
-      .map(sessionForDisplay)
+    const rawSessions = data.sessions as unknown[];
+    const nextSessions: ResearchSession[] = rawSessions
+      .map(value => {
+        try { return sessionForDisplay(value); }
+        catch (cause) {
+          console.warn('Saved research session could not be normalized for display', {
+            id: value && typeof value === 'object' && 'id' in value ? value.id : undefined,
+            error: errorMessage(cause),
+          });
+          return null;
+        }
+      })
       .filter((item: ResearchSession | null): item is ResearchSession => item !== null);
+    setInvalidSessionCount(rawSessions.length - nextSessions.length);
     setSessions(nextSessions);
     // Keep UI admission in sync with the limits snapshot used by the server.
     setMaxConcurrentSessions(Number(data.max_concurrent_sessions) || 1);
@@ -1459,6 +1493,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
@@ -1466,7 +1501,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           const currentAction = (readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action)
             .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
           const sessionExpanded = expandedSessionIds.has(item.id);
-          return <SessionRenderBoundary key={item.id} sessionId={item.id} sessionNumber={item.session_number}><li className="session-row" data-session-id={item.id}>
+          return <SessionRenderBoundary key={item.id} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at}><li className="session-row" data-session-id={item.id}>
             <div className="session-row-heading">
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
@@ -1478,7 +1513,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
+                {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
