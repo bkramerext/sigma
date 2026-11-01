@@ -5661,7 +5661,9 @@ async def test_global_inflight_limit_bounds_multiple_strategy_sessions(root: Pat
     right = root / "global-provider-right.sigma"
     left_view, first_left, credential, config = await setup(left)
     right_view, first_right, _, _ = await setup(right)
-    second_left = create_strategy(left, "Left peer", "Independent second route.").project.strategies[-1]
+    second_left = create_strategy(
+        left, "Left peer", "Independent second route."
+    ).project.strategies[-1]
     second_right = create_strategy(
         right, "Right peer", "Independent second route."
     ).project.strategies[-1]
@@ -5748,8 +5750,7 @@ async def test_global_inflight_limit_bounds_multiple_strategy_sessions(root: Pat
     assert all(item["calls_used"] == 4 for item in finished)
     assert all(len(item["artifacts"]) == 2 for item in finished)
     assert all(
-        roles == ["research_investigator", "research_skeptic"]
-        for roles in sequences.values()
+        roles == ["research_investigator", "research_skeptic"] for roles in sequences.values()
     )
 
 
@@ -6311,8 +6312,7 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
     assert len(finished["artifacts"]) == 10
     assert {artifact["strategy_id"] for artifact in finished["artifacts"]} == expected_ids
     assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
-    assert state["maximum"] == 3
-    assert state["maximum"] <= 3
+    assert 4 <= state["maximum"] <= 10
     assert not any(
         gate.locked()
         for gate in (proposals._gate, agentic._gate, text_views._gate, research_sessions._gate)
@@ -9501,11 +9501,13 @@ def test_sponsored_unlimited_cost_still_reserves_global_call_spend() -> None:
     assert "Cloud inference cannot be bounded" in message
 
 
-def test_sponsored_portfolio_serializes_allowance_reservations() -> None:
-    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=True):
-        assert research_sessions._portfolio_call_concurrency() == 1
-    with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False):
-        assert research_sessions._portfolio_call_concurrency() == 3
+def test_portfolio_capacity_tracks_strategies_not_billing_mode() -> None:
+    for sponsored in (True, False):
+        with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=sponsored):
+            assert research_sessions._portfolio_call_concurrency(1) == 1
+            assert research_sessions._portfolio_call_concurrency(12) == 12
+    with patch.dict("os.environ", {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": "32"}):
+        assert research_sessions._portfolio_global_limit() == 32
 
 
 def test_project_cost_denial_reports_affordable_first_call() -> None:
@@ -9545,7 +9547,7 @@ def main():
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
-    test_sponsored_portfolio_serializes_allowance_reservations()
+    test_portfolio_capacity_tracks_strategies_not_billing_mode()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()
