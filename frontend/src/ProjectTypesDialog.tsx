@@ -168,7 +168,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       {!readonly && <div className="project-type-icon-edit" aria-label={`Icon for ${item.name || 'new project type'}`}>{renderIcon(item)}<button type="button" disabled={busy || !!generatingId || !item.name.trim() || !item.scope.trim()} onClick={() => void generateIcon(item)}>{generatingId === item.id ? 'Generating icon…' : item.icon.kind === 'data' ? 'Regenerate icon' : 'Generate icon'}</button><small aria-live="polite">{generatingId === item.id ? 'AI is generating a preview from SIGMA’s icon style reference.' : 'Uses the selected API-key connection. A generation request may incur API charges.'}</small></div>}
       <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>
       <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>
-      {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy} onClick={() => setDrafts(previous => previous.filter(candidate => candidate.id !== item.id))}>Remove</button></div>}
+      {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy || !!generatingId} onClick={() => setDrafts(previous => previous.filter(candidate => candidate.id !== item.id))}>Remove</button></div>}
     </div>
   </details>;
   const invalidDraft = drafts.some(item => !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin' || !item.research_standards_references.every(Boolean) || !item.publication_standards_references.every(Boolean));
@@ -185,9 +185,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div><button ref={first} type="button" disabled={busy} onClick={close}>Cancel</button><button type="button" disabled={busy || !!generatingId || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button></div></header>
+    <header><h2 id="project-types-title">Project Types</h2><div><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button><button type="button" disabled={busy || !!generatingId || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button></div></header>
     <div className="project-types-body">
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim()} onClick={() => setAddingId(null)}>Save</button><button type="button" onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim()} onClick={() => setAddingId(null)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       {error && <p role="alert">{error}</p>}
     </div>
