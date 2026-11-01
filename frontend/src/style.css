@@ -327,7 +327,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   --home-project-edge: clamp(13px, 2.7vw, 45px);
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
-  top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap));
+  top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap) - 20px);
   left: var(--home-project-edge);
   z-index: 1;
 }
@@ -397,7 +397,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
     top: auto;
     left: auto;
     width: min(520px, calc(100% - 2 * var(--home-project-edge)));
-    margin: calc(1.75 * var(--home-corner-gap)) 0 0 var(--home-project-edge);
+    margin: max(0px, calc(1.75 * var(--home-corner-gap) - 20px)) 0 0 var(--home-project-edge);
   }
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
@@ -446,3 +446,6 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page .session-log-secondary-action,
 .session-log-page .session-log-secondary-action:hover { min-height: 0; padding: 1px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1c58d; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .session-log-page .session-log-secondary-action:hover { color: #ffe1ad; }
+
+/* Terms uses the same unboxed italic closing thought as Welcome. */
+.terms-welcome-phrase { margin: 0 0 14px; padding: 0; border: 0; background: transparent; color: #bcc5cc; font: inherit; font-style: italic; }
