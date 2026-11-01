@@ -3649,7 +3649,7 @@ async def test_chatgpt_stream(path: Path):
 
 async def test_session_deadline_bounds_generous_call_timeout(path: Path):
     _, _, credential, _ = await setup(path)
-    assert research_sessions.CALL_TIMEOUT == 900
+    assert research_sessions.CALL_TIMEOUT == 3600
     cancelled = asyncio.Event()
 
     async def handler(request):
@@ -3975,7 +3975,7 @@ def test_limits_validation(path: Path):
     invalid = [
         {**before, "model_calls": 1},
         {**before, "model_calls": 121},
-        {**before, "research_rounds": 10, "model_calls": 30},
+        {**before, "research_rounds": 61, "model_calls": 30},
         {**before, "session_duration_minutes": 7 * 24 * 60 + 1},
         {**before, "output_tokens_per_call": 20001},
         {**before, "maximum_estimated_cost_usd": 0.001},
@@ -3992,7 +3992,7 @@ def test_limits_validation(path: Path):
             raise AssertionError(f"invalid research limits were accepted: {candidate}")
     valid_upper = {
         **before,
-        "research_rounds": 9,
+        "research_rounds": 60,
         "model_calls": 120,
         "session_duration_minutes": 7 * 24 * 60,
         "output_tokens_per_call": 20000,
@@ -4001,7 +4001,7 @@ def test_limits_validation(path: Path):
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
     research_sessions.save_limits(str(path), before)
     assert research_sessions.get_limits(str(path)) == before
-    older_saved = {**before, "research_rounds": 10, "model_calls": 20}
+    older_saved = {**before, "research_rounds": 61, "model_calls": 20}
     limits_file = path / "research-sessions" / "limits.json"
     limits_file.write_text(json.dumps(older_saved), encoding="utf-8")
     assert research_sessions.get_limits(str(path)) == older_saved
@@ -4011,6 +4011,17 @@ def test_limits_validation(path: Path):
         pass
     else:
         raise AssertionError("new settings validation accepted a saved value above its bound")
+
+
+def test_contradictory_skeptic_counterexample_does_not_cancel_continuation():
+    assert research_sessions.coordinate_decision(
+        "continue", "decisive_counterexample",
+        "Proceed with a bounded next test", ["One gap remains"],
+        1, 9, 2, 54,
+    ) == ("continue", "Proceed with a bounded next test")
+    assert research_sessions.coordinate_decision(
+        "stop", "decisive_counterexample", "", [], 1, 9, 2, 54,
+    ) == ("stop_decisive_counterexample", "")
 
 
 def test_shared_turn_schedule_accepts_strategy_count_changes():
@@ -5723,6 +5734,15 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
             if payload["text"]["format"]["name"] == "research_investigator"
             else skeptic(cycle)
         )
+        if (
+            context["strategy"]["id"] == first.id
+            and cycle == 1
+            and payload["text"]["format"]["name"] == "research_skeptic"
+        ):
+            # Reproduce the actual session #6 contradiction: Skeptic requests
+            # continuation but labels an earlier result decisive counterexample.
+            response["stop_reason"] = "decisive_counterexample"
+            response["assessment"] = "continue"
         return httpx.Response(200, json=provider_response(response))
 
     with (
@@ -5756,6 +5776,10 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     assert all(branch["cycle"] == 9 for branch in branches), branches
     assert all(len(branch["artifacts"]) == 9 for branch in branches), branches
     assert all(branch["status"] == "ended" for branch in branches), branches
+    assert next(
+        artifact for artifact in finished["artifacts"]
+        if artifact["strategy_id"] == first.id and artifact["strategy_cycle"] == 1
+    )["coordinator_decision"] == "continue"
     assert finished.get("termination_reason_code") != "research_completed_early"
     assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
 
