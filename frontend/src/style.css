@@ -312,7 +312,12 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   gap: 12px;
 }
 @media (max-width: 700px) {
-  .home-page { --home-corner-gap: 18px; --home-corner-pill-height: 28px; }
+  .home-page {
+    --home-corner-gap: 18px;
+    --home-corner-pill-height: 28px;
+    /* On narrow screens keep Projects below the pills instead of overlapping. */
+    --home-projects-top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 8px);
+  }
   .home-page .home-topline { padding: var(--home-corner-gap) 0 0 var(--home-side-gap); }
   .home-page .home-left-actions { gap: 8px; }
   .home-page .home-projects { padding-top: 0; }
