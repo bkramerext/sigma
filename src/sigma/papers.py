@@ -745,10 +745,10 @@ def _latex_prose(source: str) -> str:
             url = match.group(0).rstrip(".,;!?")
             if not url:
                 continue
-            pieces.append(_latex(text[cursor : match.start()]))
+            pieces.append(_latex(text[cursor : match.start()]).replace(r"\_", r"\_\allowbreak{}"))
             pieces.append(r"\url{" + url + "}")
             cursor = match.start() + len(url)
-        pieces.append(_latex(text[cursor:]))
+        pieces.append(_latex(text[cursor:]).replace(r"\_", r"\_\allowbreak{}"))
         return "".join(pieces)
 
     def plain(text: str) -> str:
@@ -1776,6 +1776,12 @@ def _evidence_based_long_plan(
     conclusion_claims = [claim for claim in conclusion_claims if claim is not None]
     if not conclusion_claims:
         conclusion_claims = claims[:1]
+    # Keep complete research propositions in the claim register, but never
+    # paste a multi-paragraph research field into the final conclusion.
+    def conclusion_sentence(statement: str, limit: int = 320) -> str | None:
+        sentence = re.split(r"(?<=[.!?])\s+(?=[A-Z])", statement.strip(), maxsplit=1)[0]
+        return sentence if 35 <= len(sentence) <= limit else None
+
     # Synthesize an answer to the question, a counterweight, and the
     # remaining verification burden. Reprinting the claim register here
     # produces a paper-shaped log, not a research conclusion.
@@ -1794,11 +1800,12 @@ def _evidence_based_long_plan(
         )
     ]
     if result_claim is not None:
-        conclusions.append(
-            f"One central recorded finding is: {result_claim.statement} "
-            "Its validity remains conditional on the saved premises and "
-            "outstanding review."
-        )
+        summary = conclusion_sentence(result_claim.statement)
+        if summary:
+            conclusions.append(
+                f"One conditional recorded result is: {summary} "
+                "Its assumptions and verification limits remain material."
+            )
     other_results = [
         claim
         for claim in claims
@@ -1818,26 +1825,46 @@ def _evidence_based_long_plan(
         ]
         qualifying = list(dict.fromkeys(claim.id for claim in [*contrasting, *other_results]))
         by_id = {claim.id: claim for claim in other_results}
-        selected = [by_id[claim_id] for claim_id in qualifying[:3]]
-        conclusions.append(
-            "Other recorded findings could qualify or conflict with this interpretation: "
-            + " ".join(claim.statement for claim in selected)
-            + " Their compatibility is not independently established."
-        )
+        selected: list[PaperClaim] = []
+        seen_summaries: set[str] = set()
+        for claim_id in qualifying:
+            summary = conclusion_sentence(by_id[claim_id].statement)
+            if summary is None:
+                continue
+            normalized = " ".join(summary.casefold().split())
+            if normalized in seen_summaries:
+                continue
+            seen_summaries.add(normalized)
+            selected.append(by_id[claim_id])
+            if len(selected) >= 2:
+                break
+        if selected:
+            conclusions.append(
+                "Other qualified findings require reconciliation: "
+                + " ".join(conclusion_sentence(claim.statement) or "" for claim in selected)
+                + " Their compatibility has not been independently established."
+            )
         for claim in selected:
             if claim not in conclusion_claims:
                 conclusion_claims.append(claim)
     if negative_claim is not None:
-        conclusions.append(
-            f"This interpretation must also account for the recorded "
-            f"counterevidence: {negative_claim.statement}"
-        )
+        counterexample = conclusion_sentence(negative_claim.statement)
+        if counterexample:
+            conclusions.append(
+                f"This interpretation must also account for the recorded "
+                f"counterevidence: {counterexample}"
+            )
     if limitation_claim is not None:
         conclusions.append(
             f"The principal remaining evidence boundary is: {limitation_claim.statement}"
         )
     if questions:
-        conclusions.append("The next unresolved question is: " + questions[0])
+        next_question = next(
+            (summary for value in questions if (summary := conclusion_sentence(value))),
+            None,
+        )
+        if next_question:
+            conclusions.append("The next unresolved research task is: " + next_question)
     conclusions.append(
         "A stronger conclusion requires resolving the identified objections, "
         "checking the exact archived evidence and conducting any proposed "
@@ -4122,10 +4149,44 @@ def _repair_paper_references(
             claim.model_copy(update={"id": identity, "evidence_refs": sources, "status": status})
         )
 
+    # Provider outlines occasionally repeat identical propositions under fresh
+    # IDs. Coalesce only identical statements, judgments, rationales and source
+    # lists. Similar but conflicting research claims must remain separate.
+    before_deduplication = claims
+    downgraded = any(
+        repaired.status == "unresolved" and original.status == "established"
+        for repaired, original in zip(before_deduplication, paper.claims, strict=True)
+    )
+    canonical: dict[tuple[str, str, str, tuple[str, ...]], str] = {}
+    aliases: dict[str, str] = {}
+    claims = []
+    for claim in before_deduplication:
+        key = (
+            " ".join(claim.statement.split()),
+            claim.status,
+            " ".join(claim.reasoning.split()),
+            tuple(claim.evidence_refs),
+        )
+        prior_id = canonical.get(key)
+        if prior_id is not None and prior_id != claim.id:
+            aliases[claim.id] = prior_id
+            diagnostics.append(
+                f"Duplicate proposition {claim.id} was linked to identical claim {prior_id}."
+            )
+        else:
+            canonical[key] = claim.id
+            claims.append(claim)
+
     claim_ids = {claim.id for claim in claims}
 
     def links(values: list[str], label: str) -> list[str]:
-        accepted = list(dict.fromkeys(value for value in values if value in claim_ids))
+        accepted = list(
+            dict.fromkeys(
+                aliases.get(value, value)
+                for value in values
+                if aliases.get(value, value) in claim_ids
+            )
+        )
         if len(accepted) != len(values):
             diagnostics.append(f"Unknown or repeated claim links were removed from {label}.")
         return accepted
@@ -4200,10 +4261,7 @@ def _repair_paper_references(
         updated["validation_warnings"] = list(
             dict.fromkeys([*paper.validation_warnings, *diagnostics])
         )[:12]
-        if any(
-            claim.status == "unresolved" and original.status == "established"
-            for claim, original in zip(claims, paper.claims, strict=True)
-        ):
+        if downgraded:
             limitation = (
                 "At least one claim lacks verifiable saved evidence and is not established."
             )
@@ -4645,6 +4703,12 @@ analyses, hypotheses and proposed experiments; never present an unrun experiment
 Use the representative preview to choose an outline, not to assert complete evidence
 coverage. Additional indexed source IDs, if supplied, can be assigned to sections
 to retrieve their full notes when writing; do not infer their contents from IDs.
+Every substantive analytical or experimental result, mathematical proof, counterexample, and
+material refutation discussed in the section outline must have a distinct claim in the
+shared register and a claim_id link in its section. Do not duplicate the same proposition
+under different IDs. Keep proof/verification status separate from the claim's content.
+Use compact, source-specific claims: never substitute generic metadata or source pointers
+for the central theorem, finding, or negative result.
 Return the complete plan JSON matching the schema."""
     )
     indexed_refs = {ref for note in notes for ref in note.evidence_refs}
