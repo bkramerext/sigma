@@ -2766,6 +2766,72 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(warnings))[:20]
 
 
+def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
+    """Surface consequential saved research-session incompleteness, not failure noise.
+
+    This is a source-status note for paper readers. A failed final review does
+    not refute a surviving mathematical result; it limits the claimed degree of
+    adversarial review and research completeness.
+    """
+    notes: list[str] = []
+    for source in package.get("sources", []):
+        if source.get("kind") != "session":
+            continue
+        session = source.get("data")
+        if not isinstance(session, dict):
+            continue
+        reason = str(session.get("terminal_reason") or "")
+        code = str(session.get("termination_reason_code") or "")
+        incomplete = "research is incomplete" in reason.casefold() or (
+            code in {"provider_or_strategy_failure", "research_incomplete"}
+        )
+        if not incomplete:
+            continue
+        failed = [
+            step
+            for step in session.get("steps", [])
+            if isinstance(step, dict) and step.get("status") in {"failed", "interrupted"}
+        ] if isinstance(session.get("steps"), list) else []
+        last = failed[-1] if failed else {}
+        call = last.get("call_number")
+        role = last.get("role")
+        location = (
+            f"call {call} ({role})"
+            if isinstance(call, int) and isinstance(role, str)
+            else "a research review"
+        )
+        identifier = str(session.get("id") or source.get("id") or "unknown")
+        notes.append(
+            f"Saved research session {identifier} ended with an incomplete review; "
+            f"{location} was not successfully completed. Earlier findings remain "
+            "available, but this process limitation prevents claiming that the "
+            "planned adversarial review was fully performed."
+        )
+    return notes[:3]
+
+
+def _annotate_research_completion(
+    draft: PaperDraft, package: dict[str, Any]
+) -> PaperDraft:
+    """Retain frozen session status in the published limitations section."""
+    notes = _research_completion_limitations(package)
+    missing = [
+        note for note in notes
+        if note not in draft.limitations and note not in draft.validation_warnings
+    ]
+    if not missing:
+        return draft
+    available = max(0, 12 - len(draft.limitations))
+    updated = {"limitations": [*draft.limitations, *missing[:available]]}
+    if len(missing) > available:
+        updated["validation_warnings"] = list(dict.fromkeys([
+            *draft.validation_warnings,
+            "At least one saved research session ended without its planned final "
+            "review; inspect the complete frozen session record.",
+        ]))[:12]
+    return draft.model_copy(update=updated)
+
+
 def _reconcile_obligations(draft: PaperDraft, package: dict[str, Any]) -> list[dict[str, Any]]:
     """Match author-listed obligations to the frozen evidence without implying resolution."""
     frozen: dict[str, dict[str, Any]] = {}
@@ -6194,6 +6260,7 @@ async def _generate_impl(
         draft = PaperDraft.model_validate(
             _repair_paper_references(draft, {item["id"] for item in package["sources"]})
         )
+        draft = _annotate_research_completion(draft, package)
         validation_warnings = _validate(draft, package)
         obligation_reconciliation = _reconcile_obligations(draft, package)
         await report("validation", None, None, "milestone")
