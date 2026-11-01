@@ -1334,11 +1334,15 @@ def reserve_call(
             used_units = _global_call_amount_units(db)
             if used_units + liability_units > global_ceiling_units:
                 remaining_units = max(0, global_ceiling_units - used_units)
+                requirement = (
+                    f"next call requires ${amount_units / USD_UNITS:.4f}"
+                    if liability_units == amount_units
+                    else f"next call may require up to ${liability_units / USD_UNITS:.4f}"
+                )
                 raise CloudResearchUnavailable(
                     f"{_global_ceiling_failure_message()} "
                     f"Remaining global capacity: ${remaining_units / USD_UNITS:.4f}; "
-                    f"next call may require up to ${liability_units / USD_UNITS:.4f}. "
-                    "No provider call was made."
+                    f"{requirement}. No provider call was made."
                 )
             user_used_units = _user_call_amount_units(db, owner)
             if not unlimited_admin and user_used_units + amount_units > user_ceiling_units:
