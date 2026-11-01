@@ -6448,14 +6448,25 @@ def _obligation_ledger(
         source_project_id, source_strategy_id, assumptions = note_scope(
             artifact, objective_review, skeptic
         )
-        # Stored records also carry coordinator-expanded summaries. Those are
-        # references to earlier obligations, not new obligations scoped by
-        # this artifact's assumptions. Re-ingesting them creates exponentially
-        # many distinct identities and eventually stops long research sessions.
-        # Keep legacy artifacts readable when no structured model outputs exist.
-        structured = isinstance(artifact.get("investigator_output"), dict) or isinstance(
-            artifact.get("skeptic_output"), dict
-        )
+        # The coordinator copies older unresolved notes into each new artifact.
+        # Their origins are already recorded in previous artifacts; treating a
+        # copied note as new under later assumptions creates a growing set of
+        # false identities. Preserve actual model notes and legacy artifact-only
+        # obligations, while skipping only explicitly coordinator-added copies.
+        propagated = skeptic.get("coordinator_added_obligations")
+        propagated_texts = {
+            _normalized_obligation_text(note)
+            for note in propagated
+            if isinstance(note, str)
+        } if isinstance(propagated, list) else set()
+        artifact_notes = artifact.get("open_obligations")
+        if isinstance(artifact_notes, list) and propagated_texts:
+            artifact_notes = [
+                note
+                for note in artifact_notes
+                if not isinstance(note, str)
+                or _normalized_obligation_text(note) not in propagated_texts
+            ]
         model_remaining = skeptic.get("model_remaining_obligations")
         remaining_notes = (
             model_remaining
@@ -6464,7 +6475,7 @@ def _obligation_ledger(
         )
         note_fields = (
             investigator.get("open_obligations"),
-            None if structured else artifact.get("open_obligations"),
+            artifact_notes,
             artifact.get("objections"),
             objective_review.get("unresolved_objections"),
             skeptic.get("unresolved_objections"),
