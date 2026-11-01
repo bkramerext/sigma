@@ -15,12 +15,113 @@ def _bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
 
 
+def _bounded_excerpt(value: str, limit: int) -> str:
+    """An explicitly incomplete head/tail extract, never an exact quotation."""
+    if len(value) <= limit:
+        return value
+    half = max(1, (limit - 72) // 2)
+    return (
+        value[:half]
+        + " [INCOMPLETE EXTRACT: omitted middle; saved original not supplied] "
+        + value[-half:]
+    )
+
+
+def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
+    """Avoid losing a Skeptic turn to an unusually verbose Investigator.
+
+    This modifies the dispatch-only copy. The unmodified Investigator response
+    remains durably stored for later inspection. Any omitted derivation or
+    computation must NOT be treated as reviewed, verified, or disproved.
+    """
+    original = context.get("investigator_output")
+    if not isinstance(original, dict):
+        return False
+    excerpt: dict[str, Any] = dict(original)
+    shortened: list[str] = []
+    method = original.get("method")
+    if isinstance(method, str) and len(method) > 3600:
+        excerpt["method"] = _bounded_excerpt(method, 3600)
+        shortened.append("method")
+    steps = original.get("reasoning_steps")
+    if isinstance(steps, list):
+        selected_steps = steps[:2] + steps[-2:] if len(steps) > 4 else steps
+        selected: list[Any] = []
+        for step in selected_steps:
+            if not isinstance(step, dict):
+                selected.append(step)
+                continue
+            bounded = dict(step)
+            for field in ("argument", "rationale", "objection"):
+                value = bounded.get(field)
+                if isinstance(value, str) and len(value) > 1300:
+                    bounded[field] = _bounded_excerpt(value, 1300)
+                    if "reasoning_steps" not in shortened:
+                        shortened.append("reasoning_steps")
+            selected.append(bounded)
+        if len(steps) > len(selected_steps):
+            if "reasoning_steps" not in shortened:
+                shortened.append("reasoning_steps")
+            excerpt["reasoning_steps_total"] = len(steps)
+            excerpt["reasoning_steps_omitted"] = len(steps) - len(selected_steps)
+        excerpt["reasoning_steps"] = selected
+    for field in ("assumptions", "open_obligations"):
+        entries = original.get(field)
+        if isinstance(entries, list):
+            selected = entries[:6] + entries[-2:] if len(entries) > 8 else entries
+            bounded = [
+                _bounded_excerpt(item, 650) if isinstance(item, str) else item
+                for item in selected
+            ]
+            if bounded != entries:
+                excerpt[field] = bounded
+                excerpt[f"{field}_omitted_count"] = len(entries) - len(selected)
+                shortened.append(field)
+    for field in ("python_execution", "sage_execution"):
+        execution = original.get(field)
+        if isinstance(execution, dict) and _bytes(execution) > 5000:
+            excerpt[field] = {
+                key: execution[key]
+                for key in (
+                    "id", "execution_id", "status", "sha256",
+                    "stdout_sha256", "stderr_sha256", "exit_code",
+                )
+                if key in execution
+            } | {
+                "evidence_availability": "pointer_only_original_not_supplied",
+                "note": "Saved complete execution retained; stdout/stderr not supplied for review.",
+            }
+            shortened.append(field)
+    if not shortened:
+        return False
+    excerpt["extract_truncated_fields"] = shortened
+    excerpt["extract_complete"] = False
+    excerpt["evidence_availability"] = "incomplete_extract_original_not_supplied"
+    excerpt["note"] = (
+        "This current Investigator output is a bounded incomplete extract. "
+        "The full output remains saved, but omitted material was not reviewed here."
+    )
+    if _bytes(excerpt) >= _bytes(original):
+        return False
+    context["investigator_output"] = excerpt
+    context["investigator_output_extract_complete"] = False
+    context["context_manifest"]["inflight_investigator_extract"] = {
+        "source_step_id": context.get("investigator_step_id"),
+        "original_bytes": _bytes(original),
+        "supplied_bytes": _bytes(excerpt),
+        "truncated_fields": shortened,
+        "qualification": "Saved original retained; omitted arguments and computation output cannot be certified or used as reviewed evidence.",
+    }
+    return True
+
+
 def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
     """Compact repeated and older context before the hard dispatch byte guard.
 
-    Return True when the context fits. A genuinely oversized active question,
-    approved source packet, current Investigator output or human intervention
-    is deliberately NOT truncated: callers must still enforce the hard limit.
+    Return True when the context fits. An oversized current Investigator
+    output receives an explicitly incomplete dispatch-only extract; its full
+    original remains saved. A genuinely oversized active question, approved
+    source packet or human intervention is never silently truncated.
     """
     if _bytes(context) <= limit:
         return True
@@ -169,6 +270,12 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
                 compacted[field] = compacted.get(field, 0) + 1
                 if isinstance(entry, dict) and isinstance(entry.get(id_field), str):
                     pointers.setdefault(field, []).append(entry[id_field])
+
+    # Even one valid Investigator can emit 24 long reasoning steps, exceeding
+    # the 256 KB packet limit before any historical context is added. Prefer
+    # a visibly incomplete current-turn extract to stopping all research.
+    if _bytes(context) > limit:
+        _compact_inflight_investigator(context)
 
     if compacted:
         # Called after multiple assembly phases. Keep previous compaction
