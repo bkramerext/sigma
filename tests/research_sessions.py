@@ -6253,7 +6253,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
         second = create_strategy(
             path, "Independent peer", "Derive a complementary invariant."
         ).project.strategies[-1]
-        limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 2, "model_calls": 8}
+        limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 3, "model_calls": 12}
         research_sessions.save_limits(str(path), limits)
         seen: dict[tuple[str, int, str], dict[str, Any]] = {}
         slow_investigator_active = False
@@ -6267,13 +6267,17 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             title = context["strategy"]["title"]
             cycle = context["cycle"]
             peers = context["other_strategy_evidence"]
-            assert len(peers) == cycle - 1, (title, role, cycle)
+            assert bool(peers) is (cycle > 1), (title, role, cycle)
             seen[(title, cycle, role)] = {
                 "question": context["question"],
                 "prior_claims": [item["claim_or_question"] for item in context["prior_artifacts"]],
                 "peer_claims": [item["claim_or_question"] for item in peers],
                 "peer_assumptions": [item["assumptions"] for item in peers],
                 "peer_objections": [item["objections"] for item in peers],
+                "handoff_relations": [item["relation"] for item in context.get("peer_handoffs", [])],
+                "handoff_sources": [
+                    item["source_strategy_title"] for item in context.get("peer_handoffs", [])
+                ],
                 "pending_claim": (
                     context.get("investigator_output", {}).get("claim")
                     if role == "research_skeptic"
@@ -6298,12 +6302,27 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             else:
                 output = skeptic(
                     cycle,
-                    "revise" if cycle == 1 else "stop",
-                    "recoverable_objection" if cycle == 1 else "productive_conclusion",
+                    "stop" if cycle == 3 else "revise",
+                    "productive_conclusion" if cycle == 3 else "recoverable_objection",
                 )
                 output["next_question"] = (
-                    "Test peer evidence on the next round." if cycle == 1 else ""
+                    "Test peer evidence on the next round." if cycle < 3 else ""
                 )
+                if title == first.title and cycle == 2:
+                    assert peers, "A peer finding is required for the handoff"
+                    output["cross_strategy_relations"] = [{
+                        "strategy_id": second.id,
+                        "artifact_id": peers[-1]["artifact_id"],
+                        "relation": "contradicts",
+                        "rationale": "Compare the independent invariant's assumptions before transfer.",
+                    }]
+                if context.get("peer_handoffs"):
+                    output["peer_handoff_reviews"] = [{
+                        "handoff_id": item["handoff_id"],
+                        "disposition": "reject",
+                        "assumption_comparison": "Independent invariant assumptions have not been established as equivalent.",
+                        "rationale": "Do not transfer this purported contradiction without validating its domain.",
+                    } for item in context["peer_handoffs"]]
             return httpx.Response(200, json=provider_response(output))
 
         with (
@@ -6337,8 +6356,11 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
                 strategy_ids=[first.id, second.id],
             )
             finished = await asyncio.wait_for(wait_for(path, started["id"]), timeout=10)
-        assert finished["status"] == "ended" and finished["calls_used"] == 8
-        assert len(finished["artifacts"]) == 4 and len(seen) == 8
+        assert finished["status"] == "ended" and finished["calls_used"] == 12
+        assert len(finished["artifacts"]) == 6 and len(seen) == 12
+        assert seen[(second.title, 3, "research_investigator")]["handoff_relations"] == [
+            "contradicts"
+        ]
         titles = {first.id: first.title, second.id: second.title}
         findings = sorted(
             (
@@ -6363,10 +6385,27 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             )
             for branch in finished["strategy_runs"]
         ]
+        # Cross-session-generated UUIDs are expected to differ. Normalize
+        # referenced artifact IDs by their actual strategy and round, while
+        # retaining handoff referential integrity and all meaningful words.
+        artifact_labels = {
+            row["id"]: f"<artifact:{titles[row['strategy_id']]}:{row['strategy_cycle']}>"
+            for row in finished["artifacts"]
+        }
+        def normalize(value):
+            if isinstance(value, str):
+                for identifier, label in artifact_labels.items():
+                    value = value.replace(identifier, label)
+                return value
+            if isinstance(value, dict):
+                return {key: normalize(child) for key, child in value.items()}
+            if isinstance(value, (tuple, list)):
+                return tuple(normalize(child) for child in value)
+            return value
         return (
-            seen,
-            findings,
-            decisions,
+            normalize(seen),
+            normalize(findings),
+            normalize(decisions),
             finished["outcome"]["assessment"],
             fast_skeptic_overlapped_slow_investigator,
         )
