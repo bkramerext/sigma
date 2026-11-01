@@ -2278,7 +2278,7 @@ AMBIENT_RESEARCH_RUBRIC = (
 # Phase 2 methods are short, testable behavioral objectives, not a second
 # generic proof rubric. The primary Investigator/Skeptic guidance remains in force.
 # A saved provider request contains this version in its exact request audit.
-RESEARCH_METHOD_VERSION = "phase2-i2-v2"
+RESEARCH_METHOD_VERSION = "phase2-i2-v3"
 RESEARCH_DISCOVERY_GUIDANCE = (
     "Prefer one decisive, feasible reduction in uncertainty over repeating future-work proposals. "
     "Identify the strongest material open assumption or obligation and perform an exact "
@@ -2305,6 +2305,25 @@ RESEARCH_SHARED_VALIDATION_GUIDANCE = (
     "multiple agents agreeing is not independent confirmation. Select only "
     "methods relevant to this question; empirical measurement protocols are "
     "not mandatory for a pure mathematical proof. "
+)
+# Versioned for fresh research only; pre-existing sessions keep their recorded
+# I2 methodology and do not switch instructions during a live recovery.
+RESEARCH_EVIDENCE_ACTION_GUIDANCE = (
+    "For each pivotal claim, distinguish genuine inspected observations, a complete "
+    "formal argument, an actually executed computation, an unperformed proposal, "
+    "and agent assertion. Name the exact supplied evidence and its limits. "
+    "Trace a material objection into a concrete next derivation, test, counterexample "
+    "or source-inspection need; on later turns use the real outcome to retain, "
+    "narrow, reject or leave the claim open, rather than answering criticism with prose. "
+    "Do not claim novelty without actually inspected relevant prior literature; "
+    "where source retrieval is unavailable, mark novelty unassessed. "
+)
+RESEARCH_EVIDENCE_SKEPTIC_GUIDANCE = (
+    "Select a consequential objection and state a discriminating next_question "
+    "that can be acted on with available evidence or tools. Require the following "
+    "turn to address its actual result; if it cannot be done or the session ends, "
+    "leave the evidence obligation unresolved. No claimed computation counts "
+    "without a saved execution and verified relevance to the claim. "
 )
 RESEARCH_SKEPTIC_METHOD_GUIDANCE = (
     "Test the most consequential premise, middle inference, counterexample or "
@@ -2853,6 +2872,16 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + " "
         + RESEARCH_DISCOVERY_GUIDANCE
         + RESEARCH_SHARED_VALIDATION_GUIDANCE
+        + (
+            RESEARCH_EVIDENCE_ACTION_GUIDANCE
+            if context.get("research_method_version") == "phase2-i2-v3"
+            else ""
+        )
+        + (
+            RESEARCH_EVIDENCE_SKEPTIC_GUIDANCE
+            if role == "skeptic" and context.get("research_method_version") == "phase2-i2-v3"
+            else ""
+        )
         + " Use the session's methodology_source_material as optional, source-attributed research-method guidance, not as evidence about the project subject. Do not pretend those websites were inspected by this agent or cite them as domain findings. A failed or missing methodology reference never blocks the research task. "
         + (RESEARCH_SKEPTIC_METHOD_GUIDANCE if role == "skeptic" else "")
         + _research_mode_guidance(context)
@@ -5104,6 +5133,9 @@ async def start_session(
             # research admission. Omitted IDs/counts remain frozen in the session
             # and are disclosed to every agent in its context manifest.
             record["session_number"] = _allocate_session_number(view.path, records)
+            # Freeze the instruction version once, before the first call.
+            # Historical sessions without this field retain the v2 behavior.
+            record["research_method_version"] = RESEARCH_METHOD_VERSION
             # Deterministic source-discovery step *before* either agent turn.
             # Frozen in the saved session; reuse the last sufficiently
             # comprehensive set and never block on unavailable web material.
@@ -6317,7 +6349,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     context: dict[str, Any] = {
         "problem": record["problem"],
         "investigation_type": record.get("investigation_type"),
-        "research_method_version": RESEARCH_METHOD_VERSION,
+        "research_method_version": record.get("research_method_version") or "phase2-i2-v2",
         "methodology_source_material": (
             record.get("research_method_sources", {}).get("sources", [])
             if isinstance(record.get("research_method_sources"), dict)
