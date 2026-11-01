@@ -45,6 +45,10 @@ Publish a new immutable directory `releases/phase2-i2-v1/` with:
 
 Do not edit files under a released directory after `READY`; fix with `phase2-i2-v2` rather than overwriting evidence. A future iteration publishes a new directory and manifest; prior releases remain immutable. Pin the exact **commit SHA** and per-file SHA-256, not a moving branch HEAD alone. Phase 1 should record the specific release ID, commit and input hashes in its own authoring run metadata.
 
+## Exception handling: preserve nearly completed investigations
+
+**No research deadline.** Green should locally diagnose and restart/resume early failures, but must **not** discard a nearly finished session or rerun it from scratch merely to reset completion metrics. If an investigation stops late and cannot be resumed safely with a narrow fix, preserve the exact complete/partial project export, recorded turn counts, identifiers, artifacts and uncertain provider-call accounting; report the incident to Phase 2 Chat for a later targeted solution. Continue other investigations. An incomplete near-finished export may be committed as **STAGING** and accurately identified as such; it **never** satisfies the five-session READY release gate. Neither an old positive finding nor a newly interrupted call is to be forged into a completed final Skeptic review. Scientific quality and preservation take precedence over a clean clock.
+
 ## Green owns completion, local troubleshooting and shared-PR publication
 
 **Execution acceptance is mandatory for I2:** complete fresh research on all five, not 4/5 or partial handoffs. Initial simultaneous dispatch is a throughput goal, not a reason to abandon a stalled branch. Green must monitor until every planned round and Skeptic review is complete, diagnose project- and provider-specific faults locally, apply bounded and generally applicable fixes on PR #433, run focused deterministic regressions and `./sigma test`, and retry/resume incomplete work safely. If three to five simultaneous sessions cause rate limits or contention, reduce concurrency using existing admission and scheduling behavior, while finishing every project.
