@@ -2897,13 +2897,14 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         "strategy_snapshot": [],
         "artifacts": [decisive],
     }
-    try:
-        research_sessions._agent_context(record, "investigator", 1)
-    except research_sessions.ResearchContextLimitError as exc:
-        assert "extract is incomplete" in str(exc)
-        assert "No provider call was made" in str(exc)
-    else:
-        raise AssertionError("A mandatory artifact with truncated decisive content was supplied")
+    context = research_sessions._agent_context(record, "investigator", 1)
+    assert context["prior_artifacts"][0]["extract_truncated_fields"] == ["method"]
+    assert context["prior_artifacts"][0]["evidence_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
+    assert context["obligation_ledger"][0]["source_artifact_availability"] == (
+        "incomplete_extract_original_not_supplied"
+    )
     assert json.dumps(decisive) == before
 
     # Freeze an ordinary-language obligation ahead of thirteen routine notes,
@@ -3040,6 +3041,8 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
 
 
 async def test_t37_mandatory_context_blocks_before_provider(path: Path):
+    # Many material sources no longer force an otherwise valid session to stop.
+    # Selected sources are bounded; omitted originals remain saved and named.
     view, strategy, _, _ = await setup(path)
     session_id = str(uuid4())
     artifacts = [
@@ -3059,16 +3062,6 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
         }
         for index in range(research_sessions.MAX_CONTEXT_ARTIFACTS + 1)
     ]
-    branch = {
-        "strategy_id": strategy.id,
-        "strategy_title": strategy.title,
-        "strategy_text": strategy.approach,
-        "current_question": "Test one precise consequence.",
-        "status": "queued",
-        "cycle": 0,
-        "calls_used": 0,
-        "artifacts": [],
-    }
     record = {
         "id": session_id,
         "project_path": view.path,
@@ -3077,84 +3070,36 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
         "strategy_title": strategy.title,
         "strategy_text": strategy.approach,
         "problem": view.project.problem,
-        "current_question": branch["current_question"],
+        "current_question": "Test one precise consequence.",
         "strategy_snapshot": [],
         "artifacts": artifacts,
-        "strategy_runs": [branch],
-        "steps": [],
-        "events": [],
-        "status": "running",
-        "calls_used": 0,
-        "call_limit": 6,
     }
-    research_sessions._save(view.path, record)
-    credential_mock = AsyncMock(side_effect=AssertionError("provider preflight must not run"))
-    with (
-        patch.object(research_sessions, "execution_capabilities", return_value=[]),
-        patch.object(research_sessions, "auth_context", new=credential_mock),
-    ):
-        success = await research_sessions._portfolio_role_call(
-            session_id,
-            view.path,
-            strategy.id,
-            "investigator",
-            1,
-            asyncio.Semaphore(1),
-            asyncio.Lock(),
-        )
-    saved = research_sessions._read(view.path, session_id)
-    assert success is False
-    assert credential_mock.await_count == 0
-    assert saved["calls_used"] == 0 and saved["steps"] == []
-    assert saved["strategy_runs"][0]["status"] == "paused"
-    assert (
-        "mandatory current-session evidence sources exceed" in saved["strategy_runs"][0]["reason"]
-    )
-    assert any(event["kind"] == "research.context_blocked" for event in saved["events"])
+    context = research_sessions._agent_context(record, "investigator", 1)
+    assert len(context["prior_artifacts"]) == research_sessions.MAX_CONTEXT_ARTIFACTS
+    assert context["context_manifest"]["mandatory_source_omitted_count"] == 1
+    assert artifacts[0]["id"] in context["context_manifest"]["mandatory_source_omitted_ids"]
+    assert artifacts[0]["id"] not in context["context_artifact_ids"]
+    assert artifacts[-1]["id"] in context["context_artifact_ids"]
+    assert context["context_manifest"]["omitted_count"] == 1
+    assert research_sessions._json_bytes(context) <= research_sessions.MAX_AGENT_CONTEXT_BYTES
 
-    # A required obligation whose deterministic text extract would truncate
-    # must also stop at assembly, before the authentication/provider boundary.
-    truncated_session_id = str(uuid4())
-    truncated_branch = {**branch, "status": "queued", "calls_used": 0, "artifacts": []}
-    truncated_record = {
-        **record,
-        "id": truncated_session_id,
-        "strategy_runs": [truncated_branch],
-        "artifacts": [
-            {
-                "id": "long-open-obligation",
-                "sequence": 1,
-                "strategy_id": strategy.id,
-                "open_obligations": ["Resolve " + "x" * 710],
-                "method": "Saved complete source remains in the original artifact.",
-            }
-        ],
-        "status": "running",
-        "calls_used": 0,
-        "steps": [],
-        "events": [],
-    }
-    research_sessions._save(view.path, truncated_record)
-    credential_mock.reset_mock()
-    with (
-        patch.object(research_sessions, "execution_capabilities", return_value=[]),
-        patch.object(research_sessions, "auth_context", new=credential_mock),
-    ):
-        allowed = await research_sessions._portfolio_role_call(
-            truncated_session_id,
-            view.path,
-            strategy.id,
-            "investigator",
-            1,
-            asyncio.Semaphore(1),
-            asyncio.Lock(),
-        )
-    blocked = research_sessions._read(view.path, truncated_session_id)
-    assert allowed is False and credential_mock.await_count == 0
-    assert blocked["calls_used"] == 0 and blocked["steps"] == []
-    assert "obligation exceeds the safe extract bound" in blocked["strategy_runs"][0]["reason"], (
-        blocked["strategy_runs"][0]["reason"]
-    )
+    # A required obligation whose text extract is incomplete must remain
+    # visibly incomplete rather than being sent as complete evidence.
+    record["artifacts"] = [
+        {
+            "id": "long-open-obligation",
+            "sequence": 1,
+            "strategy_id": strategy.id,
+            "open_obligations": ["Resolve " + "x" * 710],
+            "method": "Saved complete source remains in the original artifact.",
+        }
+    ]
+    try:
+        research_sessions._agent_context(record, "investigator", 1)
+    except research_sessions.ResearchContextLimitError as exc:
+        assert "obligation exceeds the safe extract bound" in str(exc)
+    else:
+        raise AssertionError("A partially extracted unresolved obligation must be flagged")
 
 
 async def test_clipped_investigator_automatically_recovers(path: Path):
