@@ -135,8 +135,14 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Project Types")
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
     parent = dialog.locator(".project-types-body > section").first.locator(".project-type-card[open]")
+    save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
+    expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
+    expect(dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save")).to_have_count(0)
+    expect(save).to_be_disabled()
     parent.get_by_label("Name").fill("Browser Parent")
+    expect(save).to_be_disabled()  # New type still needs a scope.
     parent.get_by_label("Scope").fill("Original copied research scope")
+    expect(save).to_be_enabled()  # The only Save is the header action.
     # A built-in or custom name collision must block saving without rewriting it.
     parent.get_by_label("Name").fill("  physics  ")
     expect(parent.get_by_text("Duplicate project type name")).to_be_visible()
@@ -149,7 +155,7 @@ with sync_playwright() as playwright:
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
     expect(parent.locator(".project-type-icon-edit")).to_have_count(0)
     expect(parent.get_by_role("button", name="Generate icon")).to_have_count(0)
-    expect(parent.get_by_role("button", name="Remove", exact=True)).to_be_visible()
+    expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
     expect(parent.get_by_role("columnheader", name="URL")).to_have_count(0)
     expect(parent.get_by_text("http://temp.com/style.html")).to_have_count(0)
     parent.get_by_role("button", name="New", exact=True).first.click()
@@ -168,15 +174,22 @@ with sync_playwright() as playwright:
     )
     parent.get_by_role("button", name="New", exact=True).first.click()
     expect(parent.get_by_label("Research reference URL 3")).to_have_value("")
-    expect(dialog.locator(".project-types-section-heading").first.get_by_role(
-        "button", name="Save"
-    )).to_be_enabled()
-    ratio = parent.locator(".pt-reference-table").first.evaluate(
-        "table => { const rect = table.getBoundingClientRect(); const columns = [...table.querySelectorAll('col')].map(col => col.getBoundingClientRect().width); return columns[0] / rect.width; }"
+    expect(save).to_be_enabled()
+    reference_layout = parent.locator(".pt-reference-entry").first.evaluate(
+        """row => {
+          const input = row.querySelector('input').getBoundingClientRect();
+          const remove = row.querySelector('button').getBoundingClientRect();
+          return {gap: remove.left - input.right, sameLine: Math.abs(remove.top - input.top) < 16};
+        }"""
     )
-    assert 0.78 <= ratio <= 0.82, ratio
+    assert 0 <= reference_layout["gap"] <= 20 and reference_layout["sameLine"], reference_layout
+    # A new draft uses local Cancel, not Remove or a second Save.
+    expect(dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")).to_be_visible()
+    save.click()
+    expect(dialog).not_to_be_visible()
 
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
+    types_button.click()
+    dialog = page.get_by_role("dialog", name="Project Types")
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
     custom_section = dialog.locator(".project-types-body > section").nth(0)
     child = custom_section.locator(".project-type-card[open]")
@@ -185,11 +198,11 @@ with sync_playwright() as playwright:
     child.get_by_role("option", name="Browser Parent").click()
     child.get_by_label("Scope").fill("Independent copied scope")
     expect(child.get_by_role("button", name="Generate icon")).to_have_count(0)
+    expect(child.get_by_role("button", name="Remove project type")).to_have_count(0)
     expect(child.locator(".project-type-card-icon svg")).to_be_visible()
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
     save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
-    expect(save).to_be_disabled()  # Section Save persisted the new type.
-    dialog.locator("header").get_by_role("button", name="Cancel").click()
+    expect(save).to_be_enabled()
+    save.click()
     expect(dialog).not_to_be_visible()
     catalog = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     parent_type = next(
@@ -215,6 +228,11 @@ with sync_playwright() as playwright:
     )
     parent_card.locator("summary").click()
     parent_card.get_by_label("Scope").fill("Uncommitted scope")
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
+    title_order = parent_card.locator("summary").evaluate(
+        "summary => [...summary.children].map(item => item.tagName.toLowerCase())"
+    )
+    assert title_order == ["span", "strong", "button", "small"], title_order
     parent_card.locator(".project-type-remove").click()
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
     pending = dialog.locator(".project-types-body > section").first.locator(".project-type-card[open]")
@@ -223,6 +241,11 @@ with sync_playwright() as playwright:
         '.project-type-card:has(> summary strong:text-is("Discarded addition"))'
     )
     pending.get_by_label("Scope").fill("Discarded scope")
+    expect(pending.locator(".project-type-remove")).to_have_count(0)
+    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel").click()
+    expect(pending).to_have_count(0)
+    # Canceling the new type leaves other unsaved edits in the dialog.
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
     dialog.locator("header").get_by_role("button", name="Cancel", exact=True).click()
     expect(dialog).not_to_be_visible()
     after_cancel = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
@@ -247,9 +270,8 @@ with sync_playwright() as playwright:
             response.url.endswith("/api/project-types") and response.request.method == "PUT"
         )
     ):
-        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
-    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
-    dialog.locator("header").get_by_role("button", name="Cancel").click()
+        dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
+    expect(dialog).not_to_be_visible()
     second_type = next(
         item
         for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
