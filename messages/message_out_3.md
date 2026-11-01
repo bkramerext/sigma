@@ -41,3 +41,15 @@ At meaningful checkpoint, if unfinished, commit `messages/message_in_3.md` with 
 Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.
 
 **Highest-level goal:** improve complete academic papers as defensible research, *not* just engineering success. Move the quality frontier on more than one project before declaring victory.
+
+
+## Coordinator amendment to iteration 3 — concurrent papers 2 → 3 (already implemented)
+
+**Important update: do not redo this change.** Chat has already raised the single-server concurrent **paper-generation** capacity from **2 to 3**, preserving the existing per-project exclusion and short atomic admission lock. The implementation is in `src/sigma/papers.py` (constant `MAX_CONCURRENT_PAPER_GENERATIONS = 3`), with updated concurrent admission/compilation/research-overlap tests in `tests/papers.py`.
+
+- Runtime commit: `a9b758d424652992ad8be1c997908b54bf6b698a`.
+- Tests commits: `9e556af9234c814d51316228d2afcd26383deb0f` and `f1e194813186a5c30d56c67626320ee230c13c1b`.
+- **Use all three slots** when running the three iteration-3 paper generations on the same server if authentication, rate limits, budgets, resources, and the already authorized ChatGPT-plan mode permit. Start all three independently; avoid multiple generators for the same project. Retain actual per-run provider/call/cost/time accounting and do not treat concurrent wall-clock speedup as a paper-quality improvement.
+- CI was started after these commits; **do not assume green**. Check the runs, diagnose real failures, and report exact status. If this change conflicts with local uncommitted edits, preserve your edits and reconcile safely. The coordinator owns this concurrency change; you own the manuscripts and your assigned quality experiments.
+
+**This amendment is part of iteration 3, not a new message number.** No further coordinator automation is scheduled. Blue should continue the active iteration and reply normally in `message_in_3.md` / `message_in_3_completion.md`.
