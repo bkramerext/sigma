@@ -2649,6 +2649,72 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
         raise AssertionError("UTF-8 over-budget mandatory question was accepted")
 
 
+def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
+    """Project aliases survive recomputation and never rewrite historical IDs."""
+    from sigma.project_obligation_ids import assign_project_obligation_ids
+
+    view = initialize_project(path, "Project obligation aliases", "Prove the claim.")
+    project_id = view.project.id
+    strategy_id = str(uuid4())
+    a = "Check a counterexample under assumption A."
+    b = "Establish the boundary case under assumption B."
+    first_digest = research_sessions._obligation_identity(
+        a, project_id=project_id, strategy_id=strategy_id, assumptions=[]
+    )
+    second_digest = research_sessions._obligation_identity(
+        b, project_id=project_id, strategy_id=strategy_id, assumptions=[]
+    )
+    assert assign_project_obligation_ids(str(path), [first_digest]) == {first_digest: "o1"}
+    assert assign_project_obligation_ids(str(path), [first_digest, second_digest]) == {
+        first_digest: "o1",
+        second_digest: "o2",
+    }
+    assert assign_project_obligation_ids(str(path), [second_digest]) == {second_digest: "o2"}
+
+    old_artifact = {
+        "id": str(uuid4()),
+        "project_id": project_id,
+        "strategy_id": strategy_id,
+        "open_obligations": [a],
+    }
+    original = deepcopy(old_artifact)
+    legacy, _, _ = research_sessions._obligation_ledger(
+        [old_artifact], project_id=project_id, strategy_id=strategy_id
+    )
+    assert legacy[0]["obligation_id"] == first_digest
+    assert old_artifact == original
+
+    new_artifact = {
+        "id": str(uuid4()),
+        "project_id": project_id,
+        "strategy_id": strategy_id,
+        "open_obligations": [b],
+    }
+    compact, _, _ = research_sessions._obligation_ledger(
+        [new_artifact],
+        project_id=project_id,
+        strategy_id=strategy_id,
+        prior_obligations=legacy,
+        identity_path=str(path),
+    )
+    ids = {row["obligation_id"] for row in compact}
+    assert ids == {first_digest, "o2"}, ids
+    assert compact[0]["obligation_id"] == first_digest
+    assert compact[1]["obligation_id"] == "o2"
+    assert new_artifact["open_obligations"] == [b]
+
+    # All three ID families are accepted as references, but an agent cannot
+    # review an ID absent from the supplied ledger.
+    for value in ("o12", first_digest, str(uuid4())):
+        assert research_sessions.ObligationReview(
+            obligation_id=value,
+            status="unresolved",
+            basis_artifact_ids=[],
+            basis_step_ids=[],
+            rationale="This still requires verification.",
+        ).obligation_id == value
+
+
 def test_t37_obligation_identity_lifecycle_and_history(path: Path):
     view = initialize_project(path, "Scoped obligation history", "Check an exact claim.")
     strategy = str(uuid4())
@@ -9671,6 +9737,9 @@ def main():
         )
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         test_t37_context_selection_is_stable_and_loss_visible(root / "t37-context.sigma")
+        test_project_compact_obligation_ids_preserve_legacy_references(
+            root / "compact-obligation-ids.sigma"
+        )
         test_t37_obligation_identity_lifecycle_and_history(root / "t37-obligation-review.sigma")
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
