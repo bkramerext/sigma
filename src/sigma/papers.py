@@ -6312,6 +6312,8 @@ async def _generate_impl(
                     config["reasoning_effort"],
                 )
                 work["include_diagrams"] = include_diagrams
+                work["writing_sources"] = writing_sources
+                work["writing_source_selection"] = writing_selection
                 work["frozen_package"] = package
                 _save_work(path, work)
             elif "frozen_package" not in work:
@@ -6437,6 +6439,8 @@ async def _generate_impl(
                 "snapshot_size_bytes": len(_json(package)),
                 "source_count": len(package["sources"]),
                 "source_reference_map": source_reference_records,
+                "writing_sources": writing_sources,
+                "writing_source_selection": writing_selection,
                 "section_limit": MAX_LONG_PAPER_SECTIONS if long_form else 0,
                 "evidence_fields_omitted": (
                     len(work.get("omitted_evidence", [])) if long_form else 0
