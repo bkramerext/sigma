@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
     )
     # Exact AI Agents proof excerpt reproducing fused commands and bad fractions.
     session["outcome"]["conclusion"] += (
-        "\\n\\n"
+        "\n\n"
         "Let X_hi=(1/r_h)Σ_j(S_Ahij−S_Bhij), so X_hi∈[−1,1], and D=Σ_h(w_h/n_h)Σ_i "
         "X_hi. Under independent clusters, E[D]=d. A centered variable supported on an "
         "interval of length 2 has moment-generating function at most exp(λ²/2). "
@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
         "shows d≥D−t with probability at least 1−α. Repetition count r_h does not enter "
         "the worst-case radius: perfectly correlated repeats cannot create additional "
         "independent tasks."
-        "\\n\\n"
+        "\n\n"
         "**Skeptic review:** accepted — Each cluster average has range length two. The "
         "centered bounded-variable inequality therefore contributes exp(λ²a_hi²/2) for "
         "weight a_hi=w_h/n_h. Independence across complete clusters gives Σ_hi "
@@ -421,9 +421,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert not any(
                     fragment in annotation
                     for annotation in annotations
-                    for fragment in ("\\\\leexp", "\\\\get", "w_\\\\frac")
+                    for fragment in ("\\leexp", "\\get", "w_\\frac")
                 ), annotations
-                assert any("\\\\le exp" in value for value in annotations), annotations
+                assert any("\\le exp" in value for value in annotations), annotations
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
