@@ -75,8 +75,35 @@ def main() -> None:
             expect(dialog.locator(".about-workflow-stage")).to_have_count(6)
             expect(dialog.locator(".about-workflow")).to_contain_text("Current Understanding")
             expect(dialog.locator(".about-workflow")).to_contain_text(
-                "You choose whether and where to share or publish."
+                "Export research records and reports for inspection or sharing; no paper is required."
             )
+            expect(dialog.locator(".about-workflow")).to_contain_text(
+                "If you create a paper, review its claims, evidence, citations, and limitations before exporting PDF or TeX."
+            )
+            expect(dialog.locator(".about-workflow")).to_contain_text(
+                "You choose whether and where to share or publish a paper."
+            )
+            # Native details/summary disclosures must operate with both standard keyboard keys.
+            workflow_summary = workflow.locator("summary")
+            workflow_summary.focus()
+            page.keyboard.press("Enter")
+            expect(workflow).not_to_have_attribute("open", "")
+            page.wait_for_function(
+                "JSON.parse(localStorage.getItem('sigma.aboutDisclosureState.v1')).workflow === false"
+            )
+            page.keyboard.press("Space")
+            expect(workflow).to_have_attribute("open", "")
+            expect(workflow_summary).to_be_focused()
+            page.wait_for_function(
+                "JSON.parse(localStorage.getItem('sigma.aboutDisclosureState.v1')).workflow === true"
+            )
+            architecture = dialog.locator('[data-about-section="architecture"]')
+            architecture_summary = architecture.locator("summary")
+            architecture_summary.focus()
+            page.keyboard.press("Space")
+            expect(architecture).to_have_attribute("open", "")
+            page.keyboard.press("Enter")
+            expect(architecture).not_to_have_attribute("open", "")
             assert dialog.locator(".about-workflow").evaluate(
                 "e => [...e.querySelectorAll('.about-workflow-stage')].every(li => { const step = li.querySelector('.about-workflow-step').getBoundingClientRect(); const notes = li.querySelector('.about-workflow-notes').getBoundingClientRect(); return step.left < notes.left && Math.abs(step.top + step.height / 2 - (notes.top + notes.height / 2)) < 35; })"
             ), "Desktop stage boxes and explanatory bullets must align in two columns"
@@ -128,17 +155,34 @@ def main() -> None:
             )
 
             # Narrow layout stacks each set of bullets below its own stage box.
-            page.set_viewport_size({"width": 390, "height": 844})
             workflow = dialog.locator('[data-about-section="workflow"]')
             workflow.locator("summary").click()
-            expect(workflow.locator(".about-workflow-stage")).to_have_count(6)
-            assert workflow.evaluate(
-                "e => [...e.querySelectorAll('.about-workflow-stage')].every(li => { const step = li.querySelector('.about-workflow-step').getBoundingClientRect(); const notes = li.querySelector('.about-workflow-notes').getBoundingClientRect(); return notes.top >= step.bottom && notes.left >= step.left; })"
-            ), "Narrow layout must place each stage's notes below its box"
-            assert dialog.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), (
-                "Narrow About dialog must not overflow horizontally"
-            )
-            page.screenshot(path=str(EVIDENCE / "about-workflow-mobile.png"), full_page=True)
+            for width, screenshot_top, screenshot_bottom in (
+                (390, "about-workflow-mobile.png", "about-workflow-mobile-bottom.png"),
+                (320, "about-workflow-mobile-320.png", "about-workflow-mobile-320-bottom.png"),
+            ):
+                page.set_viewport_size({"width": width, "height": 844 if width == 390 else 740})
+                expect(workflow).to_have_attribute("open", "")
+                expect(workflow.locator(".about-workflow-stage")).to_have_count(6)
+                assert workflow.evaluate(
+                    "e => [...e.querySelectorAll('.about-workflow-stage')].every(li => { const step = li.querySelector('.about-workflow-step').getBoundingClientRect(); const notes = li.querySelector('.about-workflow-notes').getBoundingClientRect(); return notes.top >= step.bottom && notes.left >= step.left; })"
+                ), (width, "Narrow layout must place each stage's notes below its box")
+                assert dialog.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), (
+                    width,
+                    "Narrow About dialog must not overflow horizontally",
+                )
+                assert workflow.evaluate(
+                    "e => [...e.querySelectorAll('.about-workflow-notes li')].every(li => { const s = getComputedStyle(li); return li.clientWidth > 0 && li.clientHeight > 0 && li.scrollWidth <= li.clientWidth + 1 && li.scrollHeight <= li.clientHeight + 1 && !['hidden', 'clip'].includes(s.overflowX) && !['hidden', 'clip'].includes(s.overflowY) && (!s.webkitLineClamp || s.webkitLineClamp === 'none'); })"
+                ), (
+                    width,
+                    "Workflow explanatory text must wrap fully without clipping or line clamping",
+                )
+                dialog.evaluate("e => { e.scrollTop = 0; }")
+                page.screenshot(path=str(EVIDENCE / screenshot_top))
+                final_stage = workflow.locator(".about-workflow-stage").last
+                final_stage.evaluate("e => e.scrollIntoView({block: 'end', behavior: 'instant'})")
+                expect(final_stage).to_be_in_viewport()
+                page.screenshot(path=str(EVIDENCE / screenshot_bottom))
             expect(dialog.locator(".about-architecture")).to_be_attached()
             page.get_by_role("button", name="Close").click()
             page.evaluate(

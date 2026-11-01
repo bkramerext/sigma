@@ -1,34 +1,29 @@
-R4R handoff — Issue #437: High-level SIGMA workflow diagrams
+R4R correction handoff — Issue #437 / PR #439
 
+PR: https://github.com/bkramerext/sigma/pull/439
 Branch: gray/issue-437-workflow
 Base: main at 92bc34eda4c53decd6de29af315100251a5fde62
-Implementation/tested head: cffe32b2a9a377d9befc42a1c52767c7bb7bc6aa
-PR: https://github.com/bkramerext/sigma/pull/439
+Head: pending final correction commit and push
 
-Changes
-- Added a first, expanded-by-default “How SIGMA works” disclosure with six short, connected stages and concise stage notes. Paper creation is marked optional; publication is explicitly the user's choice.
-- Persisted the expanded/collapsed state of every About disclosure under stable section IDs in browser local storage, with per-section defaults and safe fallback for stale/invalid values.
-- Preserved the multi-agent architecture diagram and existing About sections.
-- Added the equivalent inline Mermaid diagram and associated stage bullets near “Using SIGMA” in README.md.
-- Added a low-key Welcome sentence pointing new users to the About SIGMA pill.
-- Added focused real-Chrome acceptance coverage and retained desktop/mobile screenshots in docs/evaluations/issue437/.
+Changes requested and addressed
+- README/About stage 6 now separates export of research records and reports from PDF/TeX export of an optional paper. It explicitly leaves paper sharing/publication to the user.
+- Condensed the README lead-in to the diagram; the session controls and limits remain linked to Getting Started.
+- Independently rendered the exact README Mermaid block through Mermaid JS v11 in real Chrome. The diagram shows all six labels, six connectors, a direct research-record/report export route, and a separate optional-paper route. Screenshot is docs/evaluations/issue437/readme-mermaid-independent.png; reproducible check is browser_checks/issue437_mermaid_render.py.
+- Changed narrow-screen explanatory text from 11px to 12px. Chrome acceptance now verifies Enter/Space keyboard disclosure toggles and complete wrapping/no clipping at 390×844 and 320×740, then scrolls to and confirms the final stage is visible. About disclosure persistence, architecture diagram and Welcome behavior remain covered.
 
-Verification actually run
-- `./sigma test` — passed all steps, including Ruff, Ruff format, Pyright (0 diagnostics), frontend typecheck, and production build. The optional graph-present Python sandbox case skipped because the local sandbox image is unavailable. The build reported the existing main chunk size advisory.
-- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright --no-sync python browser_checks/issue437_workflow.py` — passed in real Google Chrome at 1440×960 and 390×844. Checked section order and defaults, all five disclosures available in this cloud-enabled fixture across close/reopen/reload, stale/invalid saved IDs, responsive stacking, no horizontal dialog overflow, six stage descriptions, and retained architecture content.
-- `uv run --with playwright,httpx --no-sync python browser_checks/guest_samples.py` — passed in real Google Chrome; Welcome guidance assertion included.
-- `npm --prefix frontend run typecheck` — passed after the final UI helper change.
-- Ruff check/format for the three changed browser checks and `git diff --check` — passed.
-- Screenshots: docs/evaluations/issue437/about-workflow-desktop.png and docs/evaluations/issue437/about-workflow-mobile.png.
-- GitHub README browser check: HTTP 200; the Markdown page labeled the block as `data-type="mermaid"` and exposed the flowchart source. Real Chrome displayed a loading spinner without a completed diagram after 15 seconds. Completed GitHub rendering remains UNVERIFIED.
+Current verification actually run (rerun after all final edits before R4R)
+- Focused real-Chrome About/persistence/responsive/keyboard check: browser_checks/issue437_workflow.py.
+- Independent Mermaid JS v11 renderer check: browser_checks/issue437_mermaid_render.py.
+- Guest Welcome real-Chrome check: browser_checks/guest_samples.py.
+- `./sigma test`: passed after review corrections, including Python scenarios, Ruff lint/format, Pyright (0 diagnostics), frontend typecheck and production build. The existing large JavaScript chunk advisory remains; optional graph-present sandbox scenario skipped because its local image is unavailable.
+- Post-push GitHub Mermaid preview: pending. Its complete rendering must remain UNVERIFIED unless Chrome shows the finished diagram.
 
-Acceptance
-- MET: About workflow structure, introductory accuracy, first-visit default, persistent states, desktop/mobile layout, existing architecture content, inline README source, Welcome sentence, and publication/proof wording.
-- UNVERIFIED: README Mermaid rendering was inspected on the pushed GitHub page but the viewer did not finish rendering (loading spinner persisted for 15 seconds).
-- No research scheduler, agent behavior, paper-generation system, or project API changed. No paid provider calls and no deployment occurred.
+GitHub Mermaid rendering remains a separate criterion: previous pushed page returned HTTP 200 and recognized the Mermaid block, but Chrome showed only a spinner for 15 seconds. The independent Mermaid renderer now produces a complete diagram. Keep GitHub rendering UNVERIFIED unless Chrome confirms the corrected pushed page has a completed diagram.
 
-Coordination and preserved work
-- Issue #435 was checked and is currently assigned to Green. Its pre-existing dirty work remains untouched in `/Users/admin/sigma_gray` on `gray/issue-328-paper-progress` (modified frontend/src/main.tsx, src/sigma/api.py, src/sigma/papers.py, tests/papers.py, and untracked projects/.sigma-session-logs/). #435 is parked/preserved; none of those edits were copied into this branch.
-- Red owns #436, which includes renaming the About navigation pill and Project Types UI. This branch changes AboutDialog content in frontend/src/main.tsx but leaves the header pill and project-type implementation unchanged. The shared component file is an integration overlap; sequence/rebase against #436 through the human/coordinator. No direct worker coordination occurred.
+Acceptance report and screenshots: docs/evaluations/issue437/README.md and docs/evaluations/issue437/.
 
-No self-merge. Waiting for coordinator review.
+Coordination
+- #435 remains assigned to Green. Its pre-existing uncommitted work remains untouched in `/Users/admin/sigma_gray` on `gray/issue-328-paper-progress`; this PR uses its own worktree and includes none of that work.
+- Red owns #436, including About navigation; this branch changes no pill/navigation or Project Types logic. The shared frontend/src/main.tsx AboutDialog file remains an integration overlap. Report sequencing/conflicts to the coordinator through the human; no worker-to-worker communication occurred.
+
+No paid provider calls, deployment, self-merge, or changes to research/paper execution systems.

@@ -8,21 +8,23 @@ Base: `main` at `92bc34eda4c53decd6de29af315100251a5fde62`
 
 | Requirement | Result | Evidence |
 |---|---|---|
-| New first About disclosure explains project → research → optional paper → user-decided publication | **MET** | Six linked stages in `.about-workflow`; concise notes alongside every stage. |
-| First visit opens the workflow; all About disclosures persist across close/reopen and reload | **MET** | `browser_checks/issue437_workflow.py` checks first-visit default and all five rendered disclosures (workflow, features, architecture, provenance, feedback) across close/reopen and reload. It also checks stale/invalid saved section values fall back to defaults. |
-| Desktop left-column boxes and right-column notes; responsive narrow layout | **MET** | Real Chrome at 1440×960 and 390×844. Harness checks stage/notes alignment and no horizontal dialog overflow. |
-| Existing multi-agent diagram and About content remain | **MET** | Existing architecture disclosure and component remain; Chrome harness confirms architecture diagram is present. |
-| README has an equivalent inline diagram with stage notes | **MET** | GitHub Mermaid flowchart and associated bullets directly below “Using SIGMA.” |
-| Welcome tells newcomers to open About SIGMA | **MET** | `browser_checks/guest_samples.py` checks the new line during the real Chrome guest workflow. |
-| No autonomous verification or automatic publication claims | **MET** | Copy states that a draft is not proof or independent verification, and publication is the user's decision. |
-| GitHub-rendered README Mermaid appearance | **UNVERIFIED** | The pushed GitHub README returns HTTP 200 and labels the block as a Mermaid rendered-output container, but real Chrome showed a loading spinner and no completed graph after 15 seconds. |
+| First About disclosure explains project → research → optional paper → user-decided publication | **MET** | Six connected stages in `.about-workflow`. Stage 6 distinguishes research records/reports from paper PDF/TeX export. Paper sharing/publication is the user's choice. |
+| All About disclosure states persist across close/reopen and reload | **MET** | `browser_checks/issue437_workflow.py` checks first-visit defaults and all five available About disclosures in the cloud-enabled fixture across close/reopen and reload, plus stale/invalid saved values. |
+| About diagram fits desktop and narrow screens without truncated notes | **MET** | Real Chrome at 1440×960, 390×844, and 320×740. Narrow notes use 12px. The harness checks stacked layout, text scroll/clip metrics, no horizontal overflow, and reachability of the final stage through normal dialog scrolling. |
+| Keyboard operation of disclosures | **MET** | Chrome harness toggles workflow and architecture disclosures with Enter and Space. |
+| Existing multi-agent architecture content remains | **MET** | Existing disclosure and component remain; the Chrome harness confirms architecture content is present. |
+| README has an equivalent inline flow and stage notes; its lead-in is concise | **MET** | The original walkthrough is condensed, session settings link to Getting Started, and the six-stage diagram/bullets directly follow the short lead-in. Diagram arrows distinguish research export from the optional-paper route. |
+| Mermaid source renders as a complete, legible diagram | **MET** | [Independent Mermaid JS v11 Chrome render](readme-mermaid-independent.png) shows six labeled nodes and six connectors. `browser_checks/issue437_mermaid_render.py` extracts the exact README block and checks nodes and route labels. |
+| GitHub's own rendered Mermaid display | **UNVERIFIED** | The corrected pushed README page has not yet been rechecked. Earlier, real Chrome remained on a spinner after 15 seconds. The complete independent Chrome render is evidence for the Mermaid source, not GitHub's rendering. |
+| Welcome points newcomers to About SIGMA; no proof/publishing overclaims | **MET** | Real Chrome guest-flow check asserts the Welcome line. About and README say a paper is optional and publication is user-decided; they do not claim independent verification or automatic journal submission. |
 
 ## Checks run
 
-- `./sigma test` — **passed**: all steps including Python scenarios, Ruff lint/format, Pyright (0 diagnostics), frontend typecheck, and production build. Existing large JavaScript chunk advisory remains. The optional graph-present Python sandbox case skipped because its local image is unavailable.
-- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright --no-sync python browser_checks/issue437_workflow.py` — **passed** in real Google Chrome. Verified disclosure order/defaults, saved states through close/reopen/reload, six stages, desktop alignment, mobile stacked notes, no horizontal overflow, and preserved architecture diagram. Screenshots: [desktop](about-workflow-desktop.png), [mobile](about-workflow-mobile.png).
-- `uv run --with playwright,httpx --no-sync python browser_checks/guest_samples.py` — **passed** in real Google Chrome; included Welcome guidance assertion.
+- `./sigma test` — **passed after review corrections**: Python scenarios, Ruff lint/format, Pyright (0 errors/warnings/information), frontend typecheck, and production build. Existing large JavaScript chunk advisory remains. Optional graph-present sandbox scenario skipped because its local image is unavailable.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright --no-sync python browser_checks/issue437_workflow.py` — **passed** in real Google Chrome. Checks About order/defaults, keyboard Enter/Space, persistence after close/reopen/reload, stale defaults, six stages, responsive alignment, 12px notes, full wrapping, no horizontal overflow, and final-stage visibility after scrolling. Screenshots: [desktop](about-workflow-desktop.png), [390px top](about-workflow-mobile.png), [390px bottom](about-workflow-mobile-bottom.png), [320px top](about-workflow-mobile-320.png), [320px bottom](about-workflow-mobile-320-bottom.png).
+- `uv run --with playwright --no-sync python browser_checks/issue437_mermaid_render.py` — **passed** in real Chrome using the independent Mermaid JS v11 renderer; rendered all six stage labels and six connectors, including the optional paper branch and separate research/paper export paths. Screenshot: [independent Mermaid render](readme-mermaid-independent.png).
+- `uv run --with playwright,httpx --no-sync python browser_checks/guest_samples.py` — **passed** in real Google Chrome; included the Welcome guidance assertion.
 - `git diff --check` — **passed**.
-- A real-Chrome visit to the pushed GitHub README (`https://github.com/bkramerext/sigma/blob/gray/issue-437-workflow/README.md`) returned HTTP 200 and exposed `data-type="mermaid"` with the flowchart source. The GitHub Mermaid viewer still showed a loading spinner with no diagram after a 15-second wait, so completed GitHub visual rendering remains **UNVERIFIED**.
+- GitHub preview check after pushing the corrections — pending. Its completed rendering remains **UNVERIFIED** unless Chrome shows the diagram.
 
-No paid provider calls or deployments occurred. Product logic, research scheduling, and paper generation were not changed.
+No paid provider calls or deployments occurred. No research scheduling, paper-generation, or project API code changed.

@@ -2922,7 +2922,7 @@ function AboutWorkflow() {
     { title: 'Run research', notes: ['Investigator and Skeptic examine selected strategies.', 'Sessions save evidence, objections, results, and open questions.'] },
     { title: 'Review and refine', notes: ['Inspect findings, the Outcome, and Current Understanding.', 'Revise strategies or run more sessions when useful.'] },
     { title: 'Draft a paper (optional)', notes: ['Synthesize saved research into an academic paper draft.', 'A draft is not proof or independent verification.'] },
-    { title: 'Review, export, and decide', notes: ['Check claims, evidence, citations, and limitations; export PDF or TeX.', 'You choose whether and where to share or publish.'] },
+    { title: 'Review and export', notes: ['Export research records and reports for inspection or sharing; no paper is required.', 'If you create a paper, review its claims, evidence, citations, and limitations before exporting PDF or TeX.', 'You choose whether and where to share or publish a paper.'] },
   ];
   return <ol className="about-workflow" aria-label="SIGMA research workflow">{stages.map((stage, index) => <li className="about-workflow-stage" key={stage.title}>
     <div className="about-workflow-step"><span className="about-workflow-number" aria-hidden="true">{index + 1}</span><h3>{stage.title}</h3></div>

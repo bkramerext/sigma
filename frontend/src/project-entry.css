@@ -211,7 +211,7 @@
   .home-page .about-workflow-step { min-height: 44px; padding: 8px 10px; }
   .home-page .about-workflow-stage:not(:last-child)::after { top: 47px; bottom: -16px; left: 19px; }
   .home-page .about-workflow-stage:not(:last-child)::before { bottom: -16px; left: 16px; }
-  .home-page .about-workflow-notes { padding-left: 39px; font-size: 11px; }
+  .home-page .about-workflow-notes { padding-left: 39px; font-size: 12px; line-height: 1.55; }
   .home-page .about-strategy-cards { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .home-page .about-session-frame, .home-page .about-strategy-group { padding: 9px; }
   .home-page .about-exploration-space { padding: 8px 6px; }
