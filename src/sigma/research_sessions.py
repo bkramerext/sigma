@@ -6609,6 +6609,7 @@ def _reconcile_artifact_open_obligations(record: dict[str, Any], artifact: dict[
         project_id=record.get("project_id"),
         strategy_id=artifact.get("strategy_id"),
         prior_obligations=record.get("prior_session_obligations", []),
+        unbounded_for_admission=True,
     )
     strategy_id = artifact.get("strategy_id")
     unresolved = []
@@ -6656,6 +6657,7 @@ def _reconcile_skeptic_obligations(
         project_id=record.get("project_id"),
         strategy_id=strategy_id,
         prior_obligations=record.get("prior_session_obligations", []),
+        unbounded_for_admission=True,
     )
     review_status = {
         item.get("obligation_id"): item.get("status")
