@@ -7208,6 +7208,17 @@ def paper_text(path: str, paper_id: str) -> str:
         items = draft.get(key, [])
         if items:
             lines.extend(("", heading, *(str(item) for item in items)))
+    sources = record.get("generation", {}).get("writing_sources", [])
+    lines.extend(("", "Paper writing source material used"))
+    if sources:
+        for source in sources:
+            if isinstance(source, dict):
+                lines.append(
+                    f"- {source.get('title', 'Untitled')} "
+                    f"({source.get('tier', 'guidance')}): {source.get('url', '')}"
+                )
+    else:
+        lines.append("None recorded for this version.")
     return "\n".join(lines).strip() + "\n"
 
 
