@@ -113,6 +113,30 @@ type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negativ
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
+
+/**
+ * API/project snapshots can contain historical or partially persisted sessions.
+ * Normalize render-only fields without modifying the saved research record.
+ */
+function sessionForDisplay(value: unknown): ResearchSession | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Partial<ResearchSession>;
+  if (typeof raw.id !== 'string' || !raw.id) return null;
+  const missing = ['steps', 'events', 'artifacts', 'outcome'].filter(key => !(key in raw));
+  if (missing.length) console.warn('Research session has incomplete display fields', { id: raw.id, missing });
+  return {
+    ...raw,
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    events: Array.isArray(raw.events) ? raw.events : [],
+    artifacts: Array.isArray(raw.artifacts) ? raw.artifacts : [],
+    strategy_runs: Array.isArray(raw.strategy_runs) ? raw.strategy_runs.map(branch => ({
+      ...branch, artifacts: Array.isArray(branch.artifacts) ? branch.artifacts : [],
+    })) : undefined,
+    outcome: raw.outcome && typeof raw.outcome === 'object'
+      ? raw.outcome : { assessment: 'pending', label: 'Outcome unavailable', provisional: true },
+  } as ResearchSession;
+}
+
 function sessionEstimatedCostLabel(session: ResearchSession): string {
   const cost = session.estimated_cost_usd;
   // ChatGPT tokens are not billed to the operator's API account; show the
@@ -1105,7 +1129,8 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const response = await fetch(`/api/projects/research-sessions?${query}`, { signal });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
-    const nextSessions = data.sessions as ResearchSession[];
+    if (!Array.isArray(data.sessions)) throw new Error('Research sessions response is missing its sessions array');
+    const nextSessions = data.sessions.map(sessionForDisplay).filter((item: ResearchSession | null): item is ResearchSession => item !== null);
     setSessions(nextSessions);
     // Keep UI admission in sync with the limits snapshot used by the server.
     setMaxConcurrentSessions(Number(data.max_concurrent_sessions) || 1);
