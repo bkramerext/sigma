@@ -344,7 +344,7 @@ function researchArtifactMarkdown(artifact: ResearchArtifact): string {
 const MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60;
 const durationUnitMinutes: Record<Exclude<DurationUnit, 'unlimited'>, number> = { minutes: 1, hours: 60, days: 1440 };
 const limitBounds = {
-  research_rounds: [1, 5], model_calls: [2, 120], output_tokens_per_call: [256, 20000],
+  research_rounds: [1, 9], model_calls: [2, 120], output_tokens_per_call: [256, 20000],
 } as const;
 function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
   const minutes = value.session_duration_minutes;
