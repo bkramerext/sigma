@@ -2928,7 +2928,9 @@ def _settle_request_budget(
     return "Provider usage is unavailable; the full request and output reservation remains held."
 
 
-def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) -> float | None:
+def _reserve_cost(
+    record: dict[str, Any], context: dict[str, Any], role: str, *, estimate: bool = False
+) -> float | None:
     prices = TOKEN_PRICES_PER_MILLION.get(record["model"])
     if prices is None:
         return None
@@ -2937,12 +2939,13 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
     provider_output_bound = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
     if provider_output_bound is None:
         return None
-    # Estimate spend using the session's configured output target, not the
-    # model's enormous absolute maximum. This only changes funding estimates,
-    # NEVER the request payload or the research evidence given to the model.
-    output_tokens = min(
-        provider_output_bound,
-        max(1, int(record.get("output_token_limit") or 4000)),
+    # Default remains the conservative upper-bound contract for legacy
+    # consumers. Only portfolio funding admission opts into estimates;
+    # provider payload/output constraints and researcher context do not change.
+    output_tokens = (
+        min(provider_output_bound, max(1, int(record.get("output_token_limit") or 4000)))
+        if estimate
+        else provider_output_bound
     )
     # UTF-8 bytes conservatively bound billable input tokens. OpenAI applies
     # 2x input/cache and 1.5x output rates above its documented long-context
@@ -2965,7 +2968,7 @@ def _call_cost_reservation(
     if record.get("cloud_sponsored") is True or (
         record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
     ):
-        return _reserve_cost(record, context, role)
+        return _reserve_cost(record, context, role, estimate=True)
     return None
 
 
@@ -8701,21 +8704,23 @@ async def _portfolio_role_call(
                     # If concurrent requests have unsettled reservations, defer
                     # without consuming an agent turn. Their eventual settlements
                     # may release sufficient headroom for this exact next turn.
-                    if (
-                        _portfolio_has_pending_reservation(record, step_id)
-                        and any(
-                            term in str(exc).casefold()
-                            for term in (
-                                "capacity", "allowance", "spend ceiling",
-                                "token budget", "token reservation",
-                            )
+                    if _portfolio_has_pending_reservation(record, step_id) and any(
+                        term in str(exc).casefold()
+                        for term in (
+                            "capacity",
+                            "allowance",
+                            "spend ceiling",
+                            "token budget",
+                            "token reservation",
                         )
                     ):
                         step["failure_kind"] = "funding_wait_pre_dispatch"
                         branch["status"] = "queued"
                         branch["current_action"] = "Waiting for funding settlement"
                         record["current_steps"] = [
-                            item["id"] for item in record["steps"] if item.get("status") == "running"
+                            item["id"]
+                            for item in record["steps"]
+                            if item.get("status") == "running"
                         ]
                         record["current_step"] = (
                             record["current_steps"][-1] if record["current_steps"] else None
@@ -10286,11 +10291,7 @@ def _shared_provider_slot() -> int | None:
     root = cloud_workspaces.storage_root() / "provider-slots"
     root.mkdir(mode=0o700, exist_ok=True)
     info = root.lstat()
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or info.st_mode & 0o077
-    ):
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise ProjectError("Shared provider capacity directory is not private.")
     slots = _portfolio_global_limit()
     with _portfolio_global_gates_lock:
