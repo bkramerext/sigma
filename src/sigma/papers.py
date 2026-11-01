@@ -1422,6 +1422,16 @@ def _evidence_based_long_plan(
         sentence = " ".join(value.split()).strip()
         if len(sentence) < 35:
             return (-1, "", "", ())
+        # A workflow instruction is not a scholarly finding even when it
+        # appears inside a result-shaped frozen record.
+        if re.match(
+            r"(?i)(?:structured argument steps are recorded|"
+            r"review their evidence and objections|"
+            r"this is a recorded research item|"
+            r"the saved research contains indexed evidence)",
+            sentence,
+        ):
+            return (-1, "", "", ())
         provenance: list[str] = []
         valid_refs: list[str] = []
         for ref in note.evidence_refs:
