@@ -275,6 +275,32 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 /* Keep the Home controls in the upper left, independent of the brand artwork. */
 .home-page .home-topline { height: 52px; }
 .home-page .home-hero { margin-top: 12px; }
+/* Home corner actions are independent of the right-hand authentication stack. */
+.home-page .home-left-actions {
+  position: absolute;
+  top: 34px;
+  left: clamp(13px, 2.7vw, 45px);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.home-page .home-left-actions > .home-about-button {
+  position: static;
+  margin: 0;
+}
+.home-page .home-right-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .home-page .home-left-actions { top: 18px; gap: 8px; }
+  .home-page .home-projects { padding-top: 0; }
+}
 
 /* Match the background's cover scale: both images share image-top/center anchors. */
 .home-page .home-slogan {
@@ -294,7 +320,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   --home-project-edge: clamp(13px, 2.7vw, 45px);
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
-  top: var(--home-project-edge);
+  top: calc(var(--home-project-edge) + 85px);
   left: var(--home-project-edge);
   z-index: 1;
 }
@@ -364,7 +390,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
     top: auto;
     left: auto;
     width: min(520px, calc(100% - 2 * var(--home-project-edge)));
-    margin: var(--home-project-edge) 0 0 var(--home-project-edge);
+    margin: calc(var(--home-project-edge) + 85px) 0 0 var(--home-project-edge);
   }
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
