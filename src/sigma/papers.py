@@ -120,6 +120,7 @@ class PaperStageCallback(Protocol):
 CALL_SECONDS = 60 * 60
 PLANNING_CALL_SECONDS = 60 * 60
 MAX_PAPERS = 50
+MAX_CONCURRENT_PAPER_GENERATIONS = 3
 # The backend is deployed as a single Uvicorn process. Admission is atomic
 # under this short-lived lock; no AI await or TeX compilation holds it.
 _gate = asyncio.Lock()
@@ -133,7 +134,7 @@ async def _paper_operation(path: str, *, generating: bool):
     async with _gate:
         if key in _busy_paper_projects:
             raise ProjectError("A paper generation is already active for this project")
-        if generating and len(_generating_paper_projects) >= 2:
+        if generating and len(_generating_paper_projects) >= MAX_CONCURRENT_PAPER_GENERATIONS:
             raise ProjectError("Paper generation capacity is full; please try again shortly")
         _busy_paper_projects.add(key)
         if generating:
