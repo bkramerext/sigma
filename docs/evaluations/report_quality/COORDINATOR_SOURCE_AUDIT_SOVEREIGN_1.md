@@ -31,6 +31,16 @@ This is a **confirmed omission of an operational completeness limitation**, not 
 
 The paper's `C2/C3/C7/C9/C11` “established” statuses are therefore **not independently certified by the underlying Skeptic records**. Some are legitimate conditional definitions or mathematical deductions; the paper needs typed claim kinds and a separate verification field rather than treating `established` as an unqualified publication verdict. A precise claim-to-artifact support audit is still needed before assigning an individual C# to a particular saved artifact.
 
+## Specific high-impact unreviewed claim: the 1,800-pair power certificate
+
+The paper's `C18` is correctly labeled **conjecture** and explicitly conditional. Its source is **Investigator call 14**, step ID `50147fc3-6e62-4c43-b3b6-68eb3f268965`, not one of the eight completed Investigator/Skeptic artifacts. The planned final Skeptic call 18 on the same “Fairness, reliability and pilot” strategy failed, so **the saved 1,800-pair certificate did not receive the intended final Skeptic review**.
+
+I independently checked the *specific arithmetic* of its sufficient-event argument: with `Δ=0.20`, discordance `q=0.40`, variance `0.36/n`, and confidence-tail factor `log(80)`, Hoeffding plus Cantelli gives the sufficient condition
+`n > ((sqrt(2 log 80)+1.2)/0.10)^2 = 1730.9048...`.
+Thus `n=1800` satisfies that **conditional sufficient bound**, and even `n=1731` satisfies this particular inequality. This is **not** a minimum required enrollment, nor an exact power calculation or evidence that 1,800 independent episodes are affordable or obtainable. The paper's caveats about assumptions are appropriate; what is missing is disclosure that the source's planned adversarial review never completed.
+
+A complete academic presentation should say **“Investigator-derived, independently arithmetic-checked sufficient bound; final SIGMA Skeptic review failed, empirical and independence assumptions unverified.”** It must not call the result independently formally proved, peer-reviewed, or empirically validated.
+
 ## Positive fidelity checks
 
 The source records explicitly say the two MindRouter starting URLs were **not retrieved**, no campus workload or current vendor prices were measured, and the architecture/pilot were unimplemented. The manuscript correctly preserves those qualifications. The eighth artifact challenges the aggregate-to-sensitive inference with a hypothetical stratum counterexample, and the manuscript includes that correction. These are genuine evidence-fidelity successes; do not erase them while repairing the omitted session-status limitation.
