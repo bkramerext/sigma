@@ -28,7 +28,6 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from sigma import cloud_research, cloud_workspaces, session_log
-from sigma.research_method_sources import methodology_digest, select_method_sources
 from sigma.build_info import build_commit
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
@@ -53,6 +52,7 @@ from sigma.research_epistemics import (
     verification_label,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
+from sigma.research_method_sources import methodology_digest, select_method_sources
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
