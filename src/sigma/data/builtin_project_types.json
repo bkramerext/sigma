@@ -16,17 +16,6 @@
             "strokeLinejoin": "round",
             "fill": "none"
           }
-        },
-        {
-          "tag": "path",
-          "attrs": {
-            "d": "M12 8.1v7.8M8.1 12h7.8",
-            "stroke": "currentColor",
-            "strokeWidth": 1.35,
-            "strokeLinecap": "round",
-            "strokeLinejoin": "round",
-            "fill": "none"
-          }
         }
       ]
     }
