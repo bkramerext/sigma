@@ -5656,32 +5656,51 @@ async def _proofread_tex_single_pass(
                 raise ProjectError("The proofreader returned no structured response.")
             proposals = TeXProofreadResult.model_validate(response).corrections
             candidate = chunk
-            for proposal in proposals:
-                if candidate.count(proposal.find) != 1:
-                    raise ValueError(
-                        "A proposed TeX correction did not identify one exact source span."
-                    )
-                candidate = candidate.replace(proposal.find, proposal.replace, 1)
-            before_signature = _tex_semantic_signature(chunk)
-            after_signature = _tex_semantic_signature(candidate)
-            if before_signature != after_signature:
-                raise ValueError(
-                    "A proposed correction changed protected scientific or reference content."
-                )
+            original_signature = _tex_semantic_signature(chunk)
+            paper_signature = _tex_semantic_signature(initial)
+            rejected_patches: list[str] = []
+            accepted_categories: list[str] = []
             current_chunks = [
                 corrected[item] if isinstance(corrected[item], str) else initial[left:right]
                 for item, (left, right) in enumerate(bounds)
             ]
-            current_chunks[index] = candidate
-            if _tex_semantic_signature(initial) != _tex_semantic_signature("".join(current_chunks)):
-                raise ValueError(
-                    "A proposed correction changed the full paper's protected content."
-                )
-            corrected[index] = candidate if candidate != chunk else None
-            attempts[index] = "complete"
-            checkpoint["ai_performed"] = True
+            # A returned response can contain both mechanical repairs and
+            # dangerous content changes. Evaluate each change independently,
+            # retaining only the exact patches that preserve both signatures.
             for proposal in proposals:
-                checkpoint["corrections"].append(proposal.category)
+                if candidate.count(proposal.find) != 1:
+                    rejected_patches.append(
+                        "A proposed TeX correction did not identify one exact source span."
+                    )
+                    continue
+                trial = candidate.replace(proposal.find, proposal.replace, 1)
+                current_chunks[index] = trial
+                if (
+                    _tex_semantic_signature(trial) != original_signature
+                    or _tex_semantic_signature("".join(current_chunks)) != paper_signature
+                ):
+                    rejected_patches.append(
+                        "A proposed correction changed protected scientific or reference content."
+                    )
+                    current_chunks[index] = candidate
+                    continue
+                candidate = trial
+                accepted_categories.append(proposal.category)
+            corrected[index] = candidate if candidate != chunk else None
+            attempts[index] = "complete" if not rejected_patches else "rejected"
+            checkpoint["ai_performed"] = bool(
+                checkpoint["ai_performed"] or not rejected_patches or accepted_categories
+            )
+            checkpoint["corrections"].extend(accepted_categories)
+            if rejected_patches:
+                message = (
+                    f"Proofreading chunk {index + 1} was partially applied: "
+                    + rejected_patches[0]
+                )
+                checkpoint["diagnostics"] = list(
+                    dict.fromkeys([*checkpoint.get("diagnostics", []), message])
+                )[:100]
+                checkpoint["fallback_reason"] = checkpoint.get("fallback_reason") or message
             await report(
                 "proofreading",
                 index + 1,
