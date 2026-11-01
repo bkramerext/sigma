@@ -1,15 +1,20 @@
 """Unified project type catalog, transactional persistence and session safeguards."""
 
+import asyncio
+import base64
 import os
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
+import httpx
+from PIL import Image
 
-from sigma import project_types, research_sessions
+from sigma import project_type_icons, project_types, research_sessions
 from sigma.api import app
 from sigma.projects import (
     ProjectError,
@@ -20,7 +25,57 @@ from sigma.projects import (
 )
 
 
+def check_icon_generation_mock() -> None:
+    # The actual SIGMA PNG style asset is sent as image input. This test never
+    # uses an API credential or makes a paid call.
+    image = BytesIO()
+    Image.new("RGBA", (32, 32), (219, 160, 103, 255)).save(image, format="PNG")
+    encoded = base64.b64encode(image.getvalue()).decode("ascii")
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, *, headers, data, files):
+            assert url.endswith("/images/edits")
+            assert headers["Authorization"] == "Bearer test-not-real"
+            assert data["model"].startswith("gpt-image-")
+            assert data["background"] == "transparent"
+            assert "Marine biology" in data["prompt"]
+            name, reference, mime = files["image"]
+            assert name.endswith(".png") and mime == "image/png"
+            assert reference == project_type_icons.STYLE_REFERENCE.read_bytes()
+            return httpx.Response(200, json={"data": [{"b64_json": encoded}]})
+
+    with (
+        patch("sigma.cloud_workspaces.enabled", return_value=False),
+        patch.object(
+            project_type_icons, "auth_context",
+            new=AsyncMock(return_value={
+                "mode": "api_key", "status": "connected", "token": "test-not-real",
+            }),
+        ),
+        patch.object(project_type_icons.httpx, "AsyncClient", FakeClient),
+        patch.object(
+            project_type_icons, "provider_endpoint",
+            return_value="https://example.invalid/v1/images/edits",
+        ),
+    ):
+        icon = asyncio.run(
+            project_type_icons.generate_icon("Marine biology", "Oceans and cells")
+        )
+    assert icon["kind"] == "data"
+    assert icon["data_uri"].startswith("data:image/png;base64,")
+
+
 def main() -> None:
+    check_icon_generation_mock()
     builtins = project_types.builtin_types()
     ids = {item.id for item in builtins}
     assert len(ids) == 12 and "other" not in ids and "literature" in ids
@@ -47,6 +102,7 @@ def main() -> None:
                 }
             )
             assert created.user_defined and created.origin == "literature"
+            assert "description" not in created.record()
             assert project_types._store_path().stat().st_mode & 0o777 == 0o600
             assert project_types.get_type(created.id) == created
             assert project_types.safe_project_snapshot(created.record())
@@ -55,6 +111,7 @@ def main() -> None:
             )
             assert normalized_snapshot is not None
             assert normalized_snapshot["name"] == "Field Notes"
+            assert "description" not in normalized_snapshot
             for invalid in (
                 {"name": "field notes", "scope": "duplicate", "icon": _placeholder()},
                 {
