@@ -5694,7 +5694,8 @@ async def _proofread_tex_single_pass(
             checkpoint["corrections"].extend(accepted_categories)
             if rejected_patches:
                 message = (
-                    f"Proofreading chunk {index + 1} was partially applied: "
+                    f"Proofreading chunk {index + 1} "
+                    + ("was partially applied: " if accepted_categories else "was not applied: ")
                     + rejected_patches[0]
                 )
                 checkpoint["diagnostics"] = list(
