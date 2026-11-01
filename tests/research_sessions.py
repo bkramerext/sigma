@@ -5742,14 +5742,14 @@ async def test_provider_gate_fairness_and_cancelled_waiter() -> None:
     first_b = asyncio.create_task(queue("user-b", "b1"))
     await asyncio.sleep(0)
     gate.release()
-    await first_a
-    assert order == ["a1"]
-    gate.release()
     await first_b
-    assert order == ["a1", "b1"], order
+    assert order == ["b1"], order
+    gate.release()
+    await first_a
+    assert order == ["b1", "a1"], order
     gate.release()
     await second_a
-    assert order == ["a1", "b1", "a2"], order
+    assert order == ["b1", "a1", "a2"], order
     gate.release()
     assert gate.active == 0
 
