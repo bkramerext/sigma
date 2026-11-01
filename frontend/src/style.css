@@ -273,13 +273,18 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 }
 
 /* Keep the Home controls in the upper left, independent of the brand artwork. */
+.home-page {
+  /* Match the top inset of the right-hand Google pill. */
+  --home-corner-gap: 26px;
+  --home-corner-pill-height: 34px;
+}
 .home-page .home-topline { height: 52px; }
 .home-page .home-hero { margin-top: 12px; }
 /* Home corner actions are independent of the right-hand authentication stack. */
 .home-page .home-left-actions {
   position: absolute;
-  top: 34px;
-  left: clamp(13px, 2.7vw, 45px);
+  top: var(--home-corner-gap);
+  left: var(--home-corner-gap);
   z-index: 3;
   display: flex;
   flex-wrap: wrap;
@@ -298,7 +303,9 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   gap: 12px;
 }
 @media (max-width: 700px) {
-  .home-page .home-left-actions { top: 18px; gap: 8px; }
+  .home-page { --home-corner-gap: 18px; --home-corner-pill-height: 28px; }
+  .home-page .home-topline { padding-top: var(--home-corner-gap); }
+  .home-page .home-left-actions { gap: 8px; }
   .home-page .home-projects { padding-top: 0; }
 }
 
@@ -320,7 +327,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   --home-project-edge: clamp(13px, 2.7vw, 45px);
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
-  top: calc(var(--home-project-edge) + 85px);
+  top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap));
   left: var(--home-project-edge);
   z-index: 1;
 }
@@ -390,7 +397,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
     top: auto;
     left: auto;
     width: min(520px, calc(100% - 2 * var(--home-project-edge)));
-    margin: calc(var(--home-project-edge) + 85px) 0 0 var(--home-project-edge);
+    margin: calc(1.75 * var(--home-corner-gap)) 0 0 var(--home-project-edge);
   }
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
