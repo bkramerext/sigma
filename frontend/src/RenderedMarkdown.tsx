@@ -33,17 +33,26 @@ function mathSource(value: string): string {
   return value
     .replace(/√\s*\(([^()]+)\)/g, '\\sqrt{$1}')
     .replace(/√([\p{L}\d]+)/gu, '\\sqrt{$1}')
-    .replace(/[α-ωΑ-Ω−≠≤≥≈∞∫∑√±×÷]/gu, symbol => unicodeMathCommands[symbol] ?? symbol)
+    .replace(/[α-ωΑ-Ω−≠≤≥≈∞∫∑√±×÷]/gu, (symbol, index, original) => {
+      const command = unicodeMathCommands[symbol] ?? symbol;
+      // Without a token boundary, "≤exp" becomes the invalid TeX command "\\leexp".
+      return /^\\[a-zA-Z]+$/u.test(command) && /[A-Za-z]/u.test(original[index + symbol.length] ?? '')
+        ? `${command} `
+        : command;
+    })
     .replace(/²/g, '^{2}').replace(/³/g, '^{3}')
     .replace(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*\/\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/gu, '\\frac{$1}{$2}')
     .replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/gu, '\\frac{$1}{$2}')
     .replace(/_\(([^()]+)\)/gu, '_{$1}')
     .replace(/([\p{L}\d)]+)\s*\/\s*\[([^\[\]\n]+)\]/gu, '\\frac{$1}{$2}')
     .replace(/([\p{L}\d)]+)\s*\/\s*\(([^()\n]+)\)/gu, '\\frac{$1}{$2}')
-    .replace(/([\p{L}\d)]+)\s*\/\s*([\p{L}\d(][^\s,;.!?)]*)/gu, (_match, numerator: string, denominator: string) => {
+    .replace(/([\p{L}\d)]+)\s*\/\s*([\p{L}\d(][^\s,;.!?)]*)/gu, (match, numerator: string, denominator: string, offset: number, original: string) => {
+      // Never turn h/n_h into a fraction inside the subscript of w_h/n_h.
+      if (/[_^\\]/u.test(original[offset - 1] ?? '')) return match;
       const cleanDenominator = denominator.replace(/[.,;:!?]+$/u, '');
       return `\\frac{${numerator}}{${cleanDenominator}}`;
-    });
+    })
+    .replace(/_([a-zA-Z][a-zA-Z0-9]*|\d+)/gu, '_{$1}');
 }
 
 type Candidate = { start: number; end: number; value: string; priority: number };

@@ -337,6 +337,27 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             expect(
                 row.get_by_role("complementary", name="Session status and next steps")
             ).to_be_visible()
+            # The top-right Dismiss action must never cover the first line
+            # of either notice, including on narrow/mobile viewports.
+            for width in (1440, 390, 320):
+                page.set_viewport_size({"width": width, "height": 844})
+                for notice in (
+                    row.locator(".stopped-session-guidance"),
+                    row.get_by_role("complementary", name="Session status and next steps"),
+                ):
+                    layout = notice.evaluate("""element => {
+                        const button = element.querySelector('.session-notice-dismiss');
+                        const bounds = button.getBoundingClientRect();
+                        const textRows = Array.from(element.children).filter(child => child !== button);
+                        return {
+                            buttonBottom: bounds.bottom,
+                            textTop: Math.min(...textRows.map(row => row.getBoundingClientRect().top)),
+                            buttonRight: bounds.right,
+                            noticeRight: element.getBoundingClientRect().right
+                        };
+                    }""")
+                    assert layout["textTop"] >= layout["buttonBottom"] - 1, layout
+                    assert layout["buttonRight"] <= layout["noticeRight"] + 1, layout
             row.locator(".stopped-session-guidance").get_by_role(
                 "button", name="Dismiss notices for Session #1"
             ).click()

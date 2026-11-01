@@ -515,6 +515,35 @@ async def main_async(root: Path):
             raise AssertionError("Timed-out conversion was accepted")
     assert (timeout_path / "project.json").is_file()
     assert not (timeout_path / "text-representations.json").exists()
+
+    # Markdown conversion must have a real long-running budget rather than the
+    # previous 60-second cutoff. Exercise the same code with a compressed clock
+    # so the regression runs without provider calls or a ten-minute delay.
+    from sigma import text_conversion
+
+    assert text_conversion.CALL_SECONDS >= 600
+    slow_path = root / "slow-conversion.sigma"
+    initialize_project(slow_path, "Slow conversion", "Count t_n for n >= 0")
+
+    async def slower_handler(request):
+        await asyncio.sleep(0.07)
+        return httpx.Response(200, json=provider_output("Count $t_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch("sigma.text_conversion.CALL_SECONDS", 0.3),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(slower_handler), **kwargs
+            ),
+        ),
+    ):
+        converted = await convert_text(str(slow_path), "project", "markdown")
+    assert converted["markdown"]["current"]
+    assert converted["markdown"]["body"] == "Count $t_n$ for $n \\ge 0$"
+
     malformed = provider_output("unused")
     malformed["output"][0]["content"][0]["text"] = "{"
     with (
