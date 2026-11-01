@@ -151,7 +151,7 @@
 .home-page .about-exploration-round small { color: #aabfce; font: 9px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-exploration-space > .about-session-exploration-example { margin: 10px 0 0; padding: 0; font-size: 11px; }
 .home-page .about-session-toggle { position: absolute; left: 50%; top: 50%; z-index: 1; min-height: 31px; padding: 6px 12px; border: 1px solid #75b7ef; border-radius: 999px; color: #eef8ff; background: linear-gradient(115deg, #194e72, #245c83 55%, #123b59); box-shadow: inset 0 1px 0 #effaff60, 0 4px 12px #0009, 0 0 12px #4b98cf45; font: 600 10px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transform: translate(-50%, -50%); }
-.home-page .about-dialog .about-session-toggle:hover:not(:disabled), .home-page .about-dialog .about-session-toggle[aria-expanded="true"] { border-color: #acd9fa; color: #fff; background: linear-gradient(115deg, #245c83, #3275a4 55%, #194e72); box-shadow: inset 0 1px 0 #effaff80, 0 5px 16px #0009, 0 0 16px #4b98cf55; }
+.home-page .about-dialog .about-session-toggle:hover:not(:disabled), .home-page .about-dialog .about-session-toggle[aria-expanded="true"] { border-color: #acd9fa; color: #fff; background: linear-gradient(115deg, #245c83, #3275a4 55%, #194e72); box-shadow: none; }
 .home-page .about-session-detail { margin-top: 10px; padding: 12px; border: 1px solid #4c83a8; border-radius: 8px; background: radial-gradient(ellipse at 50% 0%, #3e7ca426, transparent 64%), linear-gradient(145deg, #142b3d, #0c1824 72%); box-shadow: inset 0 1px 0 #d5edff30, 0 6px 18px #0006; }
 .home-page .about-session-detail[hidden] { display: none; }
 .home-page .about-session-detail-inner { min-height: 0; }
