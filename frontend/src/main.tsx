@@ -3014,7 +3014,6 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && (!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="about-action project-types-action" aria-label="Project Types" title="Project Types" data-tooltip="Project Types" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
@@ -3645,7 +3644,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
-      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
+      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>{!initial && <p className="settings-hint">Need another project type? Use Project Types to create one.</p>}</div>
       <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
       <div className="settings-model-row">
       <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
@@ -4665,6 +4664,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   </div>;
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} projectActions={projectActionBar}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
+      {!guest && <div className="project-types-pane-control"><button type="button" className="about-action project-types-action" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button></div>}
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
           <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}>
