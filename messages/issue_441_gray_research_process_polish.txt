@@ -1,0 +1,34 @@
+R4R handoff — Issue #441 / Research Process polish
+
+PR: https://github.com/bkramerext/sigma/pull/444
+Branch: gray/441-research-process-polish
+Base: main at 4b2f34f92264bb6614cbcee0aecc19834dabf85b
+Tested implementation HEAD: 338a3271888f3ac74790bf6c0b46032a78a262e4
+The branch was at 73dac5e87a8881ac6c0a6f66f965b4dbdf8247fa when PR #444 was opened. The final PR head also contains this handoff-link update; use current PR metadata for the exact tip.
+Review-correction source and focused/full tests: e08a1841c502ff08ccddd43975d162626dadbb51.
+
+Review correction in the same PR
+- Shifted the mobile explanatory-list marker lane 19px to the right of the connector spine and increased the mobile row pitch from 164px to 188px so 12px copy continues to wrap without clipping.
+- Added a Chrome assertion for at least 8px between the outgoing connector and its native bullet-marker lane at 390px and 320px, while preserving the equal box pitch and flush connector endpoint checks.
+- Regenerated and visually inspected desktop, 390px top/bottom, and 320px top/bottom screenshots. Markers and text now sit to the right of the copper spine; all six stages and the final two bullets remain available by scrolling.
+
+Changes
+- Renamed the first About disclosure to exactly “Research Process” and preserved its stable `workflow` disclosure-state key and expanded default.
+- Rebuilt the six workflow rows with a consistent vertical pitch. CSS connectors now start at the numbered-circle bottom and point to the following box's top edge. Preserved the established arrow, dark/copper style, desktop two-column layout and mobile stacking.
+- Reduced every stage to exactly two note bullets. Stage 6 clearly distinguishes research record/report export from optional paper PDF/TeX export.
+- Added a prominent hosted SIGMA link near the README title, renamed the subsection `Workflow`, and replaced branching Mermaid syntax with a horizontal six-node/five-link linear flow. Retained all stage explanations and accurate caveats.
+- Added focused real-Chrome checks for section order/title/default, the exact two bullets per stage, disclosure persistence, uniform pitch, connector endpoint coordinates, desktop/mobile wrapping and clipping, plus README source/render checks.
+
+Evidence and tests actually run
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright --no-sync python browser_checks/issue441_research_process.py` — passed in real Chrome at desktop 1440×960 and narrow 390×844 / 320×740. Tests first-open state, close/reopen/reload persistence, stage counts, all five connector starts/ends and x coordinates within 1.5px, equal box pitch within 1.5px, mobile stacked notes, no truncation/overflow and retained architecture content.
+- `uv run --with playwright --no-sync python browser_checks/issue441_readme_mermaid.py` — passed in real Chrome; exact README Mermaid block renders six nodes in increasing horizontal order and five direct connectors, fits within the render frame, and retains the optional-paper label.
+- `./sigma test` — passed all steps: Python suites, Ruff, format (337 Python files formatted), Pyright (0 diagnostics), frontend typecheck and production build. The local graph-present sandbox case skipped because its image is unavailable; existing bundle-size advisory remains.
+- `./sigma test` was rerun and passed after the mobile marker-collision correction at `e08a1841c502ff08ccddd43975d162626dadbb51`.
+- `git diff --check` — passed.
+- Screenshots and MET/UNMET/UNVERIFIED dispositions: `docs/evaluations/issue441/README.md`.
+- GitHub Mermaid preview — real Chrome loaded the pushed README at HTTP 200 and the GitHub iframe rendered six labels/five links. Screenshot at `docs/evaluations/issue441/github-mermaid-preview.png`; status **MET**. Toolbar overlaps part of final box border but not its label. Independent Mermaid output is saved at `docs/evaluations/issue441/readme-mermaid-independent.png`.
+- GitHub Actions on PR head `69a960c591bc79485b8007e703af6019c073f719` — all six workflows passed, including SIGMA verification. That tip includes only report/handoff updates; focused browser checks and `./sigma test` passed on correction source `e08a1841c502ff08ccddd43975d162626dadbb51`.
+
+Coordination and scope
+- Red owns #440; no Red branch changes have been copied, merged, or modified. This assignment changes About content in `frontend/src/main.tsx`, a shared file and potential integration overlap with #440. The About pill/navigation and Project Types were not changed. Coordinator sequencing or conflict resolution may be needed after #440 integrates; no direct worker communication occurred.
+- No provider calls or deployed-site changes. No underlying research or paper-generation system changes. No merge or deployment.
