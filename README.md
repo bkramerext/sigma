@@ -17,7 +17,7 @@ Create a project or sample, then choose strategies to investigate. The overview 
 ### Workflow
 
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 24, "rankSpacing": 32}}}%%
+%%{init: {"flowchart": {"useMaxWidth": false, "nodeSpacing": 12, "rankSpacing": 32}, "themeVariables": {"fontSize": "13px"}}}%%
 flowchart LR
     A[Project] --> B[Strategies] --> C[Research] --> D[Refine] --> E[Optional paper] --> F[Review/export]
 ```
