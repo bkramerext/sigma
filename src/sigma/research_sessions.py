@@ -2768,7 +2768,11 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     message = str(exc)
     if "8 MB safety bound" in message:
         return {"failure_kind": "response_too_large"}
-    if "not supplied in this call" in message or "not supplied in context" in message:
+    if (
+        "not supplied in this call" in message
+        or "not supplied in context" in message
+        or "not selected into its context" in message
+    ):
         return {"failure_kind": "unsupported_context_reference"}
     if "An addressed obligation needs" in message:
         return {"failure_kind": "research_validation_failure"}
@@ -5849,6 +5853,14 @@ async def _call_provider(
                 "provider_response_id": raw.get("id"),
             },
         )
+    response_id = raw.get("id")
+    context["_provider_response_audit"] = {
+        "status": "provider_response_received",
+        "usage": usage_for_log,
+        "provider_response_id": response_id
+        if isinstance(response_id, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", response_id)
+        else None,
+    }
     try:
         validated = schema_model.model_validate(data).model_dump(exclude_unset=True)
     except ValidationError as exc:
@@ -9302,6 +9314,15 @@ async def _portfolio_role_call(
                 _save(path, interrupted)
             raise
         except Exception as exc:
+            response_audit = context.get("_provider_response_audit")
+            provider_response_id = None
+            if isinstance(response_audit, dict) and response_audit.get("status") == (
+                "provider_response_received"
+            ):
+                response_received = True
+                if response_usage is None and isinstance(response_audit.get("usage"), dict):
+                    response_usage = response_audit["usage"]
+                provider_response_id = response_audit.get("provider_response_id")
             if isinstance(exc, IncompleteResearchResponse):
                 async with state_lock:
                     record = _read(path, session_id)
@@ -9450,7 +9471,13 @@ async def _portfolio_role_call(
                     # local acknowledgment guard rejected its contents. This
                     # is not uncertain dispatch: account for known usage and
                     # preserve the rejection without publishing its output.
+                    validation_kind = step.get("failure_kind")
                     step["failure_kind"] = "response_invalid"
+                    if isinstance(validation_kind, str) and validation_kind not in {
+                        "provider_error",
+                        "response_invalid",
+                    }:
+                        step["response_validation_kind"] = validation_kind
                     if response_usage is not None:
                         step["token_usage"] = response_usage
                 input_tokens = response_usage.get("input_tokens") if response_usage else None
@@ -9510,6 +9537,8 @@ async def _portfolio_role_call(
                         if step.get("failure_kind") in {"provider_limited", "provider_rate_limited"}
                         else "call_failed_dispatch_unknown"
                     )
+                    if response_received and isinstance(provider_response_id, str):
+                        step["provider_input_audit"]["provider_response_id"] = provider_response_id
                 step.update(
                     {
                         "status": "failed",
@@ -9605,7 +9634,9 @@ async def _portfolio_role_call(
                     )
                 branch["reason"] = failure_message
                 branch["termination_reason_code"] = retry_kind or str(
-                    step.get("failure_kind") or "provider_failure"
+                    step.get("response_validation_kind")
+                    or step.get("failure_kind")
+                    or "provider_failure"
                 )
                 if retry_allowed:
                     branch["status"] = "queued"

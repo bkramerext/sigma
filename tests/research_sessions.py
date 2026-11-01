@@ -8370,6 +8370,66 @@ async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Pat
     assert [step["role"] for step in finished["steps"][1:]] == ["investigator", "skeptic"]
 
 
+async def test_invalid_completed_response_is_not_marked_dispatch_unknown(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}
+    research_sessions.save_limits(str(path), limits)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        if role == "research_investigator":
+            output = investigation(1)
+        else:
+            output = skeptic(1)
+            obligation = context["obligation_ledger"][0]
+            output["obligation_reviews"] = [
+                {
+                    "obligation_id": obligation["obligation_id"],
+                    "status": "unresolved",
+                    "basis_artifact_ids": [],
+                    "basis_step_ids": ["step-not-selected"],
+                    "rationale": "The cited step is intentionally outside the supplied context.",
+                }
+            ]
+        response = provider_response(output)
+        response["id"] = f"response-{role}"
+        return httpx.Response(200, json=response)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    skeptic_step = next(step for step in finished["steps"] if step["role"] == "skeptic")
+    audit = skeptic_step["provider_input_audit"]
+    assert finished["calls_used"] == 2
+    assert skeptic_step["status"] == "failed"
+    assert skeptic_step["failure_kind"] == "response_invalid"
+    assert skeptic_step["response_validation_kind"] == "unsupported_context_reference"
+    assert audit["status"] == "provider_response_invalid"
+    assert audit["provider_response_id"] == "response-research_skeptic"
+    assert skeptic_step["token_usage"] == {
+        "input_tokens": 120,
+        "cached_input_tokens": 20,
+        "output_tokens": 80,
+    }
+    assert skeptic_step["token_usage_status"] == "reported"
+    assert "not supplied" in finished["message"].lower()
+
+
 def test_provider_limit_recovery_requires_known_dispatch_and_enough_turns():
     strategy_id = str(uuid4())
     record = {
@@ -11425,6 +11485,11 @@ def main():
         asyncio.run(
             test_chatgpt_usage_limit_recovers_only_after_explicit_resume(
                 root / "chatgpt-limit-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_invalid_completed_response_is_not_marked_dispatch_unknown(
+                root / "invalid-completed-response.sigma"
             )
         )
         test_provider_limit_recovery_requires_known_dispatch_and_enough_turns()
