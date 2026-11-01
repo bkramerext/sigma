@@ -173,8 +173,9 @@ def main() -> None:
                     "Narrow About dialog must not overflow horizontally",
                 )
                 mobile_geometry = workflow.evaluate(
-                    "e => { const stages=[...e.querySelectorAll('.about-workflow-stage')], boxes=stages.map(li=>li.querySelector('.about-workflow-step').getBoundingClientRect()), pitches=boxes.slice(1).map((b,i)=>b.top-boxes[i].top), lines=stages.slice(0,-1).map((li,i)=>{const r=li.getBoundingClientRect(),n=li.querySelector('.about-workflow-number').getBoundingClientRect(),next=boxes[i+1],c=getComputedStyle(li,'::after');return {start:Math.abs(r.top+parseFloat(c.top)-n.bottom),end:Math.abs(r.bottom-parseFloat(c.bottom)-next.top),x:Math.abs(r.left+parseFloat(c.left)+parseFloat(c.width)/2-(n.left+n.width/2))}}); return {pitches, lines, notes:stages.map(li=>({bottom:li.querySelector('.about-workflow-notes').getBoundingClientRect().bottom,rowBottom:li.getBoundingClientRect().bottom}))}; }"
+                    "e => { const stages=[...e.querySelectorAll('.about-workflow-stage')], boxes=stages.map(li=>li.querySelector('.about-workflow-step').getBoundingClientRect()), pitches=boxes.slice(1).map((b,i)=>b.top-boxes[i].top), lines=stages.slice(0,-1).map((li,i)=>{const r=li.getBoundingClientRect(),n=li.querySelector('.about-workflow-number').getBoundingClientRect(),next=boxes[i+1],c=getComputedStyle(li,'::after');return {start:Math.abs(r.top+parseFloat(c.top)-n.bottom),end:Math.abs(r.bottom-parseFloat(c.bottom)-next.top),x:Math.abs(r.left+parseFloat(c.left)+parseFloat(c.width)/2-(n.left+n.width/2))}}), markerClearances=stages.slice(0,-1).map(li=>{const c=getComputedStyle(li,'::after'),r=li.getBoundingClientRect(),notes=li.querySelector('.about-workflow-notes'),first=notes.querySelector('li'),range=document.createRange();range.selectNodeContents(first);const text=range.getBoundingClientRect(),markerWidth=parseFloat(getComputedStyle(first,'::marker').fontSize),connectorRight=r.left+parseFloat(c.left)+parseFloat(c.width);return text.left-markerWidth-connectorRight}); return {pitches, lines, markerClearances, notes:stages.map(li=>({bottom:li.querySelector('.about-workflow-notes').getBoundingClientRect().bottom,rowBottom:li.getBoundingClientRect().bottom}))}; }"
                 )
+                # Reserve one marker em plus an 8px gap between each outgoing spine and bullet lane.
                 assert (
                     max(mobile_geometry["pitches"]) - min(mobile_geometry["pitches"]) < 1.5
                     and all(
@@ -182,6 +183,7 @@ def main() -> None:
                         for line in mobile_geometry["lines"]
                         for axis in ("start", "end", "x")
                     )
+                    and all(clearance >= 8 for clearance in mobile_geometry["markerClearances"])
                     and all(
                         note["bottom"] <= note["rowBottom"] + 1 for note in mobile_geometry["notes"]
                     )
@@ -217,7 +219,7 @@ def main() -> None:
             )
             assert not errors, errors
             print(
-                "PASS #441 Research Process, exact two bullets per stage, uniform box pitch, flush connector geometry, desktop/mobile layout, and persistent disclosure state; architecture diagram preserved."
+                "PASS #441 Research Process, two bullets per stage, uniform box pitch, flush connectors, mobile bullet-marker clearance, unclipped desktop/mobile layout, and persistent disclosure state; architecture diagram preserved."
             )
         finally:
             browser.close()
