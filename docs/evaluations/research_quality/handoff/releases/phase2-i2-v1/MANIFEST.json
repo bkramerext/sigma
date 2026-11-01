@@ -22,7 +22,7 @@
     "rounds_per_project": 3,
     "expected_role_turns_per_project": 12,
     "expected_total_turns": 60,
-    "turn_interpretation": "Each strategy performs 3 Investigator/Skeptic rounds (6 role turns); two strategies yield 12 completed role turns per project. Failed attempts are not completed turns."
+    "turn_interpretation": "Two strategy branches × 3 rounds × (Investigator + Skeptic) = 12 required completed role turns per project. Configured call_limit=18 is an attempt ceiling with recovery headroom; failed and invalid-response attempts are not completed research turns."
   },
   "parallel_execution": {
     "five_project_sessions_launched_concurrently": true,
@@ -30,18 +30,25 @@
     "actual_global_provider_concurrency": "Existing admission/gate allowed up to 10 strategy calls across five projects; no scheduler or global worker changes were made."
   },
   "totals": {
-    "completed_role_turns": 32,
-    "failed_or_uncertain_attempts": 17,
-    "never_dispatched_required_turns": 18,
+    "completed_role_turns": 40,
+    "failed_protocol_roles": 7,
+    "never_dispatched_required_turns": 13,
+    "failed_or_uncertain_attempts": 22,
+    "provider_call_attempts": 62,
     "complete_sessions": 0,
     "incomplete_sessions": 5,
-    "failed_protocol_roles": 10
+    "completed_provider_responses": 44,
+    "confirmed_provider_limit_rejections": 16,
+    "response_invalid_provider_responses": 4,
+    "dispatch_unknown_attempts": 2,
+    "tokens_reported": 1176717
   },
   "staging_blockers": [
-    "After a 13.6-minute cooldown from the prior canary rejection (no Retry-After value was available), one single-project canary again received the same subscription-sharing rejection twice. In total, all 10 explicit post-fix recovery calls across five resumption batches were rejected, with no added research turns. Further retries are paused pending reset/support clarification.",
-    "All five protocol runs remain incomplete.",
-    "Xenopus attempt b0ee377a-c83c-4687-8a4a-8180252c8a2e has call_failed_dispatch_unknown and must not be blindly replayed.",
-    "Chat 2 scientific review has not occurred."
+    "Only 40/60 required role turns are locally validated and persisted; all five sessions remain incomplete.",
+    "4 provider-completed responses failed local evidence/context validation and are preserved in the response-validation sidecar; they are not accepted turns and were not replayed.",
+    "2 Agent Skeptic requests remain interrupted with unknown provider completion; no replay was attempted.",
+    "Four of five projects have at least one unresolved provider or local protocol failure; Math also ended early when one strategy selected stop_productive_conclusion before round 3.",
+    "Chat 2 independent scientific review remains pending; PR #434 must remain STAGING and cannot be consumed by Phase 1 as READY."
   ],
   "projects": [
     {
@@ -96,24 +103,43 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 14,
+      "calls_used": 18,
       "configured_call_limit": 18,
       "cycle_limit": 3,
-      "turns_completed": 8,
+      "turns_completed": 10,
       "turns_failed": 2,
-      "turns_never_dispatched": 2,
+      "turns_never_dispatched": 0,
       "strategies": [
         {
           "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
           "strategy_title": "Develop a rigorous framework for measuring AI agent reliability",
-          "turns_completed": 4,
+          "status": "paused",
+          "cycle": 3,
+          "turns_completed": 5,
           "turns_failed": 1,
-          "turns_never_dispatched": 1,
+          "turns_never_dispatched": 0,
           "turns": [
             {
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "c8689012-3adc-4851-a880-f2db996f7fa0"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "c8689012-3adc-4851-a880-f2db996f7fa0",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "b6530fad26bdad0a51ff2bb792d43d9f98865cdcd46733a73c10399b6a745e55",
+                  "started_at": "2026-11-01T18:01:22.610862+00:00",
+                  "finished_at": "2026-11-01T18:03:07.710768+00:00"
+                }
+              ],
               "attempt_id": "c8689012-3adc-4851-a880-f2db996f7fa0",
               "request_body_sha256": "b6530fad26bdad0a51ff2bb792d43d9f98865cdcd46733a73c10399b6a745e55",
               "all_selected_method_notes_present": true
@@ -122,6 +148,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "12067c2c-900d-4396-acb1-5e819908be3a"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "12067c2c-900d-4396-acb1-5e819908be3a",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "06a11a39c84d1c19be4a4ea2653fe9142185f1de0830906850f40e8388181008",
+                  "started_at": "2026-11-01T18:03:08.561614+00:00",
+                  "finished_at": "2026-11-01T18:05:03.797387+00:00"
+                }
+              ],
               "attempt_id": "12067c2c-900d-4396-acb1-5e819908be3a",
               "request_body_sha256": "06a11a39c84d1c19be4a4ea2653fe9142185f1de0830906850f40e8388181008",
               "all_selected_method_notes_present": true
@@ -130,6 +173,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "8b319058-00bc-4c36-b16f-04fcbb9e25d1"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "8b319058-00bc-4c36-b16f-04fcbb9e25d1",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "0dd04549039b71a8bc770b292f1779f0f994917eaa768b6a02ced72d301b909c",
+                  "started_at": "2026-11-01T18:05:11.573972+00:00",
+                  "finished_at": "2026-11-01T18:07:42.395998+00:00"
+                }
+              ],
               "attempt_id": "8b319058-00bc-4c36-b16f-04fcbb9e25d1",
               "request_body_sha256": "0dd04549039b71a8bc770b292f1779f0f994917eaa768b6a02ced72d301b909c",
               "all_selected_method_notes_present": true
@@ -138,6 +198,23 @@
               "round": 2,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "c41728bc-c0c7-474a-a73c-fd9ba4987d40"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "c41728bc-c0c7-474a-a73c-fd9ba4987d40",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "cd6a621de00ad350bd65854f9769bbcbdfac63f93170ac5d8ed955e14c8614a5",
+                  "started_at": "2026-11-01T18:07:42.515640+00:00",
+                  "finished_at": "2026-11-01T18:10:35.358346+00:00"
+                }
+              ],
               "attempt_id": "c41728bc-c0c7-474a-a73c-fd9ba4987d40",
               "request_body_sha256": "cd6a621de00ad350bd65854f9769bbcbdfac63f93170ac5d8ed955e14c8614a5",
               "all_selected_method_notes_present": true
@@ -145,49 +222,124 @@
             {
               "round": 3,
               "role": "investigator",
-              "status": "failed",
-              "attempt_id": "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected",
-              "recovery_attempts": [
+              "status": "completed",
+              "attempt_ids": [
+                "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
+                "8fa8e153-7c7c-4311-a180-8a0e128a8502",
+                "d0692479-b1fd-47ce-9815-32e98ea6c56a",
+                "ecf8845b-c31a-44d7-9840-92e22a650c8c"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
+                  "request_body_sha256": "85245914ce81756010895325bb16da965d7c70f7f634b3a6cb64e738aafc9d73",
+                  "started_at": "2026-11-01T18:10:35.899121+00:00",
+                  "finished_at": "2026-11-01T18:10:38.076166+00:00"
+                },
                 {
                   "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:49:53.587907+00:00",
+                  "finished_at": "2026-11-01T18:49:55.317850+00:00"
                 },
                 {
                   "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
-                  "all_selected_method_notes_present": true,
-                  "retry_after_seconds": null
+                  "started_at": "2026-11-01T19:03:34.164963+00:00",
+                  "finished_at": "2026-11-01T19:03:36.829427+00:00"
+                },
+                {
+                  "attempt_id": "ecf8845b-c31a-44d7-9840-92e22a650c8c",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "9d2dd8941b46ac73fa38959e4ebb92a6becb28c34c9c7f90b3640758d53f0bd5",
+                  "started_at": "2026-11-01T19:19:01.153250+00:00",
+                  "finished_at": "2026-11-01T19:23:18.901621+00:00"
                 }
-              ]
+              ],
+              "attempt_id": "ecf8845b-c31a-44d7-9840-92e22a650c8c",
+              "request_body_sha256": "9d2dd8941b46ac73fa38959e4ebb92a6becb28c34c9c7f90b3640758d53f0bd5",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "failed",
+              "attempt_ids": [
+                "0c128bb9-9716-4131-a407-67f4832d9687"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "0c128bb9-9716-4131-a407-67f4832d9687",
+                  "status": "interrupted",
+                  "failure_kind": "interrupted",
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "call_interrupted_dispatch_unknown",
+                  "provider_response_id": null,
+                  "request_body_sha256": "f6204091156a8704ce8c185fc500a54a1fd3640cbab2df8ca1ff8788c3887c92",
+                  "started_at": "2026-11-01T19:23:20.172800+00:00",
+                  "finished_at": "2026-11-01T19:24:09.190975+00:00"
+                }
+              ],
+              "attempt_id": "0c128bb9-9716-4131-a407-67f4832d9687",
+              "request_body_sha256": "f6204091156a8704ce8c185fc500a54a1fd3640cbab2df8ca1ff8788c3887c92",
+              "all_selected_method_notes_present": true
             }
           ]
         },
         {
           "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
           "strategy_title": "Understand failure propagation and recovery in autonomous AI agents",
-          "turns_completed": 4,
+          "status": "paused",
+          "cycle": 3,
+          "turns_completed": 5,
           "turns_failed": 1,
-          "turns_never_dispatched": 1,
+          "turns_never_dispatched": 0,
           "turns": [
             {
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "34f57df3-e101-426f-a223-28b1123f1944"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "34f57df3-e101-426f-a223-28b1123f1944",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "188d1458be10698a9b3060b577b5f35c4c3bbc48d0b538060a2cf823648670ce",
+                  "started_at": "2026-11-01T18:01:22.627392+00:00",
+                  "finished_at": "2026-11-01T18:03:18.081362+00:00"
+                }
+              ],
               "attempt_id": "34f57df3-e101-426f-a223-28b1123f1944",
               "request_body_sha256": "188d1458be10698a9b3060b577b5f35c4c3bbc48d0b538060a2cf823648670ce",
               "all_selected_method_notes_present": true
@@ -196,6 +348,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "c4ef7e2d-c130-45fc-991d-f1c567c00d2d"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "c4ef7e2d-c130-45fc-991d-f1c567c00d2d",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "4408349645a7c031ada949ca9c72a0ab6382c12ff460fcf7b75f45cee45635f9",
+                  "started_at": "2026-11-01T18:03:18.143069+00:00",
+                  "finished_at": "2026-11-01T18:05:10.520096+00:00"
+                }
+              ],
               "attempt_id": "c4ef7e2d-c130-45fc-991d-f1c567c00d2d",
               "request_body_sha256": "4408349645a7c031ada949ca9c72a0ab6382c12ff460fcf7b75f45cee45635f9",
               "all_selected_method_notes_present": true
@@ -204,6 +373,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "ff9e0f39-af89-4039-a679-3c7953eb182e"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "ff9e0f39-af89-4039-a679-3c7953eb182e",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "eb979adeab988be57a73a27ffb54c5771382d0bfa138d9a327e6fa0847de55cc",
+                  "started_at": "2026-11-01T18:05:11.509822+00:00",
+                  "finished_at": "2026-11-01T18:07:30.715447+00:00"
+                }
+              ],
               "attempt_id": "ff9e0f39-af89-4039-a679-3c7953eb182e",
               "request_body_sha256": "eb979adeab988be57a73a27ffb54c5771382d0bfa138d9a327e6fa0847de55cc",
               "all_selected_method_notes_present": true
@@ -212,6 +398,23 @@
               "round": 2,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "9f470849-0878-40e5-9efd-f5e37b98f805"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "9f470849-0878-40e5-9efd-f5e37b98f805",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "cab5a58107df96eca005ce9c7a8d6bfac61f4b04815ba6c92e5e160796daeb2e",
+                  "started_at": "2026-11-01T18:07:31.686699+00:00",
+                  "finished_at": "2026-11-01T18:10:03.191755+00:00"
+                }
+              ],
               "attempt_id": "9f470849-0878-40e5-9efd-f5e37b98f805",
               "request_body_sha256": "cab5a58107df96eca005ce9c7a8d6bfac61f4b04815ba6c92e5e160796daeb2e",
               "all_selected_method_notes_present": true
@@ -219,35 +422,91 @@
             {
               "round": 3,
               "role": "investigator",
-              "status": "failed",
-              "attempt_id": "96ab13b3-e85a-4b40-bead-5277b72f051d",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected",
-              "recovery_attempts": [
+              "status": "completed",
+              "attempt_ids": [
+                "96ab13b3-e85a-4b40-bead-5277b72f051d",
+                "15bb0620-3bf2-4b7c-b358-1378ba60c022",
+                "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
+                "6de37505-7e7f-4d56-a085-c818b60eff23"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "96ab13b3-e85a-4b40-bead-5277b72f051d",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
+                  "request_body_sha256": "0bd5fcc75f1135a448c8d8ca6a12fffa2813f4cc7246237124503341d3f63817",
+                  "started_at": "2026-11-01T18:10:36.075437+00:00",
+                  "finished_at": "2026-11-01T18:10:37.649895+00:00"
+                },
                 {
                   "attempt_id": "15bb0620-3bf2-4b7c-b358-1378ba60c022",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:49:53.738913+00:00",
+                  "finished_at": "2026-11-01T18:49:56.187036+00:00"
                 },
                 {
                   "attempt_id": "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "2e2717d8e5f77351b3af04829d16d023d4276a49bdeed4ba8ff6f1ee942b6c48",
-                  "all_selected_method_notes_present": true,
-                  "retry_after_seconds": null
+                  "started_at": "2026-11-01T19:03:34.300820+00:00",
+                  "finished_at": "2026-11-01T19:03:36.682942+00:00"
+                },
+                {
+                  "attempt_id": "6de37505-7e7f-4d56-a085-c818b60eff23",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "2b6c8cb072fbc5b238a1a469e9952ff2661b860a4fef9572e5e930132a03bf29",
+                  "started_at": "2026-11-01T19:19:01.310226+00:00",
+                  "finished_at": "2026-11-01T19:21:40.293745+00:00"
                 }
-              ]
+              ],
+              "attempt_id": "6de37505-7e7f-4d56-a085-c818b60eff23",
+              "request_body_sha256": "2b6c8cb072fbc5b238a1a469e9952ff2661b860a4fef9572e5e930132a03bf29",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "failed",
+              "attempt_ids": [
+                "46232b5a-9009-466a-a7c9-f1a28f203b4d"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "46232b5a-9009-466a-a7c9-f1a28f203b4d",
+                  "status": "interrupted",
+                  "failure_kind": "interrupted",
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "call_interrupted_dispatch_unknown",
+                  "provider_response_id": null,
+                  "request_body_sha256": "9b3e329f8cb72417d001f5809124b50dbd6375943410e0ed3c71966f47f7bd5c",
+                  "started_at": "2026-11-01T19:21:41.303558+00:00",
+                  "finished_at": "2026-11-01T19:24:09.190945+00:00"
+                }
+              ],
+              "attempt_id": "46232b5a-9009-466a-a7c9-f1a28f203b4d",
+              "request_body_sha256": "9b3e329f8cb72417d001f5809124b50dbd6375943410e0ed3c71966f47f7bd5c",
+              "all_selected_method_notes_present": true
             }
           ]
         }
@@ -257,148 +516,176 @@
           "attempt_id": "b32aa5bc-cbf9-448f-96a5-0821a7102d19",
           "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
           "role": "investigator",
+          "round": 3,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected"
+          "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
+          "request_body_sha256": "85245914ce81756010895325bb16da965d7c70f7f634b3a6cb64e738aafc9d73",
+          "started_at": "2026-11-01T18:10:35.899121+00:00",
+          "finished_at": "2026-11-01T18:10:38.076166+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "response_validation_kind": null,
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
+          "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
+          "started_at": "2026-11-01T18:49:53.587907+00:00",
+          "finished_at": "2026-11-01T18:49:55.317850+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "investigator",
+          "round": 3,
+          "status": "failed",
+          "failure_kind": "provider_limited",
+          "response_validation_kind": null,
+          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+          "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
+          "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
+          "started_at": "2026-11-01T19:03:34.164963+00:00",
+          "finished_at": "2026-11-01T19:03:36.829427+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "0c128bb9-9716-4131-a407-67f4832d9687",
+          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+          "role": "skeptic",
+          "round": 3,
+          "status": "interrupted",
+          "failure_kind": "interrupted",
+          "response_validation_kind": null,
+          "provider_error_code": null,
+          "dispatch_status": "call_interrupted_dispatch_unknown",
+          "provider_response_id": null,
+          "request_body_sha256": "f6204091156a8704ce8c185fc500a54a1fd3640cbab2df8ca1ff8788c3887c92",
+          "started_at": "2026-11-01T19:23:20.172800+00:00",
+          "finished_at": "2026-11-01T19:24:09.190975+00:00",
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "96ab13b3-e85a-4b40-bead-5277b72f051d",
           "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
           "role": "investigator",
+          "round": 3,
+          "status": "failed",
           "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected"
-        },
-        {
-          "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
-          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
-          "role": "investigator",
-          "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
-          "started_at": "2026-11-01T18:49:53.587907+00:00",
-          "finished_at": "2026-11-01T18:49:55.317850+00:00"
+          "provider_response_id": null,
+          "request_body_sha256": "0bd5fcc75f1135a448c8d8ca6a12fffa2813f4cc7246237124503341d3f63817",
+          "started_at": "2026-11-01T18:10:36.075437+00:00",
+          "finished_at": "2026-11-01T18:10:37.649895+00:00",
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "15bb0620-3bf2-4b7c-b358-1378ba60c022",
           "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
           "role": "investigator",
+          "round": 3,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
           "started_at": "2026-11-01T18:49:53.738913+00:00",
-          "finished_at": "2026-11-01T18:49:56.187036+00:00"
-        },
-        {
-          "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
-          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
-          "role": "investigator",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
-          "started_at": "2026-11-01T19:03:34.164963+00:00",
-          "finished_at": "2026-11-01T19:03:36.829427+00:00"
+          "finished_at": "2026-11-01T18:49:56.187036+00:00",
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
           "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
           "role": "investigator",
+          "round": 3,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "2e2717d8e5f77351b3af04829d16d023d4276a49bdeed4ba8ff6f1ee942b6c48",
           "started_at": "2026-11-01T19:03:34.300820+00:00",
-          "finished_at": "2026-11-01T19:03:36.682942+00:00"
+          "finished_at": "2026-11-01T19:03:36.682942+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "46232b5a-9009-466a-a7c9-f1a28f203b4d",
+          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
+          "role": "skeptic",
+          "round": 3,
+          "status": "interrupted",
+          "failure_kind": "interrupted",
+          "response_validation_kind": null,
+          "provider_error_code": null,
+          "dispatch_status": "call_interrupted_dispatch_unknown",
+          "provider_response_id": null,
+          "request_body_sha256": "9b3e329f8cb72417d001f5809124b50dbd6375943410e0ed3c71966f47f7bd5c",
+          "started_at": "2026-11-01T19:21:41.303558+00:00",
+          "finished_at": "2026-11-01T19:24:09.190945+00:00",
+          "token_usage_status": "unavailable"
         }
       ],
       "started_at": "2026-11-01T18:01:22.082967+00:00",
-      "last_attempt_finished_at": "2026-11-01T19:03:36.829427+00:00",
+      "last_attempt_finished_at": "2026-11-01T19:24:09.190975+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/agent-reliability.bundle.json.gz",
-        "sha256_compressed": "3b2ddc01a94228866fe0dc08cf6d043763b9ddb149d0a88b9355662ad33a5760",
-        "sha256_uncompressed": "8a6bb21f05d8aa4fa4c347317d571111170eca957151745d2e666f5f5cc86ad1",
-        "compressed_bytes": 3630087,
-        "uncompressed_bytes": 9957993,
+        "sha256_compressed": "1cbedb40084cded04b734cb61f71c0ac14d2084c6878b1825f1836c93195a894",
+        "sha256_uncompressed": "008829409863ba4ce078655fa8fcd49dcdefd28ec075abec30c298dcd2caeb0d",
+        "compressed_bytes": 3824306,
+        "uncompressed_bytes": 10265940,
         "gzip_json_valid": true,
-        "research_step_count": 14,
-        "session_attempt_count": 14
+        "research_step_count": 18,
+        "session_attempt_count": 18
       },
       "mandatory_source_omitted_count": 0,
-      "wall_clock_seconds": 555.993,
-      "provider_call_attempts": 14,
+      "wall_clock_seconds": 4967.108,
+      "provider_call_attempts": 18,
       "automatic_retry_attempts": 0,
-      "tokens_used": 177468,
+      "tokens_used": 288881,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "termination_reason_code": null,
       "recovery_attempts": [
         {
-          "attempt_id": "8fa8e153-7c7c-4311-a180-8a0e128a8502",
-          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
-          "role": "investigator",
-          "round": 3,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "439d3441b65965dcd3a4e71b3b3bd53e7c68afda6ad8cd914e10e7014d89977b",
-          "started_at": "2026-11-01T18:49:53.587907+00:00",
-          "finished_at": "2026-11-01T18:49:55.317850+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "timestamp": "2026-11-01T18:49:53.413178+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         },
         {
-          "attempt_id": "15bb0620-3bf2-4b7c-b358-1378ba60c022",
-          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
-          "role": "investigator",
-          "round": 3,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "63dccecd0488d96e35a8fdae110d64ca16b7ac3bff78dbf5cc53e344316a6c35",
-          "started_at": "2026-11-01T18:49:53.738913+00:00",
-          "finished_at": "2026-11-01T18:49:56.187036+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "timestamp": "2026-11-01T19:03:33.983154+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         },
         {
-          "attempt_id": "d0692479-b1fd-47ce-9815-32e98ea6c56a",
-          "strategy_id": "b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
-          "role": "investigator",
-          "round": 3,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "3682f1bfbde327f38183ca9118ddda8eda967fb4aff39b5d723b26cc803e62aa",
-          "started_at": "2026-11-01T19:03:34.164963+00:00",
-          "finished_at": "2026-11-01T19:03:36.829427+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true,
-          "retry_after_seconds": null
-        },
-        {
-          "attempt_id": "d12b0e0c-cc4c-453c-9cb7-f8928be4a3e5",
-          "strategy_id": "843ffb99-1d7b-476b-973f-845d79d4b6e3",
-          "role": "investigator",
-          "round": 3,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "2e2717d8e5f77351b3af04829d16d023d4276a49bdeed4ba8ff6f1ee942b6c48",
-          "started_at": "2026-11-01T19:03:34.300820+00:00",
-          "finished_at": "2026-11-01T19:03:36.682942+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true,
-          "retry_after_seconds": null
+          "timestamp": "2026-11-01T19:19:00.995359+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         }
-      ]
+      ],
+      "execution_code_shas": [
+        "2253e70ea977cb6d1f1201888d0adc0d174f13ed",
+        "59687773fc5df0ad658538c38e20396add0276b4",
+        "640dabf8d4b51414aa0d877a870380704e152536",
+        "af87ad70255730bc7c4803336013a7b736cf83fe"
+      ],
+      "all_selected_method_notes_present": true
     },
     {
       "key": "sovereign",
@@ -410,7 +697,7 @@
       "problem_sha256": "88cb02de230083d68c645c93de2cb48bf72da9610b29384123dfe6a05692f204",
       "investigation_type": "computer_science",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "paused",
+      "session_status": "failed",
       "session_id": "d82391f1-956a-4546-adfd-20f030e33688",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -452,7 +739,7 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 9,
+      "calls_used": 11,
       "configured_call_limit": 18,
       "cycle_limit": 3,
       "turns_completed": 6,
@@ -462,6 +749,8 @@
         {
           "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
           "strategy_title": "Sovereignty and trust boundaries",
+          "status": "failed",
+          "cycle": 2,
           "turns_completed": 3,
           "turns_failed": 1,
           "turns_never_dispatched": 2,
@@ -470,6 +759,23 @@
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "d17acaf4-09ba-4ba0-bb19-20839f004f11"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "d17acaf4-09ba-4ba0-bb19-20839f004f11",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "e9a0193d38cc101dd2b3a5f61f2a6628548699b73c979ed989b0ff1db8819ca4",
+                  "started_at": "2026-11-01T18:01:22.657107+00:00",
+                  "finished_at": "2026-11-01T18:03:37.304787+00:00"
+                }
+              ],
               "attempt_id": "d17acaf4-09ba-4ba0-bb19-20839f004f11",
               "request_body_sha256": "e9a0193d38cc101dd2b3a5f61f2a6628548699b73c979ed989b0ff1db8819ca4",
               "all_selected_method_notes_present": true
@@ -478,6 +784,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "67d4b9e8-b14e-4e0f-ba1f-972782f85dc1"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "67d4b9e8-b14e-4e0f-ba1f-972782f85dc1",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "c3abc6787d39726e40eecb3b1cba456eaf1df31c083ce3ab86cd841aecdacdc4",
+                  "started_at": "2026-11-01T18:03:37.389107+00:00",
+                  "finished_at": "2026-11-01T18:05:59.143550+00:00"
+                }
+              ],
               "attempt_id": "67d4b9e8-b14e-4e0f-ba1f-972782f85dc1",
               "request_body_sha256": "c3abc6787d39726e40eecb3b1cba456eaf1df31c083ce3ab86cd841aecdacdc4",
               "all_selected_method_notes_present": true
@@ -486,6 +809,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "6adcf9e3-fbb3-4e72-8f3d-9edb35f268e2"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "6adcf9e3-fbb3-4e72-8f3d-9edb35f268e2",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "96bcd7544c50a3d9cf189eca7ce48155d7c76748082ac4b30eda4b0942c083b4",
+                  "started_at": "2026-11-01T18:06:11.176398+00:00",
+                  "finished_at": "2026-11-01T18:08:55.160406+00:00"
+                }
+              ],
               "attempt_id": "6adcf9e3-fbb3-4e72-8f3d-9edb35f268e2",
               "request_body_sha256": "96bcd7544c50a3d9cf189eca7ce48155d7c76748082ac4b30eda4b0942c083b4",
               "all_selected_method_notes_present": true
@@ -494,36 +834,80 @@
               "round": 2,
               "role": "skeptic",
               "status": "failed",
-              "attempt_id": "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected",
-              "recovery_attempts": [
+              "attempt_ids": [
+                "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
+                "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
+                "3c4ad76e-4115-44f2-a331-d31998d15005"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
+                  "request_body_sha256": "1d5b21a80f5e8ec0c183cf51193ece6466a041b3ec2b09d955f5ada876213b2f",
+                  "started_at": "2026-11-01T18:08:56.105132+00:00",
+                  "finished_at": "2026-11-01T18:08:58.038243+00:00"
+                },
                 {
                   "attempt_id": "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "040d6361c044678519b93b1ee1c9cf4654a56f793f91843861b5a78ac6d44f7e",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:50:25.872521+00:00",
+                  "finished_at": "2026-11-01T18:50:27.893740+00:00"
+                },
+                {
+                  "attempt_id": "3c4ad76e-4115-44f2-a331-d31998d15005",
+                  "status": "failed",
+                  "failure_kind": "response_invalid",
+                  "response_validation_kind": "unsupported_context_reference",
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_invalid",
+                  "provider_response_id": "resp_0b555cea091c128c016ae795c0c68c87d0a6d89e2913b97068",
+                  "request_body_sha256": "cda6c9d31066f0d4b69a7f43d1c172b1632787022494ce1d2577fe805bd8ad11",
+                  "started_at": "2026-11-01T19:40:47.518028+00:00",
+                  "finished_at": "2026-11-01T19:43:40.996480+00:00"
                 }
-              ]
+              ],
+              "attempt_id": "3c4ad76e-4115-44f2-a331-d31998d15005",
+              "request_body_sha256": "cda6c9d31066f0d4b69a7f43d1c172b1632787022494ce1d2577fe805bd8ad11",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             }
           ]
         },
         {
           "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
           "strategy_title": "Fairness, reliability and pilot",
+          "status": "failed",
+          "cycle": 2,
           "turns_completed": 3,
           "turns_failed": 1,
           "turns_never_dispatched": 2,
@@ -532,6 +916,23 @@
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "3457952f-709b-48bb-b873-54115193b43a"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "3457952f-709b-48bb-b873-54115193b43a",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "d2013eb6977b37e25cdb6af7499811e18a34a695b0345500e9fd21d86a91732a",
+                  "started_at": "2026-11-01T18:01:22.641381+00:00",
+                  "finished_at": "2026-11-01T18:04:08.976286+00:00"
+                }
+              ],
               "attempt_id": "3457952f-709b-48bb-b873-54115193b43a",
               "request_body_sha256": "d2013eb6977b37e25cdb6af7499811e18a34a695b0345500e9fd21d86a91732a",
               "all_selected_method_notes_present": true
@@ -540,6 +941,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "d7ee0652-ba42-49ed-901d-8d4c7bd5e03e"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "d7ee0652-ba42-49ed-901d-8d4c7bd5e03e",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "79c75d131525eca32a905ecc316a4fd997e646b039d69b8cb37f46d06d81b69e",
+                  "started_at": "2026-11-01T18:04:09.924201+00:00",
+                  "finished_at": "2026-11-01T18:06:10.918828+00:00"
+                }
+              ],
               "attempt_id": "d7ee0652-ba42-49ed-901d-8d4c7bd5e03e",
               "request_body_sha256": "79c75d131525eca32a905ecc316a4fd997e646b039d69b8cb37f46d06d81b69e",
               "all_selected_method_notes_present": true
@@ -548,6 +966,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "3b17e3df-e071-4bf8-9fc5-4d1fe64e0397"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "3b17e3df-e071-4bf8-9fc5-4d1fe64e0397",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "06a0c763818e5e19a4ec7c6349f5bd722b2044a227f8f4e848805f5a46123855",
+                  "started_at": "2026-11-01T18:06:11.270068+00:00",
+                  "finished_at": "2026-11-01T18:09:25.955290+00:00"
+                }
+              ],
               "attempt_id": "3b17e3df-e071-4bf8-9fc5-4d1fe64e0397",
               "request_body_sha256": "06a0c763818e5e19a4ec7c6349f5bd722b2044a227f8f4e848805f5a46123855",
               "all_selected_method_notes_present": true
@@ -556,31 +991,59 @@
               "round": 2,
               "role": "skeptic",
               "status": "failed",
-              "recovery_attempts": [
+              "attempt_ids": [
+                "70b3dd87-dd41-42ea-8491-e7ab84288b46",
+                "8806ca4c-e9c7-4d02-8b46-793d6e3bc1da"
+              ],
+              "attempts": [
                 {
                   "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:50:25.991401+00:00",
+                  "finished_at": "2026-11-01T18:50:28.073655+00:00"
+                },
+                {
+                  "attempt_id": "8806ca4c-e9c7-4d02-8b46-793d6e3bc1da",
+                  "status": "failed",
+                  "failure_kind": "response_invalid",
+                  "response_validation_kind": "unsupported_context_reference",
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_invalid",
+                  "provider_response_id": "resp_02985f93791aac23016ae795c0b84487d0b45f1f2a768f01ac",
+                  "request_body_sha256": "753b4d1686e494a6719fe9d9c4e9d43e376165a02675c3c7c56aa75fc4bbf852",
+                  "started_at": "2026-11-01T19:40:47.674484+00:00",
+                  "finished_at": "2026-11-01T19:43:33.420303+00:00"
                 }
               ],
-              "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
-              "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "attempt_id": "8806ca4c-e9c7-4d02-8b46-793d6e3bc1da",
+              "request_body_sha256": "753b4d1686e494a6719fe9d9c4e9d43e376165a02675c3c7c56aa75fc4bbf852",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             }
           ]
         }
@@ -590,86 +1053,127 @@
           "attempt_id": "f5ba8fdd-daca-4651-bf5a-7944c87ac7d2",
           "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected"
+          "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
+          "request_body_sha256": "1d5b21a80f5e8ec0c183cf51193ece6466a041b3ec2b09d955f5ada876213b2f",
+          "started_at": "2026-11-01T18:08:56.105132+00:00",
+          "finished_at": "2026-11-01T18:08:58.038243+00:00",
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
           "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "040d6361c044678519b93b1ee1c9cf4654a56f793f91843861b5a78ac6d44f7e",
           "started_at": "2026-11-01T18:50:25.872521+00:00",
-          "finished_at": "2026-11-01T18:50:27.893740+00:00"
+          "finished_at": "2026-11-01T18:50:27.893740+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "3c4ad76e-4115-44f2-a331-d31998d15005",
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "response_invalid",
+          "response_validation_kind": "unsupported_context_reference",
+          "provider_error_code": null,
+          "dispatch_status": "provider_response_invalid",
+          "provider_response_id": "resp_0b555cea091c128c016ae795c0c68c87d0a6d89e2913b97068",
+          "request_body_sha256": "cda6c9d31066f0d4b69a7f43d1c172b1632787022494ce1d2577fe805bd8ad11",
+          "started_at": "2026-11-01T19:40:47.518028+00:00",
+          "finished_at": "2026-11-01T19:43:40.996480+00:00",
+          "token_usage_status": "reported"
         },
         {
           "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
           "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
           "started_at": "2026-11-01T18:50:25.991401+00:00",
-          "finished_at": "2026-11-01T18:50:28.073655+00:00"
+          "finished_at": "2026-11-01T18:50:28.073655+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "8806ca4c-e9c7-4d02-8b46-793d6e3bc1da",
+          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "response_invalid",
+          "response_validation_kind": "unsupported_context_reference",
+          "provider_error_code": null,
+          "dispatch_status": "provider_response_invalid",
+          "provider_response_id": "resp_02985f93791aac23016ae795c0b84487d0b45f1f2a768f01ac",
+          "request_body_sha256": "753b4d1686e494a6719fe9d9c4e9d43e376165a02675c3c7c56aa75fc4bbf852",
+          "started_at": "2026-11-01T19:40:47.674484+00:00",
+          "finished_at": "2026-11-01T19:43:33.420303+00:00",
+          "token_usage_status": "reported"
         }
       ],
       "started_at": "2026-11-01T18:01:22.152161+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:50:28.073655+00:00",
+      "last_attempt_finished_at": "2026-11-01T19:43:40.996480+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/sovereign-ai-federation.bundle.json.gz",
-        "sha256_compressed": "cd55d86f735715afa22619a76ee433fef07f732655085a434cd768d6245235ee",
-        "sha256_uncompressed": "385ce730e51f3955479e4d48f3d6656c25bbd4bc38ad89cc81ac7a2003f7ea42",
-        "compressed_bytes": 1275857,
-        "uncompressed_bytes": 3435710,
+        "sha256_compressed": "ed41b89995542abfea938a8246d1be1bb0fe9dd0658e038412487a75ad037e45",
+        "sha256_uncompressed": "c264a15f4bd0b0775155451b288deb64ee390fcc91ab7476109dbf8b77e89f53",
+        "compressed_bytes": 1353784,
+        "uncompressed_bytes": 3552720,
         "gzip_json_valid": true,
-        "research_step_count": 9,
-        "session_attempt_count": 9
+        "research_step_count": 11,
+        "session_attempt_count": 11
       },
       "mandatory_source_omitted_count": 0,
-      "wall_clock_seconds": 483.803,
-      "provider_call_attempts": 9,
+      "wall_clock_seconds": 6138.844,
+      "provider_call_attempts": 11,
       "automatic_retry_attempts": 0,
-      "tokens_used": 134250,
+      "tokens_used": 229906,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "termination_reason_code": "provider_or_strategy_failure",
       "recovery_attempts": [
         {
-          "attempt_id": "8fdf37f2-c846-485d-bcfb-c274a5d7f50c",
-          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
-          "role": "skeptic",
-          "round": 2,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "040d6361c044678519b93b1ee1c9cf4654a56f793f91843861b5a78ac6d44f7e",
-          "started_at": "2026-11-01T18:50:25.872521+00:00",
-          "finished_at": "2026-11-01T18:50:27.893740+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "timestamp": "2026-11-01T18:50:25.698793+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         },
         {
-          "attempt_id": "70b3dd87-dd41-42ea-8491-e7ab84288b46",
-          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
-          "role": "skeptic",
-          "round": 2,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "f07e5155cb4c1fe6e34635198bf11367d635ac018cc2c5ae5c783d5def478c7e",
-          "started_at": "2026-11-01T18:50:25.991401+00:00",
-          "finished_at": "2026-11-01T18:50:28.073655+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "timestamp": "2026-11-01T19:25:05.444406+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
+        },
+        {
+          "timestamp": "2026-11-01T19:40:47.370597+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         }
-      ]
+      ],
+      "execution_code_shas": [
+        "59687773fc5df0ad658538c38e20396add0276b4",
+        "af87ad70255730bc7c4803336013a7b736cf83fe",
+        "d8774dfbf89771686803665abc213aad3aaa5aa9"
+      ],
+      "all_selected_method_notes_present": true
     },
     {
       "key": "xenopus",
@@ -733,6 +1237,8 @@
         {
           "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
           "strategy_title": "Establish the known-mechanism frontier",
+          "status": "failed",
+          "cycle": 2,
           "turns_completed": 3,
           "turns_failed": 1,
           "turns_never_dispatched": 2,
@@ -741,6 +1247,23 @@
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "9551797f-1433-447f-9116-c635fef1159f"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "9551797f-1433-447f-9116-c635fef1159f",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "25b99002b0da5780abf694f8d79e112ebf93a8fce9c97d5f4bdde4d3454b9a14",
+                  "started_at": "2026-11-01T18:01:22.671512+00:00",
+                  "finished_at": "2026-11-01T18:03:42.825433+00:00"
+                }
+              ],
               "attempt_id": "9551797f-1433-447f-9116-c635fef1159f",
               "request_body_sha256": "25b99002b0da5780abf694f8d79e112ebf93a8fce9c97d5f4bdde4d3454b9a14",
               "all_selected_method_notes_present": true
@@ -749,6 +1272,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "11f0cab6-c4db-4d4a-abe5-e3eb80724111"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "11f0cab6-c4db-4d4a-abe5-e3eb80724111",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "e48508b1eb375bd080e7ecd33c579af14d80c886796e82c528a06ed049cc3fef",
+                  "started_at": "2026-11-01T18:03:42.923330+00:00",
+                  "finished_at": "2026-11-01T18:05:41.819832+00:00"
+                }
+              ],
               "attempt_id": "11f0cab6-c4db-4d4a-abe5-e3eb80724111",
               "request_body_sha256": "e48508b1eb375bd080e7ecd33c579af14d80c886796e82c528a06ed049cc3fef",
               "all_selected_method_notes_present": true
@@ -757,6 +1297,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "7c3d8e2b-aa1b-4bd0-9bb5-c81dd4d9dff5"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "7c3d8e2b-aa1b-4bd0-9bb5-c81dd4d9dff5",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "c472a12c19afef4a07163a7c25eaa0b7149d1e7658e8c38d573db76000af6d13",
+                  "started_at": "2026-11-01T18:06:04.874137+00:00",
+                  "finished_at": "2026-11-01T18:08:23.659099+00:00"
+                }
+              ],
               "attempt_id": "7c3d8e2b-aa1b-4bd0-9bb5-c81dd4d9dff5",
               "request_body_sha256": "c472a12c19afef4a07163a7c25eaa0b7149d1e7658e8c38d573db76000af6d13",
               "all_selected_method_notes_present": true
@@ -765,26 +1322,54 @@
               "round": 2,
               "role": "skeptic",
               "status": "failed",
+              "attempt_ids": [
+                "5898c421-a6c3-41f5-a480-ad97b2cf23e5"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "5898c421-a6c3-41f5-a480-ad97b2cf23e5",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
+                  "request_body_sha256": "b68ff96541ded3e68b890df6ee5b3e0e4422e57a779c88a16f6d52593b68ac5a",
+                  "started_at": "2026-11-01T18:08:23.817012+00:00",
+                  "finished_at": "2026-11-01T18:08:25.341331+00:00"
+                }
+              ],
               "attempt_id": "5898c421-a6c3-41f5-a480-ad97b2cf23e5",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "request_body_sha256": "b68ff96541ded3e68b890df6ee5b3e0e4422e57a779c88a16f6d52593b68ac5a",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             }
           ]
         },
         {
           "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
           "strategy_title": "Find a novel temporal coupling, not another marker",
+          "status": "failed",
+          "cycle": 2,
           "turns_completed": 2,
           "turns_failed": 1,
           "turns_never_dispatched": 3,
@@ -793,6 +1378,23 @@
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "6bc8183e-1843-4495-988c-9c5cad9ed344"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "6bc8183e-1843-4495-988c-9c5cad9ed344",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "79d8ba0a6f3110aae7cc371f83a9d7ec6bb2cf0e334f2c04d7a9fd7692e798f5",
+                  "started_at": "2026-11-01T18:01:22.686023+00:00",
+                  "finished_at": "2026-11-01T18:04:07.690131+00:00"
+                }
+              ],
               "attempt_id": "6bc8183e-1843-4495-988c-9c5cad9ed344",
               "request_body_sha256": "79d8ba0a6f3110aae7cc371f83a9d7ec6bb2cf0e334f2c04d7a9fd7692e798f5",
               "all_selected_method_notes_present": true
@@ -801,6 +1403,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "4483eb11-eb73-48ea-b341-9825e3c97b67"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "4483eb11-eb73-48ea-b341-9825e3c97b67",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "79963c54e91d1957a93c95278c812d49902f8266b4395ed2a0d2768b11ee8536",
+                  "started_at": "2026-11-01T18:04:07.787655+00:00",
+                  "finished_at": "2026-11-01T18:06:04.490908+00:00"
+                }
+              ],
               "attempt_id": "4483eb11-eb73-48ea-b341-9825e3c97b67",
               "request_body_sha256": "79963c54e91d1957a93c95278c812d49902f8266b4395ed2a0d2768b11ee8536",
               "all_selected_method_notes_present": true
@@ -809,45 +1428,92 @@
               "round": 2,
               "role": "investigator",
               "status": "failed",
+              "attempt_ids": [
+                "b0ee377a-c83c-4687-8a4a-8180252c8a2e"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "b0ee377a-c83c-4687-8a4a-8180252c8a2e",
+                  "status": "failed",
+                  "failure_kind": "response_invalid",
+                  "response_validation_kind": "provider_error",
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_invalid",
+                  "provider_response_id": "resp_05232cc206139bfe016ae77f8e4f9087d0a061894a1fe29eb5",
+                  "request_body_sha256": "7172e1ce0a49b01542942866300c3d7e02fac6a5a1411b6b956dbd365f5e1adb",
+                  "started_at": "2026-11-01T18:06:04.940705+00:00",
+                  "finished_at": "2026-11-01T18:09:12.103325+00:00"
+                }
+              ],
               "attempt_id": "b0ee377a-c83c-4687-8a4a-8180252c8a2e",
-              "failure_kind": "provider_error",
-              "provider_error_code": null,
-              "dispatch_status": "call_failed_dispatch_unknown"
+              "request_body_sha256": "7172e1ce0a49b01542942866300c3d7e02fac6a5a1411b6b956dbd365f5e1adb",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 2,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             }
           ]
         }
       ],
       "failed_attempts": [
         {
-          "attempt_id": "b0ee377a-c83c-4687-8a4a-8180252c8a2e",
-          "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
-          "role": "investigator",
-          "failure_kind": "provider_error",
-          "provider_error_code": null,
-          "dispatch_status": "call_failed_dispatch_unknown"
-        },
-        {
           "attempt_id": "5898c421-a6c3-41f5-a480-ad97b2cf23e5",
           "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected"
+          "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
+          "request_body_sha256": "b68ff96541ded3e68b890df6ee5b3e0e4422e57a779c88a16f6d52593b68ac5a",
+          "started_at": "2026-11-01T18:08:23.817012+00:00",
+          "finished_at": "2026-11-01T18:08:25.341331+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "b0ee377a-c83c-4687-8a4a-8180252c8a2e",
+          "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002",
+          "role": "investigator",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "response_invalid",
+          "response_validation_kind": "provider_error",
+          "provider_error_code": null,
+          "dispatch_status": "provider_response_invalid",
+          "provider_response_id": "resp_05232cc206139bfe016ae77f8e4f9087d0a061894a1fe29eb5",
+          "request_body_sha256": "7172e1ce0a49b01542942866300c3d7e02fac6a5a1411b6b956dbd365f5e1adb",
+          "started_at": "2026-11-01T18:06:04.940705+00:00",
+          "finished_at": "2026-11-01T18:09:12.103325+00:00",
+          "token_usage_status": "reported"
         }
       ],
       "started_at": "2026-11-01T18:01:22.173037+00:00",
@@ -856,10 +1522,10 @@
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/xenopus-tadpoles.bundle.json.gz",
-        "sha256_compressed": "08353d76eda34dcd8c0a4407ff2e9c3bd8a9a75f5d40dde274812c3272af6011",
-        "sha256_uncompressed": "254be1896eaf774793bb03e47fed48c507e12f0eca9a3d03deffb8cce1a9ef68",
-        "compressed_bytes": 868965,
-        "uncompressed_bytes": 2712639,
+        "sha256_compressed": "d87e8910d09942ab9049ea7aaa11fbf2debd344628bab8d379805a2f2bcda9ef",
+        "sha256_uncompressed": "e90bdea417fb18501898f662a985379cf2ea979fd174a44f132b26535fe0bede",
+        "compressed_bytes": 872630,
+        "uncompressed_bytes": 2713345,
         "gzip_json_valid": true,
         "research_step_count": 7,
         "session_attempt_count": 7
@@ -868,10 +1534,14 @@
       "wall_clock_seconds": 469.93,
       "provider_call_attempts": 7,
       "automatic_retry_attempts": 0,
-      "tokens_used": 79881,
+      "tokens_used": 113125,
       "cost_status": "unavailable",
       "termination_reason_code": "provider_or_strategy_failure",
-      "recovery_attempts": []
+      "recovery_attempts": [],
+      "execution_code_shas": [
+        "59687773fc5df0ad658538c38e20396add0276b4"
+      ],
+      "all_selected_method_notes_present": true
     },
     {
       "key": "math",
@@ -883,7 +1553,7 @@
       "problem_sha256": "d72ef1f9904142be654e72c3dbb5e168790e721eff801057b7c458e51d067035",
       "investigation_type": "mathematical",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "paused",
+      "session_status": "ended",
       "session_id": "6ce6a07a-c844-4681-a6ec-ede98aa923ea",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -925,24 +1595,43 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 10,
+      "calls_used": 13,
       "configured_call_limit": 18,
       "cycle_limit": 3,
-      "turns_completed": 7,
-      "turns_failed": 2,
-      "turns_never_dispatched": 3,
+      "turns_completed": 10,
+      "turns_failed": 0,
+      "turns_never_dispatched": 2,
       "strategies": [
         {
           "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
           "strategy_title": "Roots-of-unity weighted Fibonacci polynomials",
-          "turns_completed": 3,
-          "turns_failed": 1,
+          "status": "ended",
+          "cycle": 2,
+          "turns_completed": 4,
+          "turns_failed": 0,
           "turns_never_dispatched": 2,
           "turns": [
             {
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "7a9db6d1-fc15-4ba5-9462-20eb79ab3e07"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "7a9db6d1-fc15-4ba5-9462-20eb79ab3e07",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "78af9ed362372e6c5b2ba7a1f3944ac7d4418637b160a094cd1edf57969c6dc6",
+                  "started_at": "2026-11-01T18:01:22.700261+00:00",
+                  "finished_at": "2026-11-01T18:03:42.628845+00:00"
+                }
+              ],
               "attempt_id": "7a9db6d1-fc15-4ba5-9462-20eb79ab3e07",
               "request_body_sha256": "78af9ed362372e6c5b2ba7a1f3944ac7d4418637b160a094cd1edf57969c6dc6",
               "all_selected_method_notes_present": true
@@ -951,6 +1640,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "843e4082-fd9b-47c9-bc9d-e70dbed5a24b"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "843e4082-fd9b-47c9-bc9d-e70dbed5a24b",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "5da233f92a8ede80fb670a65ce4e22a15461bac14d65712085d8c0ac1cbfa1ad",
+                  "started_at": "2026-11-01T18:03:42.684864+00:00",
+                  "finished_at": "2026-11-01T18:04:52.863013+00:00"
+                }
+              ],
               "attempt_id": "843e4082-fd9b-47c9-bc9d-e70dbed5a24b",
               "request_body_sha256": "5da233f92a8ede80fb670a65ce4e22a15461bac14d65712085d8c0ac1cbfa1ad",
               "all_selected_method_notes_present": true
@@ -959,6 +1665,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "1afb8373-352e-49e5-90eb-7c696e27ce3c"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "1afb8373-352e-49e5-90eb-7c696e27ce3c",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "fd608530ac35111d377020bdc1930d66a555876908a22d7bed546e8b14a6f3c1",
+                  "started_at": "2026-11-01T18:05:41.556087+00:00",
+                  "finished_at": "2026-11-01T18:08:21.186671+00:00"
+                }
+              ],
               "attempt_id": "1afb8373-352e-49e5-90eb-7c696e27ce3c",
               "request_body_sha256": "fd608530ac35111d377020bdc1930d66a555876908a22d7bed546e8b14a6f3c1",
               "all_selected_method_notes_present": true
@@ -966,45 +1689,106 @@
             {
               "round": 2,
               "role": "skeptic",
-              "status": "failed",
-              "attempt_id": "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected",
-              "recovery_attempts": [
+              "status": "completed",
+              "attempt_ids": [
+                "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
+                "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
+                "d08acdc8-5b98-4dab-90a3-7387561f17b5"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
+                  "request_body_sha256": "181ee703bd43ecc3cbfda381784ebde54d6b7c215d83b4c74bb6f7f77c2bbb40",
+                  "started_at": "2026-11-01T18:08:21.332804+00:00",
+                  "finished_at": "2026-11-01T18:08:22.902853+00:00"
+                },
                 {
                   "attempt_id": "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "5e9a7725c3dd3017cb819b76f8576c3af4e06df8aa08a19c98acc0b62aef7faf",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:50:28.876882+00:00",
+                  "finished_at": "2026-11-01T18:50:30.719102+00:00"
+                },
+                {
+                  "attempt_id": "d08acdc8-5b98-4dab-90a3-7387561f17b5",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "184ca08dca2ff4a866c50a6978c785ddf88fda92e04d95ee50e8de53865f82d5",
+                  "started_at": "2026-11-01T19:25:05.739798+00:00",
+                  "finished_at": "2026-11-01T19:27:17.967475+00:00"
                 }
-              ]
+              ],
+              "attempt_id": "d08acdc8-5b98-4dab-90a3-7387561f17b5",
+              "request_body_sha256": "184ca08dca2ff4a866c50a6978c785ddf88fda92e04d95ee50e8de53865f82d5",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             }
           ]
         },
         {
           "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf",
           "strategy_title": "Gap removal and Gaussian binomial sums",
-          "turns_completed": 4,
-          "turns_failed": 1,
-          "turns_never_dispatched": 1,
+          "status": "ended",
+          "cycle": 3,
+          "turns_completed": 6,
+          "turns_failed": 0,
+          "turns_never_dispatched": 0,
           "turns": [
             {
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "8ebcb10b-506f-43d4-a180-8b996e290d86"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "8ebcb10b-506f-43d4-a180-8b996e290d86",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "efa35e02b9350d3e2adde056d3700f11bf3a2972aaaad8054d4324c60935de42",
+                  "started_at": "2026-11-01T18:01:22.713421+00:00",
+                  "finished_at": "2026-11-01T18:04:04.417888+00:00"
+                }
+              ],
               "attempt_id": "8ebcb10b-506f-43d4-a180-8b996e290d86",
               "request_body_sha256": "efa35e02b9350d3e2adde056d3700f11bf3a2972aaaad8054d4324c60935de42",
               "all_selected_method_notes_present": true
@@ -1013,6 +1797,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "27cbef6b-b256-452e-bc48-d045fbb6818d"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "27cbef6b-b256-452e-bc48-d045fbb6818d",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "023c75f4f8e1e9b471e4042675153d0487bf331fd0dda2c5d5114449f02329f5",
+                  "started_at": "2026-11-01T18:04:04.519544+00:00",
+                  "finished_at": "2026-11-01T18:05:41.375088+00:00"
+                }
+              ],
               "attempt_id": "27cbef6b-b256-452e-bc48-d045fbb6818d",
               "request_body_sha256": "023c75f4f8e1e9b471e4042675153d0487bf331fd0dda2c5d5114449f02329f5",
               "all_selected_method_notes_present": true
@@ -1021,6 +1822,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "d9af25c9-cf16-4e90-955d-86c015f90b4d"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "d9af25c9-cf16-4e90-955d-86c015f90b4d",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "4a2217cdfaae7cfdce6a09e4c4d62747c23567747b8140c9f1654f653f7a30f1",
+                  "started_at": "2026-11-01T18:05:41.603606+00:00",
+                  "finished_at": "2026-11-01T18:07:43.921347+00:00"
+                }
+              ],
               "attempt_id": "d9af25c9-cf16-4e90-955d-86c015f90b4d",
               "request_body_sha256": "4a2217cdfaae7cfdce6a09e4c4d62747c23567747b8140c9f1654f653f7a30f1",
               "all_selected_method_notes_present": true
@@ -1029,6 +1847,23 @@
               "round": 2,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "fac0c2e0-6d98-461f-aff1-4eefde5d49af"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "fac0c2e0-6d98-461f-aff1-4eefde5d49af",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "ae7b095bcd9bb1015d4610d1ed81756aac34f83e77aa1d9a31acbac74123d965",
+                  "started_at": "2026-11-01T18:07:44.055176+00:00",
+                  "finished_at": "2026-11-01T18:09:12.372880+00:00"
+                }
+              ],
               "attempt_id": "fac0c2e0-6d98-461f-aff1-4eefde5d49af",
               "request_body_sha256": "ae7b095bcd9bb1015d4610d1ed81756aac34f83e77aa1d9a31acbac74123d965",
               "all_selected_method_notes_present": true
@@ -1036,27 +1871,65 @@
             {
               "round": 3,
               "role": "investigator",
-              "status": "failed",
-              "recovery_attempts": [
+              "status": "completed",
+              "attempt_ids": [
+                "11a638c8-7597-460c-bd4c-d1583843dd62",
+                "fbfa51ed-da2f-41e7-8567-a66cb6520a9e"
+              ],
+              "attempts": [
                 {
                   "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:50:28.969567+00:00",
+                  "finished_at": "2026-11-01T18:50:30.598149+00:00"
+                },
+                {
+                  "attempt_id": "fbfa51ed-da2f-41e7-8567-a66cb6520a9e",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "4459dafaf3aab772e0241b00cd4a09d9646d7702d148eb2a3318bbba615fe6f9",
+                  "started_at": "2026-11-01T19:25:05.820982+00:00",
+                  "finished_at": "2026-11-01T19:26:52.384157+00:00"
                 }
               ],
-              "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
-              "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "attempt_id": "fbfa51ed-da2f-41e7-8567-a66cb6520a9e",
+              "request_body_sha256": "4459dafaf3aab772e0241b00cd4a09d9646d7702d148eb2a3318bbba615fe6f9",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "completed",
+              "attempt_ids": [
+                "903dbef9-e7fc-46bd-b9e1-024a88aaa597"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "903dbef9-e7fc-46bd-b9e1-024a88aaa597",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "8931948211c103625d22664dd3cfbd8952853c72ed3075456c693ee7c737b4e7",
+                  "started_at": "2026-11-01T19:26:53.327694+00:00",
+                  "finished_at": "2026-11-01T19:28:30.125149+00:00"
+                }
+              ],
+              "attempt_id": "903dbef9-e7fc-46bd-b9e1-024a88aaa597",
+              "request_body_sha256": "8931948211c103625d22664dd3cfbd8952853c72ed3075456c693ee7c737b4e7",
+              "all_selected_method_notes_present": true
             }
           ]
         }
@@ -1066,55 +1939,18 @@
           "attempt_id": "bcca62a5-cd09-467c-8cf1-e489a6cf9ff2",
           "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected"
-        },
-        {
-          "attempt_id": "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
-          "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
-          "role": "skeptic",
-          "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "5e9a7725c3dd3017cb819b76f8576c3af4e06df8aa08a19c98acc0b62aef7faf",
-          "started_at": "2026-11-01T18:50:28.876882+00:00",
-          "finished_at": "2026-11-01T18:50:30.719102+00:00"
+          "provider_response_id": null,
+          "request_body_sha256": "181ee703bd43ecc3cbfda381784ebde54d6b7c215d83b4c74bb6f7f77c2bbb40",
+          "started_at": "2026-11-01T18:08:21.332804+00:00",
+          "finished_at": "2026-11-01T18:08:22.902853+00:00",
+          "token_usage_status": "unavailable"
         },
-        {
-          "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
-          "strategy_id": "9ad51640-ff9a-4d22-a928-518f032003bf",
-          "role": "investigator",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
-          "started_at": "2026-11-01T18:50:28.969567+00:00",
-          "finished_at": "2026-11-01T18:50:30.598149+00:00"
-        }
-      ],
-      "started_at": "2026-11-01T18:01:22.184063+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:50:30.719102+00:00",
-      "outcome_label": "Positive · solution candidate (unverified)",
-      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
-      "output_bundle": {
-        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/nonconsecutive-subset-sums.bundle.json.gz",
-        "sha256_compressed": "0cd8d5ba6816f5624b7d81e8634575322dbaf76937e553dc9fddb3348f8e9259",
-        "sha256_uncompressed": "cc08f943064230a173868687fedc5ccaee92907d3629379919fe189b764d3487",
-        "compressed_bytes": 221558,
-        "uncompressed_bytes": 568181,
-        "gzip_json_valid": true,
-        "research_step_count": 10,
-        "session_attempt_count": 10
-      },
-      "mandatory_source_omitted_count": 0,
-      "wall_clock_seconds": 470.189,
-      "provider_call_attempts": 10,
-      "automatic_retry_attempts": 0,
-      "tokens_used": 107500,
-      "cost_status": "unavailable",
-      "termination_reason_code": "provider_usage_limit_recovery_available",
-      "recovery_attempts": [
         {
           "attempt_id": "0d9a318f-7d42-4ddd-aa62-7490db098ff5",
           "strategy_id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
@@ -1122,13 +1958,14 @@
           "round": 2,
           "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "5e9a7725c3dd3017cb819b76f8576c3af4e06df8aa08a19c98acc0b62aef7faf",
           "started_at": "2026-11-01T18:50:28.876882+00:00",
           "finished_at": "2026-11-01T18:50:30.719102+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "11a638c8-7597-460c-bd4c-d1583843dd62",
@@ -1137,15 +1974,55 @@
           "round": 3,
           "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "f8d2cbf171d940be43b193696e062584b983168de99c32983e6d6c175e374070",
           "started_at": "2026-11-01T18:50:28.969567+00:00",
           "finished_at": "2026-11-01T18:50:30.598149+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "token_usage_status": "unavailable"
         }
-      ]
+      ],
+      "started_at": "2026-11-01T18:01:22.184063+00:00",
+      "last_attempt_finished_at": "2026-11-01T19:28:30.125149+00:00",
+      "outcome_label": "Positive · solution candidate (unverified)",
+      "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
+      "output_bundle": {
+        "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/nonconsecutive-subset-sums.bundle.json.gz",
+        "sha256_compressed": "165493b3d37295daa970db851771a7cd0addd11963b54f6e67ecf143b705bfa5",
+        "sha256_uncompressed": "caecfec050b4718c0a21a0f22c89d35a2302735469303f6b9de06ad2a1397dad",
+        "compressed_bytes": 315056,
+        "uncompressed_bytes": 821367,
+        "gzip_json_valid": true,
+        "research_step_count": 13,
+        "session_attempt_count": 13
+      },
+      "mandatory_source_omitted_count": 0,
+      "wall_clock_seconds": 5227.941,
+      "provider_call_attempts": 13,
+      "automatic_retry_attempts": 0,
+      "tokens_used": 197849,
+      "cost_status": "unavailable",
+      "termination_reason_code": "round_limit_reached",
+      "recovery_attempts": [
+        {
+          "timestamp": "2026-11-01T18:50:28.783837+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
+        },
+        {
+          "timestamp": "2026-11-01T19:25:05.493554+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
+        }
+      ],
+      "execution_code_shas": [
+        "2253e70ea977cb6d1f1201888d0adc0d174f13ed",
+        "59687773fc5df0ad658538c38e20396add0276b4",
+        "af87ad70255730bc7c4803336013a7b736cf83fe"
+      ],
+      "all_selected_method_notes_present": true
     },
     {
       "key": "warp",
@@ -1157,7 +2034,7 @@
       "problem_sha256": "2c21817948d99c92d596629ddda2c8a6941ea8a610a4647b3c3ae8ed3ce5a08d",
       "investigation_type": "physics",
       "status": "STAGING_INCOMPLETE",
-      "session_status": "paused",
+      "session_status": "ended",
       "session_id": "71bc9990-fab0-4c1a-b03c-1d6daa976a3e",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high",
@@ -1199,24 +2076,43 @@
         "expected_role_turns": 12,
         "turn_interpretation": "2 strategies × 3 rounds × (Investigator + Skeptic) = 12 completed role turns; 6 Investigator and 6 Skeptic turns."
       },
-      "calls_used": 9,
+      "calls_used": 13,
       "configured_call_limit": 18,
       "cycle_limit": 3,
-      "turns_completed": 6,
-      "turns_failed": 2,
-      "turns_never_dispatched": 4,
+      "turns_completed": 9,
+      "turns_failed": 1,
+      "turns_never_dispatched": 2,
       "strategies": [
         {
           "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
           "strategy_title": "Separate geometry from motion",
-          "turns_completed": 3,
-          "turns_failed": 1,
-          "turns_never_dispatched": 2,
+          "status": "ended",
+          "cycle": 3,
+          "turns_completed": 6,
+          "turns_failed": 0,
+          "turns_never_dispatched": 0,
           "turns": [
             {
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "0d1a6696-52ea-4191-82bb-300f746d18b6"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "0d1a6696-52ea-4191-82bb-300f746d18b6",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "1137ed06612d377840858c9afbb50d1719a8f0ab949a4dd40d0c51a047ce6e9f",
+                  "started_at": "2026-11-01T18:01:22.726555+00:00",
+                  "finished_at": "2026-11-01T18:03:46.291367+00:00"
+                }
+              ],
               "attempt_id": "0d1a6696-52ea-4191-82bb-300f746d18b6",
               "request_body_sha256": "1137ed06612d377840858c9afbb50d1719a8f0ab949a4dd40d0c51a047ce6e9f",
               "all_selected_method_notes_present": true
@@ -1225,6 +2121,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "3f508098-978f-429e-86cb-4989af6126d8"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "3f508098-978f-429e-86cb-4989af6126d8",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "911023f732c9f545b7a495f718cd53060185b19b3dab8c74d9dffc72a53783a8",
+                  "started_at": "2026-11-01T18:03:46.346139+00:00",
+                  "finished_at": "2026-11-01T18:06:25.903340+00:00"
+                }
+              ],
               "attempt_id": "3f508098-978f-429e-86cb-4989af6126d8",
               "request_body_sha256": "911023f732c9f545b7a495f718cd53060185b19b3dab8c74d9dffc72a53783a8",
               "all_selected_method_notes_present": true
@@ -1233,6 +2146,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "010385cf-2c4d-4f12-a086-17a6b37bec23"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "010385cf-2c4d-4f12-a086-17a6b37bec23",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "6c580f3568dd42e1a33216a1411255cb48d3d5c3ef9f4fe6120bc2e55ba30c0a",
+                  "started_at": "2026-11-01T18:06:26.977859+00:00",
+                  "finished_at": "2026-11-01T18:09:31.695051+00:00"
+                }
+              ],
               "attempt_id": "010385cf-2c4d-4f12-a086-17a6b37bec23",
               "request_body_sha256": "6c580f3568dd42e1a33216a1411255cb48d3d5c3ef9f4fe6120bc2e55ba30c0a",
               "all_selected_method_notes_present": true
@@ -1240,37 +2170,111 @@
             {
               "round": 2,
               "role": "skeptic",
-              "status": "failed",
-              "attempt_id": "38c6496d-f4c5-451b-a813-004cccb10327",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected",
-              "recovery_attempts": [
+              "status": "completed",
+              "attempt_ids": [
+                "38c6496d-f4c5-451b-a813-004cccb10327",
+                "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
+                "5edac06c-0fc4-4b28-afdc-103c2b7330dc"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "38c6496d-f4c5-451b-a813-004cccb10327",
+                  "status": "failed",
+                  "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
+                  "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
+                  "request_body_sha256": "290a6b2336edab9473979309e8937cabb25939d93478e56430025dda7c3c81d8",
+                  "started_at": "2026-11-01T18:09:31.898274+00:00",
+                  "finished_at": "2026-11-01T18:09:33.968573+00:00"
+                },
                 {
                   "attempt_id": "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "52b89a478bfd7345e629f6b3459b6f54f854e8778f490465fd63abfd022a3783",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:50:32.001692+00:00",
+                  "finished_at": "2026-11-01T18:50:35.219655+00:00"
+                },
+                {
+                  "attempt_id": "5edac06c-0fc4-4b28-afdc-103c2b7330dc",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "54e32e4f1bddb4abbb989b9ad91d32dd180bd9a9d5c4d1777b64d27841386784",
+                  "started_at": "2026-11-01T19:25:05.917623+00:00",
+                  "finished_at": "2026-11-01T19:28:24.408812+00:00"
                 }
-              ]
+              ],
+              "attempt_id": "5edac06c-0fc4-4b28-afdc-103c2b7330dc",
+              "request_body_sha256": "54e32e4f1bddb4abbb989b9ad91d32dd180bd9a9d5c4d1777b64d27841386784",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "completed",
+              "attempt_ids": [
+                "6fd2a4b1-a023-4070-8680-0025ae2d07c3"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "6fd2a4b1-a023-4070-8680-0025ae2d07c3",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "bf00639b0da5663154e9023ad46fabd9b0a97b76d475f340a6f82cc693a0c2cd",
+                  "started_at": "2026-11-01T19:30:04.387307+00:00",
+                  "finished_at": "2026-11-01T19:34:44.170283+00:00"
+                }
+              ],
+              "attempt_id": "6fd2a4b1-a023-4070-8680-0025ae2d07c3",
+              "request_body_sha256": "bf00639b0da5663154e9023ad46fabd9b0a97b76d475f340a6f82cc693a0c2cd",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "completed",
+              "attempt_ids": [
+                "9a878581-0fd2-43d4-9100-40dd732b7e99"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "9a878581-0fd2-43d4-9100-40dd732b7e99",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "5addf4ad58a09fa6ce6734b5fe473305aa75017185c0da0b13da1d3b405e7f11",
+                  "started_at": "2026-11-01T19:34:45.422030+00:00",
+                  "finished_at": "2026-11-01T19:38:05.062266+00:00"
+                }
+              ],
+              "attempt_id": "9a878581-0fd2-43d4-9100-40dd732b7e99",
+              "request_body_sha256": "5addf4ad58a09fa6ce6734b5fe473305aa75017185c0da0b13da1d3b405e7f11",
+              "all_selected_method_notes_present": true
             }
           ]
         },
         {
           "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
           "strategy_title": "Audit the stress-energy claim",
+          "status": "failed",
+          "cycle": 2,
           "turns_completed": 3,
           "turns_failed": 1,
           "turns_never_dispatched": 2,
@@ -1279,6 +2283,23 @@
               "round": 1,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "8761ec5e-c6d6-4690-8e99-5c2f38e99d28"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "8761ec5e-c6d6-4690-8e99-5c2f38e99d28",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "574e576557fa379dbc42b756509e65f3722d936548a744e838e68e3bfa762df4",
+                  "started_at": "2026-11-01T18:01:22.740071+00:00",
+                  "finished_at": "2026-11-01T18:03:32.289347+00:00"
+                }
+              ],
               "attempt_id": "8761ec5e-c6d6-4690-8e99-5c2f38e99d28",
               "request_body_sha256": "574e576557fa379dbc42b756509e65f3722d936548a744e838e68e3bfa762df4",
               "all_selected_method_notes_present": true
@@ -1287,6 +2308,23 @@
               "round": 1,
               "role": "skeptic",
               "status": "completed",
+              "attempt_ids": [
+                "23641e13-baf1-42c2-b0f5-154125f3472e"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "23641e13-baf1-42c2-b0f5-154125f3472e",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "e28b1e9ea32edbd0e8538c9079d886ba3bc0ddd9d9ce9892d791e779890b46a7",
+                  "started_at": "2026-11-01T18:03:32.395042+00:00",
+                  "finished_at": "2026-11-01T18:06:04.756235+00:00"
+                }
+              ],
               "attempt_id": "23641e13-baf1-42c2-b0f5-154125f3472e",
               "request_body_sha256": "e28b1e9ea32edbd0e8538c9079d886ba3bc0ddd9d9ce9892d791e779890b46a7",
               "all_selected_method_notes_present": true
@@ -1295,6 +2333,23 @@
               "round": 2,
               "role": "investigator",
               "status": "completed",
+              "attempt_ids": [
+                "297b8995-dbc2-4387-bcbe-a036e98b22db"
+              ],
+              "attempts": [
+                {
+                  "attempt_id": "297b8995-dbc2-4387-bcbe-a036e98b22db",
+                  "status": "completed",
+                  "failure_kind": null,
+                  "response_validation_kind": null,
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_received",
+                  "provider_response_id": null,
+                  "request_body_sha256": "74930759cb346dc4dfa8d54166f1139b5ffab9c1482f6c14156ecc25bc5903b7",
+                  "started_at": "2026-11-01T18:06:27.058740+00:00",
+                  "finished_at": "2026-11-01T18:10:27.232374+00:00"
+                }
+              ],
               "attempt_id": "297b8995-dbc2-4387-bcbe-a036e98b22db",
               "request_body_sha256": "74930759cb346dc4dfa8d54166f1139b5ffab9c1482f6c14156ecc25bc5903b7",
               "all_selected_method_notes_present": true
@@ -1303,31 +2358,59 @@
               "round": 2,
               "role": "skeptic",
               "status": "failed",
-              "recovery_attempts": [
+              "attempt_ids": [
+                "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
+                "b2274871-2317-4dff-9925-ffb89d7cf733"
+              ],
+              "attempts": [
                 {
                   "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
                   "status": "failed",
                   "failure_kind": "provider_limited",
+                  "response_validation_kind": null,
                   "provider_error_code": "subscription_sharing_usage_limit_exceeded",
+                  "dispatch_status": "provider_response_rejected",
+                  "provider_response_id": null,
                   "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
-                  "all_selected_method_notes_present": true
+                  "started_at": "2026-11-01T18:50:32.139819+00:00",
+                  "finished_at": "2026-11-01T18:50:33.907394+00:00"
+                },
+                {
+                  "attempt_id": "b2274871-2317-4dff-9925-ffb89d7cf733",
+                  "status": "failed",
+                  "failure_kind": "response_invalid",
+                  "response_validation_kind": "unsupported_context_reference",
+                  "provider_error_code": null,
+                  "dispatch_status": "provider_response_invalid",
+                  "provider_response_id": "resp_0f4aff7143ff556c016ae79213229087d096fea393de00cc77",
+                  "request_body_sha256": "f34e38f306f2b15b96dbfd70957c70fc9c83b36d9b3794c64a50ae52a97324df",
+                  "started_at": "2026-11-01T19:25:06.035595+00:00",
+                  "finished_at": "2026-11-01T19:30:03.090985+00:00"
                 }
               ],
-              "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
-              "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
-              "failure_kind": "provider_limited",
-              "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-              "dispatch_status": "provider_response_rejected"
+              "attempt_id": "b2274871-2317-4dff-9925-ffb89d7cf733",
+              "request_body_sha256": "f34e38f306f2b15b96dbfd70957c70fc9c83b36d9b3794c64a50ae52a97324df",
+              "all_selected_method_notes_present": true
             },
             {
               "round": 3,
               "role": "investigator",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             },
             {
               "round": 3,
               "role": "skeptic",
-              "status": "never_dispatched"
+              "status": "never_dispatched",
+              "attempt_ids": [],
+              "attempts": [],
+              "attempt_id": null,
+              "request_body_sha256": null,
+              "all_selected_method_notes_present": false
             }
           ]
         }
@@ -1337,86 +2420,106 @@
           "attempt_id": "38c6496d-f4c5-451b-a813-004cccb10327",
           "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected"
+          "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
+          "request_body_sha256": "290a6b2336edab9473979309e8937cabb25939d93478e56430025dda7c3c81d8",
+          "started_at": "2026-11-01T18:09:31.898274+00:00",
+          "finished_at": "2026-11-01T18:09:33.968573+00:00",
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
           "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "52b89a478bfd7345e629f6b3459b6f54f854e8778f490465fd63abfd022a3783",
           "started_at": "2026-11-01T18:50:32.001692+00:00",
-          "finished_at": "2026-11-01T18:50:35.219655+00:00"
+          "finished_at": "2026-11-01T18:50:35.219655+00:00",
+          "token_usage_status": "unavailable"
         },
         {
           "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
           "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
           "role": "skeptic",
+          "round": 2,
+          "status": "failed",
           "failure_kind": "provider_limited",
+          "response_validation_kind": null,
           "provider_error_code": "subscription_sharing_usage_limit_exceeded",
           "dispatch_status": "provider_response_rejected",
+          "provider_response_id": null,
           "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
           "started_at": "2026-11-01T18:50:32.139819+00:00",
-          "finished_at": "2026-11-01T18:50:33.907394+00:00"
+          "finished_at": "2026-11-01T18:50:33.907394+00:00",
+          "token_usage_status": "unavailable"
+        },
+        {
+          "attempt_id": "b2274871-2317-4dff-9925-ffb89d7cf733",
+          "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
+          "role": "skeptic",
+          "round": 2,
+          "status": "failed",
+          "failure_kind": "response_invalid",
+          "response_validation_kind": "unsupported_context_reference",
+          "provider_error_code": null,
+          "dispatch_status": "provider_response_invalid",
+          "provider_response_id": "resp_0f4aff7143ff556c016ae79213229087d096fea393de00cc77",
+          "request_body_sha256": "f34e38f306f2b15b96dbfd70957c70fc9c83b36d9b3794c64a50ae52a97324df",
+          "started_at": "2026-11-01T19:25:06.035595+00:00",
+          "finished_at": "2026-11-01T19:30:03.090985+00:00",
+          "token_usage_status": "reported"
         }
       ],
       "started_at": "2026-11-01T18:01:22.186239+00:00",
-      "last_attempt_finished_at": "2026-11-01T18:50:35.219655+00:00",
+      "last_attempt_finished_at": "2026-11-01T19:38:05.062266+00:00",
       "outcome_label": "Mixed · partial progress, unresolved",
       "scientific_review_status": "Not independently reviewed; Chat 2 review required.",
       "output_bundle": {
         "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/warp-drive.bundle.json.gz",
-        "sha256_compressed": "20993d8df92fc36b602414e4d89a99d791919491f479acb673363bad60566099",
-        "sha256_uncompressed": "996174d74f906c795bd11635bdf550415a7fd939d2d479ff485bd28d7f76742f",
-        "compressed_bytes": 304786,
-        "uncompressed_bytes": 740922,
+        "sha256_compressed": "11da0ce72ffe8180b7bcb5b37b53a32c5a723adde4ebfc84acc54ae7259e9f02",
+        "sha256_uncompressed": "e3ec7fa970e45a51be5b4b7088fef66f889124d5ae574857efd89cecca7e7619",
+        "compressed_bytes": 512897,
+        "uncompressed_bytes": 1290213,
         "gzip_json_valid": true,
-        "research_step_count": 9,
-        "session_attempt_count": 9
+        "research_step_count": 13,
+        "session_attempt_count": 13
       },
       "mandatory_source_omitted_count": 0,
-      "wall_clock_seconds": 545.046,
-      "provider_call_attempts": 9,
+      "wall_clock_seconds": 5802.876,
+      "provider_call_attempts": 13,
       "automatic_retry_attempts": 0,
-      "tokens_used": 128816,
+      "tokens_used": 346956,
       "cost_status": "unavailable",
-      "termination_reason_code": "provider_usage_limit_recovery_available",
+      "termination_reason_code": "provider_or_strategy_failure",
       "recovery_attempts": [
         {
-          "attempt_id": "5d7830f5-60db-43b3-b65a-e6a74aab14a3",
-          "strategy_id": "ce1020e0-a4a2-4eff-88d8-7837ab35d37f",
-          "role": "skeptic",
-          "round": 2,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "52b89a478bfd7345e629f6b3459b6f54f854e8778f490465fd63abfd022a3783",
-          "started_at": "2026-11-01T18:50:32.001692+00:00",
-          "finished_at": "2026-11-01T18:50:35.219655+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "timestamp": "2026-11-01T18:50:31.871517+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         },
         {
-          "attempt_id": "bc5b1423-3878-4ee4-92d9-7abb395f5d5d",
-          "strategy_id": "3bfcc4b7-af55-45f1-8195-7cfe1e733ce7",
-          "role": "skeptic",
-          "round": 2,
-          "status": "failed",
-          "failure_kind": "provider_limited",
-          "provider_error_code": "subscription_sharing_usage_limit_exceeded",
-          "dispatch_status": "provider_response_rejected",
-          "request_body_sha256": "649b9dcd67fcdbc14916ac4f76261cdd880f36e9fd0d0ebd93d629224f07ddb8",
-          "started_at": "2026-11-01T18:50:32.139819+00:00",
-          "finished_at": "2026-11-01T18:50:33.907394+00:00",
-          "token_usage_status": "unavailable",
-          "all_selected_method_notes_present": true
+          "timestamp": "2026-11-01T19:25:05.526394+00:00",
+          "event_kind": "resumed",
+          "message": "Research resumed by user. Previous artifacts and remaining call budget retained."
         }
-      ]
+      ],
+      "execution_code_shas": [
+        "2253e70ea977cb6d1f1201888d0adc0d174f13ed",
+        "59687773fc5df0ad658538c38e20396add0276b4",
+        "af87ad70255730bc7c4803336013a7b736cf83fe"
+      ],
+      "all_selected_method_notes_present": true
     }
   ],
   "release_gate": "Never READY until all five sessions have 12 completed role turns including each final Skeptic, exports pass full validation, and Chat 2 independently approves scientific review.",
@@ -1426,32 +2529,38 @@
     "all_five_imported_into_disposable_isolated_workspaces": true,
     "all_project_ids_match_pinned_identities": true,
     "completed_turn_request_hashes_and_method_notes_rechecked": true,
+    "all_recorded_request_hashes_checked": true,
     "mandatory_context_source_omissions": 0,
+    "frozen_input_hashes_rechecked": true,
+    "invalid_response_sidecar_matched_to_full_provider_logs": true,
     "scientific_review_complete": false,
     "ready_gate_passed": false
   },
   "execution_timing": {
     "parallel_launch_start_utc": "2026-11-01T18:01:22.082967+00:00",
-    "last_attempt_finished_utc": "2026-11-01T18:10:38.076166+00:00",
-    "combined_wall_clock_seconds": 555.993,
+    "last_attempt_finished_utc": "2026-11-01T19:43:40.996480+00:00",
+    "combined_wall_clock_seconds": 6138.914,
     "per_project_wall_clock_seconds": {
-      "agent": 555.993,
-      "sovereign": 483.803,
+      "agent": 4967.108,
+      "sovereign": 6138.844,
       "xenopus": 469.93,
-      "math": 470.189,
-      "warp": 545.046
-    }
+      "math": 5227.941,
+      "warp": 5802.876
+    },
+    "initial_combined_wall_clock_seconds": 555.993
   },
   "provider_accounting": {
-    "provider_call_attempts": 39,
-    "completed_provider_responses": 32,
-    "confirmed_provider_limit_rejections": 6,
-    "dispatch_unknown_attempts": 1,
+    "provider_call_attempts": 62,
+    "completed_provider_responses": 44,
+    "validated_completed_role_turns": 40,
+    "confirmed_provider_limit_rejections": 16,
+    "completed_but_locally_invalid_responses": 4,
+    "dispatch_unknown_attempts": 2,
     "automatic_retries": 0,
     "monetary_api_spend": 0,
     "chatgpt_plan_usage_consumed": true,
     "plan_usage_units_unavailable": true,
-    "tokens_reported_across_sessions": 627915
+    "tokens_reported_across_sessions": 1176717
   },
   "recovery_execution": {
     "code_sha": "5fc8637535fb4c76f175502645a372e8c569899a",
@@ -1505,7 +2614,37 @@
       }
     ]
   },
-  "provider_call_attempts_total": 49,
+  "provider_call_attempts_total": 62,
   "confirmed_provider_rejections_total": 16,
-  "dispatch_unknown_attempts_total": 1
+  "dispatch_unknown_attempts_total": 2,
+  "provider_response_validation_evidence": {
+    "path": "docs/evaluations/research_quality/handoff/releases/phase2-i2-v1/provider-response-validation.json.gz",
+    "response_count": 4,
+    "sha256_compressed": "7ea055543b1d586584314ebf40740c6598b8ac036bcd8d0279bb3980ab225ff9",
+    "sha256_uncompressed": "ce2698d714aa3c0f0b833ac6e9888bf47714c69688789c0465fcbe040bef8104",
+    "compressed_bytes": 595264,
+    "uncompressed_bytes": 6004969,
+    "contains_authorization_headers": false,
+    "validation_status": "raw completed response matched to exact request/step; output excluded from findings"
+  },
+  "additional_execution_and_diagnostics_commits": [
+    "5fc8637535fb4c76f175502645a372e8c569899a",
+    "228f281de6403ad65ee362fe99be34dc7c80a10b",
+    "2253e70ea977cb6d1f1201888d0adc0d174f13ed",
+    "27074a75",
+    "d8774dfbf89771686803665abc213aad3aaa5aa9",
+    "93588d9b"
+  ],
+  "research_code_history": {
+    "initial_sessions_code_sha": "59687773fc5df0ad658538c38e20396add0276b4",
+    "recovery_and_diagnostics_commits": [
+      "5fc8637535fb4c76f175502645a372e8c569899a",
+      "228f281de6403ad65ee362fe99be34dc7c80a10b",
+      "2253e70ea977cb6d1f1201888d0adc0d174f13ed",
+      "27074a75",
+      "d8774dfbf89771686803665abc213aad3aaa5aa9",
+      "93588d9b"
+    ],
+    "sha_note": "Per-step backend_build_commit records remain in every project export; the manually resumed Sovereign calls preserve their original abbreviated prefix and add the exact reconciled source SHA."
+  }
 }
