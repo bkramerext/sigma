@@ -363,12 +363,11 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
     Retain counts of withheld provenance, but offer only IDs that this exact
     request can legitimately cite. Do not make pointer-only evidence citable.
     """
-    allowed_artifacts = {
-        value
-        for field in ("context_artifact_ids", "prior_session_artifact_ids")
-        for value in context.get(field, [])
-        if isinstance(value, str)
-    }
+    allowed_artifacts: set[str] = set()
+    for field in ("context_artifact_ids", "prior_session_artifact_ids"):
+        values = context.get(field)
+        if isinstance(values, list):
+            allowed_artifacts.update(value for value in values if isinstance(value, str))
     current_step = context.get("investigator_step_id")
     allowed_steps = {current_step} if isinstance(current_step, str) else set()
     ledger = context.get("obligation_ledger")
@@ -377,16 +376,21 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
     for obligation in ledger:
         if not isinstance(obligation, dict):
             continue
-        for field in ("source_artifact_ids", "basis_artifact_ids", "supplied_source_artifact_ids",
-                      "pointer_source_artifact_ids"):
+        for field in (
+            "source_artifact_ids",
+            "basis_artifact_ids",
+            "supplied_source_artifact_ids",
+            "pointer_source_artifact_ids",
+        ):
             refs = obligation.get(field)
             if not isinstance(refs, list):
                 continue
             kept = [ref for ref in refs if isinstance(ref, str) and ref in allowed_artifacts]
             if field == "source_artifact_ids":
+                saved_total = obligation.get("source_artifact_count")
                 original_total = max(
                     len(refs),
-                    int(obligation.get("source_artifact_count", 0) or 0),
+                    saved_total if type(saved_total) is int and saved_total >= 0 else 0,
                 )
                 obligation["source_artifact_count"] = original_total
                 obligation["unsupplied_source_artifact_count"] = max(0, original_total - len(kept))
@@ -405,6 +409,4 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
         if obligation.get("unsupplied_source_artifact_count", 0) or obligation.get(
             "withheld_pointer_source_count", 0
         ):
-            obligation["source_artifact_availability"] = (
-                "incomplete_extract_original_not_supplied"
-            )
+            obligation["source_artifact_availability"] = "incomplete_extract_original_not_supplied"
