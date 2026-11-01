@@ -2422,7 +2422,11 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
             for name, data in members.items():
                 if not name.startswith("research-sessions/") or not name.endswith(".json"):
                     continue
-                if name in {"research-sessions/limits.json", "research-sessions/sequence.json"}:
+                if name in {
+                    "research-sessions/limits.json",
+                    "research-sessions/sequence.json",
+                    "research-sessions/obligation-ids.json",
+                }:
                     continue
                 try:
                     if str(
@@ -3121,6 +3125,7 @@ def _save_unlocked(path: str, record: dict[str, Any]) -> None:
                 if name.startswith("research-sessions/")
                 and name.endswith(".json")
                 and name != member
+                and name != "research-sessions/obligation-ids.json"
             )
             if total + len(encoded) > MAX_TOTAL:
                 raise ProjectError(
@@ -3262,7 +3267,7 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
             if not name.startswith("research-sessions/") or not name.endswith(".json"):
                 continue
             stem = name.removeprefix("research-sessions/").removesuffix(".json")
-            if stem in {"limits", "sequence"} or "/" in stem:
+            if stem in {"limits", "sequence", "obligation-ids"} or "/" in stem:
                 continue
             try:
                 data = base64.b64decode(encoded, validate=True)
@@ -3294,7 +3299,7 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     records: list[dict[str, Any]] = []
     unavailable = 0
     for file in sorted(directory.glob("*.json")):
-        if file.name in {"limits.json", "sequence.json"}:
+        if file.name in {"limits.json", "sequence.json", "obligation-ids.json"}:
             continue
         try:
             if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_RECORD:
