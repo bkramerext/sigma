@@ -4426,6 +4426,7 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
     assert result_claim.evidence_refs == [result_a]
     assert contrary_claim.evidence_refs == [result_b]
     assert any("retry failure" in claim.statement for claim in plan.claims)
+    assert any("Source-index classification: result." in claim.reasoning for claim in plan.claims)
     full_proof_claim = next(
         claim for claim in plan.claims if "derivation starts" in claim.statement
     )
@@ -5851,6 +5852,8 @@ def test_review_fallback_question_and_tex_safety() -> None:
     assert r"\section{Selected source-linked research excerpts}" not in tex
     assert r"\section{Structured reasoning and review records}" not in tex
     assert r"\section*{About this paper}" in tex
+    assert r"\begin{sloppypar}" in tex
+    assert r"\end{sloppypar}" in tex
 
 
 def test_review_fallback_rejects_process_text_as_claim() -> None:
