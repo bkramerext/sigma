@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
+import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import SessionLogButton from './SessionLogButton';
@@ -436,6 +436,38 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
 }
 
 type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
+
+type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; children: ReactNode };
+type SessionRenderBoundaryState = { error: Error | null };
+
+/** A single corrupt historical record must not take down the project workspace. */
+class SessionRenderBoundary extends Component<SessionRenderBoundaryProps, SessionRenderBoundaryState> {
+  state: SessionRenderBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): SessionRenderBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Unable to render saved research session', {
+      sessionId: this.props.sessionId,
+      sessionNumber: this.props.sessionNumber,
+      error,
+      componentStack: info.componentStack,
+    });
+  }
+
+  componentDidUpdate(previous: SessionRenderBoundaryProps) {
+    if (previous.sessionId !== this.props.sessionId && this.state.error) this.setState({ error: null });
+  }
+
+  render() {
+    if (this.state.error) return <li className="session-row session-render-error" data-session-id={this.props.sessionId}>
+      <p role="alert"><strong>Session #{this.props.sessionNumber} could not be displayed.</strong> Its saved record remains available in the project export. Details: {this.state.error.message}</p>
+    </li>;
+    return this.props.children;
+  }
+}
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -1130,7 +1162,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     if (!Array.isArray(data.sessions)) throw new Error('Research sessions response is missing its sessions array');
-    const nextSessions = data.sessions.map(sessionForDisplay).filter((item: ResearchSession | null): item is ResearchSession => item !== null);
+    const nextSessions: ResearchSession[] = (data.sessions as unknown[])
+      .map(sessionForDisplay)
+      .filter((item: ResearchSession | null): item is ResearchSession => item !== null);
     setSessions(nextSessions);
     // Keep UI admission in sync with the limits snapshot used by the server.
     setMaxConcurrentSessions(Number(data.max_concurrent_sessions) || 1);
@@ -1418,7 +1452,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
           const currentAction = (readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action)
             .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
           const sessionExpanded = expandedSessionIds.has(item.id);
-          return <li className="session-row" key={item.id} data-session-id={item.id}>
+          return <SessionRenderBoundary key={item.id} sessionId={item.id} sessionNumber={item.session_number}><li className="session-row" data-session-id={item.id}>
             <div className="session-row-heading">
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
@@ -1436,7 +1470,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
               </div>
             </div>
             <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
-          </li>;
+          </li></SessionRenderBoundary>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
     </div>
