@@ -87,6 +87,11 @@ with sync_playwright() as playwright:
     assert dialog.get_by_text("Other", exact=True).count() == 0
     literature = dialog.locator('.project-type-card:has(> summary strong:text-is("Literature"))')
     literature.locator("summary").click()
+    expect(literature).to_have_attribute("open", "")
+    literature.locator("summary").click()
+    expect(literature).not_to_have_attribute("open", "")
+    literature.locator("summary").click()
+    expect(literature).to_have_attribute("open", "")
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
     expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(2)
     expect(literature.get_by_role("columnheader", name="Action", exact=True)).to_have_count(0)
@@ -163,6 +168,15 @@ with sync_playwright() as playwright:
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
     )
+    parent.get_by_role("button", name="New", exact=True).first.click()
+    parent.get_by_label("Research reference URL 2").fill(
+        "HTTPS://EXAMPLE.ORG:443/research-standard"
+    )
+    parent.get_by_role("button", name="New", exact=True).first.click()
+    expect(parent.get_by_label("Research reference URL 3")).to_have_value("")
+    expect(dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="Save"
+    )).to_be_enabled()
     ratio = parent.locator(".pt-reference-table").first.evaluate(
         "table => { const rect = table.getBoundingClientRect(); const columns = [...table.querySelectorAll('col')].map(col => col.getBoundingClientRect().width); return columns[0] / rect.width; }"
     )
