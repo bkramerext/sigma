@@ -8287,6 +8287,9 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         assert limited.get("provider_stream_event") is None
         assert "HTTP 429" in limited["failure_message"]
     assert finished["calls_used"] == 1
+    assert datetime.fromisoformat(finished["stopped_at"]) <= datetime.fromisoformat(
+        limited["finished_at"]
+    )
 
 
 async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Path):

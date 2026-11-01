@@ -5232,7 +5232,9 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["status"] = "paused"
         record["current_action"] = "Paused · provider usage limit"
         record["provider_limit_recovery_ready"] = True
-        record["stopped_at"] = _now()
+        # A rejected provider request begins the pause interval. Preserve its
+        # timestamp when this ended session is first explicitly reopened.
+        record.setdefault("stopped_at", _now())
         record["message"] = pause_message
         record["terminal_reason"] = pause_message
         record["termination_reason_code"] = "provider_usage_limit_recovery_available"
@@ -9628,6 +9630,10 @@ async def _portfolio_role_call(
                     step["failure_message"] = failure_message
                 if step.get("failure_kind") == "provider_limited":
                     record["provider_usage_limited"] = True
+                    # Stop the session clock at the confirmed rejection, even
+                    # when the portfolio needs to finish accounting other
+                    # already-dispatched branches before it can be paused.
+                    record.setdefault("stopped_at", step.get("finished_at") or _now())
                     if record.get("mode") == "chatgpt":
                         record["terminal_reason"] = (
                             "The selected ChatGPT account rejected the request at its usage limit."
@@ -10531,7 +10537,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     record["message"] = pause_message
                     record["terminal_reason"] = pause_message
                     record["provider_limit_recovery_ready"] = True
-                    record["stopped_at"] = _now()
+                    record.setdefault("stopped_at", _now())
                     record["cycle"] = max((branch["cycle"] for branch in runs), default=0)
                     record["outcome"] = _outcome(record)
                     record["strategy_assessments"] = _strategy_assessments(record)
@@ -10754,7 +10760,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 record["message"] = pause_message
                 record["terminal_reason"] = pause_message
                 record["provider_limit_recovery_ready"] = True
-                record["stopped_at"] = _now()
+                record.setdefault("stopped_at", _now())
                 record["cycle"] = max(
                     (branch["cycle"] for branch in record["strategy_runs"]), default=0
                 )
