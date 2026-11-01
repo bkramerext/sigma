@@ -9340,8 +9340,8 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
                 "obligation_id": "open-one",
                 "text": "Check the counterexample before claiming a result.",
                 "status": "unresolved",
-                "source_artifact_ids": ["saved-0"],
-                "supplied_source_artifact_ids": ["saved-0"],
+                "source_artifact_ids": ["saved-1"],
+                "supplied_source_artifact_ids": ["saved-1"],
                 "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
             }
         ],
@@ -9372,7 +9372,8 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
         "incomplete_extract_original_not_supplied"
     )
     assert context["prior_artifacts"][0]["id"] == "saved-0"
-    assert context["prior_artifacts"][0]["evidence_availability"] == (
+    assert context["prior_artifacts"][0]["method"] == original_evidence[0]["method"]
+    assert context["prior_artifacts"][1]["evidence_availability"] == (
         "pointer_only_original_not_supplied"
     )
     assert original_evidence[0]["method"].endswith("x" * 18000)
