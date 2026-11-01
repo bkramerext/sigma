@@ -11064,6 +11064,65 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
     assert ledger["calls"] == []
 
 
+def test_obligation_dispatch_citations_exclude_withheld_history() -> None:
+    """No paid Skeptic response should be invited to cite unsupplied IDs."""
+    from copy import deepcopy
+
+    saved = {
+        "obligation_id": "open-1",
+        "status": "unresolved",
+        "text": "Check the counterexample.",
+        "source_artifact_ids": ["present", "withheld", "prior"],
+        "source_artifact_count": 5,
+        "basis_artifact_ids": ["present", "withheld"],
+        "supplied_source_artifact_ids": ["present", "withheld"],
+        "pointer_source_artifact_ids": ["withheld"],
+        "source_step_ids": ["old-step", "current-step"],
+        "basis_step_ids": ["old-step", "current-step"],
+        "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+    }
+    original = deepcopy(saved)
+    context = {
+        "context_artifact_ids": ["present"],
+        "prior_session_artifact_ids": ["prior"],
+        "investigator_step_id": "current-step",
+        "obligation_ledger": [deepcopy(saved)],
+    }
+    research_sessions.restrict_obligation_citations_to_supplied_context(context)
+    actual = context["obligation_ledger"][0]
+    assert actual["source_artifact_ids"] == ["present", "prior"]
+    assert actual["supplied_source_artifact_ids"] == ["present"]
+    assert actual["basis_artifact_ids"] == ["present"]
+    assert actual["pointer_source_artifact_ids"] == []
+    assert actual["source_artifact_count"] == 5
+    assert actual["unsupplied_source_artifact_count"] == 3
+    assert actual["withheld_pointer_source_count"] == 1
+    assert actual["source_step_ids"] == ["current-step"]
+    assert actual["basis_step_ids"] == ["current-step"]
+    assert actual["withheld_source_step_ids_count"] == 1
+    assert actual["source_artifact_availability"] == "incomplete_extract_original_not_supplied"
+    assert saved == original, "Only the dispatch copy may change"
+
+    allowed = {
+        "context_artifact_ids": ["present"],
+        "prior_session_artifact_ids": [],
+        "investigator_step_id": "current-step",
+        "obligation_ledger": [{
+            "obligation_id": "open-2",
+            "source_artifact_ids": ["present"],
+            "source_artifact_count": 1,
+            "supplied_source_artifact_ids": ["present"],
+            "source_step_ids": ["current-step"],
+            "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+        }],
+    }
+    research_sessions.restrict_obligation_citations_to_supplied_context(allowed)
+    assert allowed["obligation_ledger"][0]["source_artifact_ids"] == ["present"]
+    assert allowed["obligation_ledger"][0]["source_artifact_availability"] == (
+        "adequate_bounded_extract_original_not_supplied"
+    )
+
+
 def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
     """Regression for Session #5: portfolio coordination must not KeyError."""
     from copy import deepcopy
@@ -11378,6 +11437,7 @@ def main():
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
+    test_obligation_dispatch_citations_exclude_withheld_history()
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
