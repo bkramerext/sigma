@@ -101,12 +101,25 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
                     pointers.setdefault(field, []).append(entry[id_field])
 
     if compacted:
+        # Called after multiple assembly phases. Keep previous compaction
+        # accounting when later peer/guidance fields require another pass.
+        previous = manifest.get("dispatch_budget_compaction", {})
+        prior_counts = previous.get("counts", {}) if isinstance(previous, dict) else {}
+        prior_ids = previous.get("ids", {}) if isinstance(previous, dict) else {}
+        prior_unlisted = previous.get("unlisted_id_counts", {}) if isinstance(previous, dict) else {}
+        counts = dict(prior_counts)
+        ids = {field: list(values) for field, values in prior_ids.items()}
+        unlisted = dict(prior_unlisted)
+        for field, count in compacted.items():
+            counts[field] = counts.get(field, 0) + count
+        for field, new_ids in pointers.items():
+            merged = ids.get(field, []) + new_ids
+            ids[field] = merged[:4]
+            unlisted[field] = unlisted.get(field, 0) + max(0, len(merged) - 4)
         manifest["dispatch_budget_compaction"] = {
-            "counts": compacted,
-            "ids": {field: ids[:16] for field, ids in pointers.items()},
-            "unlisted_id_counts": {
-                field: max(0, len(ids) - 16) for field, ids in pointers.items()
-            },
+            "counts": counts,
+            "ids": ids,
+            "unlisted_id_counts": unlisted,
             "qualification": (
                 "Saved originals are intact. Pointers do not establish that "
                 "omitted evidence was read, verified, or resolved."
