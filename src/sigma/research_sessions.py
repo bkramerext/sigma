@@ -2754,6 +2754,10 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
         }
         if exc.code is not None:
             fields["provider_error_code"] = exc.code
+        if exc.provider_request_id is not None:
+            fields["provider_request_id"] = exc.provider_request_id
+        if exc.response_shape is not None:
+            fields["provider_response_shape"] = exc.response_shape
         if exc.stream_event is not None:
             fields["provider_stream_event"] = exc.stream_event
         if exc.retry_after_seconds is not None:
@@ -5717,7 +5721,19 @@ async def _call_provider(
                         "role": role,
                         "status": "provider_rejected",
                         "http_status": response.status_code,
-                        "provider_error": error_data,
+                        "provider_error_code": (
+                            code
+                            if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code)
+                            else None
+                        ),
+                        "provider_request_id": (
+                            response.headers.get("x-request-id")
+                            if re.fullmatch(
+                                r"[A-Za-z0-9_.:-]{1,128}",
+                                response.headers.get("x-request-id", ""),
+                            )
+                            else None
+                        ),
                         "elapsed_seconds": round(time.monotonic() - started, 3),
                     },
                 )
@@ -5727,6 +5743,7 @@ async def _call_provider(
                 credential["mode"],
                 "research",
                 retry_after=response.headers.get("retry-after"),
+                provider_request_id=response.headers.get("x-request-id"),
             )
         if credential["mode"] == "chatgpt":
             raw = await completed(
@@ -6071,6 +6088,18 @@ async def _call(
                     "role": role,
                     "status": "failed",
                     "failure_type": type(exc).__name__,
+                    **(
+                        {
+                            "provider_http_status": exc.http_status,
+                            "provider_error_code": exc.code,
+                            "provider_request_id": exc.provider_request_id,
+                            "provider_response_shape": exc.response_shape,
+                            "retry_after_seconds": exc.retry_after_seconds,
+                            "provider_response_channel": "stream" if exc.streamed else "http",
+                        }
+                        if isinstance(exc, ChatGPTProviderRejection)
+                        else {}
+                    ),
                 },
             )
         message = str(exc).casefold()

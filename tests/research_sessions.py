@@ -82,9 +82,17 @@ def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not
         code=None,
         http_status=429,
         streamed=False,
+        provider_request_id="req_safe-123",
+        response_shape="responses-error",
     )
     assert research_sessions._provider_failure_fields(rate_limit)["failure_kind"] == (
         "provider_rate_limited"
+    )
+    assert research_sessions._provider_failure_fields(rate_limit)["provider_request_id"] == (
+        "req_safe-123"
+    )
+    assert research_sessions._provider_failure_fields(rate_limit)["provider_response_shape"] == (
+        "responses-error"
     )
     assert research_sessions._transient_failure_kind(rate_limit) == "provider_rate_limited"
     account_limit = research_sessions.ChatGPTProviderRejection(
@@ -582,9 +590,13 @@ def test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff():
                 {"error": {"code": "rate_limit_exceeded"}},
                 "chatgpt",
                 retry_after="17",
+                provider_request_id="req_safe-123",
             )
         except research_sessions.ChatGPTProviderRejection as exc:
             assert exc.retry_after_seconds == 17
+            assert exc.provider_request_id == "req_safe-123"
+            assert exc.response_shape == "responses-error"
+            assert exc.code == "rate_limit_exceeded"
         else:
             raise AssertionError("Expected a classified temporary provider rate limit")
 
@@ -8128,9 +8140,17 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
             body = "".join(
                 f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
             )
-            return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "text/event-stream",
+                    "x-request-id": "req-limited-123",
+                },
+                text=body,
+            )
         return httpx.Response(
             429,
+            headers={"x-request-id": "req-limited-123"},
             json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
         )
 
@@ -8167,6 +8187,8 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
     assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
+    assert limited["provider_request_id"] == "req-limited-123"
+    assert limited["provider_response_shape"] in {"responses-error", "other-object"}
     metrics = {
         item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
     }
