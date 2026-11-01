@@ -1577,7 +1577,7 @@ def _evidence_based_long_plan(
                 if candidate_field not in covered_candidate_fields:
                     matching.append(note)
                     covered_candidate_fields.add(candidate_field)
-                if len(matching) >= 3:
+                if len(matching) >= 5:
                     break
             section_claim_ids: list[str] = []
             # The section may discuss several ideas, but a claim remains one
@@ -1613,7 +1613,11 @@ def _evidence_based_long_plan(
             sections.append(
                 LongSectionPlan(
                     heading=heading if offset == 0 else f"{heading}: additional evidence",
-                    purpose=purpose,
+                    purpose=(
+                        purpose + " Examine the distinct source-linked propositions "
+                        "in this section with their premises, strongest objections "
+                        "and unresolved verification, rather than listing records."
+                    )[:500],
                     evidence_refs=chunk,
                     claim_ids=section_claim_ids,
                 )
