@@ -1065,7 +1065,7 @@ async def test_start_preflight_does_not_hold_project_or_global_admission_locks(p
         await research_sessions._tasks[result["id"]]
 
 
-async def test_start_revalidates_project_after_slow_preflight(path: Path):
+async def test_start_preserves_frozen_inputs_after_slow_preflight(path: Path):
     view, strategy, credential, config = await setup(path)
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -1075,7 +1075,12 @@ async def test_start_revalidates_project_after_slow_preflight(path: Path):
         await release.wait()
         return credential
 
+    async def no_provider_worker(_session_id: str, _path: str):
+        # The regression validates admission without invoking a paid provider.
+        return
+
     with (
+        patch.object(research_sessions, "_worker", new=no_provider_worker),
         patch.object(research_sessions, "auth_context", new=slow_auth),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
     ):
@@ -1091,13 +1096,14 @@ async def test_start_revalidates_project_after_slow_preflight(path: Path):
             )
         finally:
             release.set()
-        try:
-            await asyncio.wait_for(task, timeout=2)
-        except ProjectError as exc:
-            assert "changed during research preflight" in str(exc)
-        else:
-            raise AssertionError("Stale strategy snapshots must not dispatch research")
-    assert research_sessions.list_sessions(str(path)) == []
+        started = await asyncio.wait_for(task, timeout=2)
+        await research_sessions._tasks[started["id"]]
+    record = research_sessions._read(str(path), started["id"])
+    assert record["strategy_text"] == strategy.approach
+    assert record["strategy_title"] == strategy.title
+    assert record["strategy_runs"][0]["strategy_text"] == strategy.approach
+    assert inspect_project(path).project.strategies[0].title == "Revised approach"
+    assert len(research_sessions.list_sessions(str(path))) == 1
 
 
 async def test_project_concurrent_session_limit_is_atomic(path: Path):
@@ -9587,7 +9593,7 @@ def main():
             )
         )
         asyncio.run(
-            test_start_revalidates_project_after_slow_preflight(
+            test_start_preserves_frozen_inputs_after_slow_preflight(
                 root / "admission-preflight-revalidation.sigma"
             )
         )

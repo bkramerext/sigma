@@ -769,7 +769,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         <p>{statusNextStep}</p>
       </aside>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
-        <div className="outcome-summary-text"><div className="outcome-summary-title"><span className="outcome-summary-kicker">{resultLabel}</span>{conclusionFormatToggle}</div>
+        <div className="outcome-summary-text"><div className="outcome-summary-title"><span className="outcome-summary-kicker">{resultLabel}</span></div>
           {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
           <p className="advanced-outcome-hint">Want more detail? Turn on <button type="button" className="advanced-outcome-link" disabled={enablingAdvancedOutcome} onClick={async () => {
             setEnablingAdvancedOutcome(true); setAdvancedOutcomeEnableError('');
