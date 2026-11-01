@@ -142,7 +142,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     let current: string | null | undefined = parentId;
     while (current && !visited.has(current) && byId.has(current)) {
       visited.add(current);
-      const item = byId.get(current)!;
+      const item: ProjectTypeRecord = byId.get(current)!;
       chain.push(item);
       current = item.based_on;
     }
