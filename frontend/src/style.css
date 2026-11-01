@@ -274,14 +274,17 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* Keep the Home controls in the upper left, independent of the brand artwork. */
 .home-page {
-  /* Match the top inset of the right-hand Google pill. */
+  /* Horizontal edge inset matches the right-hand pill's 12px visible margin.
+     Vertical positioning remains aligned with the Google pill at 26px. */
+  --home-side-gap: 12px;
   --home-corner-gap: 26px;
   --home-corner-pill-height: 34px;
+  --home-projects-top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap) - 40px);
 }
 .home-page .home-topline {
   box-sizing: border-box;
   height: 52px;
-  padding: var(--home-corner-gap) 0 0 var(--home-corner-gap);
+  padding: var(--home-corner-gap) 0 0 var(--home-side-gap);
   flex-wrap: nowrap;
   justify-content: space-between;
   align-items: flex-start;
@@ -310,7 +313,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 }
 @media (max-width: 700px) {
   .home-page { --home-corner-gap: 18px; --home-corner-pill-height: 28px; }
-  .home-page .home-topline { padding: var(--home-corner-gap) 0 0 var(--home-corner-gap); }
+  .home-page .home-topline { padding: var(--home-corner-gap) 0 0 var(--home-side-gap); }
   .home-page .home-left-actions { gap: 8px; }
   .home-page .home-projects { padding-top: 0; }
 }
@@ -330,10 +333,10 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* Compact Home project navigation. The artwork is independent of this column. */
 .home-page .home-projects {
-  --home-project-edge: clamp(13px, 2.7vw, 45px);
+  --home-project-edge: calc(2 * var(--home-side-gap));
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
-  top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap) - 20px);
+  top: var(--home-projects-top);
   left: var(--home-project-edge);
   z-index: 1;
 }
@@ -402,7 +405,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
      potentially much taller Google/Sponsored/Admin control stack. */
   .home-page .home-projects {
     position: absolute;
-    top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap) - 20px);
+    top: var(--home-projects-top);
     left: var(--home-project-edge);
     width: min(520px, calc(100% - 2 * var(--home-project-edge)));
     margin: 0;
