@@ -3489,6 +3489,7 @@ def _tex(
     include_validation_notes: bool = False,
     include_research_excerpts: bool = False,
     source_reference_map: Mapping[str, str] | None = None,
+    writing_sources: list[dict[str, Any]] | None = None,
 ) -> str:
     include_claim_details = include_claim_details or include_research_details
     include_validation_notes = include_validation_notes or include_research_details
@@ -3886,6 +3887,23 @@ def _tex(
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
     if math_style and include_claim_details:
         claim_register()
+    parts.append(r"\\section*{Paper writing source material used}")
+    if writing_sources:
+        parts.append(prose_text(
+            "These sources informed manuscript organization and writing methods, "
+            "not the scientific evidence or findings."
+        ))
+        parts.append(r"\\begin{itemize}")
+        for source in writing_sources[:3]:
+            if not isinstance(source, dict):
+                continue
+            title = str(source.get("title") or "Writing guide")
+            tier = str(source.get("tier") or "guidance")
+            url = str(source.get("url") or "")
+            parts.append(r"\\item " + prose_text(f"{title} ({tier}): {url}"))
+        parts.append(r"\\end{itemize}")
+    else:
+        parts.append(prose_text("No external writing-guidance sources were recorded."))
     if include_research_excerpts and integrity_records:
         parts += [
             r"\appendix",
@@ -6519,6 +6537,7 @@ async def _generate_impl(
                 "include_validation_notes": include_validation_notes,
                 "include_research_excerpts": include_research_excerpts,
                 "source_reference_map": source_reference_map,
+                "writing_sources": writing_sources,
             }
             tex = _tex(draft, warnings, snapshot_hash, **tex_options)
             saved_proofreading = work.get("proofreading")
