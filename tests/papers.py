@@ -5721,7 +5721,75 @@ def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
     )
 
 
+def test_review_fallback_question_and_tex_safety() -> None:
+    """Phase-1 writing fixes must preserve the problem and scientific notation."""
+    question = (
+        "Can a gateway improve authorized research completion? "
+        + "The project also includes background and long source references. " * 20
+        + "https://mindrouter.ai/documentation"
+    )
+    plan = papers._evidence_based_long_plan(
+        {"title": "Conditional gateway research", "problem": question},
+        [],
+        {"project:gateway"},
+        [{"id": "project:gateway", "kind": "project", "data": {"problem": question}}],
+    )
+    assert "Can a gateway improve authorized research completion?" in plan.problem_framing[0]
+    assert "https://mindrouter.ai/documen" not in plan.problem_framing[0]
+    assert "… " not in plan.problem_framing[0]
+    assert r"$\eta$" in papers._latex_prose("Error allowance η")
+    assert r"$\rho$" in papers._latex_prose("Density ρ")
+    rendered = papers._latex_prose(
+        "See https://mindrouter.ai/documentation.html for reference."
+    )
+    assert r"\url{https://mindrouter.ai/documentation.html}" in rendered
+    assert r"\usepackage[hyphens]{url}" in papers._tex(
+        draft(), [], "e" * 64, include_research_details=False
+    )
+    tex = papers._tex(
+        draft(), [], "a" * 64,
+        integrity_records=[{"kind": "research", "description": "Saved private artifact"}],
+        include_research_details=True,
+        include_research_excerpts=False,
+    )
+    assert r"\section{Selected source-linked research excerpts}" not in tex
+    assert r"\section{Structured reasoning and review records}" not in tex
+    assert r"\section*{About this paper}" in tex
+
+
+def test_review_fallback_rejects_process_text_as_claim() -> None:
+    research = "The bounded comparison leaves the remote policy condition unresolved."
+    scaffolding = "Structured argument steps are recorded; review their evidence and objections."
+    notes = [
+        papers.EvidenceNote(
+            statement="findings: " + scaffolding,
+            kind="result",
+            evidence_refs=["artifact:meta"],
+        ),
+        papers.EvidenceNote(
+            statement="findings: " + research,
+            kind="result",
+            evidence_refs=["artifact:research"],
+        ),
+    ]
+    plan = papers._evidence_based_long_plan(
+        {"title": "Policy comparison", "problem": "Can the policy remain enforceable?"},
+        notes,
+        {"artifact:meta", "artifact:research"},
+        [
+            {"id": "artifact:meta", "kind": "artifact", "data": {"findings": scaffolding}},
+            {"id": "artifact:research", "kind": "artifact", "data": {"findings": research}},
+        ],
+    )
+    assert any(research in claim.statement for claim in plan.claims)
+    assert all(scaffolding not in claim.statement for claim in plan.claims)
+    assert scaffolding not in plan.abstract
+    assert all(not paragraph.startswith("Recorded result:") for paragraph in plan.conclusions)
+
+
 def main() -> None:
+    test_review_fallback_question_and_tex_safety()
+    test_review_fallback_rejects_process_text_as_claim()
     test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
     test_tex_proofreader_three_passes_with_early_convergence()
     test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data()
