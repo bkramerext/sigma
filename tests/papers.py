@@ -4442,6 +4442,8 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
     conclusion = " ".join(plan.conclusions)
     assert "stable difference" in conclusion and "no stable difference" in conclusion
     assert "process restart" in conclusion
+    # Fallback conclusions must not dump long unrelated source fields.
+    assert max(map(len, plan.conclusions)) < 1000
 
 
 def test_fallback_abstract_uses_complete_result_and_keeps_proposals_out_of_findings() -> None:
@@ -4927,6 +4929,37 @@ def test_one_shot_publishes_with_repaired_claim_links() -> None:
         assert any("not established" in x for x in saved["draft"]["limitations"])
         assert saved["pdf_available"] is True
         assert papers._load_work(str(path)) is None
+
+
+def test_repair_coalesces_only_exact_duplicate_propositions() -> None:
+    original = draft()
+    first = original.claims[0]
+    duplicate = first.model_copy(update={"id": "C2"})
+    extra = first.model_copy(
+        update={
+            "id": "C3",
+            "statement": "A distinct conditional counterexample changes the conclusion.",
+        }
+    )
+    outline = original.model_copy(
+        update={
+            "claims": [first, duplicate, extra],
+            "abstract_claim_ids": ["C2", "C3"],
+            "sections": [
+                original.sections[0].model_copy(update={"claim_ids": ["C2", "C3"]}),
+                original.sections[1],
+            ],
+        }
+    )
+    repaired = papers.PaperDraft.model_validate(
+        papers._repair_paper_references(outline, {"project:pid"})
+    )
+    assert [claim.id for claim in repaired.claims] == ["C1", "C3"]
+    assert repaired.abstract_claim_ids == ["C1", "C3"]
+    assert repaired.sections[0].claim_ids == ["C1", "C3"]
+    assert repaired.claims[0].evidence_refs == first.evidence_refs
+    assert repaired.claims[1].statement == extra.statement
+    assert any("Duplicate proposition C2" in x for x in repaired.validation_warnings)
 
 
 def test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims() -> None:
@@ -5802,6 +5835,8 @@ def test_review_fallback_question_and_tex_safety() -> None:
     assert r"$\rho$" in papers._latex_prose("Density ρ")
     rendered = papers._latex_prose("See https://mindrouter.ai/documentation.html for reference.")
     assert r"\url{https://mindrouter.ai/documentation.html}" in rendered
+    wrapped = papers._latex_prose("Recorded at portfolio_decision/cross_strategy_reviews/2.")
+    assert r"portfolio\_\allowbreak{}decision" in wrapped
     assert r"\usepackage[hyphens]{url}" in papers._tex(
         draft(), [], "e" * 64, include_research_details=False
     )
@@ -5933,6 +5968,7 @@ def main() -> None:
     test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness()
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
+    test_repair_coalesces_only_exact_duplicate_propositions()
     test_one_shot_publishes_with_repaired_claim_links()
     test_live_research_change_does_not_discard_completed_paper()
     test_frozen_evidence_checkpoint_survives_live_research_drift()
