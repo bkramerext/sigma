@@ -35,7 +35,7 @@
 
 | Item | Baseline locus | What treatment must preserve |
 |---|---|---|
-| Nonidentifiability | lines 27–29, claim `C3` | Equal uniform marginals with `E=U,R=U` and `E=U,R=1-U` produce slopes +1 and -1; stage interaction not identified without paired units. |
+| Nonidentifiability | lines 27–29, claim `C3` | Retain a **valid explicit joint-distribution counterexample**: identical observed early/late marginals but opposite within-stage coupling slopes, so an individual stage interaction is not identifiable without paired units. Mathematically equivalent constructions count: I1 uses continuous uniform `E=U,R=U` versus `E=U,R=1-U` (slopes +1/-1); I2 uses binary `E∈{-1,+1}`, `L=E` versus `L=-E` (slopes +1/-1). **Do not require literal variable names or the uniform example**; verify the calculation, assumptions and preserved inferential conclusion. |
 | Stage-mean aliasing | line 30, claim `C4` | `E=e_0+(e_1-e_0)S`, `SE=e_1S`: regressors span ≤2 dimensions. |
 | Restricted receptivity contrast | lines 35–41, claim `C6` | Equal added ERK exposure produces `ΔJ=-kcQ` or `+kcQ` only under idealized window-support assumptions; no measured regrowth effect. |
 | Response latency | lines 44–46, claim `C7` | A fixed wound-age endpoint confounds wound age with elapsed time since pulse. |
