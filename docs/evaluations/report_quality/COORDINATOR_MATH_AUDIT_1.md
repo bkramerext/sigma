@@ -23,6 +23,10 @@ This confirms the **conditional cost-per-success inequality** under positive den
 
 **Result:** PASS for the stated identity.
 
+**Additional source-specific check:** The saved Sovereignty Investigator call 14 derives a conditional **80% power sufficient bound** for the conservative paired confidence gate under hypothetical `Δ=0.20`, discordance `q=0.40`, and IID paired episodes. The Cantelli–Hoeffding threshold is `n>1730.9048...`, so `n=1800` satisfies it; the smallest integer satisfying *this particular sufficient inequality* is **1731**, not a claim of minimum actual enrollment. The final Skeptic review of this step **failed**; see `COORDINATOR_SOURCE_AUDIT_SOVEREIGN_1.md`. Independent arithmetic checking does not substitute for a completed adversarial review or empirical validation.
+
+
+
 ## Xenopus
 
 Verified exactly:
