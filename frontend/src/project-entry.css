@@ -91,11 +91,11 @@
 .home-page .about-disclosure-content { padding: 0 14px 14px; }
 .home-page .about-disclosure-content > .about-terms { margin-bottom: 2px; }
 .home-page .about-disclosure-content > .about-feature:first-child { border-top: 1px solid #35404a; }
-.home-page .about-workflow { display: grid; gap: 17px; margin: 0; padding: 3px 2px 2px; list-style: none; }
-.home-page .about-workflow-stage { position: relative; display: grid; grid-template-columns: minmax(190px, .9fr) minmax(0, 1.1fr); align-items: center; gap: 18px; min-width: 0; }
+.home-page .about-workflow { display: grid; grid-template-rows: repeat(6, 86px); gap: 0; margin: 0; padding: 3px 2px 2px; list-style: none; }
+.home-page .about-workflow-stage { position: relative; display: grid; grid-template-columns: minmax(190px, .9fr) minmax(0, 1.1fr); align-items: center; gap: 18px; min-width: 0; height: 86px; }
 .home-page .about-workflow-step { position: relative; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 9px 12px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; background: linear-gradient(145deg, #302117, #151c22 58%, #0a121b); box-shadow: inset 0 1px 0 #f6c98d2e, 0 5px 14px #0004; }
-.home-page .about-workflow-stage:not(:last-child)::after { position: absolute; z-index: 1; top: 55px; bottom: -18px; left: 21px; width: 1px; background: linear-gradient(180deg, #e1b77f, #926146 72%, #57402e); content: ''; }
-.home-page .about-workflow-stage:not(:last-child)::before { position: absolute; z-index: 1; bottom: -18px; left: 18px; width: 6px; height: 6px; border-right: 1px solid #d4a372; border-bottom: 1px solid #d4a372; content: ''; transform: rotate(45deg); }
+.home-page .about-workflow-stage:not(:last-child)::after { position: absolute; z-index: 1; top: calc(50% + 12.5px); bottom: -17px; left: 25px; width: 1px; background: linear-gradient(180deg, #e1b77f, #926146 72%, #57402e); content: ''; }
+.home-page .about-workflow-stage:not(:last-child)::before { position: absolute; z-index: 1; bottom: -15.75px; left: 22px; width: 6px; height: 6px; border-right: 1px solid #d4a372; border-bottom: 1px solid #d4a372; content: ''; transform: rotate(45deg); }
 .home-page .about-workflow-number { display: grid; flex: 0 0 25px; place-items: center; width: 25px; height: 25px; border: 1px solid #c68d5d; border-radius: 50%; color: #f0c999; font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-workflow-step h3 { margin: 0; color: #f0c999; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-workflow-notes { min-width: 0; margin: 0; padding-left: 18px; color: #c4ced8; font: 12px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
@@ -206,12 +206,12 @@
   .home-page .about-dialog .entry-dialog-header { margin: -16px -16px 14px; padding: 14px 16px 11px; }
   .home-page .about-dialog-content { font-size: 12px; }
   .home-page .about-disclosure-content { padding: 0 10px 11px; }
-  .home-page .about-workflow { gap: 15px; }
-  .home-page .about-workflow-stage { grid-template-columns: minmax(0, 1fr); gap: 5px; align-items: start; }
+  .home-page .about-workflow { grid-template-rows: repeat(6, 188px); gap: 0; }
+  .home-page .about-workflow-stage { grid-template-columns: minmax(0, 1fr); gap: 5px; align-items: start; height: 188px; }
   .home-page .about-workflow-step { min-height: 44px; padding: 8px 10px; }
-  .home-page .about-workflow-stage:not(:last-child)::after { top: 47px; bottom: -16px; left: 19px; }
-  .home-page .about-workflow-stage:not(:last-child)::before { bottom: -16px; left: 16px; }
-  .home-page .about-workflow-notes { padding-left: 39px; font-size: 12px; line-height: 1.55; }
+  .home-page .about-workflow-stage:not(:last-child)::after { top: 34px; bottom: 0; left: 23px; }
+  .home-page .about-workflow-stage:not(:last-child)::before { bottom: 1.25px; left: 20px; }
+  .home-page .about-workflow-notes { padding-left: 58px; font-size: 12px; line-height: 1.55; }
   .home-page .about-strategy-cards { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .home-page .about-session-frame, .home-page .about-strategy-group { padding: 9px; }
   .home-page .about-exploration-space { padding: 8px 6px; }

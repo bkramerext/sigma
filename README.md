@@ -2,6 +2,8 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
+**[Open Hosted SIGMA →](https://sigma-research.duckdns.org/)**
+
 SIGMA is an experimental research workspace for investigating difficult questions through multiple approaches. It grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
 
 A project contains a question, candidate strategies, research sessions, and saved evidence. During a session, Investigator and Skeptic roles examine selected strategies in bounded exchanges. SIGMA records findings, objections, unresolved questions, and available computational results so a person can inspect and continue the investigation. Research can involve multiple strategies, with evidence carried forward between steps and sessions.
@@ -12,16 +14,12 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 Create a project or sample, then choose strategies to investigate. The overview below shows how SIGMA preserves findings for review and how you can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
 
-### The SIGMA workflow
+### Workflow
 
 ```mermaid
-flowchart TD
-    A[Create a project] --> B[Explore research strategies]
-    B --> C[Run Investigator and Skeptic research]
-    C --> D[Review findings and refine understanding]
-    D -->|research records and reports| F[Review and export]
-    D -. optional paper .-> E[Draft an academic paper]
-    E -->|paper review and export| F
+%%{init: {"flowchart": {"useMaxWidth": false, "nodeSpacing": 12, "rankSpacing": 32}, "themeVariables": {"fontSize": "13px"}}}%%
+flowchart LR
+    A[Project] --> B[Strategies] --> C[Research] --> D[Refine] --> E[Optional paper] --> F[Review/export]
 ```
 
 - **Create a project:** Choose a subject or sample and frame the question.

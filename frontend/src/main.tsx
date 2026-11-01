@@ -2947,7 +2947,7 @@ function AboutWorkflow() {
     { title: 'Run research', notes: ['Investigator and Skeptic examine selected strategies.', 'Sessions save evidence, objections, results, and open questions.'] },
     { title: 'Review and refine', notes: ['Inspect findings, the Outcome, and Current Understanding.', 'Revise strategies or run more sessions when useful.'] },
     { title: 'Draft a paper (optional)', notes: ['Synthesize saved research into an academic paper draft.', 'A draft is not proof or independent verification.'] },
-    { title: 'Review and export', notes: ['Export research records and reports for inspection or sharing; no paper is required.', 'If you create a paper, review its claims, evidence, citations, and limitations before exporting PDF or TeX.', 'You choose whether and where to share or publish a paper.'] },
+    { title: 'Review and export', notes: ['Export research records and reports without a paper.', 'For a draft, review claims, evidence, citations, and limits before PDF or TeX export.'] },
   ];
   return <ol className="about-workflow" aria-label="SIGMA research workflow">{stages.map((stage, index) => <li className="about-workflow-stage" key={stage.title}>
     <div className="about-workflow-step"><span className="about-workflow-number" aria-hidden="true">{index + 1}</span><h3>{stage.title}</h3></div>
@@ -2968,7 +2968,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     <div className="about-dialog-content">
       <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
       <details className="about-disclosure about-workflow-disclosure" data-about-section="workflow" open={aboutDisclosureState('workflow')} onToggle={event => rememberAboutDisclosure(event, 'workflow')}>
-        <summary>How SIGMA works</summary>
+        <summary>Research Process</summary>
         <div className="about-disclosure-content"><AboutWorkflow/></div>
       </details>
       <details className="about-disclosure" data-about-section="features" open={aboutDisclosureState('features')} onToggle={event => rememberAboutDisclosure(event, 'features')}>
@@ -4675,6 +4675,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <div id="project-pane-content" hidden={!projectExpanded}>
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
+      <div className="project-description-columns"><span>DESCRIPTION AND ACCEPTANCE CRITERIA</span></div>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
         <div className="project-intro">
