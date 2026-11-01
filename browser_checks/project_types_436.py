@@ -73,6 +73,18 @@ with sync_playwright() as playwright:
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
     )
 
+    # Home account pills occupy About / Google over Admin / ChatGPT at right.
+    grid = page.locator(".home-account-grid")
+    expect(grid).to_be_visible()
+    expect(grid.locator(".home-about-button")).to_have_text("About")
+    assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
+        '"about google" "admin chatgpt"'
+    )
+    about_rect = grid.locator(".home-about-button").bounding_box()
+    google_rect = grid.locator(".project-google-signin").first.bounding_box()
+    assert about_rect and google_rect
+    assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
+
     # The native Project Types dialog traps keyboard focus, closes on Escape,
     # restores focus, and keeps the Literature/open-book catalog read-only.
     types_button = page.get_by_role("button", name="Project Types", exact=True)
@@ -418,6 +430,13 @@ with sync_playwright() as playwright:
     legacy = project(page, "Legacy default project", "default")
     open_project(page, legacy["path"])
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
+    header = page.locator(".project-art-header")
+    expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About")
+    assert header.locator(".header-controls").evaluate(
+        "node => getComputedStyle(node).gridTemplateAreas"
+    ) == '"difficulty model identity" "about thinking identity"'
+    assert header.locator(".project-types-title-action").count() == 1
+
     with page.expect_download() as legacy_download:
         page.get_by_role("button", name="Export project").click()
         page.get_by_role("dialog", name="Export Project").get_by_role(
