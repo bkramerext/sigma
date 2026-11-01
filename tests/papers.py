@@ -1628,6 +1628,7 @@ def test_research_details_toggle_preserves_science_and_opt_in_diagnostics() -> N
         ["A validator recorded an unsupported citation."],
         snapshot,
         include_research_details=True,
+        include_research_excerpts=True,
         **opts,
     )
     for required in (
@@ -1710,6 +1711,7 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
         "f" * 64,
         math_style=True,
         include_research_details=True,
+        include_research_excerpts=True,
         integrity_records=integrity,
         integrity_excerpts=True,
         obligation_reconciliation=obligations,
@@ -2968,6 +2970,7 @@ def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> N
             for item in excerpts
         ],
         integrity_excerpts=True,
+        include_research_excerpts=True,
         obligation_reconciliation=unresolved,
     )
     assert r"\section{Frozen obligation reconciliation}" in rendered
@@ -3101,7 +3104,7 @@ def test_long_paper_can_retrieve_sources_outside_planner_preview() -> None:
 
 def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     expected = {
-        "biology": ("Introduction and biological context", "cross-species limitations"),
+        "biology": ("Introduction and biological context", "cross-species limits"),
         "mathematical": ("Introduction", "bridges between logical steps"),
         "military": ("Question and operational context", "alternative courses of action"),
     }
@@ -3112,6 +3115,163 @@ def test_research_type_specific_tex_sections_and_authoring_guidance() -> None:
     math_tex = papers._tex(draft(), [], "f" * 64, math_style=True)
     assert r"\section{Introduction}" in math_tex
     assert r"\section*{Claim status and evidence}" in math_tex
+
+
+def test_writing_source_selection_reuses_complete_prior_set_and_skips_failures() -> None:
+    catalog = papers.paper_writing_sources
+    calls: list[str] = []
+
+    async def fetch(url: str) -> str | None:
+        calls.append(url)
+        if "pmc.ncbi" in url:
+            return None
+        return "Readable, relevant scientific writing guidance. " * 20
+
+    project = {
+        "investigation_type": "mathematical",
+        "title": "Nonconsecutive Subset Sums Modulo 3",
+        "problem": "Prove a recurrence and exact limit.",
+    }
+
+    async def check() -> None:
+        chosen, status = await catalog.select(project, fetch=fetch)
+        assert status == "selected"
+        assert len(chosen) == 3
+        assert {item["tier"] for item in chosen} == {
+            "general", "discipline", "branch"
+        }
+        assert all(len(item["excerpt"]) >= 450 for item in chosen)
+        assert all(item["type"] == "mathematical" and item["branch"] == "combinatorics"
+                   for item in chosen)
+        count = len(calls)
+        reused, mode = await catalog.select(project, chosen, fetch=fetch)
+        assert mode == "reused" and reused == chosen and len(calls) == count
+        damaged = [dict(item) for item in chosen]
+        damaged[0]["sha256"] = "0" * 64
+        updated, mode = await catalog.select(project, damaged, fetch=fetch)
+        assert mode == "selected" and updated == chosen
+        no_urls, status = await catalog.select(
+            {"investigation_type": "law", "title": "Legal memorandum"},
+            fetch=lambda _url: unavailable(),
+        )
+        assert status == "unavailable" and no_urls == []
+
+    async def unavailable() -> None:
+        raise RuntimeError("unavailable writing source")
+
+    asyncio.run(check())
+
+
+def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> None:
+    source = {
+        "title": "Writing Mathematics",
+        "url": "https://example.org/writing-math",
+        "tier": "discipline",
+        "type": "mathematical",
+        "branch": "general",
+        "excerpt": "A source excerpt used only for writing.",
+        "sha256": "a" * 64,
+    }
+    tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
+    assert r"\section*{Paper writing source material used}" in tex
+    assert "Writing Mathematics" in tex
+    assert r"\url{https://example.org/writing-math}" in tex
+    assert "not the scientific evidence or findings" in tex
+    empty_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[])
+    assert "No external writing-guidance sources were recorded." in empty_tex
+
+
+def test_math_and_physics_methodology_reaches_every_authoring_path() -> None:
+    """Each project type gets general, evidence-specific genre instructions."""
+    cases = (
+        (
+            "mathematical",
+            "lemmas by logical dependency",
+            "a universal proof",
+            "chosen metric or field ansatz",
+        ),
+        (
+            "physics",
+            "theoretical derivation",
+            "A chosen metric or field ansatz",
+            "Finite enumeration or numerical pattern matching",
+        ),
+    )
+    for project_type, marker, second_marker, excluded in cases:
+        package, plan = fast_package()
+        package["sources"][0]["data"]["investigation_type"] = project_type
+        package["sources"][0]["data"]["problem"] = "Study the stated research question."
+        seen: dict[str, list[str]] = {}
+
+        async def fake_stage(
+            _input, _binding, _config, *, instructions, schema_name, **_kwargs
+        ):
+            seen.setdefault(schema_name, []).append(instructions)
+            if schema_name == "sigma_long_paper_plan":
+                return plan, "fixture-model"
+            assert schema_name == "sigma_long_paper_section"
+            return papers.LongSectionDraft(
+                paragraphs=["The bounded source analysis supports a conditional result."]
+            ), "fixture-model"
+
+        state = papers._new_work("a" * 64, "fast-fixture", "b" * 64, "fixture-model", "high")
+
+        async def write_long() -> None:
+            with patch.object(papers, "_provider_structured", new=fake_stage):
+                draft_value, _calls, _batches = await papers._generate_long_draft(
+                    package,
+                    {"mode": "api_key", "identity": "fixture", "token": "fixture"},
+                    {"model": "fixture-model", "reasoning_effort": "high"},
+                    state,
+                    lambda _state: None,
+                    structured_fast_path=True,
+                )
+            assert draft_value.sections
+
+        asyncio.run(write_long())
+        assert set(seen) == {"sigma_long_paper_plan", "sigma_long_paper_section"}
+        for value in seen.values():
+            for instructions in value:
+                assert marker in instructions
+                assert second_marker in instructions
+                assert excluded not in instructions
+
+        requests: list[dict[str, Any]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(json.loads(request.content))
+            return httpx.Response(400, json={"error": {"code": "invalid_json_schema"}})
+
+        real_client = httpx.AsyncClient
+        with patch(
+            "sigma.papers.httpx.AsyncClient",
+            side_effect=lambda **kwargs: real_client(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ):
+            try:
+                asyncio.run(
+                    papers._provider(
+                        package,
+                        {"mode": "api_key", "token": "fixture"},
+                        {"model": "fixture-model", "reasoning_effort": "high"},
+                    )
+                )
+            except ProjectError as exc:
+                assert "HTTP 400" in str(exc)
+            else:
+                raise AssertionError("Mock provider should reject schema")
+
+        assert len(requests) == 1
+        assert marker in requests[0]["instructions"]
+        assert second_marker in requests[0]["instructions"]
+        assert excluded not in requests[0]["instructions"]
+
+        opening, methods, _, _ = papers._paper_style(project_type)
+        tex = papers._tex(draft(), [], "f" * 64, investigation_type=project_type)
+        assert rf"\section{{{opening}}}" in tex
+        assert rf"\section{{{methods}}}" in tex
+        assert marker not in papers._paper_style("default")[3]
 
 
 def test_military_style_guidance_reaches_all_authoring_paths() -> None:
@@ -3615,10 +3775,10 @@ def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
         assert not papers._gate.locked()
 
 
-def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
+def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None:
     """AI latency in one user's paper must not block another project."""
     with TemporaryDirectory() as temporary:
-        paths = [Path(temporary) / f"paper-{index}.sigma" for index in range(3)]
+        paths = [Path(temporary) / f"paper-{index}.sigma" for index in range(4)]
         views = [
             initialize_project(path, f"Paper project {index}", "Independent bounded research")
             for index, path in enumerate(paths)
@@ -3630,15 +3790,15 @@ def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
             "model": "fixture-model",
             "reasoning_effort": "high",
         }
-        both_started = asyncio.Event()
+        three_started = asyncio.Event()
         release = asyncio.Event()
         provider_calls = 0
 
         async def blocked_provider(context, *_args):
             nonlocal provider_calls
             provider_calls += 1
-            if provider_calls == 2:
-                both_started.set()
+            if provider_calls == 3:
+                three_started.set()
             await release.wait()
             source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
             return draft(source), "fixture-model"
@@ -3657,42 +3817,43 @@ def test_two_paper_generators_run_concurrently_and_third_fails_fast() -> None:
                 patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
                 mock_pdf_inspection(),
             ):
-                first, second = [
+                first, second, third = [
                     asyncio.create_task(
                         papers.generate(str(path), credential["identity"], view.project.id)
                     )
-                    for path, view in zip(paths[:2], views[:2])
+                    for path, view in zip(paths[:3], views[:3])
                 ]
                 try:
-                    await asyncio.wait_for(both_started.wait(), timeout=2)
-                    assert provider_calls == 2, "Both users should reach AI concurrently"
-                    assert len(papers._generating_paper_projects) == 2
+                    await asyncio.wait_for(three_started.wait(), timeout=2)
+                    assert provider_calls == 3, "All three users should reach AI concurrently"
+                    assert len(papers._generating_paper_projects) == 3
                     try:
                         await papers.generate(
-                            str(paths[2]), credential["identity"], views[2].project.id
+                            str(paths[3]), credential["identity"], views[3].project.id
                         )
                     except ProjectError as exc:
                         assert "capacity is full" in str(exc)
                     else:
-                        raise AssertionError("Third paper must be rejected before provider I/O")
-                    assert provider_calls == 2
+                        raise AssertionError("Fourth paper must be rejected before provider I/O")
+                    assert provider_calls == 3
                 finally:
                     release.set()
-                results = await asyncio.wait_for(asyncio.gather(first, second), timeout=5)
-                assert len(results) == 2
+                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=5)
+                assert len(results) == 3
                 assert len(papers.list_papers(str(paths[0]))) == 1
                 assert len(papers.list_papers(str(paths[1]))) == 1
-                assert papers.list_papers(str(paths[2])) == []
+                assert len(papers.list_papers(str(paths[2]))) == 1
+                assert papers.list_papers(str(paths[3])) == []
                 assert not papers._busy_paper_projects
                 assert not papers._generating_paper_projects
 
         asyncio.run(check())
 
 
-def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
-    """Both admitted papers compile in parallel; no third paper enters mid-compile."""
+def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
+    """Three admitted papers compile in parallel; a fourth cannot enter mid-compile."""
     with TemporaryDirectory() as temporary:
-        paths = [Path(temporary) / f"compile-{index}.sigma" for index in range(3)]
+        paths = [Path(temporary) / f"compile-{index}.sigma" for index in range(4)]
         views = [
             initialize_project(path, f"Compile project {index}", "Compile independently")
             for index, path in enumerate(paths)
@@ -3704,7 +3865,7 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
             "model": "fixture-model",
             "reasoning_effort": "high",
         }
-        two_compiling = threading.Event()
+        three_compiling = threading.Event()
         finish_compiling = threading.Event()
         count_lock = threading.Lock()
         compilations = 0
@@ -3714,8 +3875,8 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
             nonlocal compilations
             with count_lock:
                 compilations += 1
-                if compilations == 2:
-                    two_compiling.set()
+                if compilations == 3:
+                    three_compiling.set()
             if not finish_compiling.wait(timeout=10):
                 raise AssertionError("An independent PDF compiler was serialized or stranded")
             return b"%PDF-fixture"
@@ -3740,42 +3901,44 @@ def test_two_papers_reach_compilation_together_and_hold_capacity() -> None:
                 patch.object(papers, "_compile_pdf", new=blocked_compiler),
                 mock_pdf_inspection(),
             ):
-                first, second = [
+                first, second, third = [
                     asyncio.create_task(
                         papers.generate(str(path), credential["identity"], view.project.id)
                     )
-                    for path, view in zip(paths[:2], views[:2])
+                    for path, view in zip(paths[:3], views[:3])
                 ]
                 try:
                     assert await asyncio.wait_for(
-                        asyncio.to_thread(two_compiling.wait, 8), timeout=9
-                    ), "Only one paper reached PDF compilation"
-                    assert compilations == 2
-                    assert len(papers._generating_paper_projects) == 2
+                        asyncio.to_thread(three_compiling.wait, 8), timeout=9
+                    ), "Not all three papers reached PDF compilation"
+                    assert compilations == 3
+                    assert len(papers._generating_paper_projects) == 3
                     try:
                         await papers.generate(
-                            str(paths[2]), credential["identity"], views[2].project.id
+                            str(paths[3]), credential["identity"], views[3].project.id
                         )
                     except ProjectError as exc:
                         assert "capacity is full" in str(exc)
                     else:
-                        raise AssertionError("Third paper entered while two compilers were active")
-                    assert provider_calls == 2
-                    assert compilations == 2
+                        raise AssertionError(
+                            "Fourth paper entered while three compilers were active"
+                        )
+                    assert provider_calls == 3
+                    assert compilations == 3
                 finally:
                     finish_compiling.set()
-                results = await asyncio.wait_for(asyncio.gather(first, second), timeout=6)
-                assert len(results) == 2
-                assert all(len(papers.list_papers(str(path))) == 1 for path in paths[:2])
-                assert papers.list_papers(str(paths[2])) == []
+                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=6)
+                assert len(results) == 3
+                assert all(len(papers.list_papers(str(path))) == 1 for path in paths[:3])
+                assert papers.list_papers(str(paths[3])) == []
                 assert not papers._busy_paper_projects
                 assert not papers._generating_paper_projects
 
         asyncio.run(check())
 
 
-def test_eight_research_sessions_overlap_two_paper_generators() -> None:
-    """Cross-feature smoke: 8 live mock research calls + 2 paper model calls."""
+def test_eight_research_sessions_overlap_three_paper_generators() -> None:
+    """Cross-feature smoke: 8 live mock research calls + 3 paper model calls."""
     from contextvars import ContextVar
     from uuid import uuid4
 
@@ -3828,7 +3991,7 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
     async def paper_provider(context, *_args):
         nonlocal paper_count
         paper_count += 1
-        if paper_count == 2:
+        if paper_count == 3:
             paper_ready.set()
         await release.wait()
         source = next(item["id"] for item in context["sources"] if item["kind"] == "project")
@@ -3845,7 +4008,7 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
             research_projects.append((path, view, strategy))
         paper_projects = [
             (path, initialize_project(path, f"Paper {index}", "Independent paper"))
-            for index in range(2)
+            for index in range(3)
             for path in [root / f"paper-{index}.sigma"]
         ]
 
@@ -3891,9 +4054,9 @@ def test_eight_research_sessions_overlap_two_paper_generators() -> None:
                     for i, (path, view) in enumerate(paper_projects)
                 ]
                 await asyncio.wait_for(paper_ready.wait(), 15)
-                assert len(papers._generating_paper_projects) == 2
+                assert len(papers._generating_paper_projects) == 3
                 assert all(not research_sessions._tasks[row["id"]].done() for row in starts)
-                assert paper_count == 2
+                assert paper_count == 3
             finally:
                 release.set()
             await asyncio.wait_for(asyncio.gather(*paper_tasks), 15)
@@ -4290,6 +4453,239 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
     package["sources"][0]["data"]["difficulty"] = "easy"
     package["sources"][1]["data"]["outcome"]["argument"] *= 2
     assert papers._paper_long_form(package) is True
+
+
+def test_fallback_planner_ranks_complete_research_notes_over_operational_fields() -> None:
+    session = "session:fixture"
+    result_a = "artifact:result-a"
+    result_b = "artifact:result-b"
+    skeptic = "artifact:skeptic"
+    complete_proof_ref = "artifact:complete-proof"
+    truncated_ref = "artifact:truncated"
+    obligation = "artifact:obligation"
+    long_proof = (
+        "P" * 430 + " and therefore this final step follows only if the earlier premises hold."
+    )
+    complete_proof = (
+        "The derivation starts from the stated assumptions. "
+        + "The intermediate step preserves the same invariant. " * 10
+        + "The complete final implication follows under those assumptions."
+    )
+    truncated_text = "This imported field ends abruptly without a complete claim"
+    obligation_text = "Determine whether the effect record remains durable after a process restart?"
+    complete_chunk_size = papers.FAST_NOTE_TEXT_LENGTH - len("complete_proof") - 3
+    complete_chunks = [
+        complete_proof[index : index + complete_chunk_size]
+        for index in range(0, len(complete_proof), complete_chunk_size)
+    ]
+    notes = [
+        papers.EvidenceNote(
+            statement="events/4/project_change/previous/reasoning_effort: high",
+            kind="result",
+            evidence_refs=[session],
+        ),
+        papers.EvidenceNote(
+            statement="events/10/failure_kind: preflight_error",
+            kind="negative",
+            evidence_refs=[session],
+        ),
+        papers.EvidenceNote(
+            statement="finding: The saved comparison supports a stable difference between the two measured conditions.",
+            kind="result",
+            evidence_refs=[result_a],
+        ),
+        papers.EvidenceNote(
+            statement="finding: An independent comparison reports no stable difference between the two measured conditions.",
+            kind="result",
+            evidence_refs=[result_b],
+        ),
+        papers.EvidenceNote(
+            statement="failure_analysis: The saved retry failure shows that an acknowledged operation can still lack a durable effect record.",
+            kind="negative",
+            evidence_refs=[skeptic],
+        ),
+        papers.EvidenceNote(
+            statement="proof: and therefore this final step follows only if the earlier premises hold.",
+            kind="result",
+            evidence_refs=[skeptic],
+        ),
+        *[
+            papers.EvidenceNote(
+                statement=f"complete_proof: {chunk}",
+                kind="result",
+                evidence_refs=[complete_proof_ref],
+            )
+            for chunk in complete_chunks
+        ],
+        papers.EvidenceNote(
+            statement=f"open_obligation: {obligation_text}",
+            kind="question",
+            evidence_refs=[obligation],
+        ),
+        papers.EvidenceNote(
+            statement=f"truncated_capture: {truncated_text}",
+            kind="result",
+            evidence_refs=[truncated_ref],
+        ),
+    ]
+    sources = [
+        {
+            "id": session,
+            "kind": "session",
+            "data": {
+                "events": [
+                    {"project_change": {"previous": {"reasoning_effort": "high"}}},
+                    {"failure_kind": "preflight_error"},
+                ]
+            },
+        },
+        {
+            "id": result_a,
+            "kind": "artifact",
+            "data": {"finding": notes[2].statement.removeprefix("finding: ")},
+        },
+        {
+            "id": result_b,
+            "kind": "artifact",
+            "data": {"finding": notes[3].statement.removeprefix("finding: ")},
+        },
+        {
+            "id": skeptic,
+            "kind": "artifact",
+            "data": {
+                "failure_analysis": notes[4].statement.removeprefix("failure_analysis: "),
+                "proof": long_proof,
+            },
+        },
+        {"id": complete_proof_ref, "kind": "artifact", "data": {"complete_proof": complete_proof}},
+        {"id": truncated_ref, "kind": "artifact", "data": {"truncated_capture": truncated_text}},
+        {
+            "id": obligation,
+            "kind": "artifact",
+            "data": {"open_obligation": obligation_text},
+        },
+    ]
+    plan = papers._evidence_based_long_plan(
+        {"title": "Fixture project", "problem": "What changes across conditions?"},
+        notes,
+        {session, result_a, result_b, skeptic, complete_proof_ref, truncated_ref, obligation},
+        sources,
+    )
+    assert all("events/" not in claim.statement for claim in plan.claims)
+    assert all("proof:" not in claim.statement for claim in plan.claims)
+    result_claim = next(
+        claim for claim in plan.claims if "supports a stable difference" in claim.statement
+    )
+    contrary_claim = next(
+        claim for claim in plan.claims if "reports no stable difference" in claim.statement
+    )
+    assert result_claim.id != contrary_claim.id
+    assert result_claim.evidence_refs == [result_a]
+    assert contrary_claim.evidence_refs == [result_b]
+    assert any("retry failure" in claim.statement for claim in plan.claims)
+    assert any("Source-index classification: result." in claim.reasoning for claim in plan.claims)
+    full_proof_claim = next(
+        claim for claim in plan.claims if "derivation starts" in claim.statement
+    )
+    assert "complete final implication" in full_proof_claim.statement
+    assert complete_proof_ref in full_proof_claim.evidence_refs
+    assert all("ends abruptly" not in claim.statement for claim in plan.claims)
+    assert all(
+        set(claim.evidence_refs)
+        <= {session, result_a, result_b, skeptic, complete_proof_ref, truncated_ref, obligation}
+        for claim in plan.claims
+    )
+    assert all(session not in section.evidence_refs for section in plan.sections)
+    assert any("process restart" in obligation for obligation in plan.open_obligations)
+    conclusion = " ".join(plan.conclusions)
+    assert "stable difference" in conclusion and "no stable difference" in conclusion
+    assert "process restart" in conclusion
+    # Fallback conclusions must not dump long unrelated source fields.
+    assert max(map(len, plan.conclusions)) < 1000
+
+
+def test_fallback_abstract_uses_complete_result_and_keeps_proposals_out_of_findings() -> None:
+    result_ref = "artifact:conditional-result"
+    proposal_ref = "artifact:proposed-pilot"
+    result = (
+        "Under the stated partition model, cached approval cannot guarantee immediate "
+        "revocation while preserving disconnected admission. This limitation applies only "
+        "when the replica has neither authoritative information nor an earlier grant. "
+        + "Additional source detail supports the same conditional result. "
+        * 5
+    )
+    proposal = "Use matched campus cohorts and report clustered uncertainty at the end."
+    notes = [
+        papers.EvidenceNote(
+            statement=f"claim_or_question: {result}",
+            kind="result",
+            evidence_refs=[result_ref],
+        ),
+        papers.EvidenceNote(
+            statement=f"argument: {proposal}",
+            kind="result",
+            evidence_refs=[proposal_ref],
+        ),
+    ]
+    sources = [
+        {
+            "id": result_ref,
+            "kind": "artifact",
+            "data": {"claim_or_question": result},
+        },
+        {
+            "id": proposal_ref,
+            "kind": "artifact",
+            "data": {"investigator_output": {"reasoning_steps": [{"argument": proposal}]}},
+        },
+    ]
+    plan = papers._evidence_based_long_plan(
+        {
+            "title": "A partition and policy analysis",
+            "problem": "When can remote access remain safe?",
+        },
+        notes,
+        {result_ref, proposal_ref},
+        sources,
+    )
+    assert "cached approval cannot guarantee immediate revocation" in plan.abstract
+    assert "does not establish an independently verified resolution" not in plan.abstract
+    assert "Use matched campus cohorts" not in plan.abstract
+    assert "Use matched campus cohorts" not in " ".join(
+        claim.statement for claim in plan.claims if claim.id in plan.sections[0].claim_ids
+    )
+    proposed_claim = next(claim for claim in plan.claims if claim.statement == proposal)
+    methods = next(
+        section
+        for section in plan.sections
+        if section.heading == "Research methods and proposed approaches"
+    )
+    assert proposed_claim.id in methods.claim_ids
+    assert plan.abstract_claim_ids == [
+        next(claim.id for claim in plan.claims if claim.statement == result)
+    ]
+
+
+def test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness() -> None:
+    package = {
+        "schema": "sigma-paper-evidence-v2",
+        "project_id": "frozen-project",
+        "sources": [{"id": "project:frozen-project", "kind": "project", "data": {}}],
+    }
+    validated, digest = papers._validate_frozen_snapshot(package, "frozen-project")
+    assert validated is package
+    assert len(digest) == 64
+    duplicate = {**package, "sources": [*package["sources"], *package["sources"]]}
+    for invalid, project_id, expected in (
+        (package, "other-project", "another project"),
+        (duplicate, "frozen-project", "duplicate"),
+    ):
+        try:
+            papers._validate_frozen_snapshot(invalid, project_id)
+        except papers.ProjectError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError(f"Invalid frozen snapshot was accepted: {expected}")
 
 
 def test_invalid_planning_claim_reference_is_recoverable() -> None:
@@ -4691,6 +5087,37 @@ def test_one_shot_publishes_with_repaired_claim_links() -> None:
         assert any("not established" in x for x in saved["draft"]["limitations"])
         assert saved["pdf_available"] is True
         assert papers._load_work(str(path)) is None
+
+
+def test_repair_coalesces_only_exact_duplicate_propositions() -> None:
+    original = draft()
+    first = original.claims[0]
+    duplicate = first.model_copy(update={"id": "C2"})
+    extra = first.model_copy(
+        update={
+            "id": "C3",
+            "statement": "A distinct conditional counterexample changes the conclusion.",
+        }
+    )
+    outline = original.model_copy(
+        update={
+            "claims": [first, duplicate, extra],
+            "abstract_claim_ids": ["C2", "C3"],
+            "sections": [
+                original.sections[0].model_copy(update={"claim_ids": ["C2", "C3"]}),
+                original.sections[1],
+            ],
+        }
+    )
+    repaired = papers.PaperDraft.model_validate(
+        papers._repair_paper_references(outline, {"project:pid"})
+    )
+    assert [claim.id for claim in repaired.claims] == ["C1", "C3"]
+    assert repaired.abstract_claim_ids == ["C1", "C3"]
+    assert repaired.sections[0].claim_ids == ["C1", "C3"]
+    assert repaired.claims[0].evidence_refs == first.evidence_refs
+    assert repaired.claims[1].statement == extra.statement
+    assert any("Duplicate proposition C2" in x for x in repaired.validation_warnings)
 
 
 def test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims() -> None:
@@ -5546,7 +5973,176 @@ def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
     )
 
 
+def test_publication_preserves_failed_final_skeptic_as_research_limitation() -> None:
+    session = {
+        "id": "session-failed-final",
+        "kind": "session",
+        "data": {
+            "id": "failed-final",
+            "status": "ended",
+            "terminal_reason": "Research stopped early. Research is incomplete.",
+            "termination_reason_code": "provider_or_strategy_failure",
+            "steps": [
+                {
+                    "call_number": 18,
+                    "role": "skeptic",
+                    "status": "failed",
+                    "failure_kind": "provider_error",
+                }
+            ],
+        },
+    }
+    healthy = {
+        "id": "session-complete",
+        "kind": "session",
+        "data": {"id": "complete", "status": "ended", "termination_reason_code": "completed"},
+    }
+    frozen = {"sources": [session, healthy]}
+    notes = papers._research_completion_limitations(frozen)
+    assert len(notes) == 1
+    assert "failed-final" in notes[0]
+    assert "call 18 (skeptic)" in notes[0]
+    assert "Earlier findings remain available" in notes[0]
+    result = papers._annotate_research_completion(draft(), frozen)
+    assert any("call 18 (skeptic)" in item for item in result.limitations)
+    assert len(result.limitations) == len(draft().limitations) + 1
+    assert len(papers._annotate_research_completion(result, frozen).limitations) == len(
+        result.limitations
+    )
+    assert papers._research_completion_limitations({"sources": [healthy]}) == []
+
+
+def test_review_fallback_question_and_tex_safety() -> None:
+    """Phase-1 writing fixes must preserve the problem and scientific notation."""
+    question = (
+        "Can a gateway improve authorized research completion? "
+        + "The project also includes background and long source references. " * 20
+        + "https://mindrouter.ai/documentation"
+    )
+    plan = papers._evidence_based_long_plan(
+        {"title": "Conditional gateway research", "problem": question},
+        [],
+        {"project:gateway"},
+        [{"id": "project:gateway", "kind": "project", "data": {"problem": question}}],
+    )
+    assert "Can a gateway improve authorized research completion?" in plan.problem_framing[0]
+    assert "https://mindrouter.ai/documen" not in plan.problem_framing[0]
+    assert "… " not in plan.problem_framing[0]
+    assert r"$\eta$" in papers._latex_prose("Error allowance η")
+    assert r"$\rho$" in papers._latex_prose("Density ρ")
+    rendered = papers._latex_prose("See https://mindrouter.ai/documentation.html for reference.")
+    assert r"\url{https://mindrouter.ai/documentation.html}" in rendered
+    wrapped = papers._latex_prose("Recorded at portfolio_decision/cross_strategy_reviews/2.")
+    assert r"portfolio\_\allowbreak{}decision" in wrapped
+    assert r"\usepackage[hyphens]{url}" in papers._tex(
+        draft(), [], "e" * 64, include_research_details=False
+    )
+    tex = papers._tex(
+        draft(),
+        [],
+        "a" * 64,
+        integrity_records=[{"kind": "research", "description": "Saved private artifact"}],
+        include_research_details=True,
+        include_research_excerpts=False,
+    )
+    assert r"\section{Selected source-linked research excerpts}" not in tex
+    assert r"\section{Structured reasoning and review records}" not in tex
+    assert r"\section*{About this paper}" in tex
+    assert r"\begin{sloppypar}" in tex
+    assert r"\end{sloppypar}" in tex
+
+
+def test_review_fallback_rejects_process_text_as_claim() -> None:
+    research = "The bounded comparison leaves the remote policy condition unresolved."
+    scaffolding = "Structured argument steps are recorded; review their evidence and objections."
+    notes = [
+        papers.EvidenceNote(
+            statement="findings: " + scaffolding,
+            kind="result",
+            evidence_refs=["artifact:meta"],
+        ),
+        papers.EvidenceNote(
+            statement="findings: " + research,
+            kind="result",
+            evidence_refs=["artifact:research"],
+        ),
+    ]
+    plan = papers._evidence_based_long_plan(
+        {"title": "Policy comparison", "problem": "Can the policy remain enforceable?"},
+        notes,
+        {"artifact:meta", "artifact:research"},
+        [
+            {"id": "artifact:meta", "kind": "artifact", "data": {"findings": scaffolding}},
+            {"id": "artifact:research", "kind": "artifact", "data": {"findings": research}},
+        ],
+    )
+    assert any(research in claim.statement for claim in plan.claims)
+    assert all(scaffolding not in claim.statement for claim in plan.claims)
+    assert scaffolding not in plan.abstract
+    assert all(not paragraph.startswith("Recorded result:") for paragraph in plan.conclusions)
+
+
+def test_review_proofreader_accepts_safe_patch_but_rejects_mutation() -> None:
+    """One unsafe suggestion must not discard an unrelated safe layout repair."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "mixed-proofread.sigma"
+        view = initialize_project(path, "Mixed proofreading", "Protect research claims")
+        state = papers._new_work(
+            "c" * 64, view.project.id, "d" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = (
+            "\\documentclass{article}\n\\emergencystretch=2em\n"
+            "\\begin{document}\nThe result is 3.\n\\end{document}\n"
+        )
+
+        async def provider(_input, _binding, _config, *, response_model, **_kwargs):
+            return response_model(
+                corrections=[
+                    papers.TeXCorrection(
+                        category="spacing",
+                        find=r"\emergencystretch=2em",
+                        replace=r"\emergencystretch=4em",
+                        rationale="Safe line breaking adjustment.",
+                    ),
+                    papers.TeXCorrection(
+                        category="spacing",
+                        find="result is 3",
+                        replace="result is 4",
+                        rationale="Unsafe scientific alteration fixture.",
+                    ),
+                ]
+            ), "fixture"
+
+        async def report(*_args, **_kwargs):
+            return None
+
+        with (
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            patch.object(papers, "_provider_structured", new=provider),
+        ):
+            corrected, result = asyncio.run(
+                papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+            )
+        assert r"\emergencystretch=4em" in corrected
+        assert "The result is 3" in corrected and "The result is 4" not in corrected
+        assert result["status"] == "fallback"
+        assert result["corrections"] == ["spacing"]
+        assert "changed protected scientific" in result["fallback_reason"]
+
+
 def main() -> None:
+    test_review_proofreader_accepts_safe_patch_but_rejects_mutation()
+    test_review_fallback_question_and_tex_safety()
+    test_publication_preserves_failed_final_skeptic_as_research_limitation()
+    test_review_fallback_rejects_process_text_as_claim()
     test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
     test_tex_proofreader_three_passes_with_early_convergence()
     test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data()
@@ -5568,8 +6164,11 @@ def main() -> None:
     test_easy_paper_start_over_escapes_repeated_paid_planning()
     test_maximum_regions_archived_one_session_stays_fast()
     test_easy_paper_avoids_unnecessary_long_form_calls()
+    test_fallback_planner_ranks_complete_research_notes_over_operational_fields()
+    test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness()
     test_invalid_planning_claim_reference_is_recoverable()
     test_repair_paper_references_preserves_science_and_downgrades_unsupported_claims()
+    test_repair_coalesces_only_exact_duplicate_propositions()
     test_one_shot_publishes_with_repaired_claim_links()
     test_live_research_change_does_not_discard_completed_paper()
     test_frozen_evidence_checkpoint_survives_live_research_drift()
@@ -5600,6 +6199,9 @@ def main() -> None:
     test_long_paper_can_retrieve_sources_outside_planner_preview()
     test_research_type_specific_tex_sections_and_authoring_guidance()
     test_military_style_guidance_reaches_all_authoring_paths()
+    test_math_and_physics_methodology_reaches_every_authoring_path()
+    test_writing_source_selection_reuses_complete_prior_set_and_skips_failures()
+    test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence()
     test_fast_long_draft_safe_retry_and_unknown_consumption_checkpoint()
     test_failed_planning_checkpoint_continues_without_repeating_paid_plan()
     test_paper_failure_reason_survives_reopen()
@@ -5607,9 +6209,9 @@ def main() -> None:
     test_fast_checkpoint_resume_replays_only_incomplete_section()
     test_fast_long_draft_cancellation_keeps_completed_sections()
     test_paper_generation_rejects_concurrent_duplicate_request()
-    test_two_paper_generators_run_concurrently_and_third_fails_fast()
-    test_two_papers_reach_compilation_together_and_hold_capacity()
-    test_eight_research_sessions_overlap_two_paper_generators()
+    test_three_paper_generators_run_concurrently_and_fourth_fails_fast()
+    test_three_papers_reach_compilation_together_and_hold_capacity()
+    test_eight_research_sessions_overlap_three_paper_generators()
     test_tadpoles_five_session_mock_provider_to_pdf_timing()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
@@ -5752,7 +6354,13 @@ def main() -> None:
         "Verify the base case.",
     ):
         assert outcome_text in outcome_json
-    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=[session_outcome])
+    outcome_tex = papers._tex(
+        draft(),
+        [],
+        "c" * 64,
+        integrity_records=[session_outcome],
+        include_research_excerpts=True,
+    )
     assert r"\section{Structured reasoning and review records}" in outcome_tex
     assert "Conditional conclusion" in outcome_tex
     assert "The argument remains unverified." in outcome_tex

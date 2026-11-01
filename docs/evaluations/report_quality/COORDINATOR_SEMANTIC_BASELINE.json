@@ -1,0 +1,119 @@
+{
+  "source_commit": "0f6e86e5201a4f3339dcff9592f6e7a7e1ec035c",
+  "method": "Coordinator JS mirror of offline semantic_gate.py; source text and compact metadata fetched from GitHub; structural risk flags only, not scientific truth",
+  "papers": {
+    "ai-agent-reliability-v1": {
+      "abstract_words": 112,
+      "abstract_record_paths": [
+        "investigator_output/reasoning_steps/0/argument",
+        "come/solution_review/strategy_findings/0/failure_reason"
+      ],
+      "claim_count": 5,
+      "operational_claims": [
+        {
+          "id": "1",
+          "status": "unresolved",
+          "statement": "title: AI Agent Reliability and Evaluation v1"
+        },
+        {
+          "id": "2",
+          "status": "unresolved",
+          "statement": "events/4/project_change/previous/reasoning_effort: high"
+        },
+        {
+          "id": "3",
+          "status": "unresolved",
+          "statement": "events/10/failure_kind: preflight_error"
+        },
+        {
+          "id": "4",
+          "status": "limitation",
+          "statement": "outcome/caveats/0: Agent-reported evidence is unverified; agreement is not independent verification."
+        },
+        {
+          "id": "5",
+          "status": "unresolved",
+          "statement": "investigator_output/open_obligations/0: Test reference-adjudication validity. If reference labels can falsely certify success, derive an additional error allowance or partial-identification bound rather than treating the present guarantee as unconditional."
+        }
+      ],
+      "claim_mentions_in_body": {
+        "1": 8,
+        "2": 2,
+        "3": 1,
+        "4": 7,
+        "5": 9
+      },
+      "conclusion_words": 20,
+      "omitted_index_fragments": 32191,
+      "omission_counts_in_warnings": [
+        32187,
+        32191
+      ],
+      "review_flags": [
+        "abstract contains raw saved-record locators",
+        "claim register includes operational metadata or raw record locators",
+        "conclusion is unusually short; inspect for generic fallback",
+        "inconsistent omission counts in metadata warnings"
+      ]
+    },
+    "ai-sovereignty-v2": {
+      "abstract_words": 148,
+      "abstract_record_paths": [],
+      "claim_count": 19,
+      "operational_claims": [],
+      "claim_mentions_in_body": {
+        "1": 2,
+        "2": 7,
+        "3": 15,
+        "4": 7,
+        "5": 6,
+        "6": 14,
+        "7": 1,
+        "8": 5,
+        "9": 1,
+        "10": 9,
+        "11": 4,
+        "12": 10,
+        "13": 5,
+        "14": 10,
+        "15": 4,
+        "16": 17,
+        "17": 2,
+        "18": 4,
+        "19": 19
+      },
+      "conclusion_words": 134,
+      "omitted_index_fragments": 9718,
+      "omission_counts_in_warnings": [
+        9718
+      ],
+      "review_flags": []
+    },
+    "xenopus-tadpoles-v9": {
+      "abstract_words": 142,
+      "abstract_record_paths": [],
+      "claim_count": 12,
+      "operational_claims": [],
+      "claim_mentions_in_body": {
+        "1": 1,
+        "2": 5,
+        "3": 7,
+        "4": 2,
+        "5": 7,
+        "6": 6,
+        "7": 5,
+        "8": 2,
+        "9": 5,
+        "10": 11,
+        "11": 3,
+        "12": 2
+      },
+      "conclusion_words": 130,
+      "omitted_index_fragments": 3370,
+      "omission_counts_in_warnings": [
+        3370
+      ],
+      "review_flags": []
+    }
+  }
+}

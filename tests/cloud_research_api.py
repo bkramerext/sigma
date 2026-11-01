@@ -864,6 +864,13 @@ def main() -> None:
                             transport=httpx.MockTransport(provider_fixture), **kwargs
                         ),
                     ),
+                    # Writing-guide retrieval is a separate non-provider stage;
+                    # it must not be counted by this mocked AI transport test.
+                    patch.object(
+                        papers.paper_writing_sources,
+                        "select",
+                        new=AsyncMock(return_value=([], "unavailable")),
+                    ),
                 ):
                     long_response = client.post(
                         "/api/projects/papers",
