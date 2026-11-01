@@ -35,7 +35,8 @@ async def generate_icon(name: str, scope: str) -> dict[str, str]:
             "sponsored usage accounting must be configured first."
         )
     auth = await auth_context()
-    if auth["mode"] != "api_key" or auth["status"] != "connected":
+    if (auth["mode"] != "api_key" or auth["status"] != "connected"
+            or auth["identity"] != "api_key"):
         raise ProjectError(
             "Icon generation needs the selected OpenAI API-key connection. "
             "No ChatGPT or sponsor account will be charged automatically."
