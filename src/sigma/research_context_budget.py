@@ -83,8 +83,13 @@ def _compact_inflight_investigator(context: dict[str, Any]) -> bool:
             excerpt[field] = {
                 key: execution[key]
                 for key in (
-                    "id", "execution_id", "status", "sha256",
-                    "stdout_sha256", "stderr_sha256", "exit_code",
+                    "id",
+                    "execution_id",
+                    "status",
+                    "sha256",
+                    "stdout_sha256",
+                    "stderr_sha256",
+                    "exit_code",
                 )
                 if key in execution
             } | {
