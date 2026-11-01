@@ -9920,7 +9920,7 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
             if calls >= call_limit
             else "the remaining shared turns could not fund another complete Investigator/Skeptic pair"
             if deferred_pair
-            else "the per-strategy round ceiling was reached"
+            else "the per-strategy round limit was reached (not a funding shortage)"
         )
         return (
             f"{limit_kind}_limit_reached",
