@@ -21,11 +21,11 @@ Integrated base: `main` at `4b2f34f9` (#439, Research Process/About workflow).
 | Running session context stays frozen after type deletion | **MET** | Session snapshot persistence tests; deletion does not mutate existing sessions. |
 | Research/publication references are stored without changing methodology or paper-authoring behavior | **MET** | Catalog persistence/API tests. The later #440/#443 integrations remain outside this implementation. |
 | Gray's #439 About workflow, architecture content, and disclosure persistence remain intact | **MET** | Rebased/merged #439 commit `4b2f34f9`; real Chrome `browser_checks/issue437_workflow.py` covers keyboard disclosure operation, close/reopen, reload persistence, responsive layout and retained architecture content. |
-| GitHub CI for the new head | **PENDING** | Must be checked after the updated branch is pushed; local full suite and T201 browser acceptance pass. |
+| GitHub CI for the implementation head | **MET** | GitHub Actions on `6575f1eeca34fa8cfb6446fc813c7a78674dcfdf`: SIGMA verification, T201 obligation recovery, T249 integrated verification, T92 Recent Projects, T200 model availability and Research Outcome all succeeded. The unrelated scheduled #421 parity workflow was skipped. |
 
 ## Verification run
 
-- `./sigma test` — **PASS** after the hosted user-isolation correction. Includes project type, cloud workspace, security, lint/format, Pyright, frontend typecheck and production build checks. The suite reports one existing optional graph-present sandbox scenario as skipped because its local execution image is unavailable; graph-withheld checks pass.
+- `./sigma test` — **PASS** on the final merged implementation tree after the hosted user-isolation correction. Includes project type, cloud workspace, security, lint/format, Pyright, frontend typecheck and production build checks. The suite reports one existing optional graph-present sandbox scenario as skipped because its local execution image is unavailable; graph-withheld checks pass.
 - `uv run --locked --no-sync python tests/project_types.py` — **PASS**.
 - `uv run --locked --no-sync python tests/cloud_workspaces.py` — **PASS**, including two-owner isolation and reload/restart persistence.
 - T201 workflow acceptance (`browser_checks/t201_overflow.py`, `t81_public_legal_pages.py`, `guest_samples.py`) — **PASS** in installed real Google Chrome against isolated local fixtures. T201 verifies bounded repeatable recovery, provenance, start controls and immutable history; guest and public legal-page checks also pass.
