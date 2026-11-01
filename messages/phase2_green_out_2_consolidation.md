@@ -1,5 +1,7 @@
 # Green: Phase 2 I2 — single PR and best-available research (owner override)
 
+> **Research-quality addendum (Nov 1):** Read [evidence versus plausible reasoning](phase2_green_out_evidence_action.md). Trace actual claim → supplied evidence → Skeptic objection → follow-up execution/derivation → observed result → corrected conclusion for pivotal claims across domains. Existing I2 resumes retain their frozen v2 instructions; fresh sessions receive the new v3 research guidance. This does not authorize new provider work or change the existing research protocol.
+
 **Authoritative user decision, November 1, 2026.** This supersedes the five-project all-or-nothing paper-consumer gate and the separate export-PR instructions in `phase2_green_out_2.md`, the old #434 handoff contract and `phase2_green_out_2_context_unblock.md`. Preserve the earlier messages as history. **This does not cancel the goal of good, complete research.**
 
 ## Repository change already made
