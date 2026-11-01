@@ -3930,7 +3930,7 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
         {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
-        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} aria-label={`Start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start</button>
+        <button type="button" className="text-view-link session-start-link" title={`Start Session #${controls.nextSessionNumber}`} aria-label={`Start Session #${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start Session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || controls.playDisabled} onClick={guest ? onGuestPlay : controls.play}>
