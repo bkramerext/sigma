@@ -3680,9 +3680,7 @@ def test_three_paper_generators_run_concurrently_and_fourth_fails_fast() -> None
                     assert provider_calls == 3
                 finally:
                     release.set()
-                results = await asyncio.wait_for(
-                    asyncio.gather(first, second, third), timeout=5
-                )
+                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=5)
                 assert len(results) == 3
                 assert len(papers.list_papers(str(paths[0]))) == 1
                 assert len(papers.list_papers(str(paths[1]))) == 1
@@ -3771,9 +3769,7 @@ def test_three_papers_reach_compilation_together_and_hold_capacity() -> None:
                     assert compilations == 3
                 finally:
                     finish_compiling.set()
-                results = await asyncio.wait_for(
-                    asyncio.gather(first, second, third), timeout=6
-                )
+                results = await asyncio.wait_for(asyncio.gather(first, second, third), timeout=6)
                 assert len(results) == 3
                 assert all(len(papers.list_papers(str(path))) == 1 for path in paths[:3])
                 assert papers.list_papers(str(paths[3])) == []
@@ -5741,15 +5737,15 @@ def test_review_fallback_question_and_tex_safety() -> None:
     assert "… " not in plan.problem_framing[0]
     assert r"$\eta$" in papers._latex_prose("Error allowance η")
     assert r"$\rho$" in papers._latex_prose("Density ρ")
-    rendered = papers._latex_prose(
-        "See https://mindrouter.ai/documentation.html for reference."
-    )
+    rendered = papers._latex_prose("See https://mindrouter.ai/documentation.html for reference.")
     assert r"\url{https://mindrouter.ai/documentation.html}" in rendered
     assert r"\usepackage[hyphens]{url}" in papers._tex(
         draft(), [], "e" * 64, include_research_details=False
     )
     tex = papers._tex(
-        draft(), [], "a" * 64,
+        draft(),
+        [],
+        "a" * 64,
         integrity_records=[{"kind": "research", "description": "Saved private artifact"}],
         include_research_details=True,
         include_research_excerpts=False,
@@ -5801,21 +5797,24 @@ def test_review_proofreader_accepts_safe_patch_but_rejects_mutation() -> None:
             "\\documentclass{article}\n\\emergencystretch=2em\n"
             "\\begin{document}\nThe result is 3.\n\\end{document}\n"
         )
+
         async def provider(_input, _binding, _config, *, response_model, **_kwargs):
-            return response_model(corrections=[
-                papers.TeXCorrection(
-                    category="spacing",
-                    find=r"\emergencystretch=2em",
-                    replace=r"\emergencystretch=4em",
-                    rationale="Safe line breaking adjustment.",
-                ),
-                papers.TeXCorrection(
-                    category="spacing",
-                    find="result is 3",
-                    replace="result is 4",
-                    rationale="Unsafe scientific alteration fixture.",
-                ),
-            ]), "fixture"
+            return response_model(
+                corrections=[
+                    papers.TeXCorrection(
+                        category="spacing",
+                        find=r"\emergencystretch=2em",
+                        replace=r"\emergencystretch=4em",
+                        rationale="Safe line breaking adjustment.",
+                    ),
+                    papers.TeXCorrection(
+                        category="spacing",
+                        find="result is 3",
+                        replace="result is 4",
+                        rationale="Unsafe scientific alteration fixture.",
+                    ),
+                ]
+            ), "fixture"
 
         async def report(*_args, **_kwargs):
             return None
@@ -5824,12 +5823,17 @@ def test_review_proofreader_accepts_safe_patch_but_rejects_mutation() -> None:
             patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
             patch.object(papers, "_provider_structured", new=provider),
         ):
-            corrected, result = asyncio.run(papers._proofread_tex(
-                tex, state,
-                binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
-                config={"model": "fixture", "reasoning_effort": "high"},
-                project_id=view.project.id, project_path_value=str(path), report=report,
-            ))
+            corrected, result = asyncio.run(
+                papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+            )
         assert r"\emergencystretch=4em" in corrected
         assert "The result is 3" in corrected and "The result is 4" not in corrected
         assert result["status"] == "fallback"
@@ -6049,7 +6053,10 @@ def main() -> None:
     ):
         assert outcome_text in outcome_json
     outcome_tex = papers._tex(
-        draft(), [], "c" * 64, integrity_records=[session_outcome],
+        draft(),
+        [],
+        "c" * 64,
+        integrity_records=[session_outcome],
         include_research_excerpts=True,
     )
     assert r"\section{Structured reasoning and review records}" in outcome_tex
