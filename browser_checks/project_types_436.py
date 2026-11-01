@@ -93,8 +93,11 @@ with sync_playwright() as playwright:
     literature.locator("summary").click()
     expect(literature).to_have_attribute("open", "")
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
-    expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(2)
-    expect(literature.get_by_role("columnheader", name="Action", exact=True)).to_have_count(0)
+    # Empty reference sections disappear on read-only built-ins.
+    expect(literature.get_by_text("Research standards references")).to_have_count(0)
+    expect(literature.get_by_text("Publication standards references")).to_have_count(0)
+    expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
+    expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
     builtin_names = (
         dialog.locator(".project-types-body > section")
         .nth(1)
@@ -141,23 +144,14 @@ with sync_playwright() as playwright:
     parent.get_by_label("Name").fill("Browser Parent")
     expect(parent.get_by_text("Duplicate project type name")).to_have_count(0)
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
-    expect(parent.get_by_role("button", name="Generate icon")).to_be_visible()
-    icon_box = parent.locator(".project-type-icon-edit .research-type-icon").first.bounding_box()
-    assert icon_box and 20 <= icon_box["width"] <= 25 and 20 <= icon_box["height"] <= 25
-    # Mock a rejected AI request: error persists inline, prior icon remains,
-    # editor must stay open, and a retry action remains available.
-    page.route("**/api/project-types/icon", lambda route: route.fulfill(
-        status=400, content_type="application/json",
-        body='{"detail":"Mock image provider unavailable"}',
-    ))
-    parent.get_by_role("button", name="Generate icon").click()
-    expect(parent.get_by_text("Icon not generated:", exact=False)).to_contain_text(
-        "Mock image provider unavailable"
-    )
-    expect(parent).to_have_attribute("open", "")
-    expect(parent.get_by_role("button", name="Generate icon")).to_be_enabled()
+    # The new type shows its icon in the header immediately, without an icon
+    # editor or any image-generation controls / provider calls.
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
-    page.unroute("**/api/project-types/icon")
+    expect(parent.locator(".project-type-icon-edit")).to_have_count(0)
+    expect(parent.get_by_role("button", name="Generate icon")).to_have_count(0)
+    expect(parent.get_by_role("button", name="Remove", exact=True)).to_be_visible()
+    expect(parent.get_by_role("columnheader", name="URL")).to_have_count(0)
+    expect(parent.get_by_text("http://temp.com/style.html")).to_have_count(0)
     parent.get_by_role("button", name="New", exact=True).first.click()
     # The next New remains unavailable until the just-created row contains a URL.
     expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
@@ -190,7 +184,7 @@ with sync_playwright() as playwright:
     child.get_by_role("combobox", name="Based on project type").click()
     child.get_by_role("option", name="Browser Parent").click()
     child.get_by_label("Scope").fill("Independent copied scope")
-    expect(child.get_by_role("button", name="Generate icon")).to_be_visible()
+    expect(child.get_by_role("button", name="Generate icon")).to_have_count(0)
     expect(child.locator(".project-type-card-icon svg")).to_be_visible()
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
     save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
@@ -209,7 +203,7 @@ with sync_playwright() as playwright:
     assert child_type["based_on"] == parent_type["id"]
     assert child_type["scope"] == "Independent copied scope"
     assert child_type["research_standards_references"] == ["https://example.org/research-standard"]
-    assert len([url for url, _ in api_requests if url.endswith("/project-types/icon")]) == 1
+    assert not [url for url, _ in api_requests if url.endswith("/project-types/icon")]
 
     # Edit/add/remove are all drafts. Cancel discards all three, and Remove
     # makes no write until Save.
@@ -221,7 +215,7 @@ with sync_playwright() as playwright:
     )
     parent_card.locator("summary").click()
     parent_card.get_by_label("Scope").fill("Uncommitted scope")
-    parent_card.locator(".project-type-card-actions button").click()
+    parent_card.locator(".project-type-remove").click()
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
     pending = dialog.locator(".project-types-body > section").first.locator(".project-type-card[open]")
     pending.get_by_label("Name").fill("Discarded addition")
@@ -273,12 +267,12 @@ with sync_playwright() as playwright:
         '.project-type-card:has(> summary strong:text-is("Browser Parent"))'
     )
     parent_card.locator("summary").click()
-    parent_card.locator(".project-type-card-actions button").click()
+    parent_card.locator(".project-type-remove").click()
     second_type_card = dialog.locator(
         '.project-type-card:has(> summary strong:text-is("Browser Second"))'
     )
     second_type_card.locator("summary").click()
-    second_type_card.locator(".project-type-card-actions button").click()
+    second_type_card.locator(".project-type-remove").click()
     assert (
         page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"]
         == before["revision"]
