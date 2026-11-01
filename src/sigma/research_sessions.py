@@ -8284,6 +8284,27 @@ async def _portfolio_role_call(
 ) -> bool | Literal["retry", "funding_wait"]:
     if role == "skeptic":
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
+    # Mandatory evidence guards must run BEFORE any credential/model preflight.
+    # Reassemble after the await to include newly delivered human interventions.
+    async with state_lock:
+        initial = _read(path, session_id)
+        if initial["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+            return False
+        initial_branch = next(
+            item for item in initial["strategy_runs"] if item["strategy_id"] == strategy_id
+        )
+        try:
+            _portfolio_context(initial, initial_branch, role, cycle)
+        except ResearchContextLimitError as exc:
+            _record_preflight_failure(initial, initial_branch, role, "context_assembly", exc)
+            initial_branch["status"] = "paused"
+            initial_branch["current_action"] = "Paused · context limit"
+            initial_branch["termination_reason_code"] = "context_limit"
+            initial_branch["reason"] = str(exc).strip()[:1000]
+            initial["message"] = initial_branch["reason"]
+            _event(initial, "research.context_blocked", initial_branch["reason"])
+            _save(path, initial)
+            return False
     # Never hold a session lock or provider capacity through awaited identity
     # and model checks. This is optimistic preflight; frozen identity/model
     # bindings are validated again after acquiring the short state lock.
