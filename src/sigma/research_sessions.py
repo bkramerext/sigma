@@ -2758,6 +2758,8 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
             fields["provider_request_id"] = exc.provider_request_id
         if exc.response_shape is not None:
             fields["provider_response_shape"] = exc.response_shape
+        if exc.provider_limit_headers:
+            fields["provider_limit_headers"] = exc.provider_limit_headers
         if exc.stream_event is not None:
             fields["provider_stream_event"] = exc.stream_event
         if exc.retry_after_seconds is not None:
@@ -5744,6 +5746,7 @@ async def _call_provider(
                 "research",
                 retry_after=response.headers.get("retry-after"),
                 provider_request_id=response.headers.get("x-request-id"),
+                provider_limit_headers=response.headers,
             )
         if credential["mode"] == "chatgpt":
             raw = await completed(

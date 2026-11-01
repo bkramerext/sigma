@@ -84,6 +84,10 @@ def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not
         streamed=False,
         provider_request_id="req_safe-123",
         response_shape="responses-error",
+        provider_limit_headers={
+            "x-codex-primary-used-percent": "100",
+            "set-cookie": "secret=session",
+        },
     )
     assert research_sessions._provider_failure_fields(rate_limit)["failure_kind"] == (
         "provider_rate_limited"
@@ -94,6 +98,9 @@ def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not
     assert research_sessions._provider_failure_fields(rate_limit)["provider_response_shape"] == (
         "responses-error"
     )
+    assert research_sessions._provider_failure_fields(rate_limit)["provider_limit_headers"] == {
+        "x-codex-primary-used-percent": "100"
+    }
     assert research_sessions._transient_failure_kind(rate_limit) == "provider_rate_limited"
     account_limit = research_sessions.ChatGPTProviderRejection(
         "plan usage limit",
@@ -591,12 +598,22 @@ def test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff():
                 "chatgpt",
                 retry_after="17",
                 provider_request_id="req_safe-123",
+                provider_limit_headers={
+                    "x-ratelimit-reset-requests": "1s",
+                    "x-codex-secondary-used-percent": "36",
+                    "authorization": "secret",
+                    "x-codex-primary-used-percent": "100\\nsecret",
+                },
             )
         except research_sessions.ChatGPTProviderRejection as exc:
             assert exc.retry_after_seconds == 17
             assert exc.provider_request_id == "req_safe-123"
             assert exc.response_shape == "responses-error"
             assert exc.code == "rate_limit_exceeded"
+            assert exc.provider_limit_headers == {
+                "x-ratelimit-reset-requests": "1s",
+                "x-codex-secondary-used-percent": "36",
+            }
         else:
             raise AssertionError("Expected a classified temporary provider rate limit")
 
@@ -8145,12 +8162,20 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
                 headers={
                     "content-type": "text/event-stream",
                     "x-request-id": "req-limited-123",
+                    "x-codex-primary-used-percent": "100",
+                    "x-codex-secondary-used-percent": "36",
+                    "set-cookie": "secret=never-log",
                 },
                 text=body,
             )
         return httpx.Response(
             429,
-            headers={"x-request-id": "req-limited-123"},
+            headers={
+                "x-request-id": "req-limited-123",
+                "x-codex-primary-used-percent": "100",
+                "x-codex-secondary-used-percent": "36",
+                "set-cookie": "secret=never-log",
+            },
             json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
         )
 
@@ -8189,6 +8214,10 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
     assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
     assert limited["provider_request_id"] == "req-limited-123"
     assert limited["provider_response_shape"] in {"responses-error", "other-object"}
+    assert limited["provider_limit_headers"] == {
+        "x-codex-primary-used-percent": "100",
+        "x-codex-secondary-used-percent": "36",
+    }
     metrics = {
         item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
     }
