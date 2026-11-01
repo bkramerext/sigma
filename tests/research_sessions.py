@@ -6105,6 +6105,72 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
     assert (path / "project.json").read_bytes() == project_before
 
 
+async def test_parallel_budget_pressure_defers_without_ending_research(path: Path):
+    """Temporary simultaneous reservations must not change a funded outcome."""
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Second funded approach", "Test an independent boundary case."
+    ).project.strategies[-1]
+    limits = {
+        **research_sessions.DEFAULT_LIMITS,
+        "research_rounds": 1,
+        "model_calls": 4,
+        "maximum_estimated_cost_usd": 0.30,
+    }
+    research_sessions.save_limits(str(path), limits)
+    observed_deferral = []
+    original_pending = research_sessions._portfolio_has_pending_reservation
+
+    def monitor_pending(record, exclude_step_id=None):
+        pending = original_pending(record, exclude_step_id)
+        if pending:
+            observed_deferral.append(True)
+        return pending
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        await asyncio.sleep(0.04)
+        role = payload["text"]["format"]["name"]
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"], "stop")
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(research_sessions, "_call_cost_reservation", return_value=0.20),
+        patch.dict(research_sessions.MODEL_OUTPUT_LIMITS, {MODEL: 1000}),
+        patch.object(research_sessions, "_portfolio_has_pending_reservation", side_effect=monitor_pending),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await asyncio.wait_for(wait_for(path, started["id"]), timeout=10)
+
+    assert observed_deferral, "Concurrent funding pressure was not exercised"
+    assert finished["status"] == "ended", finished["message"]
+    assert finished["calls_used"] == 4
+    assert len(finished["artifacts"]) == 2
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+
+
 def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
     """Identical deterministic role outputs must produce identical research data.
 
@@ -9951,6 +10017,9 @@ def main():
         test_backend_global_provider_file_slots_are_bounded(root)
         asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        asyncio.run(test_parallel_budget_pressure_defers_without_ending_research(
+            root / "budget-pressure-deferral.sigma"
+        ))
         test_parallel_schedule_preserves_research_semantics(root)
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
