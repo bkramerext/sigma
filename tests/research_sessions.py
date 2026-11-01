@@ -10999,7 +10999,6 @@ def main():
             )
         )
         asyncio.run(
-        asyncio.run(
             test_parallel_budget_pressure_defers_without_ending_research(
                 root / "budget-pressure-deferral.sigma"
             )
