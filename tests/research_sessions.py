@@ -9337,6 +9337,39 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
     assert ledger["calls"] == []
 
 
+def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
+    """Regression for Session #5: portfolio coordination must not KeyError."""
+    from copy import deepcopy
+
+    ledger = [
+        {"obligation_id": "open-a", "status": "unresolved", "text": "First open question."},
+        {"obligation_id": "closed-b", "status": "resolved", "text": "Previously resolved."},
+        {"obligation_id": "open-c", "status": "unresolved", "text": "Second open question."},
+    ]
+    original_ledger = deepcopy(ledger)
+    context = {
+        "problem": "Test context growth without losing active research.",
+        "obligation_ledger": ledger,
+        "outstanding_obligations": ["Large duplicated text " * 900, "Another open obligation"],
+        "context_manifest": {"sources": []},
+    }
+    assert research_sessions._json_bytes(context) > 2048
+    assert research_sessions.compact_dispatch_context(context, limit=2048)
+    assert "outstanding_obligations" not in context
+    assert context["context_manifest"]["outstanding_obligations_location"] == "obligation_ledger"
+    assert research_sessions._context_obligation_count(context) == 2
+    assert context["obligation_ledger"] == original_ledger
+
+    # Older saved dispatch records may have only the legacy flat list.
+    assert research_sessions._context_obligation_count(
+        {"outstanding_obligations": ["first", "second"]}
+    ) == 2
+    assert research_sessions._context_obligation_count(
+        {"outstanding_obligations": ["stale"], "obligation_ledger": []}
+    ) == 0
+    assert research_sessions._context_obligation_count({}) == 0
+
+
 def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     """Long runs preserve provenance while dropping redundant prompt bytes."""
     from copy import deepcopy
@@ -9556,6 +9589,7 @@ def main():
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
+    test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
     test_sponsored_portfolio_serializes_allowance_reservations()
