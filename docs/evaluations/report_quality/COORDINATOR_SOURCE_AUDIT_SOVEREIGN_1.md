@@ -33,7 +33,7 @@ The paper's `C2/C3/C7/C9/C11` “established” statuses are therefore **not ind
 
 ## Specific high-impact unreviewed claim: the 1,800-pair power certificate
 
-The paper's `C18` is correctly labeled **conjecture** and explicitly conditional. Its source is **Investigator call 14**, step ID `50147fc3-6e62-4c43-b3b6-68eb3f268965`, not one of the eight completed Investigator/Skeptic artifacts. The planned final Skeptic call 18 on the same “Fairness, reliability and pilot” strategy failed, so **the saved 1,800-pair certificate did not receive the intended final Skeptic review**.
+The paper's `C18` is correctly labeled **conjecture** and explicitly conditional. However, its TeX claim register cites only **[Research session 1]**, not the exact saved step 14; the compact metadata's source-reference map enumerates the session and eight artifacts but does not map this specific Investigator step. A reader of the PDF alone cannot identify the decisive source span without separately searching the entire saved session. Its source is **Investigator call 14**, step ID `50147fc3-6e62-4c43-b3b6-68eb3f268965`, not one of the eight completed Investigator/Skeptic artifacts. The planned final Skeptic call 18 on the same “Fairness, reliability and pilot” strategy failed, so **the saved 1,800-pair certificate did not receive the intended final Skeptic review**.
 
 I independently checked the *specific arithmetic* of its sufficient-event argument: with `Δ=0.20`, discordance `q=0.40`, variance `0.36/n`, and confidence-tail factor `log(80)`, Hoeffding plus Cantelli gives the sufficient condition
 `n > ((sqrt(2 log 80)+1.2)/0.10)^2 = 1730.9048...`.
