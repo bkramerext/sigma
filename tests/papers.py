@@ -2970,6 +2970,7 @@ def test_structured_fast_index_preserves_math_review_and_bounds_omissions() -> N
             for item in excerpts
         ],
         integrity_excerpts=True,
+        include_research_excerpts=True,
         obligation_reconciliation=unresolved,
     )
     assert r"\section{Frozen obligation reconciliation}" in rendered
