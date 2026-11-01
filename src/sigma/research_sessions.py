@@ -216,7 +216,9 @@ class PeerHandoffReview(BaseModel):
 
 class ObligationReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    obligation_id: str = Field(pattern=r"^(o[1-9][0-9]*|[0-9a-f]{64})$")
+    # Opaque references: compact local IDs, saved SHA-256 IDs and UUIDs
+    # share one namespace. Exact context membership is checked separately.
+    obligation_id: str = Field(min_length=1, max_length=128)
     status: str = Field(pattern="^(unresolved|addressed|superseded|retracted|unknown)$")
     basis_artifact_ids: list[str] = Field(max_length=8)
     basis_step_ids: list[str] = Field(max_length=4)
@@ -6393,12 +6395,7 @@ def _obligation_ledger(
             strategy_id=source_strategy_id,
             assumptions=assumptions,
         )
-        if identity_path is not None:
-            if digest not in assigned:
-                assigned.update(assign_project_obligation_ids(identity_path, [digest]))
-            obligation_id = assigned[digest]
-        else:
-            obligation_id = digest
+        obligation_id = assigned[digest] if identity_path is not None else digest
         legacy_id = _legacy_obligation_identity(text)
         item = entries.setdefault(
             obligation_id,
@@ -6460,6 +6457,61 @@ def _obligation_ledger(
         source_project_id = artifact.get("project_id", project_id)
         source_strategy_id = artifact.get("strategy_id", strategy_id)
         return source_project_id, source_strategy_id, list(dict.fromkeys(assumptions))
+
+    # Allocate all new obligation aliases in ONE project transaction. A
+    # project may contain hundreds of notes; allocating separately for each
+    # would repeatedly rewrite the project bundle during every agent turn.
+    if identity_path is not None:
+        required: list[str] = []
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            objective_review = artifact.get("objective_review")
+            objective_review = objective_review if isinstance(objective_review, dict) else {}
+            skeptic = artifact.get("skeptic_output")
+            skeptic = skeptic if isinstance(skeptic, dict) else {}
+            investigator = artifact.get("investigator_output")
+            investigator = investigator if isinstance(investigator, dict) else {}
+            source_project, source_strategy, assumptions = note_scope(
+                artifact, objective_review, skeptic
+            )
+            for notes in (
+                investigator.get("open_obligations"),
+                artifact.get("open_obligations"),
+                artifact.get("objections"),
+                objective_review.get("unresolved_objections"),
+                skeptic.get("unresolved_objections"),
+                skeptic.get("remaining_obligations"),
+            ):
+                for note in notes if isinstance(notes, list) else []:
+                    if isinstance(note, str) and note.strip():
+                        required.append(
+                            _obligation_identity(
+                                note,
+                                project_id=source_project,
+                                strategy_id=source_strategy,
+                                assumptions=assumptions,
+                            )
+                        )
+        if isinstance(pending_investigation, dict):
+            assumptions = pending_investigation.get("assumptions", [])
+            assumptions = (
+                [item for item in assumptions if isinstance(item, str)]
+                if isinstance(assumptions, list)
+                else []
+            )
+            for note in pending_investigation.get("open_obligations", []):
+                if isinstance(note, str) and note.strip():
+                    required.append(
+                        _obligation_identity(
+                            note,
+                            project_id=project_id,
+                            strategy_id=strategy_id,
+                            assumptions=assumptions,
+                        )
+                    )
+        if required:
+            assigned.update(assign_project_obligation_ids(identity_path, required))
 
     # Prior-session obligations are frozen at session creation and seed the
     # current ledger. A later current-session note can explicitly reopen one.
