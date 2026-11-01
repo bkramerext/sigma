@@ -2311,6 +2311,19 @@ RESEARCH_SYSTEMS_METHOD_GUIDANCE = (
     "minimal indistinguishable history or changed-assumption counterexample and "
     "identify a feasible observation oracle before claiming effectiveness. "
 )
+RESEARCH_PHYSICS_METHOD_GUIDANCE = (
+    "For theoretical physics, define the physical quantities, units, metric signature, "
+    "coordinate gauge and explicit assumptions before calculating. Distinguish a "
+    "prescribed geometric metric from a self-consistent Einstein-equation source, "
+    "a realizable stress-energy configuration, a dynamically stable solution and an "
+    "engineerable system. Check tensor/curvature and dimensional identities, limiting "
+    "cases, causal horizons, energy conditions, conservation, backreaction and "
+    "perturbative stability where relevant. Separate invariant physical observables "
+    "from coordinate artifacts, and test the strongest countermodel with a feasible "
+    "discriminating calculation. A numerically computed tensor in one model is not "
+    "evidence the required matter or propulsion exists. Mark inaccessible primary "
+    "physics literature and absent empirical validation explicitly. "
+)
 RESEARCH_TRADE_STUDY_METHOD_GUIDANCE = (
     "For economic or engineering trade studies, compare feasible alternatives on "
     "the same authorized task unit, with identical outcome and cost definitions. "
@@ -2749,6 +2762,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + RESEARCH_DISCOVERY_GUIDANCE
         + (RESEARCH_SKEPTIC_METHOD_GUIDANCE if role == "skeptic" else "")
         + (RESEARCH_MATH_METHOD_GUIDANCE if context.get("investigation_type") == "mathematical" else "")
+        + (RESEARCH_PHYSICS_METHOD_GUIDANCE if context.get("investigation_type") == "physics" else "")
         + (RESEARCH_BIOLOGY_METHOD_GUIDANCE if context.get("investigation_type") == "biology" else "")
         + (RESEARCH_SYSTEMS_METHOD_GUIDANCE if context.get("investigation_type") == "computer_science" else "")
         + (RESEARCH_TRADE_STUDY_METHOD_GUIDANCE if context.get("investigation_type") in {"engineering", "economics"} else "")
