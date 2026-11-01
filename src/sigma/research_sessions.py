@@ -10346,7 +10346,12 @@ def _shared_provider_slot() -> int | None:
     process exit, without treating uncertain inference attempts as complete.
     """
     global _portfolio_slot_cursor
-    root = cloud_workspaces.storage_root() / "provider-slots"
+    # All local processes share the same projects directory; hosted workers
+    # share cloud workspace storage. Use the OS lock in BOTH modes.
+    from sigma.projects import projects_root
+
+    base = cloud_workspaces.storage_root() if cloud_workspaces.enabled() else projects_root()
+    root = base / "provider-slots"
     root.mkdir(mode=0o700, exist_ok=True)
     info = root.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
@@ -10394,11 +10399,10 @@ async def _portfolio_global_gate(session_id: str):
     try:
         # Cross-process provider cap is enforced through durable private OS
         # slots; waiters do not own project/session state locks.
-        if cloud_workspaces.enabled():
-            while fd is None:
-                fd = _shared_provider_slot()
-                if fd is None:
-                    await asyncio.sleep(0.05)
+        while fd is None:
+            fd = _shared_provider_slot()
+            if fd is None:
+                await asyncio.sleep(0.05)
         yield
     finally:
         if fd is not None:
