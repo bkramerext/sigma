@@ -125,8 +125,20 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
   return cost > 0 && cost < 0.0001 ? `${label} <$0.0001` : `${label} ${cost.toFixed(4)}`;
 }
 
+function parallelSessionActivity(session: ResearchSession): string | null {
+  if (session.status !== 'running' && session.status !== 'queued') return null;
+  if (!session.strategy_runs || session.strategy_runs.length <= 1) return null;
+  const active = new Set((session.steps ?? []).filter(step => step.status === 'running').map(step => step.strategy_id));
+  const waiting = session.strategy_runs.filter(branch =>
+    (branch.status === 'queued' || branch.status === 'running') && !active.has(branch.strategy_id),
+  ).length;
+  return `${active.size} in flight · ${waiting} waiting · ${session.artifacts.length} findings saved`;
+}
+
 function liveResearchSummary(session: ResearchSession): string | null {
   if (session.status !== 'running') return null;
+  const activity = parallelSessionActivity(session);
+  if (activity) return activity;
   const action = session.current_action?.trim();
   const question = session.current_question?.trim();
   const source = [action, question].filter(Boolean).join(': ');
@@ -1407,7 +1419,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
-                <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
+                <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {sessionEstimatedCostLabel(item)}</small>
               </div>
             </div>
             <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
