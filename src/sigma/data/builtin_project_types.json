@@ -25,7 +25,6 @@
       "id": "biology",
       "name": "Biology",
       "scope": "Life sciences, organisms, cells, genetics, ecology and medicine.",
-      "description": "Research questions about living systems and biological evidence.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -75,7 +74,6 @@
       "id": "chemistry",
       "name": "Chemistry",
       "scope": "Chemical substances, reactions, molecular structure and materials.",
-      "description": "Research questions about chemical systems and transformations.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -101,7 +99,6 @@
       "id": "computer_science",
       "name": "Computer Science",
       "scope": "Algorithms, computation, programming languages and information systems.",
-      "description": "Research questions about computation and software systems.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -127,7 +124,6 @@
       "id": "economics",
       "name": "Economics",
       "scope": "Production, distribution, markets, incentives and economic policy.",
-      "description": "Research questions about economic behavior and institutions.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -159,7 +155,6 @@
       "id": "engineering",
       "name": "Engineering",
       "scope": "Design, construction, operation and evaluation of technical systems.",
-      "description": "Research questions about engineered systems and their performance.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -201,7 +196,6 @@
       "id": "law",
       "name": "Law",
       "scope": "Legal rules, institutions, cases and interpretation.",
-      "description": "Research questions about legal systems and their application.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -233,7 +227,6 @@
       "id": "mathematical",
       "name": "Mathematics",
       "scope": "Mathematical structures, proofs, conjectures and computation.",
-      "description": "Research questions requiring mathematical reasoning and proof discipline.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -265,7 +258,6 @@
       "id": "military",
       "name": "Military",
       "scope": "Military operations, strategy, capabilities and conflict.",
-      "description": "Research questions about military affairs and operational decisions.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -297,7 +289,6 @@
       "id": "philosophy",
       "name": "Philosophy",
       "scope": "Conceptual analysis, arguments, ethics and theories of knowledge.",
-      "description": "Research questions about concepts, reasoning and normative claims.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -329,7 +320,6 @@
       "id": "physics",
       "name": "Physics",
       "scope": "Matter, energy, motion, fields and the laws of nature.",
-      "description": "Research questions about physical systems and quantitative evidence.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -387,7 +377,6 @@
       "id": "religion",
       "name": "Religion",
       "scope": "Religious traditions, texts, practices and institutions.",
-      "description": "Research questions about religion and religious thought.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
@@ -413,7 +402,6 @@
       "id": "literature",
       "name": "Literature",
       "scope": "Literary works, language, narrative, genre and interpretation.",
-      "description": "Research and creative inquiry concerning literary texts and traditions.",
       "user_defined": false,
       "icon": {
         "kind": "builtin",
