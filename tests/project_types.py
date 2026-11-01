@@ -49,7 +49,10 @@ def main() -> None:
             assert created.user_defined and created.origin == "literature"
             assert "description" not in created.record()
             assert project_types._store_path().stat().st_mode & 0o777 == 0o600
-            assert next(item for item in project_types.custom_types() if item.id == created.id) == created
+            assert (
+                next(item for item in project_types.custom_types() if item.id == created.id)
+                == created
+            )
             resolved = project_types.get_type(created.id)
             assert resolved is not None and resolved.icon["key"] == "literature"
             assert project_types.safe_project_snapshot(created.record())
