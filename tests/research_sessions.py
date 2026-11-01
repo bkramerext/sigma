@@ -5767,6 +5767,29 @@ async def test_provider_gate_fairness_and_cancelled_waiter() -> None:
     assert gate.active == 0 and not gate.waiting and not gate.owners
 
 
+def test_backend_global_provider_file_slots_are_bounded(root: Path) -> None:
+    """No 33rd provider request can pass the backend's shared 32-slot gate."""
+    with (
+        patch.object(research_sessions.cloud_workspaces, "storage_root", return_value=root),
+        patch.dict("os.environ", {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": "32"}),
+    ):
+        held: list[int] = []
+        try:
+            for _ in range(32):
+                fd = research_sessions._shared_provider_slot()
+                assert fd is not None
+                held.append(fd)
+            assert research_sessions._shared_provider_slot() is None
+        finally:
+            for fd in held:
+                research_sessions.fcntl.flock(fd, research_sessions.fcntl.LOCK_UN)
+                research_sessions.os.close(fd)
+        again = research_sessions._shared_provider_slot()
+        assert again is not None
+        research_sessions.fcntl.flock(again, research_sessions.fcntl.LOCK_UN)
+        research_sessions.os.close(again)
+
+
 async def test_global_inflight_limit_bounds_multiple_strategy_sessions(root: Path):
     """Concurrent sessions share the process-level provider admission limit."""
     left = root / "global-provider-left.sigma"
@@ -9833,6 +9856,7 @@ def main():
             root / "duplicate-strategy-dispatch.sigma"
         ))
         asyncio.run(test_provider_gate_fairness_and_cancelled_waiter())
+        test_backend_global_provider_file_slots_are_bounded(root)
         asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
         asyncio.run(
