@@ -40,7 +40,6 @@ class ProjectType:
     scope: str
     user_defined: bool
     icon: dict[str, Any]
-    description: str = ""
     based_on: str | None = None
     origin: str | None = None
     research_standards_references: tuple[str, ...] = ()
@@ -131,12 +130,10 @@ def _validate_icon(value: Any) -> dict[str, Any]:
 def _from_record(raw: dict[str, Any]) -> ProjectType:
     name = _required_text(raw.get("name"), "Name", 80)
     scope = _required_text(raw.get("scope"), "Scope", 500)
-    description = _optional_text(raw.get("description"), "Description", 2000)
     return ProjectType(
         id=str(raw["id"]),
         name=name,
         scope=scope,
-        description=description,
         user_defined=bool(raw.get("user_defined")),
         based_on=raw.get("based_on"),
         origin=raw.get("origin"),
@@ -294,7 +291,6 @@ def normalize_project_snapshot(value: Any, identifier: str) -> dict[str, Any] | 
             "id": identifier,
             "name": _required_text(value["name"], "Name", 80),
             "scope": _required_text(value["scope"], "Scope", 500),
-            "description": _optional_text(value.get("description"), "Description", 2000),
             "user_defined": value["user_defined"],
             "based_on": value.get("based_on"),
             "origin": value.get("origin"),
