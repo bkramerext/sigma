@@ -62,11 +62,17 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             else set()
         )
 
-        def is_material(index: int) -> bool:
-            item = entries[index]
-            return isinstance(item, dict) and item.get(id_field) in material_ids
+        # Bind per-field locals before the sort key: no loop-variable capture.
+        rows: list[Any] = entries
+        field_name = id_field
+        material: set[str] = material_ids
 
-        indices = sorted(range(len(entries)), key=lambda i: (is_material(i), i))
+        def is_material(index: int, *, items: list[Any] = rows,
+                        key: str = field_name, ids: set[str] = material) -> bool:
+            item = items[index]
+            return isinstance(item, dict) and item.get(key) in ids
+
+        indices = sorted(range(len(rows)), key=lambda i: (is_material(i), i))
         for index in indices:
             entry = entries[index]
             if _bytes(context) <= limit:
@@ -136,7 +142,8 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
         if not isinstance(supplied_ids, list):
             continue
         missing_ids = [
-            item_id for item_id in supplied_ids
+            item_id
+            for item_id in supplied_ids
             if item_id in pointer_artifacts or item_id in pointer_findings
         ]
         if missing_ids:
