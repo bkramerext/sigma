@@ -5775,6 +5775,92 @@ async def test_concurrent_strategy_portfolio(path: Path):
     assert finished["portfolio_decision"]["status"] == "model_reported_unverified"
 
 
+async def test_session7_context_pause_recovers_original_18_turn_research(path: Path):
+    """An old context guard at approximately turn 11 must not destroy the session.
+
+    Restart the *same* research after its preflight context interruption and
+    preserve every committed artifact. The provider is a deterministic mock.
+    """
+    view, first, credential, config = await setup(path)
+    second = create_strategy(path, "Independent reliability route", "Test failure isolation.").project.strategies[-1]
+    third = create_strategy(path, "Independent recovery route", "Test recovery safety.").project.strategies[-1]
+    limits = research_sessions.save_limits(
+        str(path),
+        {
+            **research_sessions.get_limits(str(path)),
+            "research_rounds": 3,
+            "model_calls": 18,
+            "session_duration_minutes": None,
+        },
+    )
+    requests = 0
+    old_guard_active = False
+    original_context = research_sessions._agent_context
+
+    def context_with_reproduction(record, role, cycle):
+        if old_guard_active:
+            raise research_sessions.ResearchContextLimitError(
+                "Synthetic old 256 KB context guard; saved original is intact."
+            )
+        return original_context(record, role, cycle)
+
+    async def handler(request):
+        nonlocal requests, old_guard_active
+        requests += 1
+        # Reproduce the observable boundary of Session #7 after eleven turns.
+        # The guard rejects *new* context assembly, never an in-flight call.
+        if requests == 11:
+            old_guard_active = True
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        result = (
+            investigation(context["cycle"])
+            if payload["text"]["format"]["name"] == "research_investigator"
+            else skeptic(context["cycle"])
+        )
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "_agent_context", side_effect=context_with_reproduction),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        interrupted = await wait_for(path, started["id"])
+        assert interrupted["status"] in {"paused", "stopped"}, interrupted["message"]
+        assert 11 <= interrupted["calls_used"] < 18, interrupted["calls_used"]
+        assert interrupted["artifacts"], "Context interruption must retain completed work"
+        assert any(e["kind"] == "research.context_blocked" for e in interrupted["events"])
+        committed = {a["id"]: deepcopy(a) for a in interrupted["artifacts"]}
+        old_guard_active = False
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["id"] == started["id"]
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] in {"ended", "completed"}, finished["message"]
+    assert finished["calls_used"] == 18, finished["message"]
+    assert requests == 18
+    assert len(finished["artifacts"]) == 9
+    saved = {a["id"]: a for a in finished["artifacts"]}
+    assert all(saved[item_id] == source for item_id, source in committed.items())
+    assert len(saved) == len({a["id"] for a in finished["artifacts"]})
+    assert len([step for step in finished["steps"] if step["status"] == "completed"]) == 18
+
+
 async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
     path: Path,
 ):
@@ -10081,6 +10167,11 @@ def main():
             )
         )
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        asyncio.run(
+            test_session7_context_pause_recovers_original_18_turn_research(
+                root / "session7-context-resume.sigma"
+            )
+        )
         asyncio.run(
             test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
                 root / "portfolio-54-turns.sigma"
