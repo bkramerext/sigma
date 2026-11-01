@@ -532,7 +532,7 @@ def test_tex_proofreader_three_passes_with_early_convergence() -> None:
         )
         tex = (
             r"\documentclass{article}" + "\n" + r"\begin{document}" + "\n"
-            + r"$\\\\alpha+\\\\beta=3$"
+            + r"$\\alpha+\\beta=3$"
             + "\n" + r"\end{document}" + "\n"
         )
         calls = 0
