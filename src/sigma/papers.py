@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import json
 import os
 import re
 import stat
+import unicodedata
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
@@ -1609,6 +1611,191 @@ def _paper_artifact_names(path: Path) -> set[str]:
         raise ProjectError("Project artifacts are unreadable") from exc
 
 
+def _paper_records(path: str) -> list[dict[str, Any]]:
+    """Read saved paper records without exposing their storage layout to callers."""
+    target = project_path(path)
+    records: list[dict[str, Any]] = []
+    if target.suffix == ".json":
+        from sigma.projects import read_project_artifact
+
+        for name in sorted(_paper_artifact_names(target)):
+            if not (
+                name.startswith("artifacts/papers/")
+                and name.endswith(".json")
+                and "/" not in name[len("artifacts/papers/") :]
+            ):
+                continue
+            try:
+                record = json.loads(read_project_artifact(target, name))
+            except (OSError, ValueError, TypeError):
+                continue
+            if (
+                isinstance(record, dict)
+                and record.get("project_id") == inspect_project(path).project.id
+            ):
+                records.append(record)
+    else:
+        directory = _paper_dir(path, create=False)
+        if not directory.exists():
+            return records
+        for file in sorted(directory.glob("*.json")):
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_PAPER_BYTES:
+                continue
+            try:
+                record = json.loads(file.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                continue
+            if (
+                isinstance(record, dict)
+                and record.get("project_id") == inspect_project(path).project.id
+            ):
+                records.append(record)
+    return records
+
+
+def _version_sequence_member(path: str) -> str:
+    return (
+        "artifacts/papers/.version-sequence"
+        if project_path(path).suffix == ".json"
+        else ".version-sequence"
+    )
+
+
+def _read_version_sequence(path: str) -> int:
+    target = project_path(path)
+    member = _version_sequence_member(path)
+    try:
+        if target.suffix == ".json":
+            from sigma.projects import read_project_artifact
+
+            raw = read_project_artifact(target, member)
+        else:
+            sequence = _paper_dir(path, create=False) / member
+            if sequence.is_symlink() or not sequence.is_file():
+                return 0
+            raw = sequence.read_bytes()
+        value = int(raw.decode("ascii"))
+    except (OSError, UnicodeDecodeError, ValueError, ProjectError):
+        return 0
+    return max(0, value)
+
+
+def _write_version_sequence(path: str, version: int) -> None:
+    target = project_path(path)
+    member = _version_sequence_member(path)
+    payload = str(version).encode("ascii")
+    if target.suffix == ".json":
+        from sigma.projects import save_project_artifacts
+
+        save_project_artifacts(target, {member: payload})
+        return
+    directory = _paper_dir(path)
+    sequence = directory / member
+    staged = _stage(directory, payload)
+    try:
+        os.replace(staged, sequence)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _persist_paper_versions(path: str, records: list[dict[str, Any]]) -> None:
+    """Backfill legacy records once, preserving their current chronological labels."""
+    ordered = sorted(
+        records,
+        key=lambda item: (str(item.get("created_at") or ""), str(item.get("paper_id") or "")),
+    )
+    used = {
+        item["paper_version"]
+        for item in ordered
+        if type(item.get("paper_version")) is int and item["paper_version"] > 0
+    }
+    next_version = 1
+    updates: dict[str, bytes | None] = {}
+    target = project_path(path)
+    for record in ordered:
+        version = record.get("paper_version")
+        if type(version) is int and version > 0:
+            continue
+        while next_version in used:
+            next_version += 1
+        version = next_version
+        next_version += 1
+        used.add(version)
+        record["paper_version"] = version
+        identifier = _paper_id(record["paper_id"])
+        payload = _json(record)
+        if target.suffix == ".json":
+            updates[f"artifacts/papers/{identifier}.json"] = payload
+        else:
+            directory = _paper_dir(path, create=False)
+            file = directory / f"{identifier}.json"
+            staged = _stage(directory, payload)
+            try:
+                os.replace(staged, file)
+            finally:
+                staged.unlink(missing_ok=True)
+    if updates:
+        from sigma.projects import save_project_artifacts
+
+        save_project_artifacts(target, updates)
+
+
+def _paper_version_lock(path: str):
+    """Serialize version allocation and legacy-version backfill per project."""
+    directory = _paper_dir(path)
+    lock_path = directory / ".version.lock"
+    if lock_path.is_symlink():
+        raise ProjectError("Paper version lock must not be a symbolic link")
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ProjectError("Paper version lock is unsafe")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _allocate_paper_version(path: str) -> int:
+    descriptor = _paper_version_lock(path)
+    try:
+        records = _paper_records(path)
+        _persist_paper_versions(path, records)
+        current = max(
+            _read_version_sequence(path),
+            *(item["paper_version"] for item in records if type(item.get("paper_version")) is int),
+            0,
+        )
+        version = current + 1
+        _write_version_sequence(path, version)
+        return version
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def paper_download_basename(path: str, paper_id: str) -> str:
+    """Return the shared, stable human-readable basename for a saved version."""
+    record = get_paper(path, paper_id)
+    slug = _paper_filename_slug(inspect_project(path).project.title)
+    version = record.get("paper_version")
+    if type(version) is not int or version < 1:
+        version = next(
+            (item["paper_version"] for item in list_papers(path) if item["paper_id"] == paper_id),
+            1,
+        )
+    return f"{slug}-v{version}"
+
+
+def _paper_filename_slug(title: str) -> str:
+    normalized = unicodedata.normalize("NFKC", title).strip()
+    slug = re.sub(r"[^\w.-]+", "-", normalized, flags=re.UNICODE)
+    slug = re.sub(r"[-_.]{2,}", "-", slug).strip("-._")[:80].rstrip("-._").casefold()
+    return slug if slug and slug not in {".", ".."} else "sigma-paper"
+
+
 def _paper_id(value: str) -> str:
     if not re.fullmatch(r"[0-9a-f]{32}", value):
         raise ProjectError("Invalid paper identifier")
@@ -1645,6 +1832,8 @@ def _read_one(path: str, identifier: str) -> dict[str, Any]:
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
     target = project_path(path)
     identifier = _paper_id(record["paper_id"])
+    if type(record.get("paper_version")) is not int or record["paper_version"] < 1:
+        record["paper_version"] = _allocate_paper_version(path)
     record["pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
     record["pdf_size_bytes"] = len(pdf)
     json_bytes = _json(record)
@@ -6555,6 +6744,7 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                 records.append(
                     {
                         "paper_id": value["paper_id"],
+                        "paper_version": value.get("paper_version"),
                         "title": value["draft"]["title"],
                         "created_at": value["created_at"],
                         "snapshot_sha256": value["snapshot_sha256"],
@@ -6574,7 +6764,13 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                 )
         except (OSError, ValueError, KeyError, TypeError):
             continue
-    return sorted(records, key=lambda item: item["created_at"], reverse=True)
+    records.sort(key=lambda item: (item["created_at"], item["paper_id"]), reverse=True)
+    slug = _paper_filename_slug(inspect_project(path).project.title)
+    for index, item in enumerate(records):
+        if type(item["paper_version"]) is not int or item["paper_version"] < 1:
+            item["paper_version"] = len(records) - index
+        item["download_basename"] = f"{slug}-v{item['paper_version']}"
+    return records
 
 
 def get_paper(path: str, paper_id: str) -> dict[str, Any]:
@@ -6637,26 +6833,32 @@ def delete_paper(path: str, paper_id: str) -> None:
     if record.get("project_id") != inspect_project(path).project.id:
         raise ProjectError("Paper belongs to a different project")
     identifier = _paper_id(paper_id)
-    target = project_path(path)
-    if target.suffix == ".json":
-        from sigma.projects import save_project_artifacts
+    descriptor = _paper_version_lock(path)
+    try:
+        _persist_paper_versions(path, _paper_records(path))
+        target = project_path(path)
+        if target.suffix == ".json":
+            from sigma.projects import save_project_artifacts
 
-        save_project_artifacts(
-            target,
-            {
-                f"artifacts/papers/{identifier}.json": None,
-                f"artifacts/papers/{identifier}.pdf": None,
-            },
-        )
-        return
-    directory = _paper_dir(path, create=False)
-    for suffix in (".json", ".pdf"):
-        artifact = directory / f"{identifier}{suffix}"
-        try:
-            if artifact.is_symlink() or artifact.is_file():
-                artifact.unlink()
-        except FileNotFoundError:
-            pass
+            save_project_artifacts(
+                target,
+                {
+                    f"artifacts/papers/{identifier}.json": None,
+                    f"artifacts/papers/{identifier}.pdf": None,
+                },
+            )
+            return
+        directory = _paper_dir(path, create=False)
+        for suffix in (".json", ".pdf"):
+            artifact = directory / f"{identifier}{suffix}"
+            try:
+                if artifact.is_symlink() or artifact.is_file():
+                    artifact.unlink()
+            except FileNotFoundError:
+                pass
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def _valid_pdf_file(path: str, record: dict[str, Any]) -> bool:

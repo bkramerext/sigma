@@ -622,36 +622,48 @@ def paper_view(paper_id: str, path: str):
 @app.get("/api/projects/papers/{paper_id}/pdf")
 def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
     disposition = "inline" if open_in_browser else "attachment"
+    filename = f"{papers.paper_download_basename(path, paper_id)}.pdf"
+    fallback = filename.encode("ascii", "ignore").decode("ascii") or "sigma-paper.pdf"
     return Response(
         papers.get_pdf(path, paper_id),
         media_type="application/pdf",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'{disposition}; filename="sigma-ai-paper-{paper_id}.pdf"',
+            "Content-Disposition": (
+                f"{disposition}; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+            ),
         },
     )
 
 
 @app.get("/api/projects/papers/{paper_id}/txt")
 def paper_txt_view(paper_id: str, path: str):
+    filename = f"{papers.paper_download_basename(path, paper_id)}.txt"
+    fallback = filename.encode("ascii", "ignore").decode("ascii") or "sigma-paper.txt"
     return Response(
         papers.paper_text(path, paper_id),
         media_type="text/plain; charset=utf-8",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.txt"',
+            "Content-Disposition": (
+                f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+            ),
         },
     )
 
 
 @app.get("/api/projects/papers/{paper_id}/tex")
 def paper_tex_view(paper_id: str, path: str):
+    filename = f"{papers.paper_download_basename(path, paper_id)}.tex"
+    fallback = filename.encode("ascii", "ignore").decode("ascii") or "sigma-paper.tex"
     return Response(
         papers.paper_tex(path, paper_id),
         media_type="application/x-tex; charset=utf-8",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.tex"',
+            "Content-Disposition": (
+                f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+            ),
         },
     )
 

@@ -181,6 +181,104 @@ def test_structured_evidence_short_tail_does_not_crash() -> None:
     assert omitted == []
 
 
+def test_readable_paper_download_names_keep_stable_versions_and_server_headers() -> None:
+    """Saved names stay readable and attached to each paper version after edits/deletion."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sigma import api, project_bundle
+
+    def save_fixture(path: Path, project_id: str, paper_id: str, created_at: str) -> None:
+        record = {
+            "schema_version": 1,
+            "paper_id": paper_id,
+            "project_id": project_id,
+            "created_at": created_at,
+            "snapshot_sha256": "a" * 64,
+            "draft": {"title": "A saved paper"},
+            "generation": {},
+            "validation_warnings": [],
+            "tex_source": r"\documentclass{article}\begin{document}Fixture\end{document}",
+        }
+        papers._save(str(path), record, b"%PDF-fixture")
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        path = root / "readable-paper.sigma"
+        view = initialize_project(path, "  Étoile / Math: Sums!  ", "Count a saved example.")
+        first_id, second_id = "a" * 32, "b" * 32
+        save_fixture(path, view.project.id, first_id, "2026-10-01T00:00:00+00:00")
+        save_fixture(path, view.project.id, second_id, "2026-10-02T00:00:00+00:00")
+        papers_found = papers.list_papers(str(path))
+        assert [(item["paper_version"], item["download_basename"]) for item in papers_found] == [
+            (2, "étoile-math-sums-v2"),
+            (1, "étoile-math-sums-v1"),
+        ]
+        assert papers.paper_download_basename(str(path), first_id) == "étoile-math-sums-v1"
+        for endpoint, extension in (
+            (api.paper_pdf_view, "pdf"),
+            (api.paper_txt_view, "txt"),
+            (api.paper_tex_view, "tex"),
+        ):
+            response = endpoint(first_id, str(path))
+            disposition = response.headers["content-disposition"]
+            assert f"filename*=UTF-8''%C3%A9toile-math-sums-v1.{extension}" in disposition
+            assert first_id not in disposition
+        inline = api.paper_pdf_view(first_id, str(path), open_in_browser=True)
+        assert inline.headers["content-disposition"].startswith("inline;")
+        assert (
+            "filename*=UTF-8''%C3%A9toile-math-sums-v1.pdf" in inline.headers["content-disposition"]
+        )
+
+        papers.delete_paper(str(path), second_id)
+        assert papers.paper_download_basename(str(path), first_id) == "étoile-math-sums-v1"
+        third_id = "c" * 32
+        save_fixture(path, view.project.id, third_id, "2026-10-03T00:00:00+00:00")
+        assert papers.paper_download_basename(str(path), third_id) == "étoile-math-sums-v3"
+
+        # Exercise the portable JSON-project format separately from the legacy
+        # directory format; its sequence must travel inside the project bundle.
+        source_document = (path / "project.json").read_bytes()
+        json_source = root / "editable.json"
+        project_bundle.import_bundle(
+            project_bundle.portable_bundle({"project.json": source_document}), json_source
+        )
+        json_id = "d" * 32
+        save_fixture(json_source, view.project.id, json_id, "2026-10-04T00:00:00+00:00")
+        json_export = json.loads(project_bundle.download_bytes(str(json_source)))
+        imported_path = root / "round-trip.json"
+        project_bundle.import_bundle(json_export, imported_path)
+        fifth_id = "e" * 32
+        save_fixture(imported_path, view.project.id, fifth_id, "2026-10-05T00:00:00+00:00")
+        assert papers.paper_download_basename(str(imported_path), json_id) == "étoile-math-sums-v1"
+        assert papers.paper_download_basename(str(imported_path), fifth_id) == "étoile-math-sums-v2"
+        assert papers._paper_filename_slug("/// !!!") == "sigma-paper"
+        assert not any(
+            paper_id in papers.paper_download_basename(str(path), paper_id)
+            for paper_id in (first_id, third_id)
+        )
+
+        concurrent_path = root / "concurrent-paper.sigma"
+        concurrent_view = initialize_project(
+            concurrent_path, "Concurrent Paper", "Allocate distinct stable versions."
+        )
+        concurrent_ids = [f"{index:032x}" for index in range(1, 13)]
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            list(
+                executor.map(
+                    lambda item: save_fixture(
+                        concurrent_path,
+                        concurrent_view.project.id,
+                        item,
+                        "2026-10-01T00:00:00+00:00",
+                    ),
+                    concurrent_ids,
+                )
+            )
+        assert sorted(
+            item["paper_version"] for item in papers.list_papers(str(concurrent_path))
+        ) == list(range(1, len(concurrent_ids) + 1))
+
+
 def test_unexpected_paper_exception_yields_sanitized_sse_error() -> None:
     """An unexpected crash must not terminate HTTP 200 without an SSE error."""
 
@@ -5576,6 +5674,7 @@ def main() -> None:
     test_one_shot_validation_failure_preserves_paid_draft_for_continue()
     test_long_paper_planning_timeout_is_stage_specific()
     test_structured_evidence_short_tail_does_not_crash()
+    test_readable_paper_download_names_keep_stable_versions_and_server_headers()
     test_unexpected_paper_exception_yields_sanitized_sse_error()
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_api_provider_failure_classification_is_safe_and_actionable()
