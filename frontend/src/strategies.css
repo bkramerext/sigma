@@ -635,6 +635,10 @@
 .workspace-page .session-outcome .outcome-markdown { overflow-wrap: anywhere; }
 .workspace-page .session-outcome .outcome-markdown > :first-child { margin-top: 5px; }
 .workspace-page .session-outcome .outcome-markdown > :last-child { margin-bottom: 2px; }
+/* Research markdown is embedded inside an already-titled disclosure.
+   Keep generated h1/h2 headings compact, not document-cover sized. */
+.workspace-page .session-outcome .outcome-markdown h1 { margin: 10px 0 6px; color: #ead0ae; font: 500 19px/1.35 Georgia, serif; }
+.workspace-page .session-outcome .outcome-markdown h2 { margin: 12px 0 5px; color: #d5dfe7; font: 500 16px/1.4 Georgia, serif; }
 .workspace-page .session-outcome .outcome-markdown h3 { margin: 12px 0 5px; color: #ead0ae; font-size: 14px; }
 .workspace-page .session-outcome .outcome-markdown p { margin: 5px 0; }
 .workspace-page .session-outcome .outcome-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
