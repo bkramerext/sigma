@@ -1,0 +1,42 @@
+# Coordinator source-to-paper audit — Sovereign AI Federation v2
+
+**Prepared:** 2026-11-01 PST. **Independent source inspection:** parsed the committed 2,570,814-byte project bundle `docs/evaluations/report_quality/iteration_1/exports/sovereign-ai-federation-v2-after-research.bundle.json` (Git blob `a23aeb2aeea545caf3bebfa4bd497b4d977b94af`) and compared its saved session to the complete iteration-1 Sovereignty TXT/TeX. This is the first **actual source-bundle cross-check** of the three papers; Agent and Xenopus full source bundles were not committed and have not undergone the same check.
+
+## Frozen source identity and status
+
+- Project ID: `9175d73d-62aa-4523-a286-445f5390ae1d`, title **Sovereign AI Federation v2**.
+- Research session: `36e06a52-e138-48ee-9ccf-1519bb6faedc`, 18 saved steps, **8 artifacts**, status **ended**.
+- All eight artifacts' `skeptic_output.objective_status` are **partial**. Seven `verification_status` values are `convincing_unverified`; one is `incomplete`. **None is independently verified.**
+- The last step, call **18**, is a **failed Skeptic** attempt for “Fairness, reliability and pilot,” with `failure_kind=provider_error`, `provider_input_audit.status=call_failed_dispatch_unknown`, and no saved output. The terminal reason says the session stopped early after using its final available turn, with eight findings preserved and **research incomplete**.
+- The failed step's context manifest records **55 unresolved obligations**, zero marked addressed/retracted/superseded in that packet, and a bounded selection of two current-session material artifacts plus peer evidence. The source record explicitly warns that selected extracts/pointers do not prove omitted originals were read or verified. Do **not** equate 55 with all obligations in the full project; this is the context count for the final attempted turn.
+
+## Concrete manuscript omission
+
+I searched the complete Sovereignty TXT and TeX for the source's distinctive terminal-status phrases and markers: `provider response failed`, `research stopped early`, `research is incomplete`, `turn 18`, `provider_or_strategy_failure`, and `failed turn`. **None occurs** in either manuscript. The paper describes unimplemented pilots, unverified sources and other limitations, but **does not disclose that its final adversarial Skeptic review failed and the session ended incomplete**.
+
+This is a **confirmed omission of an operational completeness limitation**, not proof that the substantive mathematical deductions are false. It matters because a reader could reasonably infer that the planned three-round review was completed normally. The omission should be addressed in an explicit *research process and completeness* note with the session ID, last failed turn, and unresolved-review consequence. Do not inflate this operational failure into a refutation of the claims or conceal it to make the paper sound more polished.
+
+## Artifact verification-status matrix
+
+| Artifact ID (prefix) | Skeptic status | Assessment | Objective |
+|---|---|---|---|
+| `bfcf812f` | convincing_unverified | continue | partial |
+| `5c8fdc17` | convincing_unverified | continue | partial |
+| `cc14dcfd` | convincing_unverified | stop | partial |
+| `f5e8dea1` | convincing_unverified | continue | partial |
+| `1e89585c` | **incomplete** | revise | partial |
+| `2fef1213` | convincing_unverified | continue | partial |
+| `296ee708` | convincing_unverified | revise | partial |
+| `d802474b` | convincing_unverified | revise | partial |
+
+The paper's `C2/C3/C7/C9/C11` “established” statuses are therefore **not independently certified by the underlying Skeptic records**. Some are legitimate conditional definitions or mathematical deductions; the paper needs typed claim kinds and a separate verification field rather than treating `established` as an unqualified publication verdict. A precise claim-to-artifact support audit is still needed before assigning an individual C# to a particular saved artifact.
+
+## Positive fidelity checks
+
+The source records explicitly say the two MindRouter starting URLs were **not retrieved**, no campus workload or current vendor prices were measured, and the architecture/pilot were unimplemented. The manuscript correctly preserves those qualifications. The eighth artifact challenges the aggregate-to-sensitive inference with a hypothetical stratum counterexample, and the manuscript includes that correction. These are genuine evidence-fidelity successes; do not erase them while repairing the omitted session-status limitation.
+
+## Acceptance and next test
+
+For a future controlled publication-readiness pass, require an explicit **research completeness ledger** that distinguishes (a) substantive negative findings, (b) operational failures that prevented review, (c) unverified conditional deductions, and (d) resolved obligations. The manuscript should include the decision-critical parts, with exact session/attempt IDs, without dumping all 55 obligations as prose. Verify that no final-turn failure or superseding counterexample disappears from the published limitations.
+
+**Scope:** This audit covers only the committed Sovereignty source bundle. No full Agent or Xenopus source-bundle verification was possible from the PR's currently committed exports. No new research/provider call or project mutation occurred.
