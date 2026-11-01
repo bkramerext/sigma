@@ -684,7 +684,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             # Closed historical sessions must not construct full hidden
             # provider-input/provenance DOM trees. The real project snapshot
             # can accumulate many megabytes of saved agent input.
-            disclosure.click()
+            if disclosure.get_attribute("aria-expanded") != "false":
+                disclosure.click()
             expect(disclosure).to_have_attribute("aria-expanded", "false")
             expect(saved_row.locator(".outcome-provenance-list")).to_have_count(0)
             disclosure.click()
@@ -716,7 +717,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(diagnostic.get_by_role("heading", name="Strategies")).to_be_visible()
             diagnostic_row = diagnostic.locator(f'li[data-session-id="{session["id"]}"]')
             expect(diagnostic_row).to_be_visible()
-            diagnostic_row.get_by_role("button", name="Expand Session", exact=False).click()
+            diagnostic_disclosure = diagnostic_row.locator("button.session-row-disclosure")
+            if diagnostic_disclosure.get_attribute("aria-expanded") != "true":
+                diagnostic_disclosure.click()
             expect(
                 diagnostic.get_by_role("alert").filter(
                     has_text="Session #"
