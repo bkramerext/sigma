@@ -3141,11 +3141,11 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
     # (opening section, methods section, findings label, authoring emphasis)
     "mathematical": (
         "Introduction",
-        "Evidence and scope",
-        "Arguments and claims",
+        "Definitions and proof basis",
+        "Theorems, arguments, and scope",
         (
             "Distinguish proved statements from conjectures, failed arguments, and open proof obligations. "
-            "State assumptions and explain bridges between logical steps."
+            "State assumptions and explain bridges between logical steps, across any mathematical branch."
         ),
     ),
     "biology": (
@@ -3171,11 +3171,12 @@ _PAPER_TYPE_STYLES: dict[str, tuple[str, str, str, str]] = {
     ),
     "physics": (
         "Introduction and physical framework",
-        "Methods and evidence",
-        "Results and interpretation",
+        "Models, methods, and evidence",
+        "Physical results and interpretation",
         (
-            "Distinguish models and derivations from measurements and simulations; "
-            "identify assumptions, units, uncertainties and verification gaps."
+            "Separate theory, actual observation, simulation and speculative proposals. "
+            "Identify assumptions, units, coordinate conventions when material, "
+            "uncertainty, alternatives and verification limits."
         ),
     ),
     "computer_science": (
@@ -3980,8 +3981,9 @@ async def _provider(
         else "default"
     )
     instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
-    if project_type == "mathematical":
-        instructions += "\n\n" + MATHEMATICS_INSTRUCTIONS
+    methodology = _subject_methodology(project_type)
+    if methodology:
+        instructions += "\n\n" + methodology
     serialized_context = json.dumps(context, ensure_ascii=False)
     payload: dict[str, Any] = {
         "model": config["model"],
@@ -4792,6 +4794,8 @@ that occur in the input. Do not add scientific claims or outside citations."""
         + PUBLICATION_INSTRUCTIONS
         + "\n\nRESEARCH TYPE AND WRITING STYLE: "
         + _paper_style(project_type)[3]
+        + "\n\n"
+        + _subject_methodology(project_type)
         + ("\n\n" + VISUAL_AUTHORING_INSTRUCTIONS if include_diagrams else "")
         + (
             "\n\nProduce between 2 and 8 substantial, logically connected sections. "
@@ -4927,6 +4931,7 @@ Use explicit $...$ inline math and $...$ standalone math for EVERY mathematical 
 write $a_{n+3}$ rather than a_(n+3). Do not emit TeX commands outside math delimiters
 or document markup."""
     section_instructions += "\n\nRESEARCH TYPE AND WRITING STYLE: " + _paper_style(project_type)[3]
+    section_instructions += "\n\n" + _subject_methodology(project_type)
     if include_diagrams:
         section_instructions += "\n\n" + SECTION_TABLE_INSTRUCTIONS
     saved_sections: dict[str, Any] = state.setdefault("section_drafts", {})
