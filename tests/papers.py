@@ -432,6 +432,8 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
             nonlocal calls
             calls += 1
             assert response_model is papers.TeXProofreadResult
+            if r"\\alpha" not in _input["exact_tex_chunk"]:
+                return response_model(corrections=[]), "fixture"
             return (
                 response_model(
                     corrections=[
@@ -488,9 +490,10 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
         assert r"$\alpha=3$" in corrected
         assert r"\\cite{source:one}" in corrected
         assert provenance["status"] == "complete"
-        assert provenance["provider_calls_attempted"] == 1
+        assert provenance["provider_calls_attempted"] == 2
+        assert provenance["pass_number"] == 2
         assert provenance["corrections"] == ["math_notation"]
-        assert provenance["initial_sha256"] == papers.hashlib.sha256(tex.encode()).hexdigest()
+        assert provenance["original_sha256"] == papers.hashlib.sha256(tex.encode()).hexdigest()
         proofread_progress = [item for item in progress if item["stage"] == "proofreading"]
         assert proofread_progress
         assert all(
@@ -517,6 +520,71 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
         if shutil.which("tectonic"):
             compiled = papers._compile_pdf(corrected, timeout_seconds=90)
             assert compiled.startswith(b"%PDF-")
+
+
+def test_tex_proofreader_three_passes_with_early_convergence() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "three-pass.sigma"
+        view = initialize_project(path, "Three-pass fixture", "Convergent corrections.")
+        state = papers._new_work(
+            "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = (
+            r"\documentclass{article}"
+            + "\n"
+            + r"\begin{document}"
+            + "\n"
+            + r"$\\alpha+\\beta=3$"
+            + "\n"
+            + r"\end{document}"
+            + "\n"
+        )
+        calls = 0
+
+        async def provider(_payload, *_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            corrections = []
+            if calls <= 2:
+                symbol = "alpha" if calls == 1 else "beta"
+                corrections = [
+                    papers.TeXCorrection(
+                        category="math_notation",
+                        find=r"\\" + symbol,
+                        replace="\\" + symbol,
+                        rationale="Correct a double TeX escape.",
+                    )
+                ]
+            return papers.TeXProofreadResult(corrections=corrections), "fixture"
+
+        async def report(*_args, **_kwargs):
+            return None
+
+        async def run():
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                patch.object(papers, "_provider_structured", new=provider),
+            ):
+                return await papers._proofread_tex(
+                    tex,
+                    state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+
+        result, checkpoint = asyncio.run(run())
+        assert papers.MAX_PROOFREADER_PASSES == 3
+        assert checkpoint["pass_number"] == 3
+        assert checkpoint["provider_calls_attempted"] == 3
+        assert checkpoint["status"] == "complete"
+        assert r"$\alpha+\beta=3$" in result
+        assert calls == 3
+        again, _ = asyncio.run(run())
+        assert again == result
+        assert calls == 3
 
 
 def test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data() -> None:
@@ -1348,6 +1416,8 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
             return authored, config["model"]
 
         async def fake_proofreader(_context, *_args, **_kwargs):
+            if r"\\alpha" not in _context["exact_tex_chunk"]:
+                return papers.TeXProofreadResult(corrections=[]), config["model"]
             return (
                 papers.TeXProofreadResult(
                     corrections=[
@@ -1368,11 +1438,11 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
 
         def fail_diagram_then_compile(tex: str, **kwargs):
             compile_tex.append(tex)
-            if len(compile_tex) == 1:
-                # The pre-proofread temporary compile is intentionally a fixture:
+            if len(compile_tex) <= 2:
+                # Each proofreading pass compiles a temporary diagnostic fixture:
                 # the provider receives the generated source next.
                 return b"%PDF-initial-diagnostic-fixture"
-            if len(compile_tex) == 2:
+            if len(compile_tex) == 3:
                 assert r"$\alpha=3$" in tex
                 assert r"\begin{tikzpicture}" in tex
                 if diagnostics := kwargs.get("diagnostics"):
@@ -1409,25 +1479,27 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
         result = asyncio.run(run())
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert len(compile_tex) == 3
+        assert len(compile_tex) == 4
         assert len(successful_tex) == 1
         assert r"$\\alpha=3$" in compile_tex[0]
         assert r"$\alpha=3$" in compile_tex[1]
+        assert r"$\alpha=3$" in compile_tex[2]
         assert r"$\alpha=3$" in successful_tex[0]
         assert r"\usepackage{tikz}" in compile_tex[0]
         assert r"\usepackage{tikz}" in compile_tex[1]
+        assert r"\usepackage{tikz}" in compile_tex[2]
         assert r"\usepackage{tikz}" not in successful_tex[0]
         assert all(r"\begin{longtable}" in source for source in compile_tex)
         assert r"\begin{longtable}" in successful_tex[0]
         assert saved["snapshot_sha256"] == snapshot_hash
-        assert saved["generation"]["provider_calls_attempted"] == 2
-        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 1
+        assert saved["generation"]["provider_calls_attempted"] == 3
+        assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
         assert saved["generation"]["proofreading"]["correction_categories"] == ["math_notation"]
         assert saved["draft"]["diagrams"] == []
         assert saved["draft"]["sections"][0]["tables"]
         assert saved["tex_source"] == successful_tex[0]
         assert saved["generation"]["proofreading"]["corrected_tex_sha256"] == (
-            papers.hashlib.sha256(compile_tex[1].encode()).hexdigest()
+            papers.hashlib.sha256(compile_tex[2].encode()).hexdigest()
         )
         assert saved["generation"]["proofreading"]["final_tex_sha256"] == (
             papers.hashlib.sha256(saved["tex_source"].encode()).hexdigest()
@@ -5476,6 +5548,7 @@ def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
 
 def main() -> None:
     test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
+    test_tex_proofreader_three_passes_with_early_convergence()
     test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data()
     test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls()
     test_longtable_semantic_signature_normalizes_every_table_preamble()
