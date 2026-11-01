@@ -1,0 +1,84 @@
+name: Strategy scheduler semantic parity (#421)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/sigma/research_sessions.py'
+      - 'src/sigma/research_budget.py'
+      - 'tests/strategy_scheduler_parity.py'
+      - '.github/workflows/strategy-scheduler-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-main-parity:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 423
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      SIGMA_CLOUD_AUTH_ENABLED: 'false'
+      SIGMA_RESEARCH_GLOBAL_INFLIGHT: '32'
+    steps:
+      - name: Check out candidate branch
+        uses: actions/checkout@v4
+        with:
+          path: candidate
+          persist-credentials: false
+      - name: Check out immutable original scheduler baseline
+        uses: actions/checkout@v4
+        with:
+          ref: 48c1fb2322a95ddcb5a218cca29fcba59c4f8108
+          path: original-main
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install synthetic-test dependencies, no live API
+        run: uv sync --project candidate --locked --no-dev
+      - name: Run real original-main scheduler against deterministic synthetic provider
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/original-main/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py original-main baseline-parity.json
+      - name: Run candidate parallel scheduler against identical synthetic provider
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py candidate parallel-parity.json
+      - name: Compare complete provider inputs and reviewed research outputs
+        run: |
+          python - <<'PY'
+          import difflib
+          import json
+          from pathlib import Path
+
+          baseline = json.loads(Path("baseline-parity.json").read_text())
+          parallel = json.loads(Path("parallel-parity.json").read_text())
+          if baseline["diagnostic_overlap"] or not parallel["diagnostic_overlap"]:
+              raise AssertionError(
+                  "The original/main and parallel runs did not exercise different dispatch ordering."
+              )
+          if baseline["semantic"] != parallel["semantic"]:
+              left = json.dumps(baseline["semantic"], sort_keys=True, indent=2).splitlines()
+              right = json.dumps(parallel["semantic"], sort_keys=True, indent=2).splitlines()
+              print("\n".join(list(difflib.unified_diff(
+                  left, right, fromfile="original-main", tofile="parallel", lineterm=""
+              ))[:250]))
+              raise AssertionError("Research semantics changed under strategy parallelization.")
+          print("PASS: original-main and candidate have identical canonical provider requests, "
+                "peer handoffs, reviewed artifacts, coordinator decisions, and outcomes.")
+          PY
+      - name: Upload synthetic diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: strategy-parity-snapshots
+          path: '*-parity.json'
+          if-no-files-found: ignore
