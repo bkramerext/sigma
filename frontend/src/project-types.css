@@ -37,7 +37,7 @@
 .pt-reference-table col:last-child { width: 20%; }
 .pt-reference-table th, .pt-reference-table td { padding: 4px 6px; border-bottom: 1px solid #35404a; text-align: left; }
 .pt-reference-table th:nth-child(2), .pt-reference-table td:nth-child(2) { text-align: right; }
-.pt-reference-table col:only-child { width: 100%; }
+.pt-reference-table col:first-child:only-child { width: 100%; }
 .pt-reference-table td input { min-height: 32px; text-overflow: ellipsis; }
 .pt-reference-example { color: #aebbc7; font-style: italic; overflow-wrap: anywhere; }
 .pt-reference-example small { margin-left: 6px; color: #94a4b2; font-size: 11px; }
