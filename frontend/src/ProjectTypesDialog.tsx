@@ -61,7 +61,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
-  const initialDrafts = useRef('[]');
+  const [savedDrafts, setSavedDrafts] = useState<ProjectTypeRecord[] | null>(null);
   const initialCustomNames = useRef<Map<string, string>>(new Map());
   const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
@@ -90,7 +90,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     const data = await response.json() as { project_types: ProjectTypeRecord[]; icons: { placeholder: ProjectTypeRecord['icon'] }; revision: string };
     setBuiltins(data.project_types.filter(item => !item.user_defined));
     const savedCustomTypes = data.project_types.filter(item => item.user_defined);
-    initialDrafts.current = JSON.stringify(savedCustomTypes);
+    setSavedDrafts(structuredClone(savedCustomTypes));
     setDrafts(savedCustomTypes);
     setPlaceholderIcon(data.icons.placeholder);
     initialCustomIds.current = data.project_types.filter(item => item.user_defined).map(item => item.id);
@@ -162,8 +162,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     setAddingId(previous => previous === id ? null : previous);
     setOpen(previous => previous === id ? null : previous);
   }
-  async function save(closeAfter = true) {
-    if (JSON.stringify(drafts) === initialDrafts.current) { if (closeAfter) close(); return; }
+  async function save() {
+    if (!hasChanges || invalidDraft) return;
     setBusy(true); setError('');
     try {
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
@@ -181,7 +181,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       await load();
       window.dispatchEvent(new Event('sigma-project-types-updated'));
       setAddingId(null);
-      if (closeAfter) close();
+      close();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
@@ -190,21 +190,21 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     const label = field === 'research_standards_references' ? 'Research' : 'Publication';
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
     if (readonly && urls.length === 0) return null;
-    return <table className="pt-reference-table">
-      <colgroup>{readonly ? <col/> : <><col/><col/></>}</colgroup>
-      <tbody>
-        {urls.map((url, index) => <tr key={index}>
-          <td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>}</td>
-          {!readonly && <td><button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button></td>}
-        </tr>)}
-        {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || urls.some(url => !url.trim())} onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td><td/></tr>}
-      </tbody>
-    </table>;
+    return <table className="pt-reference-table"><tbody>
+      {urls.map((url, index) => <tr key={index}><td>
+        {readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <div className="pt-reference-entry">
+          <input aria-label={`${label} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>
+          <button type="button" disabled={busy} onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>
+        </div>}
+      </td></tr>)}
+      {!readonly && <tr className="pt-reference-new-row"><td><button type="button" disabled={busy || urls.some(url => !url.trim())} onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td></tr>}
+    </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id}>
     <summary onClick={event => { event.preventDefault(); setOpen(previous => previous === item.id ? null : item.id); }}>
-      <span className="project-type-card-icon">{renderEffectiveIcon(item)}</span><strong>{item.name || 'New project type'}</strong><small>{readonly ? 'Built-in' : 'Custom'}</small>
-      {!readonly && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name || 'new project type'}`} onClick={event => { event.preventDefault(); event.stopPropagation(); removeDraft(item.id); }}>Remove</button>}
+      <span className="project-type-card-icon">{renderEffectiveIcon(item)}</span><strong>{item.name || 'New project type'}</strong>
+      {!readonly && initialCustomIds.current.includes(item.id) && <button type="button" className="project-type-remove" disabled={busy} aria-label={`Remove project type ${item.name}`} onClick={event => { event.preventDefault(); event.stopPropagation(); removeDraft(item.id); }}>Remove</button>}
+      <small>{readonly ? 'Built-in' : 'Custom'}</small>
     </summary>
     <div className="project-type-card-body">
       <label>Name<input value={item.name} disabled={readonly} aria-invalid={!readonly && isDuplicateName(item)} aria-describedby={!readonly && isDuplicateName(item) ? `duplicate-type-${item.id}` : undefined} onChange={event => edit(item.id, { name: event.target.value })}/>{!readonly && isDuplicateName(item) && <span className="pt-validation-error" id={`duplicate-type-${item.id}`} role="alert">Duplicate project type name</span>}</label>
@@ -214,7 +214,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       {(!readonly || item.publication_standards_references.length > 0) && <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>}
     </div>
   </details>;
-  const hasChanges = JSON.stringify(drafts) !== initialDrafts.current;
+  const hasChanges = savedDrafts !== null && JSON.stringify(drafts) !== JSON.stringify(savedDrafts);
   const invalidDraft = drafts.some(item => isDuplicateName(item) || !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin');
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy) close(); }} onClick={event => { if (event.target === dialog.current && !busy) close(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
@@ -231,7 +231,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   }}>
     <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy} onClick={close}>Cancel</button></div></header>
     <div className="project-types-body">
-      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim() || !!drafts.find(d => d.id === addingId && isDuplicateName(d)) || invalidDraft} onClick={() => void save(false)}>Save</button><button type="button" disabled={busy} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <button type="button" disabled={busy} onClick={() => removeDraft(addingId)}>Cancel</button> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       {error && <p role="alert">{error}</p>}
     </div>
