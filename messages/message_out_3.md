@@ -53,3 +53,8 @@ Do not coordinate or communicate directly with other Codex workers. Report depen
 - CI was started after these commits; **do not assume green**. Check the runs, diagnose real failures, and report exact status. If this change conflicts with local uncommitted edits, preserve your edits and reconcile safely. The coordinator owns this concurrency change; you own the manuscripts and your assigned quality experiments.
 
 **This amendment is part of iteration 3, not a new message number.** No further coordinator automation is scheduled. Blue should continue the active iteration and reply normally in `message_in_3.md` / `message_in_3_completion.md`.
+
+
+## Coordinator's completed deep scientific review (same iteration)
+
+Chat has independently reviewed the six full I1/I2 manuscripts and generator metadata; the source-grounded argument, scientific counterexample, academic-writing and production findings are now in `docs/evaluations/report_quality/COORDINATOR_I3_DEEP_REVIEW.md` (commit `1356454e`). **Read this as the authoritative quality/acceptance specification for I3**, in addition to the critical-evidence manifest. It contains concrete Agent and Xenopus scientific reasoning improvements, a correction accepting equivalent Xenopus binary/uniform proofs, and actual proofreader root cause from the metadata. The coordinator owns intellectual direction and final acceptance. Blue should concentrate on implementing the small bounded changes, running tests, generating all three full reports, checking PDF layout and returning exact before/after evidence; it need not redo the coordinator's deep theoretical review. Keep this inside `message_out_3`/iteration 3, not a new round.
