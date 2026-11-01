@@ -1711,6 +1711,7 @@ def test_publication_paragraphs_math_and_bounded_optional_appendix() -> None:
         "f" * 64,
         math_style=True,
         include_research_details=True,
+        include_research_excerpts=True,
         integrity_records=integrity,
         integrity_excerpts=True,
         obligation_reconciliation=obligations,
@@ -6047,7 +6048,10 @@ def main() -> None:
         "Verify the base case.",
     ):
         assert outcome_text in outcome_json
-    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=[session_outcome])
+    outcome_tex = papers._tex(
+        draft(), [], "c" * 64, integrity_records=[session_outcome],
+        include_research_excerpts=True,
+    )
     assert r"\section{Structured reasoning and review records}" in outcome_tex
     assert "Conditional conclusion" in outcome_tex
     assert "The argument remains unverified." in outcome_tex
