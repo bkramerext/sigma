@@ -9390,6 +9390,79 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     assert len(huge_question["problem"]) == research_sessions.MAX_AGENT_CONTEXT_BYTES + 1
 
 
+async def test_eighteen_turns_survive_project_edits_and_bounded_context(path: Path):
+    """Three strategies and three rounds continue despite live UI-style edits."""
+    view, first, credential, config = await setup(path)
+    next_view = create_strategy(path, "Independent second approach", "Check a second route.")
+    second = next(row for row in next_view.project.strategies if row.id != first.id)
+    third_view = create_strategy(path, "Independent third approach", "Check a third route.")
+    third = next(row for row in third_view.project.strategies if row.id not in {first.id, second.id})
+    limits = research_sessions.get_limits(str(path))
+    limits.update({"research_rounds": 3, "model_calls": 18})
+    limits = research_sessions.save_limits(str(path), limits)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    submitted = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        submitted.append((context["strategy"]["id"], role, context["cycle"]))
+        if len(submitted) == 1:
+            entered.set()
+            await release.wait()
+        if role == "research_investigator":
+            output = investigation(context["cycle"])
+            output["method"] += " Saved investigation detail." * 220
+        else:
+            output = skeptic(context["cycle"])
+            output["response"] += " Bounded critical review." * 45
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "MAX_AGENT_CONTEXT_BYTES", 45_000),
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
+            expected_limits=limits, strategy_ids=[first.id, second.id, third.id],
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        edit_strategy(str(path), first.id, first.title, first.approach + " Edited while playing.")
+        set_strategy_enabled(str(path), second.id, False)
+        current = inspect_project(path).project
+        update_project(
+            str(path), current.title, current.problem + " (edited while playing)",
+            current.investigation_type.value, current.ai_model, current.reasoning_effort,
+            {
+                "title": current.title,
+                "problem": current.problem,
+                "investigation_type": current.investigation_type.value,
+                "ai_model": current.ai_model,
+                "reasoning_effort": current.reasoning_effort,
+                "difficulty": current.difficulty.value if current.difficulty else None,
+                "show_advanced_outcome_details": False,
+            },
+            show_advanced_outcome_details=True,
+        )
+        release.set()
+        finished = await wait_for(path, started["id"])
+    assert finished["status"] in {"ended", "completed"}, finished["message"]
+    assert finished["calls_used"] == 18, (finished["calls_used"], finished["message"])
+    assert len(submitted) == 18
+    assert len(finished["artifacts"]) == 9
+    assert len({strategy_id for strategy_id, _, _ in submitted}) == 3
+    saved = research_sessions._read(str(path), started["id"])
+    assert saved["problem"] == view.project.problem
+    assert saved["strategy_runs"][0]["strategy_text"] == first.approach
+
+
 def main():
     test_backend_build_is_pinned_at_backend_start()
     test_project_cost_denial_reports_affordable_first_call()
@@ -9672,6 +9745,11 @@ def main():
         asyncio.run(
             test_three_strategies_launch_under_three_turn_shared_ceiling(
                 root / "portfolio-three-turns.sigma"
+            )
+        )
+        asyncio.run(
+            test_eighteen_turns_survive_project_edits_and_bounded_context(
+                root / "portfolio-eighteen-turns.sigma"
             )
         )
         asyncio.run(
