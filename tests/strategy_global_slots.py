@@ -74,8 +74,10 @@ from pathlib import Path
 from unittest.mock import patch
 from sigma import research_sessions
 async def main():
-    with patch('sigma.projects.projects_root', return_value=Path(sys.argv[1])), \\
-         patch.object(research_sessions.cloud_workspaces, 'enabled', return_value=False):
+    with (
+        patch('sigma.projects.projects_root', return_value=Path(sys.argv[1])),
+        patch.object(research_sessions.cloud_workspaces, 'enabled', return_value=False),
+    ):
         try:
             async with asyncio.timeout(0.25):
                 async with research_sessions._portfolio_global_gate('other-process'):
