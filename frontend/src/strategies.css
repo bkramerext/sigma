@@ -26,7 +26,9 @@
 .workspace-page .pool-heading h2 { font-size: 30px; }
 .workspace-page .strategies-intro { font-size: 15px; margin: 6px 0 18px; }
 .workspace-page .strategies-table { min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; }
-.workspace-page .strategy-columns { display: grid; grid-template-columns: minmax(0, 1fr) 266px; padding: 14px 24px; text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
+.workspace-page :is(.strategy-columns, .project-description-columns) { text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
+.workspace-page .strategy-columns { display: grid; grid-template-columns: minmax(0, 1fr) 266px; padding: 14px 24px; }
+.workspace-page .project-description-columns { margin: -8px -24px 8px; padding: 14px 24px; overflow-wrap: anywhere; }
 .workspace-page .strategy-list { background: transparent; padding: 0; margin: 0; border: 0; border-radius: 5px; }
 .workspace-page .strategy-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 190px 44px; column-gap: 16px; align-items: start; padding: 15px 36px 15px 24px; min-height: 78px; border-top: 1px solid var(--workspace-line); transition: background-color .15s; }
 .workspace-page .strategy-detail { min-width: 0; }
@@ -425,7 +427,7 @@
 /* Revised A17.1 section, row and inline-edit conventions. */
 .workspace-page .project-pane-heading { padding: 10px 0 5px; }
 .workspace-page .project-pane-heading h2 { text-transform: uppercase; letter-spacing: .14em; font-size: 17px; }
-.workspace-page .project-overview-card { min-width: 0; min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; padding: 8px 8px 10px; }
+.workspace-page .project-overview-card { min-width: 0; min-height: 0; border: 2px solid var(--workspace-line); border-radius: 5px; background: #09141e; padding: 8px 24px 10px; }
 .workspace-page .project-pane-title-line { display: flex; align-items: center; flex-wrap: nowrap; column-gap: 6px; min-width: 0; margin: 0; }
 .workspace-page .project-pane-title-line .current-project { min-width: 0; max-width: 100%; flex: 0 1 auto; overflow: hidden; margin: 0; color: #e3e9ef; font: 500 19px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-page .project-pane-title-line .project-title-pencil { flex: 0 0 28px; }

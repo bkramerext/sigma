@@ -4606,6 +4606,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <div className="project-overview-card">
+      <div className="project-description-columns"><span>DESCRIPTION AND ACCEPTANCE CRITERIA</span></div>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
         <div className="project-intro">
