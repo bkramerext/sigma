@@ -12,6 +12,8 @@ All three compact metadata files report `generation.include_research_excerpts=fa
 | Sovereignty v2 | line 577 | **13** | false |
 | Xenopus v9 | line 287 | **9** | false |
 
+**Manuscript-space impact (exact TeX slice from the excerpt heading to the next validation section):** Agent **26,377 characters / 32.1%** of the entire TeX file, Sovereignty **19,876 / 15.4%**, Xenopus **14,985 / 19.3%**. These percentages measure TeX source characters, **not PDF pages or scholarly word counts**; they demonstrate substantial unnecessary appendix weight even with the excerpt option explicitly false.
+
 **Root cause confirmed in source:** `src/sigma/papers.py::_tex`, around line **3041**, unconditionally applies
 `include_research_excerpts = include_research_excerpts or include_research_details`.
 The actual generation set `include_research_details=true`, so the explicit `include_research_excerpts=false` is overridden. Around line **3430**, `_tex` renders the appendix whenever the resulting flag is true and integrity records exist. The persisted metadata at line ~5862 retains the original false value, and the call around ~5935 passes it unchanged. Thus the **saved option disagrees with the generated TeX**. This is deterministic and directly reproduced by the three manuscripts, not an inference about model behavior.
