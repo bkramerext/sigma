@@ -5816,6 +5816,43 @@ def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
     )
 
 
+def test_publication_preserves_failed_final_skeptic_as_research_limitation() -> None:
+    session = {
+        "id": "session-failed-final",
+        "kind": "session",
+        "data": {
+            "id": "failed-final",
+            "status": "ended",
+            "terminal_reason": "Research stopped early. Research is incomplete.",
+            "termination_reason_code": "provider_or_strategy_failure",
+            "steps": [
+                {
+                    "call_number": 18,
+                    "role": "skeptic",
+                    "status": "failed",
+                    "failure_kind": "provider_error",
+                }
+            ],
+        },
+    }
+    healthy = {
+        "id": "session-complete",
+        "kind": "session",
+        "data": {"id": "complete", "status": "ended", "termination_reason_code": "completed"},
+    }
+    frozen = {"sources": [session, healthy]}
+    notes = papers._research_completion_limitations(frozen)
+    assert len(notes) == 1
+    assert "failed-final" in notes[0]
+    assert "call 18 (skeptic)" in notes[0]
+    assert "Earlier findings remain available" in notes[0]
+    result = papers._annotate_research_completion(draft(), frozen)
+    assert any("call 18 (skeptic)" in item for item in result.limitations)
+    assert len(result.limitations) == len(draft().limitations) + 1
+    assert len(papers._annotate_research_completion(result, frozen).limitations) == len(result.limitations)
+    assert papers._research_completion_limitations({"sources": [healthy]}) == []
+
+
 def test_review_fallback_question_and_tex_safety() -> None:
     """Phase-1 writing fixes must preserve the problem and scientific notation."""
     question = (
@@ -5945,6 +5982,7 @@ def test_review_proofreader_accepts_safe_patch_but_rejects_mutation() -> None:
 def main() -> None:
     test_review_proofreader_accepts_safe_patch_but_rejects_mutation()
     test_review_fallback_question_and_tex_safety()
+    test_publication_preserves_failed_final_skeptic_as_research_limitation()
     test_review_fallback_rejects_process_text_as_claim()
     test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
     test_tex_proofreader_three_passes_with_early_convergence()
