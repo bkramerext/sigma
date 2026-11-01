@@ -6543,16 +6543,21 @@ def _obligation_ledger(
             if isinstance(key, str) and key in entries:
                 target_ids.add(key)
             elif isinstance(disposition.get("text"), str):
-                target_ids.add(
-                    entry_for(
-                        disposition["text"],
-                        source_project_id=source_project_id,
-                        source_strategy_id=source_strategy_id,
-                        assumptions=assumptions,
-                    )["obligation_id"]
+                digest = _obligation_identity(
+                    disposition["text"],
+                    project_id=source_project_id,
+                    strategy_id=source_strategy_id,
+                    assumptions=assumptions,
                 )
+                target_ids.add(assigned.get(digest, digest) if identity_path is not None else digest)
             elif isinstance(key, str):
-                target_ids.update(legacy_ids.get(key, set()))
+                # Historical reviews cite 64-hex identities; newer ones cite
+                # compact oN aliases. Resolve old IDs without mutating the
+                # saved source artifact or falsely closing another obligation.
+                if identity_path is not None and key in assigned:
+                    target_ids.add(assigned[key])
+                else:
+                    target_ids.update(legacy_ids.get(key, set()))
                 if len(target_ids) != 1:
                     for candidate_id in target_ids:
                         entries[candidate_id].setdefault(
