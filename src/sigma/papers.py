@@ -6250,6 +6250,8 @@ async def _generate_impl(
                         kind="one_shot",
                     )
                     work["include_diagrams"] = include_diagrams
+                work["writing_sources"] = writing_sources
+                work["writing_source_selection"] = writing_selection
                 work["include_diagrams"] = include_diagrams
                 work["frozen_package"] = package
                 work["progress"] = {
@@ -6272,7 +6274,12 @@ async def _generate_impl(
                 _save_work(path, work)
                 await report("writing", None, None)
                 draft, model = await _provider(
-                    package,
+                    {
+                        **package,
+                        "paper_writing_methodology": paper_writing_sources.prompt_material(
+                            writing_sources
+                        ),
+                    },
                     initial_auth,
                     config,
                     view.project.id,
