@@ -6115,6 +6115,7 @@ async def test_parallel_budget_pressure_defers_without_ending_research(path: Pat
         **research_sessions.DEFAULT_LIMITS,
         "research_rounds": 1,
         "model_calls": 4,
+        "output_tokens_per_call": 20000,
         "maximum_estimated_cost_usd": 0.30,
     }
     research_sessions.save_limits(str(path), limits)
@@ -6143,9 +6144,11 @@ async def test_parallel_budget_pressure_defers_without_ending_research(path: Pat
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "execution_capabilities", return_value=[]),
-        patch.object(research_sessions, "_call_cost_reservation", return_value=0.20),
-        patch.dict(research_sessions.MODEL_OUTPUT_LIMITS, {MODEL: 1000}),
-        patch.object(research_sessions, "_portfolio_has_pending_reservation", side_effect=monitor_pending),
+        patch.object(
+            research_sessions,
+            "_portfolio_has_pending_reservation",
+            side_effect=monitor_pending,
+        ),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
