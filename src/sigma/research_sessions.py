@@ -5960,14 +5960,12 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         strategy_id=strategy_id,
         prior_obligations=prior_session_obligations,
     )
-    if any(
+    incomplete_unresolved_count = sum(
         item.get("status") == "unresolved" and not item.get("text_complete", True)
         for item in obligations
-    ):
-        raise ResearchContextLimitError(
-            "An unresolved obligation exceeds the safe extract bound. No provider call was made; "
-            "the original obligation remains saved and must be reviewed before continuing."
-        )
+    )
+    # The full text remains in saved research; text_complete=False explicitly
+    # prohibits treating a bounded extract as a complete obligation.
     strategy_snapshot, omitted_strategy_count, omitted_strategy_ids = _compact_strategy_snapshot(
         record.get("strategy_snapshot"), record.get("strategy_id")
     )
@@ -6046,6 +6044,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             item["attempt_id"] for item in prior_session_failures
         ],
         "obligation_ledger": obligations,
+        "incomplete_unresolved_obligation_count": incomplete_unresolved_count,
         "obligation_ledger_omitted_count": omitted_obligation_count,
         "obligation_ledger_omitted_ids": omitted_obligation_ids,
         "outstanding_obligations": [
@@ -6168,7 +6167,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     manifest["omitted_obligations"] = {
         "count": omitted_obligation_count,
         "obligation_ids": omitted_obligation_ids,
-        "reason": "lower-priority dispositions exceeded the fixed 64-obligation ledger bound; unresolved obligations are never omitted",
+        "reason": "recent unresolved obligations take priority; older unresolved and lower-priority dispositions may be omitted from this packet but remain open in saved research",
+    }
+    manifest["incomplete_unresolved_obligations"] = {
+        "count": incomplete_unresolved_count,
+        "reason": "bounded extracts omit parts of the original text; no truncated item is a complete reviewed obligation",
     }
     if role == "skeptic":
         pending = pending_investigation
@@ -6576,13 +6579,10 @@ def _obligation_ledger(
         item.pop("_seen_source_ids", None)
     if unbounded_for_admission or len(result) <= MAX_CONTEXT_OBLIGATIONS:
         return result, 0, []
-    mandatory = [item for item in result if item["status"] == "unresolved"]
-    if len(mandatory) > MAX_CONTEXT_OBLIGATIONS:
-        raise ResearchContextLimitError(
-            f"{len(mandatory)} unresolved obligations exceed the "
-            f"{MAX_CONTEXT_OBLIGATIONS}-item context bound. No provider call was made; "
-            "saved research history was preserved. Narrow the current question."
-        )
+    # Preserve the original ledger, but a long-running session can accumulate
+    # more unresolved obligations than the dispatch bound. Send the newest ones
+    # and report omitted older IDs/counts rather than terminating the session.
+    # Omission never constitutes an addressed or superseded disposition.
     priority = {"unresolved": 0, "addressed": 1, "superseded": 1, "retracted": 1, "unknown": 2}
     source_order = {item.get("obligation_id"): index for index, item in enumerate(result)}
     ordered = sorted(
