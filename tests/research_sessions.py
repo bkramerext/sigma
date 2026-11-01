@@ -5821,9 +5821,20 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
             else skeptic(cycle)
         )
         if payload["text"]["format"]["name"] == "research_investigator":
-            response["method"] += " Long saved method detail." * 900
+            # Valid maximum-sized provider fields, not a malformed 20 KB
+            # method that fails schema validation before context is tested.
+            response["method"] += " Long saved method detail." * 170
+            response["reasoning_steps"].extend(
+                {
+                    "title": f"Additional consideration {i}",
+                    "argument": "Substantial but unresolved derivation. " * 150,
+                    "epistemic_status": "conjecture",
+                    "basis_artifact_ids": [],
+                }
+                for i in range(3)
+            )
         else:
-            response["response"] += " Long saved Skeptic objection." * 450
+            response["response"] += " Long saved Skeptic objection." * 155
         if (
             context["strategy"]["id"] == first.id
             and cycle == 1
@@ -5885,7 +5896,8 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
         for c in dispatched_contexts
     ), "The 54-turn fixture must exercise dispatch compaction"
     assert all(
-        len(a["investigator_output"]["method"]) > 19_000
+        len(a["investigator_output"]["method"]) > 4_000
+        and len(a["investigator_output"]["reasoning_steps"]) == 4
         for a in finished["artifacts"]
     ), "Dispatch compaction must preserve original saved evidence"
 
