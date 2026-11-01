@@ -2319,11 +2319,13 @@ RESEARCH_EVIDENCE_ACTION_GUIDANCE = (
     "where source retrieval is unavailable, mark novelty unassessed. "
 )
 RESEARCH_EVIDENCE_SKEPTIC_GUIDANCE = (
-    "Select a consequential objection and state a discriminating next_question "
-    "that can be acted on with available evidence or tools. Require the following "
-    "turn to address its actual result; if it cannot be done or the session ends, "
-    "leave the evidence obligation unresolved. No claimed computation counts "
-    "without a saved execution and verified relevance to the claim. "
+    "For an unresolved consequential objection, state a discriminating "
+    "next_question when a feasible next action exists; a subsequent turn must "
+    "address the actual result, not repeat the proposal. If no test is available "
+    "or this is the final turn, preserve the open evidence obligation instead of "
+    "claiming its resolution. Do not force another turn when a decisive negative "
+    "finding or completed supported result justifies stopping. A claimed computation "
+    "requires saved execution and evidence relevant to the claim. "
 )
 RESEARCH_SKEPTIC_METHOD_GUIDANCE = (
     "Test the most consequential premise, middle inference, counterexample or "
