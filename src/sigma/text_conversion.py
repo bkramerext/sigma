@@ -58,6 +58,45 @@ INSTRUCTIONS = (
 )
 
 
+# Only saved researcher-facing narrative fields are eligible for AI conversion.
+# Operational metadata, usage metrics and arbitrary client text are not eligible.
+RESEARCH_BLOCK_PATH = re.compile(
+    r"^(?:outcome\.(?:conclusion|summary|solution_review\.(?:claim|argument_summary|"
+    r"skeptic_response|argument_steps\.[0-9]{1,3}\.argument|"
+    r"strategy_findings\.[0-9]{1,3}\.(?:claim|reasoning_steps\.[0-9]{1,3}\.argument)))|"
+    r"artifacts\.[0-9]{1,4}\.(?:claim_or_question|method|skeptic_response|"
+    r"coordinator_decision|next_question)|"
+    r"strategy_assessments\.[0-9]{1,3}\.rationale)$"
+)
+
+
+def _saved_research_block(path: str, session_id: str, field_path: str) -> str:
+    """Resolve allowlisted text from the saved session, not the browser's copy."""
+    from sigma.research_sessions import read_session_snapshot
+
+    if not RESEARCH_BLOCK_PATH.fullmatch(field_path):
+        raise ProjectError("This research text field cannot be converted")
+    records, _ = read_session_snapshot(path)
+    record = next((item for item in records if item.get("id") == session_id), None)
+    if record is None:
+        raise ProjectError("Saved research session is unavailable")
+    value = record
+    for part in field_path.split("."):
+        if isinstance(value, list) and part.isdecimal():
+            index = int(part)
+            value = value[index] if index < len(value) else None
+        elif isinstance(value, dict):
+            value = value.get(part)
+        else:
+            value = None
+        if value is None:
+            break
+    if not isinstance(value, str) or not value.strip():
+        raise ProjectError("Saved research text is unavailable")
+    return value
+
+
+
 def _looks_like_sse(data: bytes) -> bool:
     """Recognize event-stream framing when a ChatGPT bridge omits its media type."""
     try:
@@ -76,6 +115,7 @@ async def convert_text(
     expected_binding: str | None = None,
     expected_project_id: str | None = None,
     session_id: str | None = None,
+    field_path: str | None = None,
 ) -> dict:
     try:
         return await _convert_text(
@@ -87,6 +127,7 @@ async def convert_text(
             expected_binding,
             expected_project_id,
             session_id,
+            field_path,
         )
     except TimeoutError as exc:
         raise ProjectError("Text conversion timed out; source text was kept") from exc
@@ -101,6 +142,7 @@ async def _convert_text(
     expected_binding: str | None = None,
     expected_project_id: str | None = None,
     session_id: str | None = None,
+    field_path: str | None = None,
 ) -> dict:
     target_format = _format(target)
     if _gate.locked():
@@ -110,7 +152,19 @@ async def _convert_text(
             view = inspect_project(path)
             if expected_project_id is not None and view.project.id != expected_project_id:
                 raise ProjectError("Project identity changed; reopen it before converting")
-            if scope == "research-conclusion":
+            if scope == "research-block":
+                if not session_id or strategy_id is not None or target_format != "markdown" or not field_path:
+                    raise ProjectError("Research text conversion requires a saved session, field and Markdown")
+                raw_block = _saved_research_block(path, session_id, field_path)
+                if expected_digest is None:
+                    raise ProjectError("Research text source digest is required")
+                source = {
+                    "source_format": "plain",
+                    "source_digest": digest(raw_block),
+                    "plain": {"body": raw_block},
+                    "markdown": None,
+                }
+            elif scope == "research-conclusion":
                 if not session_id or strategy_id is not None or target_format != "markdown":
                     raise ProjectError(
                         "Conclusion conversion requires a saved session and Markdown"
@@ -139,7 +193,7 @@ async def _convert_text(
                 }
             else:
                 if session_id is not None:
-                    raise ProjectError("Session ID is only valid for a research Conclusion")
+                    raise ProjectError("Session ID requires a research text scope")
                 source = inspect_text(path, scope, strategy_id)
             if expected_digest is not None and source["source_digest"] != expected_digest:
                 raise ProjectError("Text changed since this view opened. Refresh before converting")
@@ -149,7 +203,7 @@ async def _convert_text(
                 return source
             source_format: Format = source["source_format"]
             source_body: str = source[source_format]["body"]
-            limit = 20000 if scope in {"project", "research-conclusion"} else MAX_STRATEGY_APPROACH
+            limit = 20000 if scope in {"project", "research-conclusion", "research-block"} else MAX_STRATEGY_APPROACH
             if len(source_body) > limit:
                 raise ProjectError("Source text exceeds the conversion limit")
             binding = await auth_context()
@@ -369,19 +423,19 @@ async def _convert_text(
                 raise ProjectError(
                     "Project model/Thinking changed during conversion; nothing was saved"
                 )
-            if scope == "research-conclusion":
-                from sigma.research_sessions import read_session_snapshot
+            if scope in {"research-conclusion", "research-block"}:
+                if scope == "research-block":
+                    latest_text = _saved_research_block(path, session_id, field_path)
+                else:
+                    from sigma.research_sessions import read_session_snapshot
 
-                records, _ = read_session_snapshot(path)
-                record = next((item for item in records if item.get("id") == session_id), None)
-                outcome = record.get("outcome") if record else None
-                latest_conclusion = outcome.get("conclusion") if isinstance(outcome, dict) else None
-                if (
-                    not isinstance(latest_conclusion, str)
-                    or digest(latest_conclusion) != source["source_digest"]
-                ):
+                    records, _ = read_session_snapshot(path)
+                    record = next((item for item in records if item.get("id") == session_id), None)
+                    outcome = record.get("outcome") if record else None
+                    latest_text = outcome.get("conclusion") if isinstance(outcome, dict) else None
+                if not isinstance(latest_text, str) or digest(latest_text) != source["source_digest"]:
                     raise ProjectError(
-                        "Saved Conclusion changed during conversion; reopen before retrying"
+                        "Saved research text changed during conversion; reopen before retrying"
                     )
                 return {
                     "body": body,

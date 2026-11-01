@@ -15,6 +15,7 @@ import zlib
 from collections.abc import Sequence
 from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -4279,6 +4280,32 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
+
+def _same_session_project(record: dict[str, Any], view: Any) -> bool:
+    """Research runs on frozen session inputs, not the mutable project revision.
+
+    A project can be renamed, edited, reformatted, have strategies re-ordered,
+    enabled or removed, or change its preferred model without rewriting already
+    accepted research. Only a foreign/replaced project identity is fatal.
+    """
+    return view.project.id == record.get("project_id")
+
+
+async def _frozen_session_configuration(
+    view: Any, credential: dict[str, Any], record: dict[str, Any]
+) -> dict[str, Any]:
+    """Check provider access for the model selected when the session began."""
+    pinned = replace(
+        view,
+        project=replace(
+            view.project,
+            ai_model=record["model"],
+            reasoning_effort=record["reasoning_effort"],
+        ),
+    )
+    return await configuration(view=pinned, context=credential)
+
+
 def _project_guard_state(project: Any) -> str:
     """Hash persisted project semantics without its append-only audit history."""
     state = {
@@ -5003,15 +5030,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         _save(path, record)
     if record["status"] not in {"paused", "stopped"}:
         return _public(record)
-    if action == "resume":
-        project = inspect_project(path).project
-        strategy_ids = record.get("strategy_ids", [record.get("strategy_id")])
-        for strategy_id in strategy_ids:
-            strategy = next((item for item in project.strategies if item.id == strategy_id), None)
-            if strategy is None or strategy.removed_at is not None or not strategy.enabled:
-                raise ProjectError(
-                    "A strategy in this session is disabled; enable it before resuming"
-                )
+    # Resume uses the frozen accepted strategy snapshot. New edits, removals,
+    # eligibility changes and reordering affect future sessions only.
     interrupted_call = (
         record.get("status") == "paused"
         and bool(record.get("steps"))
@@ -5059,19 +5079,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
     view, guard = _snapshot(record["project_path"])
     credential = await auth_context()
     guard_state_hash = _project_guard_state(view.project)
-    guard_matches = guard == record.get("guard_hash")
-    if not guard_matches:
-        saved_state_hash = record.get("guard_state_hash")
-        guard_matches = (
-            saved_state_hash == guard_state_hash
-            if isinstance(saved_state_hash, str)
-            else _legacy_resume_state_matches(record, view.project)
-        )
-    if not guard_matches or view.project.id != record["project_id"]:
+    if not _same_session_project(record, view):
         record["message"] = "Project or strategy changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
-    config = await configuration(view=view, context=credential)
+    config = await _frozen_session_configuration(view, credential, record)
     if (
         not config["available"]
         or config["model"] != record["model"]
@@ -5115,8 +5127,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
-            _, locked_guard = _snapshot(record["project_path"])
-            if locked_guard != guard:
+            locked_view, locked_guard = _snapshot(record["project_path"])
+            if not _same_session_project(record, locked_view):
                 record["message"] = "Project or strategy changed; research remains paused."
                 _save(record["project_path"], record)
                 raise ProjectError(record["message"])
@@ -8286,8 +8298,8 @@ async def _portfolio_role_call(
                 _record_preflight_failure(record, branch, role, "project_snapshot", exc)
                 _save(path, record)
                 raise
-            if guard != record["guard_hash"] or view.project.id != record["project_id"]:
-                exc = ProjectError("Project or strategy changed; session paused before a new call.")
+            if not _same_session_project(record, view):
+                exc = ProjectError("Project identity changed; session paused before a new call.")
                 _record_preflight_failure(record, branch, role, "project_binding", exc)
                 _save(path, record)
                 raise exc
@@ -8313,7 +8325,8 @@ async def _portfolio_role_call(
                 raise exc
             try:
                 config = await asyncio.wait_for(
-                    configuration(view=view, context=credential), timeout=PREFLIGHT_TIMEOUT
+                    _frozen_session_configuration(view, credential, record),
+                    timeout=PREFLIGHT_TIMEOUT
                 )
             except Exception as exc:
                 _record_preflight_failure(record, branch, role, "model_configuration", exc)
@@ -9262,9 +9275,9 @@ async def _execute_pending_python(
             return
         if record.get("guard_hash"):
             view, guard = _snapshot(path)
-            if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+            if not _same_session_project(record, view):
                 raise ProjectError(
-                    f"Project or strategy changed; session paused before {tool} dispatch."
+                    f"Project identity changed; session paused before {tool} dispatch."
                 )
         branch["current_action"] = f"{tool} execution"
         record["current_action"] = f"{tool} execution · {branch['strategy_title']}"
@@ -10721,10 +10734,10 @@ async def _worker(session_id: str, path: str) -> None:
                     return
                 view, guard = _snapshot(path)
                 credential = await auth_context()
-                if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+                if not _same_session_project(record, view):
                     record["status"] = "paused"
                     record["message"] = (
-                        "Project or strategy changed; session paused before a new call."
+                        "Project identity changed; session paused before a new call."
                     )
                     _save(path, record)
                     return
@@ -10738,7 +10751,7 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
-                config = await configuration(view=view, context=credential)
+                config = await _frozen_session_configuration(view, credential, record)
                 if (
                     not config["available"]
                     or config["model"] != record["model"]

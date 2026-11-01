@@ -1111,3 +1111,34 @@
 .workspace-page .session-summary .session-heading-actions > .session-mini-process-control,
 .workspace-page .session-summary .session-heading-actions > .session-log-open-link,
 .workspace-page .session-summary .session-heading-actions > .session-remove-link { align-self: center; }
+
+
+/* Markdown belongs beside section headings; each section can render independently. */
+.workspace-page .outcome-subsection.has-markdown-control { position: relative; }
+.workspace-page .outcome-subsection.has-markdown-control > summary { padding-right: 52px; }
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle,
+.workspace-page .outcome-summary-title > .sigma-render-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; min-height: 28px; padding: 0;
+  border: 0; background: transparent; box-shadow: none; color: #aab4ba;
+}
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle {
+  position: absolute; top: 4px; right: 10px; z-index: 1;
+}
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .outcome-summary-title > .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle[aria-pressed="true"],
+.workspace-page .outcome-summary-title > .sigma-render-toggle[aria-pressed="true"] {
+  color: #f1c58d; background: transparent; border: 0; box-shadow: none;
+}
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle:focus-visible,
+.workspace-page .outcome-summary-title > .sigma-render-toggle:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
+}
+.workspace-page .outcome-subsection.has-markdown-control .markdown-logo,
+.workspace-page .outcome-summary-title .markdown-logo {
+  width: 24px; height: 20px; display: block;
+}
+.workspace-page .outcome-summary-title { display: flex; align-items: center; gap: 8px; }
+.workspace-page .outcome-summary-title .outcome-summary-kicker { margin: 0; }
+.workspace-page .outcome-markdown-progress { color: #c8d3dc; font-size: 12px; margin: 7px 0; }

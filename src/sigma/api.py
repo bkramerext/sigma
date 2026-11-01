@@ -1502,6 +1502,7 @@ class TextConversionRequest(OpenRequest):
     scope: str
     strategy_id: str | None = None
     session_id: str | None = Field(default=None, max_length=36)
+    field_path: str | None = Field(default=None, max_length=160)
     target: str
     expected_digest: str
     expected_binding: str | None = None
@@ -1528,6 +1529,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.expected_binding,
             body.expected_project_id,
             body.session_id,
+            body.field_path,
         )
     )
     connection = asyncio.create_task(disconnected())
