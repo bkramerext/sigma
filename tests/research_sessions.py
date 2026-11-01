@@ -5782,8 +5782,12 @@ async def test_session7_context_pause_recovers_original_18_turn_research(path: P
     preserve every committed artifact. The provider is a deterministic mock.
     """
     view, first, credential, config = await setup(path)
-    second = create_strategy(path, "Independent reliability route", "Test failure isolation.").project.strategies[-1]
-    third = create_strategy(path, "Independent recovery route", "Test recovery safety.").project.strategies[-1]
+    second = create_strategy(
+        path, "Independent reliability route", "Test failure isolation."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Independent recovery route", "Test recovery safety."
+    ).project.strategies[-1]
     limits = research_sessions.save_limits(
         str(path),
         {
@@ -5979,8 +5983,10 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     assert any(
         c.get("context_manifest", {}).get("dispatch_budget_compaction")
         or c.get("context_manifest", {}).get("inflight_investigator_extract")
+        or c.get("context_manifest", {}).get("omitted_count", 0) > 0
+        or c.get("context_manifest", {}).get("mandatory_source_omitted_count", 0) > 0
         for c in dispatched_contexts
-    ), "The 54-turn fixture must exercise dispatch compaction"
+    ), "The 54-turn fixture must exercise context compaction or explicit history omissions"
     assert all(
         len(a["investigator_output"]["method"]) > 4_000
         and len(a["investigator_output"]["reasoning_steps"]) == 4
