@@ -1,7 +1,8 @@
 # Blue handoff — Issue #415 saved-session render isolation
 
-Branch: `blue/issue-415-session-render`  
-Base: current `main` at `48c1fb23`, with candidate `30b84a43` inspected and retained as the starting point.  
+Branch: `blue/issue-415-session-render`
+
+Base: current `main` at `48c1fb23`, with candidate `30b84a43` inspected and retained as the starting point.
 Status: ready for review; no merge performed.
 
 ## Finding
