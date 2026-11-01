@@ -88,8 +88,9 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
         normalized = urlunsplit(
             (parsed.scheme.casefold(), host, parsed.path or "/", parsed.query, "")
         )
-        key = normalized.casefold()
-        if key in {entry.casefold() for entry in cleaned}:
+        # HTTP paths and query values may be case-sensitive. The scheme and
+        # hostname have already been canonicalized above.
+        if normalized in cleaned:
             continue  # Keep first canonical occurrence; deduplicate on Save.
         cleaned.append(normalized)
     return tuple(sorted(cleaned, key=str.casefold))
