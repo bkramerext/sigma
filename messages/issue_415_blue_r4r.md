@@ -1,46 +1,43 @@
-# Blue handoff — Issue #415 saved-session render isolation
+# Blue handoff — Issue #415 saved-session rendering
 
 Branch: `blue/issue-415-session-render`
 
-Base: current `main` at `48c1fb23`, with candidate `30b84a43` inspected and retained as the starting point.
-Status: ready for review; no merge performed.
+Base: `main` at `48c1fb2322a95ddcb5a218cca29fcba59c4f8108`. Candidate `30b84a4315a79e07e0a1211c597c55377503b350` was inspected, not assumed correct. PR #422 remains open and unmerged.
 
-## Finding
+## Root cause
 
-The supplied `sigma-debug.json` was not present in the workspace or issue metadata during this investigation, so the exact AI Agent Reliability project payload could not be replayed. The reproduction used a private temporary project made from the checked-in T17.8 saved-session fixture, with six sessions and a deliberately malformed saved artifact. No original project or research data was touched.
+The actual project bundle was available outside the checkout at the owner's local projects directory. It was read and imported into a temporary isolated workspace; the original file was never opened for writing, and its SHA-256 was identical before and after replay.
 
-On unpatched candidate `30b84a4315a79e07e0a1211c597c55377503b350`, real Chrome reproduced a blank page from the malformed session. The first uncaught exception was:
+Backend project opening and session serialization succeeded: `/api/projects/open` and `/api/projects/research-sessions` returned HTTP 200. The real Chrome console and React component stack identified a frontend failure in `ResearchSessionContents` while mapping a saved prior-session finding:
 
 ```text
-TypeError: Cannot convert undefined or null to object
-    at Object.keys (<anonymous>)
-    at frontend/src/main.tsx:192:74
-    at Array.some (<anonymous>)
-    at stoppedSessionGuidance (frontend/src/main.tsx:192:48)
-    at frontend/src/main.tsx:5021:32
-    at frontend/src/main.tsx:5065:15
+TypeError: Cannot read properties of undefined (reading 'length')
+    at http://127.0.0.1:<isolated-port>/src/main.tsx:3495:38
     at Array.map (<anonymous>)
-    at ResearchWorkspace (frontend/src/main.tsx:4885:214)
+    at ResearchSessionContents (http://127.0.0.1:<isolated-port>/src/main.tsx:3422:113)
+    ... React render stack ...
+The above error occurred in the <ResearchSessionContents> component.
+React will try to recreate this component tree from scratch using the error boundary ...
 ```
 
-The statement is `Object.keys(artifact.investigator_output)` in stopped-session guidance. A null/missing nested `investigator_output` field throws while React renders the session list. This reproduction disproves the `strategy_runs` hypothesis for this crash mechanism: the optional `strategy_runs` accesses were not involved. The `/api/projects/open` and `/api/projects/research-sessions` responses were HTTP 200, which locates this reproduced failure in React rendering rather than backend project loading or API serialization.
+Session #6 has a legacy prior-session finding without `objections`, `open_obligations`, and `obligation_reviews`. The renderer reads these fields as arrays. `sessionForDisplay` now supplies empty render-only arrays for absent or invalid nested finding arrays; this does not write to or alter the saved session. A per-session error boundary additionally keeps unrelated malformed records from taking down the workspace. This is a React rendering defect, not backend project loading or API serialization. The separate `strategy_runs` hypothesis is not the cause of this session's failure.
 
-The same fixture also exercises malformed fields in expanded session details. React reported errors in both `<StoppedSessionNotice>` and `<ResearchSessionContents>`; the corrected UI logs the message and React component stack while confining the error to the affected session row. The exact malformed field in the unavailable owner bundle remains unverified.
+On the supplied synthetic malformed fixture, unpatched candidate `30b84a4315a79e07e0a1211c597c55377503b350` also produced a blank page with the first uncaught exception at `Object.keys(artifact.investigator_output)` in `stoppedSessionGuidance`. That additional valid failure mode is retained as regression coverage and localized by the stopped-notice/session boundaries.
 
 ## Changes
 
-- `frontend/src/main.tsx`: normalize render-critical session fields, show a pane-level warning for records lacking usable IDs, and isolate each session row and stopped-session notice with React error boundaries. The boundaries retain concise diagnostics in the browser console and provide an export-preservation message in the UI. Normalization is display-only; the stored record and export bytes are unchanged.
-- `browser_checks/issue415_session_render_isolation.py`: real-Chrome regression using an isolated six-session project. It includes a synthetic 14-turn display, malformed nested artifact, a missing-ID API record, Advanced Outcome, F5 while the deterministic backend mock is running, and project-bundle download.
+- `frontend/src/main.tsx`: normalize nested historical prior-finding arrays for rendering; retain top-level normalization, missing-ID warning, and session/notice error boundaries.
+- `browser_checks/issue415_session_render_isolation.py`: six-session regression with malformed nested stopped-session artifact, a legacy prior finding missing its display arrays, missing-ID handling, 14-turn session display, Advanced Outcome, refresh during deterministic mock research, and export.
+- `browser_checks/issue415_owner_bundle_replay.py`: optional real-Chrome check for an actual local `sigma.project.bundle`; imports a temporary copy, verifies the six sessions and Session #6's 14 steps/7 artifacts across reload/export, and confirms the source hash is unchanged.
 
-No backend or scheduler changes were needed. No provider calls were made.
+No backend or scheduler change was required. No provider calls were made.
 
 ## Verification
 
-- `./sigma test` — passed all configured steps, including Ruff, Pyright, frontend typecheck, and production build. Existing large-chunk advisory remains.
-- `uv run --with playwright python browser_checks/issue415_session_render_isolation.py` — passed in real Chrome. Six saved session files exported; malformed sessions localized; 14-turn display and Advanced Outcome survived refresh; deterministic mock backend statuses progressed `running → running → ended` with saved evidence; no stop/control request; zero uncaught page exceptions. The `ended` transition is the deterministic mock's expected completion, with no provider calls.
-- Candidate baseline run — failed with the uncaught exception and blank body shown above.
-- Candidate production build before correction — failed TypeScript due implicit `any` in the new `nextSessions` callbacks; the branch now explicitly types the normalized list and passes typecheck/build.
+- Actual owner bundle replay: `SIGMA_ISSUE415_BUNDLE=/path/to/ai-agent-reliability-and-evaluation-v1.json uv run --with playwright --project . python browser_checks/issue415_owner_bundle_replay.py` — passed in real Chrome. Six sessions loaded; no session render boundaries fired; Session #6 rendered before and after refresh; export preserved every original session ID, step count, and artifact ID, including Session #6's 14 steps and 7 artifacts. Source SHA-256 unchanged; zero uncaught page errors. Project open, session list and export APIs returned HTTP 200. The only browser console error was an unrelated static-resource 404.
+- `uv run --with playwright python browser_checks/issue415_session_render_isolation.py` — passed in real Chrome. Malformed session diagnostics stayed localized, six saved session files exported, the 14-turn display and Advanced Outcome survived refresh, and deterministic mock execution progressed `running → running → ended` and saved evidence without a stop/control request or provider call.
+- `./sigma test` — passed all configured steps: Ruff, Pyright, frontend typecheck, and production build included. Existing large-chunk advisory remains. The unrelated optional graph-present sandbox check was skipped because its local Docker image is unavailable.
 
-## Verification limit
+## Scope and limits
 
-The attached private 6.7 MB bundle was not available locally and its URL was absent from issue #415's API body/comments. The issue owner's original project, its six session IDs, and its saved artifacts have therefore not been validated in Chrome or exported in this run. Please attach the bundle to the PR/review thread for a direct replay before claiming the exact target project is accepted. The user-facing fix and regression test cover the observed frontend failure class without modifying that project.
+The target's six sessions, Session #6 artifacts, and export were exercised from the actual bundle via an isolated imported copy. The source bundle was not modified. This branch remains unmerged pending review and coordination.

@@ -76,6 +76,25 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
             session["mock_stage"] = 0
             session["mock_scenario"] = "completed"
             session["mode"] = "mock"
+        if number == 6:
+            # Historical findings may predate the optional display arrays.
+            # Session 6 used to crash in ResearchSessionContents when it read
+            # finding.objections.length.
+            session["prior_session_findings"] = [
+                {
+                    "id": "legacy-prior-finding",
+                    "sequence": 1,
+                    "claim_or_question": "Legacy saved finding",
+                    "method": "Historical method",
+                    "evidence_status": "unverified",
+                    "coordinator_decision": "retained",
+                    "next_question": "",
+                    "session_id": str(uuid4()),
+                    "session_number": 1,
+                    "strategy_id": "legacy-strategy",
+                    "strategy_title": "Legacy strategy",
+                }
+            ]
         if number == 6 and session.get("steps"):
             seed_steps = session["steps"]
             session["steps"] = []
@@ -231,6 +250,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-issue415-chrome-") as temporary:
             expect(page.locator(".session-list")).to_be_visible()
             long_session = page.locator(f'li[data-session-id="{session_ids[5]}"]')
             page.get_by_role("button", name="Session #6").click()
+            expect(long_session.get_by_role("alert")).to_have_count(0)
             expect(long_session.locator(".session-progress-inline")).to_contain_text(
                 "14/16 agent turns"
             )
