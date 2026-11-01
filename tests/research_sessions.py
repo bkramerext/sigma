@@ -5877,7 +5877,8 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     )
     assert finished.get("termination_reason_code") != "research_completed_early"
     assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
-    assert len(dispatched_contexts) == 55
+    # Attempt fourteen fails before its request body is inspected by the mock.
+    assert len(dispatched_contexts) == 54
     assert any(
         c.get("context_manifest", {}).get("dispatch_budget_compaction")
         or c.get("context_manifest", {}).get("inflight_investigator_extract")
