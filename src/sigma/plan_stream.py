@@ -51,6 +51,28 @@ KNOWN_ERRORS = {
         "ChatGPT account/workspace is temporarily unavailable. Account retained; retry later.",
     ),
 }
+_SAFE_LIMIT_HEADER_NAME = re.compile(
+    r"(?:x-ratelimit-[a-z0-9-]{1,48}|x-codex-(?:primary|secondary)-[a-z0-9-]{1,48}|"
+    r"x-codex-(?:active-limit|plan-type))\Z",
+    re.IGNORECASE,
+)
+_SAFE_LIMIT_HEADER_VALUE = re.compile(r"[A-Za-z0-9_.:%-]{1,64}\Z")
+
+
+def _safe_provider_limit_headers(headers: Any) -> dict[str, str]:
+    """Retain only bounded provider rate/plan telemetry, never arbitrary headers."""
+    if not hasattr(headers, "items"):
+        return {}
+    safe: dict[str, str] = {}
+    for name, value in headers.items():
+        if not isinstance(name, str) or not _SAFE_LIMIT_HEADER_NAME.fullmatch(name):
+            continue
+        if not isinstance(value, str) or not _SAFE_LIMIT_HEADER_VALUE.fullmatch(value):
+            continue
+        safe[name.lower()] = value
+        if len(safe) >= 24:
+            break
+    return safe
 
 
 class ChatGPTProviderRejection(ProjectError):
@@ -72,6 +94,7 @@ class ChatGPTProviderRejection(ProjectError):
         retry_after_seconds: float | None = None,
         provider_request_id: str | None = None,
         response_shape: str | None = None,
+        provider_limit_headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.state = state
@@ -87,6 +110,7 @@ class ChatGPTProviderRejection(ProjectError):
         self.retry_after_seconds = retry_after_seconds
         self.provider_request_id = provider_request_id
         self.response_shape = response_shape
+        self.provider_limit_headers = _safe_provider_limit_headers(provider_limit_headers or {})
 
 
 def failure(
@@ -99,6 +123,7 @@ def failure(
     stream_event: str | None = None,
     retry_after: str | None = None,
     provider_request_id: str | None = None,
+    provider_limit_headers: Any = None,
 ) -> None:
     retry_after_seconds = None
     if retry_after is not None:
@@ -136,6 +161,7 @@ def failure(
         and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", provider_request_id)
         else None
     )
+    safe_limit_headers = _safe_provider_limit_headers(provider_limit_headers)
     if mode == "chatgpt":
         # Strict-schema rejection is an actionable request defect, not an
         # account/plan failure. Expose only a locally allowlisted provider
@@ -155,6 +181,7 @@ def failure(
                 retry_after_seconds=retry_after_seconds,
                 provider_request_id=safe_request_id,
                 response_shape=shape,
+                provider_limit_headers=safe_limit_headers,
             )
         state, message = KNOWN_ERRORS.get(
             code if isinstance(code, str) else "",
@@ -200,6 +227,7 @@ def failure(
                 retry_after_seconds=retry_after_seconds,
                 provider_request_id=safe_request_id,
                 response_shape=shape,
+                provider_limit_headers=safe_limit_headers,
             )
         # A Responses stream is admitted at the outer HTTP status and can then
         # fail in-band; the provider error code is not a second HTTP response.
@@ -235,6 +263,7 @@ def failure(
             retry_after_seconds=retry_after_seconds,
             provider_request_id=safe_request_id,
             response_shape=shape,
+            provider_limit_headers=safe_limit_headers,
         )
     # Provider error bodies can contain request context or other sensitive
     # values. Surface only a small allowlist of machine fields; never echo the
@@ -379,6 +408,7 @@ async def completed(
                     stream_event="error",
                     retry_after=retry_after,
                     provider_request_id=response.headers.get("x-request-id"),
+                    provider_limit_headers=response.headers,
                 )
             if kind == "response.created":
                 if response_id is not None or not isinstance(
@@ -402,6 +432,7 @@ async def completed(
                         stream_event="response.failed",
                         retry_after=retry_after,
                         provider_request_id=response.headers.get("x-request-id"),
+                        provider_limit_headers=response.headers,
                     )
                 if kind == "response.incomplete":
                     raise ProjectError(
