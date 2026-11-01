@@ -36,6 +36,16 @@ Phase 1 still writes the **best defensible scholarly paper from the recorded res
 
 **Warp Drive Design / Physics:** distinguish specified geometry, stress-energy tensors, causal/horizon behavior, quantum-field and stability assumptions from a verified physical mechanism. State sign conventions, chosen metric, coordinates, units and actual proof conditions; do not call a coordinate representation local superluminal transport. Treat numerical computations as model-bound and report precision/convergence only if executed. Compare a geometry-based proposal with the second conceptual framework in the actual research without inventing support. Preserve counterexamples (energy conditions, backreaction, stability, conservation, horizons), negative findings, unresolved falsifiability and explicit feasibility limits. The prior interrupted Warp Drive session (#399) is a runtime integrity issue, not a physics result. Write an analytical/theoretical physics paper if no experiment was done, not an invented experiment.
 
+## Dynamic academic-writing source preflight (new Phase 1 requirement)
+
+Before the planning call for **each paper**, run the bounded writing-method source selection, choosing up to **three readable guides** spread across general academic writing, the project's broad type (mathematics, physics, biology, engineering, etc.) and its detected specialty (for these projects, combinatorics, relativity and developmental biology). This is about *writing conventions*, not adding scientific evidence. The saved source records include title, URL, tier, category, branch, excerpt and SHA-256.
+
+Prefer a previous paper's 2–3-source set when its category/branch, tiers and preserved excerpt digests still qualify; do not churn the sources between iterations merely because a different webpage is available. Skip inaccessible pages, suspicious HTML, incomplete text and timed-out attempts without blocking planning or initiating new paid source searches. No usable source must result in an honest "none recorded" section, not fabricated references.
+
+Apply the material as editorial-method context only in both one-shot and long-form authoring; never let untrusted source text override project evidence, provide facts about the research problem, or authorize claims of originality. Every saved paper Outcome, exported text and TeX/PDF must list the source titles/links and explain these are manuscript-method sources, distinct from scientific research evidence. Verify source choices, actual excerpt availability and whether reuse occurred for each completed subject.
+
+See [`COORDINATOR_I4_MATH_PHYSICS_WRITING_SOURCES.md`](COORDINATOR_I4_MATH_PHYSICS_WRITING_SOURCES.md) and the implementation `src/sigma/paper_writing_sources.py`. The selected guides should be sufficiently broad for multiple branches of mathematics and physics rather than narrowly prescriptive to combinatorics or a warp metric.
+
 ## Quality process and deliverables
 
 - Start from the latest fully tested Phase 1 code at an exact commit SHA and `./sigma test`/CI gate. Verify model, high effort, provider route and whether user allowance permits four independent operations; never start extra retries on an ambiguous or already consumed call.
