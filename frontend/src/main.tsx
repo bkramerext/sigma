@@ -5877,7 +5877,7 @@ function PrivacyNoticePage() {
 function TermsOfServicePage() {
   const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
-  return <main className="cloud-auth-shell" onClick={event => { if (event.target === event.currentTarget) window.location.assign('/'); }}><article className="cloud-auth-card privacy-notice-card terms-of-service-card">
+  return <main className="cloud-auth-shell terms-of-service-shell" onClick={event => { if (event.target === event.currentTarget) window.location.assign('/'); }}><article className="cloud-auth-card privacy-notice-card terms-of-service-card">
     <div className="privacy-notice-heading"><h1>Terms of Service</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
     <div className="terms-of-service-copy">
       <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
