@@ -6222,11 +6222,13 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "research_method_version": RESEARCH_METHOD_VERSION,
         "methodology_source_material": (
             record.get("research_method_sources", {}).get("sources", [])
-            if isinstance(record.get("research_method_sources"), dict) else []
+            if isinstance(record.get("research_method_sources"), dict)
+            else []
         ),
         "methodology_source_status": (
             record.get("research_method_sources", {}).get("status", "unavailable")
-            if isinstance(record.get("research_method_sources"), dict) else "unavailable"
+            if isinstance(record.get("research_method_sources"), dict)
+            else "unavailable"
         ),
         "strategy": {
             "id": record["strategy_id"],
