@@ -131,10 +131,10 @@ with sync_playwright() as playwright:
     parent.get_by_label("Scope").fill("Original copied research scope")
     # A built-in or custom name collision must block saving without rewriting it.
     parent.get_by_label("Name").fill("  physics  ")
-    expect(parent.get_by_text("A project type with this name already exists.")).to_be_visible()
+    expect(parent.get_by_text("Duplicate project type name")).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     parent.get_by_label("Name").fill("Browser Parent")
-    expect(parent.get_by_text("A project type with this name already exists.")).to_have_count(0)
+    expect(parent.get_by_text("Duplicate project type name")).to_have_count(0)
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
     expect(parent.get_by_role("button", name="Generate icon")).to_be_visible()
     icon_box = parent.locator(".project-type-icon-edit .research-type-icon").first.bounding_box()
