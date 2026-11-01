@@ -40,7 +40,6 @@ class ProjectType:
     scope: str
     user_defined: bool
     icon: dict[str, Any]
-    description: str = ""
     based_on: str | None = None
     origin: str | None = None
     research_standards_references: tuple[str, ...] = ()
@@ -63,10 +62,14 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
     for item in value:
         if not isinstance(item, str) or len(item) > 2048:
             raise ProjectError(f"{field} contains an invalid URL")
+        # Blank draft rows are not references. Discard them on Save.
+        candidate = item.strip()
+        if not candidate:
+            continue
         from urllib.parse import urlsplit, urlunsplit
 
         try:
-            parsed = urlsplit(item.strip())
+            parsed = urlsplit(candidate)
             hostname = parsed.hostname
             port = parsed.port
         except ValueError as exc:
@@ -85,9 +88,10 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
         normalized = urlunsplit(
             (parsed.scheme.casefold(), host, parsed.path or "/", parsed.query, "")
         )
-        key = normalized.casefold()
-        if key in {entry.casefold() for entry in cleaned}:
-            raise ProjectError(f"{field} cannot contain duplicate URLs")
+        # HTTP paths and query values may be case-sensitive. The scheme and
+        # hostname have already been canonicalized above.
+        if normalized in cleaned:
+            continue  # Keep first canonical occurrence; deduplicate on Save.
         cleaned.append(normalized)
     return tuple(sorted(cleaned, key=str.casefold))
 
@@ -131,12 +135,10 @@ def _validate_icon(value: Any) -> dict[str, Any]:
 def _from_record(raw: dict[str, Any]) -> ProjectType:
     name = _required_text(raw.get("name"), "Name", 80)
     scope = _required_text(raw.get("scope"), "Scope", 500)
-    description = _optional_text(raw.get("description"), "Description", 2000)
     return ProjectType(
         id=str(raw["id"]),
         name=name,
         scope=scope,
-        description=description,
         user_defined=bool(raw.get("user_defined")),
         based_on=raw.get("based_on"),
         origin=raw.get("origin"),
@@ -215,8 +217,55 @@ def custom_types() -> list[ProjectType]:
     return sorted(result, key=lambda item: item.name.casefold())
 
 
+def resolve_type_metadata(
+    identifier: str, definitions: dict[str, ProjectType] | None = None
+) -> ProjectType | None:
+    """Resolve based_on transitively, preserving explicit child metadata.
+
+    A child keeps its own name, scope, identity and saved icon/references. An
+    uncustomized placeholder or empty reference list falls back recursively to
+    the closest available ancestor. Missing parents use the child's snapshot;
+    cycles are bounded and never followed indefinitely.
+    """
+    from dataclasses import replace
+
+    if definitions is None:
+        definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+    item = definitions.get(identifier)
+    if item is None:
+        return None
+    ancestry: set[str] = {identifier}
+    icon = item.icon
+    research = item.research_standards_references
+    publication = item.publication_standards_references
+    parent_id = item.based_on
+    while parent_id and parent_id not in ancestry:
+        ancestry.add(parent_id)
+        parent = definitions.get(parent_id)
+        if parent is None:
+            break
+        if icon.get("key") == "placeholder" and parent.icon.get("key") != "placeholder":
+            icon = parent.icon
+        if not research:
+            research = parent.research_standards_references
+        if not publication:
+            publication = parent.publication_standards_references
+        parent_id = parent.based_on
+    return replace(
+        item,
+        icon=icon,
+        research_standards_references=research,
+        publication_standards_references=publication,
+    )
+
+
 def all_types() -> list[ProjectType]:
-    return [*builtin_types(), *custom_types()]
+    definitions = {item.id: item for item in [*builtin_types(), *custom_types()]}
+    return [
+        resolved
+        for identifier in definitions
+        if (resolved := resolve_type_metadata(identifier, definitions)) is not None
+    ]
 
 
 def catalog_revision() -> str:
@@ -294,7 +343,6 @@ def normalize_project_snapshot(value: Any, identifier: str) -> dict[str, Any] | 
             "id": identifier,
             "name": _required_text(value["name"], "Name", 80),
             "scope": _required_text(value["scope"], "Scope", 500),
-            "description": _optional_text(value.get("description"), "Description", 2000),
             "user_defined": value["user_defined"],
             "based_on": value.get("based_on"),
             "origin": value.get("origin"),

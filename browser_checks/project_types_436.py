@@ -73,30 +73,46 @@ with sync_playwright() as playwright:
         "window.__projectTypeConfirmations = []; window.confirm = message => { window.__projectTypeConfirmations.push(String(message)); return true; }"
     )
 
+    # Home account pills occupy About / Google over Admin / ChatGPT at right.
+    grid = page.locator(".home-account-grid")
+    expect(grid).to_be_visible()
+    expect(grid.locator(".home-about-button")).to_have_text("About")
+    assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
+        '"about google" "admin chatgpt"'
+    )
+    about_rect = grid.locator(".home-about-button").bounding_box()
+    google_rect = grid.locator(".project-google-signin").first.bounding_box()
+    assert about_rect and google_rect
+    assert about_rect["x"] < google_rect["x"] and abs(about_rect["y"] - google_rect["y"]) <= 5
+
     # The native Project Types dialog traps keyboard focus, closes on Escape,
     # restores focus, and keeps the Literature/open-book catalog read-only.
     types_button = page.get_by_role("button", name="Project Types", exact=True)
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
-    expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_be_checked()
-    checkbox = dialog.get_by_role("checkbox", name="Show built-in project types")
-    for width in (1440, 390):
-        page.set_viewport_size({"width": width, "height": 844})
-        box = checkbox.bounding_box()
-        label = checkbox.locator("xpath=..")
-        label_box = label.bounding_box()
-        assert box and label_box and 14 <= box["width"] <= 18 and 14 <= box["height"] <= 18
-        assert label_box["width"] < 300 and box["x"] < label_box["x"] + label_box["width"]
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
+    expect(dialog.get_by_text("(cannot be modified)", exact=True)).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
     expect(dialog.get_by_text("Literature", exact=True).first).to_be_visible()
     assert dialog.get_by_text("Other", exact=True).count() == 0
     literature = dialog.locator('.project-type-card:has(> summary strong:text-is("Literature"))')
     literature.locator("summary").click()
+    expect(literature).to_have_attribute("open", "")
+    literature.locator("summary").click()
+    expect(literature).not_to_have_attribute("open", "")
+    literature.locator("summary").click()
+    expect(literature).to_have_attribute("open", "")
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
+    # Empty reference sections disappear on read-only built-ins.
+    expect(literature.get_by_text("Research standards references")).to_have_count(0)
+    expect(literature.get_by_text("Publication standards references")).to_have_count(0)
+    expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(0)
+    expect(literature.get_by_role("columnheader", name="URL")).to_have_count(0)
     builtin_names = (
         dialog.locator(".project-types-body > section")
-        .nth(0)
+        .nth(1)
         .locator(".project-type-card > summary strong")
         .all_text_contents()
     )
@@ -114,51 +130,119 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 1440, "height": 1000})
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
-    add_button = dialog.get_by_role("button", name="Add project type")
+    add_button = dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="New"
+    )
     expect(add_button).to_be_enabled()
     add_button.focus()
     page.keyboard.press("Tab")
-    cancel_button = dialog.get_by_role("button", name="Cancel", exact=True)
-    expect(cancel_button).to_be_focused()
+    assert dialog.evaluate("dialog => dialog.contains(document.activeElement)")
     page.keyboard.press("Shift+Tab")
     expect(add_button).to_be_focused()
     page.keyboard.press("Escape")
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
 
-    # Create two custom types in one Save. The child uses an unsaved parent as
-    # a one-time copy; the placeholder is free and replaceable with a catalog icon.
+    # Create a parent with the one top-level Save, then a derived child with
+    # another top-level Save. The placeholder is free and replaceable.
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
-    dialog.get_by_role("button", name="Add project type").click()
-    parent = dialog.locator(".project-type-card").last
+    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    parent = dialog.locator(".project-types-body > section").first.locator(
+        ".project-type-card[open]"
+    )
+    save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
+    expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
+    expect(
+        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save")
+    ).to_have_count(0)
+    expect(save).to_be_disabled()
     parent.get_by_label("Name").fill("Browser Parent")
+    expect(save).to_be_disabled()  # New type still needs a scope.
     parent.get_by_label("Scope").fill("Original copied research scope")
+    expect(save).to_be_enabled()  # The only Save is the header action.
+    # A built-in or custom name collision must block saving without rewriting it.
+    parent.get_by_label("Name").fill("  physics  ")
+    expect(parent.get_by_text("Duplicate project type name")).to_be_visible()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    parent.get_by_label("Name").fill("Browser Parent")
+    expect(parent.get_by_text("Duplicate project type name")).to_have_count(0)
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
-    expect(parent.get_by_label("Icon for Browser Parent")).to_have_value("placeholder")
+    # The new type shows its icon in the header immediately, without an icon
+    # editor or any image-generation controls / provider calls.
+    expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
+    expect(parent.locator(".project-type-icon-edit")).to_have_count(0)
+    expect(parent.get_by_role("button", name="Generate icon")).to_have_count(0)
+    expect(parent.get_by_role("button", name="Remove project type")).to_have_count(0)
+    expect(parent.get_by_role("columnheader", name="URL")).to_have_count(0)
+    expect(parent.get_by_text("http://temp.com/style.html")).to_have_count(0)
     parent.get_by_role("button", name="New", exact=True).first.click()
+    # The next New remains unavailable until the just-created row contains a URL.
+    expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
     url_input = parent.get_by_label("Research reference URL 1")
+    url_input.fill("not-a-url")
+    expect(url_input).to_have_attribute("aria-invalid", "true")
+    expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_be_visible()
+    expect(save).to_be_disabled()
     url_input.fill("https://example.org/research-standard")
+    expect(url_input).to_have_attribute("aria-invalid", "false")
+    expect(parent.get_by_text("Use an HTTP or HTTPS URL with a host.")).to_have_count(0)
+    expect(save).to_be_enabled()
     expect(url_input).to_have_value("https://example.org/research-standard")
+    expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
     )
-    ratio = parent.locator(".pt-reference-table").first.evaluate(
-        "table => { const rect = table.getBoundingClientRect(); const columns = [...table.querySelectorAll('col')].map(col => col.getBoundingClientRect().width); return columns[0] / rect.width; }"
+    parent.get_by_role("button", name="New", exact=True).first.click()
+    parent.get_by_label("Research reference URL 2").fill(
+        "HTTPS://EXAMPLE.ORG:443/research-standard"
     )
-    assert 0.78 <= ratio <= 0.82, ratio
+    parent.get_by_role("button", name="New", exact=True).first.click()
+    expect(parent.get_by_label("Research reference URL 3")).to_have_value("")
+    expect(save).to_be_enabled()
+    reference_layout = parent.locator(".pt-reference-entry").first.evaluate(
+        """row => {
+          const input = row.querySelector('input').getBoundingClientRect();
+          const remove = row.querySelector('button').getBoundingClientRect();
+          return {gap: remove.left - input.right, sameLine: Math.abs(remove.top - input.top) < 16};
+        }"""
+    )
+    assert 0 <= reference_layout["gap"] <= 20 and reference_layout["sameLine"], reference_layout
+    # A new draft uses local Cancel, not Remove or a second Save.
+    expect(
+        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Cancel")
+    ).to_be_visible()
+    # An API validation error belongs to this dialog, not a hidden global toast.
+    toast_count = page.locator(".request-toast-stack .request-toast").count()
 
-    dialog.get_by_role("button", name="Add project type").click()
-    custom_section = dialog.locator(".project-types-body > section").nth(1)
-    child = custom_section.locator(".project-type-card").first
+    def reject_save(route):
+        route.fulfill(
+            status=400,
+            content_type="application/json",
+            body='{"detail":"Server-side reference validation failed"}',
+        )
+
+    page.route("**/api/project-types", reject_save)
+    save.click()
+    expect(dialog.get_by_text("Server-side reference validation failed")).to_be_visible()
+    expect(page.locator(".request-toast-stack .request-toast")).to_have_count(toast_count)
+    page.unroute("**/api/project-types", reject_save)
+    save.click()
+    expect(dialog).not_to_be_visible()
+
+    types_button.click()
+    dialog = page.get_by_role("dialog", name="Project Types")
+    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    custom_section = dialog.locator(".project-types-body > section").nth(0)
+    child = custom_section.locator(".project-type-card[open]")
     child.get_by_label("Name").fill("Browser Derived")
-    child.locator("label").filter(has_text="Based on").locator("select").select_option(
-        label="Browser Parent"
-    )
+    child.get_by_role("combobox", name="Based on project type").click()
+    child.get_by_role("option", name="Browser Parent").click()
     child.get_by_label("Scope").fill("Independent copied scope")
-    child.get_by_label("Icon for Browser Derived").select_option("literature")
+    expect(child.get_by_role("button", name="Generate icon")).to_have_count(0)
+    expect(child.get_by_role("button", name="Remove project type")).to_have_count(0)
     expect(child.locator(".project-type-card-icon svg")).to_be_visible()
-    save = dialog.get_by_role("button", name="Save", exact=True)
+    save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
     expect(save).to_be_enabled()
     save.click()
     expect(dialog).not_to_be_visible()
@@ -170,11 +254,11 @@ with sync_playwright() as playwright:
         item for item in catalog["project_types"] if item["name"] == "Browser Derived"
     )
     assert parent_type["icon"]["key"] == "placeholder"
-    assert child_type["icon"]["key"] == "literature"
+    assert child_type["icon"]["key"] == "placeholder"
     assert child_type["based_on"] == parent_type["id"]
     assert child_type["scope"] == "Independent copied scope"
     assert child_type["research_standards_references"] == ["https://example.org/research-standard"]
-    assert not any(url.endswith("/project-types/icon") for url, _ in api_requests)
+    assert not [url for url, _ in api_requests if url.endswith("/project-types/icon")]
 
     # Edit/add/remove are all drafts. Cancel discards all three, and Remove
     # makes no write until Save.
@@ -186,17 +270,29 @@ with sync_playwright() as playwright:
     )
     parent_card.locator("summary").click()
     parent_card.get_by_label("Scope").fill("Uncommitted scope")
-    parent_card.locator(".project-type-card-actions button").click()
-    dialog.get_by_role("button", name="Add project type").click()
-    pending = (
-        dialog.locator(".project-types-body > section").nth(1).locator(".project-type-card").first
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
+    title_order = parent_card.locator("summary").evaluate(
+        "summary => [...summary.children].map(item => item.tagName.toLowerCase())"
+    )
+    assert title_order == ["span", "strong", "button", "small"], title_order
+    parent_card.locator(".project-type-remove").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
+    pending = dialog.locator(".project-types-body > section").first.locator(
+        ".project-type-card[open]"
     )
     pending.get_by_label("Name").fill("Discarded addition")
     pending = dialog.locator(
         '.project-type-card:has(> summary strong:text-is("Discarded addition"))'
     )
     pending.get_by_label("Scope").fill("Discarded scope")
-    dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(pending.locator(".project-type-remove")).to_have_count(0)
+    dialog.locator(".project-types-section-heading").first.get_by_role(
+        "button", name="Cancel"
+    ).click()
+    expect(pending).to_have_count(0)
+    # Canceling the new type leaves other unsaved edits in the dialog.
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_enabled()
+    dialog.locator("header").get_by_role("button", name="Cancel", exact=True).click()
     expect(dialog).not_to_be_visible()
     after_cancel = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     assert after_cancel["revision"] == before["revision"]
@@ -211,7 +307,7 @@ with sync_playwright() as playwright:
     # Remove multiple referenced types in one Save and retain each original name.
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
-    dialog.get_by_role("button", name="Add project type").click()
+    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
     second_card = dialog.locator(".project-type-card[open]")
     second_card.get_by_label("Name").fill("Browser Second")
     second_card.get_by_label("Scope").fill("Second saved scope")
@@ -220,7 +316,8 @@ with sync_playwright() as playwright:
             response.url.endswith("/api/project-types") and response.request.method == "PUT"
         )
     ):
-        dialog.get_by_role("button", name="Save", exact=True).click()
+        dialog.locator("header").get_by_role("button", name="Save", exact=True).click()
+    expect(dialog).not_to_be_visible()
     second_type = next(
         item
         for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
@@ -238,12 +335,12 @@ with sync_playwright() as playwright:
         '.project-type-card:has(> summary strong:text-is("Browser Parent"))'
     )
     parent_card.locator("summary").click()
-    parent_card.locator(".project-type-card-actions button").click()
+    parent_card.locator(".project-type-remove").click()
     second_type_card = dialog.locator(
         '.project-type-card:has(> summary strong:text-is("Browser Second"))'
     )
     second_type_card.locator("summary").click()
-    second_type_card.locator(".project-type-card-actions button").click()
+    second_type_card.locator(".project-type-remove").click()
     assert (
         page.request.get(f"{FIXTURE_URL}/api/project-types").json()["revision"]
         == before["revision"]
@@ -367,6 +464,16 @@ with sync_playwright() as playwright:
     legacy = project(page, "Legacy default project", "default")
     open_project(page, legacy["path"])
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
+    header = page.locator(".project-art-header")
+    expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About")
+    assert (
+        header.locator(".header-controls").evaluate(
+            "node => getComputedStyle(node).gridTemplateAreas"
+        )
+        == '"difficulty model identity" "about thinking identity"'
+    )
+    assert header.get_by_role("button", name="Project Types").count() == 0
+
     with page.expect_download() as legacy_download:
         page.get_by_role("button", name="Export project").click()
         page.get_by_role("dialog", name="Export Project").get_by_role(

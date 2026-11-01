@@ -134,7 +134,8 @@ class ProjectTypeBody(BaseModel):
     id: str | None = Field(default=None, max_length=100)
     name: str = Field(min_length=1, max_length=80)
     scope: str = Field(min_length=1, max_length=500)
-    description: str = Field(default="", max_length=2000)
+    # Accept historical clients but do not persist the retired description field.
+    description: str = Field(default="", max_length=2000, exclude=True)
     based_on: str | None = Field(default=None, max_length=100)
     user_defined: bool = True
     icon: dict[str, Any]

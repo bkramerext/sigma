@@ -429,6 +429,13 @@ def exercise(ui_url: str, root: Path) -> None:
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible()
         expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
+        # The imported sample may use a retired built-in project type. Its
+        # complete saved snapshot requires explicit acknowledgement before
+        # the sign-in return can resume the start confirmation.
+        missing_type = page.get_by_role("alertdialog", name="Project type unavailable")
+        if missing_type.is_visible():
+            expect(missing_type).to_contain_text("complete saved settings")
+            missing_type.get_by_role("button", name="Continue with saved settings").click()
         expect(page.get_by_role("button", name="Start Session #1")).to_be_visible(timeout=15000)
         assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
         resumed_mutations = len(mutation_requests)

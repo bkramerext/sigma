@@ -1592,7 +1592,7 @@ def _paper_dir(path: str, create: bool = True) -> Path:
     if not directory.exists() and not directory.is_symlink():
         if not create:
             return directory
-        directory.mkdir(mode=0o700)
+        directory.mkdir(mode=0o700, exist_ok=True)
     info = directory.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
         raise ProjectError("Paper storage directory is unsafe")

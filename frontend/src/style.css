@@ -142,7 +142,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page label { color: #dce9f5; letter-spacing: .03em; }
 .home-page input { background: #0c1a2bdb; color: #eff8ff; border: 1px solid #54718c; box-shadow: inset 0 1px 12px #0003; }
 .home-page input:focus { border-color: #a2d6fa; }
-.home-page button { background: linear-gradient(120deg, #cda66e, #e7cf9b); color: #111e2b; box-shadow: 0 5px 28px #d5ac6333; }
+.home-page button { background: linear-gradient(120deg, #cda66e, #e7cf9b); color: #111e2b; box-shadow: none; }
 .home-page button:hover:not(:disabled) { background: #f5ddb1; }
 .home-page button:disabled { background: #485463; color: #d3d9e1; }
 .home-page .hint { color: #94acc0; }
@@ -273,8 +273,71 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 }
 
 /* Keep the Home controls in the upper left, independent of the brand artwork. */
-.home-page .home-topline { height: 52px; }
+.home-page {
+  /* Horizontal edge inset matches the right-hand pill's 12px visible margin.
+     Vertical positioning remains aligned with the Google pill at 26px. */
+  --home-side-gap: 12px;
+  --home-corner-gap: 26px;
+  --home-corner-pill-height: 34px;
+  --home-projects-top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 1.75 * var(--home-corner-gap) - 40px);
+}
+.home-page .home-topline {
+  box-sizing: border-box;
+  height: 52px;
+  padding: var(--home-corner-gap) 0 0 var(--home-side-gap);
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: flex-start;
+}
 .home-page .home-hero { margin-top: 12px; }
+/* Home corner actions are independent of the right-hand authentication stack. */
+.home-page .home-left-actions {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.home-page .home-left-actions > .home-about-button {
+  position: static;
+  margin: 0;
+}
+.home-page .home-right-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+}
+/* The two home account columns align as About/Google above Admin/ChatGPT. */
+.home-page .home-account-grid {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "about google" "admin chatgpt";
+  align-items: start;
+  justify-content: end;
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  row-gap: var(--identity-pill-gap);
+}
+.home-page .home-account-grid > .home-about-button { grid-area: about; justify-self: end; }
+.home-page .home-account-grid > .project-google-signin { grid-area: google; justify-self: start; }
+.home-page .home-account-grid > .administrator-settings-link { grid-area: admin; justify-self: end; }
+.home-page .home-account-grid > .api-connection { grid-area: chatgpt; justify-self: start; margin-left: 0; }
+.home-page .home-account-grid > .google-invitation-dialog { display: none; }
+.home-page .home-account-grid > .google-invitation-dialog[open] { display: block; }
+@media (max-width: 700px) {
+  .home-page {
+    --home-corner-gap: 18px;
+    --home-corner-pill-height: 28px;
+    /* On narrow screens keep Projects below the pills instead of overlapping. */
+    --home-projects-top: calc(var(--home-corner-gap) + var(--home-corner-pill-height) + 8px);
+  }
+  .home-page .home-topline { padding: var(--home-corner-gap) 0 0 var(--home-side-gap); }
+  .home-page .home-left-actions { gap: 8px; }
+  .home-page .home-projects { padding-top: 0; }
+}
 
 /* Match the background's cover scale: both images share image-top/center anchors. */
 .home-page .home-slogan {
@@ -291,10 +354,10 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* Compact Home project navigation. The artwork is independent of this column. */
 .home-page .home-projects {
-  --home-project-edge: clamp(13px, 2.7vw, 45px);
+  --home-project-edge: calc(2 * var(--home-side-gap));
   width: min(520px, calc(100% - 2 * var(--home-project-edge)));
   position: absolute;
-  top: var(--home-project-edge);
+  top: var(--home-projects-top);
   left: var(--home-project-edge);
   z-index: 1;
 }
@@ -359,12 +422,14 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   .home-page .home-atmosphere {
     background: linear-gradient(#020711d9, #020711d9), url('/sigma-home-background-copper.png') 35% top / cover no-repeat;
   }
+  /* Keep the Projects column anchored to the left pills, not below the
+     potentially much taller Google/Sponsored/Admin control stack. */
   .home-page .home-projects {
-    position: relative;
-    top: auto;
-    left: auto;
+    position: absolute;
+    top: var(--home-projects-top);
+    left: var(--home-project-edge);
     width: min(520px, calc(100% - 2 * var(--home-project-edge)));
-    margin: var(--home-project-edge) 0 0 var(--home-project-edge);
+    margin: 0;
   }
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
@@ -413,3 +478,15 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .session-log-page .session-log-secondary-action,
 .session-log-page .session-log-secondary-action:hover { min-height: 0; padding: 1px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1c58d; font: 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .session-log-page .session-log-secondary-action:hover { color: #ffe1ad; }
+
+/* Welcome's 16px copy is scaled 1.25x in its dialog. Match the visible
+   20px typography here without scaling the entire Terms card. */
+.terms-of-service-shell { width: 100%; max-width: none; }
+.terms-of-service-card { width: min(100%, 780px); }
+.terms-of-service-copy { display: grid; gap: 24px; max-width: 690px; margin: 24px 0 6px; }
+.terms-of-service-card .terms-of-service-copy > p { margin: 0; color: #bcc5cc; font: 400 20px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+.terms-of-service-card .terms-of-service-copy > .terms-welcome-phrase { font-style: italic; }
+@media (max-width: 700px) {
+  .terms-of-service-card .terms-of-service-copy > p { font-size: clamp(16px, 3.5vw, 20px); }
+  .terms-of-service-copy { gap: 18px; margin-top: 18px; }
+}

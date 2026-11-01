@@ -47,14 +47,21 @@ def main() -> None:
                 }
             )
             assert created.user_defined and created.origin == "literature"
+            assert "description" not in created.record()
             assert project_types._store_path().stat().st_mode & 0o777 == 0o600
-            assert project_types.get_type(created.id) == created
+            assert (
+                next(item for item in project_types.custom_types() if item.id == created.id)
+                == created
+            )
+            resolved = project_types.get_type(created.id)
+            assert resolved is not None and resolved.icon["key"] == "literature"
             assert project_types.safe_project_snapshot(created.record())
             normalized_snapshot = project_types.normalize_project_snapshot(
                 created.record(), created.id
             )
             assert normalized_snapshot is not None
             assert normalized_snapshot["name"] == "Field Notes"
+            assert "description" not in normalized_snapshot
             for invalid in (
                 {"name": "field notes", "scope": "duplicate", "icon": _placeholder()},
                 {
@@ -110,6 +117,50 @@ def main() -> None:
                 assert response.status_code == 400, (bad_url, response.status_code, response.text)
                 assert client.get("/api/project-types").json()["revision"] == revision
                 assert project_types.custom_types() == []
+            # References are normalized on Save: blanks and equivalent URLs
+            # vanish, while a case-sensitive path remains distinct.
+            clean = _record("ref-cleanup", "Reference Cleanup", "Testing URLs", placeholder)
+            clean["research_standards_references"] = [
+                " ",
+                "HTTP://EXAMPLE.ORG:80/style.html",
+                "http://example.org/style.html",
+                "http://example.org/STYLE.html",
+                "",
+            ]
+            clean["publication_standards_references"] = [
+                "https://example.com:443/guide",
+                "https://EXAMPLE.COM/guide",
+                "   ",
+            ]
+            clean_response = client.put(
+                "/api/project-types",
+                json={"project_types": [clean], "expected_revision": revision},
+            )
+            assert clean_response.status_code == 200, clean_response.text
+            cleaned = next(
+                item
+                for item in clean_response.json()["project_types"]
+                if item["id"] == "ref-cleanup"
+            )
+            assert cleaned["research_standards_references"] == [
+                "http://example.org/style.html",
+                "http://example.org/STYLE.html",
+            ]
+            assert cleaned["publication_standards_references"] == [
+                "https://example.com/guide",
+            ]
+            revision = clean_response.json()["revision"]
+            clear_response = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [],
+                    "expected_revision": revision,
+                    "confirmed_removals": {"ref-cleanup": 0},
+                },
+            )
+            assert clear_response.status_code == 200, clear_response.text
+            revision = clear_response.json()["revision"]
+
             parent = _record("draft-parent", "Draft parent", "Copied scope", placeholder)
             child = _record(
                 "draft-child",

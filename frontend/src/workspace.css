@@ -49,12 +49,12 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model identity" "project-types about identity" "thinking . identity"; align-items: center; justify-content: end; gap: var(--identity-pill-gap); column-gap: calc(var(--identity-pill-gap) * 1.2); margin-left: auto; padding-top: 6px; pointer-events: none; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model identity" "about thinking identity"; align-items: center; justify-content: end; gap: var(--identity-pill-gap); column-gap: calc(var(--identity-pill-gap) * 1.2); margin-left: auto; padding-top: 6px; pointer-events: none; }
 .workspace-page .project-art-header .header-controls :is(button, a, select, summary, [role="button"]) { pointer-events: auto; }
 .workspace-page .project-art-header .about-action { grid-area: about; }
-.workspace-page .project-art-header .project-types-action { grid-area: project-types; }
-.workspace-page .project-art-header .about-action { display: inline-flex; align-items: center; justify-content: center; justify-self: start; box-sizing: border-box; flex: 0 0 auto; width: auto; min-width: 0; height: 34px; min-height: 34px; padding: 0 12px; border-color: #a9654875; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
-.workspace-page .project-art-header .about-action:hover:not(:disabled) { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
+.workspace-page .project-art-header .project-types-action { grid-area: auto; }
+.workspace-page .project-art-header .about-action { display: inline-flex; align-items: center; justify-content: center; justify-self: start; box-sizing: border-box; flex: 0 0 auto; width: auto; min-width: 0; height: 34px; min-height: 34px; padding: 0 12px; border-color: #a9654875; background: #07111ef2; box-shadow: none; color: #e0d0c8; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
+.workspace-page .project-art-header .about-action:hover:not(:disabled) { border-color: #cd9270; background: #172536fa; box-shadow: none; color: #fff2e9; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-identity-pill-stack { grid-area: identity; align-self: start; }
 .workspace-page .project-identity-pill-stack > .project-google-signin,
@@ -211,7 +211,7 @@
   .workspace-page .project-header-art { width: min(100%, 281px); margin-left: -20px; }
   .workspace-page .project-art-back-row { left: auto; right: auto; }
   .workspace-page .current-project { padding-top: 0; }
-.workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto auto auto; grid-template-areas: "difficulty difficulty" "project-types identity" "about identity" "model identity" "thinking ."; justify-content: stretch; gap: var(--identity-pill-gap); column-gap: calc(var(--identity-pill-gap) * 1.2); margin-left: 0; }
+.workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "difficulty model" "about thinking" "identity identity"; justify-content: stretch; gap: var(--identity-pill-gap); column-gap: calc(var(--identity-pill-gap) * 1.2); margin-left: 0; }
   .workspace-page .project-art-header .about-action { position: relative; top: auto; right: auto; grid-area: about; justify-self: start; }
   .workspace-page .project-art-header .project-difficulty-badge { width: auto; justify-self: start; align-self: center; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
@@ -281,8 +281,8 @@
 .workspace-page .project-model-pill > span { margin: 0; }
 .workspace-page .project-thinking-pill { grid-area: thinking; justify-content: center; align-items: center; text-align: center; }
 .workspace-page .cloud-home-controls.compact { grid-area: google; }
-.workspace-page .project-google-signin { grid-area: google; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; margin-left: 0; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 10px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; white-space: nowrap; transition: background-color .15s, border-color .15s, box-shadow .15s; }
-.workspace-page .project-google-signin:hover, .workspace-page .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
+.workspace-page .project-google-signin { grid-area: google; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; margin-left: 0; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: none; color: #e0d0c8; font: 400 10px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; white-space: nowrap; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+.workspace-page .project-google-signin:hover, .workspace-page .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: none; color: #fff2e9; }
 .workspace-page .project-google-signin:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 .workspace-page .project-chatgpt-signin { min-width: 0; max-width: none; }
 .workspace-page .project-chatgpt-signin > summary { margin-left: 0; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); font-size: 10px; }

@@ -42,11 +42,32 @@ def main() -> None:
                         ).to_be_visible()
                     else:
                         expect(
-                            page.get_by_text("No terms yet, except just have fun.", exact=True)
+                            page.get_by_text(
+                                "No terms except to discover something interesting, wonderous, or pioneering.",
+                                exact=True,
+                            )
                         ).to_be_visible()
                     assert not [url for url in api_requests if "/api/cloud-auth/" in url], (
                         api_requests
                     )
+
+            page.goto(f"{URL}/tos")
+            terms = page.locator(".terms-of-service-card")
+            copy = terms.locator(".terms-of-service-copy > p")
+            expect(copy).to_have_count(2)
+            sizes = copy.evaluate_all(
+                "nodes => nodes.map(node => parseFloat(getComputedStyle(node).fontSize))"
+            )
+            assert sizes[0] == sizes[1] and sizes[0] >= 19, sizes
+            assert copy.nth(1).evaluate("node => getComputedStyle(node).fontStyle") == "italic"
+            # Clicking within the card keeps it open. Clicking its backdrop
+            # returns home just like the explicit Close action.
+            copy.first.click()
+            expect(page.get_by_role("heading", name="Terms of Service")).to_be_visible()
+            shell_box = page.locator(".cloud-auth-shell").bounding_box()
+            assert shell_box
+            page.mouse.click(shell_box["x"] + 6, shell_box["y"] + 6)
+            expect(page).to_have_url(URL + "/")
 
             page.goto(URL)
             welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
@@ -78,9 +99,7 @@ def main() -> None:
         finally:
             browser.close()
 
-    print(
-        "PASS signed-out direct /privacy and /tos navigation/refresh; About Privacy and Terms links"
-    )
+    print("PASS public legal pages, Welcome-sized Terms text, backdrop close and About links")
 
 
 if __name__ == "__main__":

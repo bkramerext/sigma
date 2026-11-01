@@ -3014,12 +3014,11 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && (!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="about-action project-types-action" aria-label="Project Types" title="Project Types" data-tooltip="Project Types" onClick={() => window.dispatchEvent(new Event('sigma-open-project-types'))}>Project Types</button>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
   </header>;
 }
@@ -3645,7 +3644,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
-      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
+      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>{!initial && <p className="settings-hint">Need another project type? Use Project Types to create one.</p>}</div>
       <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
       <div className="settings-model-row">
       <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
@@ -3991,7 +3990,18 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/><div className="identity-pill-stack"><GoogleIdentityPill inviteInHeader/><HomeInvitationAction/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div></div><div className="home-header-actions">{(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}>Project Types</button>}<button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}</div></div>
+      <div className="home-topline">
+        <div className="home-left-actions">{(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <button type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={projectTypesOpen} onClick={() => setProjectTypesOpen(true)}>Project Types</button>}</div>
+        <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
+          <div className="home-account-grid">
+            <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>
+            <GoogleIdentityPill inviteInHeader/>
+            {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
+            {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+          </div>
+          <HomeInvitationAction/>
+        </div></div>
+      </div>
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -5865,10 +5875,14 @@ function PrivacyNoticePage() {
 }
 
 function TermsOfServicePage() {
+  const [phrase] = useState(() => invitationWelcomePhrases[Math.floor(Math.random() * invitationWelcomePhrases.length)]);
   useEffect(() => { document.title = 'Terms of Service · SIGMA'; }, []);
-  return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+  return <main className="cloud-auth-shell terms-of-service-shell" onClick={event => { if (event.target === event.currentTarget) window.location.assign('/'); }}><article className="cloud-auth-card privacy-notice-card terms-of-service-card">
     <div className="privacy-notice-heading"><h1>Terms of Service</h1><button type="button" className="privacy-close-button" onClick={() => { window.location.assign('/'); }}>Close</button></div>
-    <p>No terms yet, except just have fun.</p>
+    <div className="terms-of-service-copy">
+      <p>No terms except to discover something interesting, wonderous, or pioneering.</p>
+      <p className="terms-welcome-phrase">{phrase}</p>
+    </div>
   </article></main>;
 }
 

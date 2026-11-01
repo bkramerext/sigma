@@ -50,17 +50,20 @@ export function installRequestErrorToasts() {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const isApi = new URL(url, window.location.href).pathname.startsWith('/api/');
+    // Dialogs with their own actionable error UI opt out of duplicate global toasts.
+    const handledLocally = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+      .get('X-Sigma-Error-Handled') === 'true';
     try {
       const response = await originalFetch(input, init);
       const requestPath = new URL(url, window.location.href).pathname;
       const expectedSignedOutCheck = response.status === 401 && requestPath === '/api/ai/connection' &&
         (await response.clone().json().catch(() => null) as { error?: unknown } | null)?.error === 'Authentication required.';
-      if (isApi && !response.ok && !expectedSignedOutCheck) reportRequestFailure(await responseError(response));
+      if (isApi && !response.ok && !expectedSignedOutCheck && !handledLocally) reportRequestFailure(await responseError(response));
       return response;
     } catch (error) {
       const aborted = init?.signal?.aborted || (input instanceof Request && input.signal.aborted)
         || (error instanceof DOMException && error.name === 'AbortError');
-      if (isApi && !aborted) {
+      if (isApi && !aborted && !handledLocally) {
         reportRequestFailure(error instanceof Error ? error.message : 'Network request failed');
       }
       throw error;
