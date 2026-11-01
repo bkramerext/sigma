@@ -36,6 +36,26 @@ def canonicalize(value, names: dict[str, str]):
     # Name all known IDs by their durable referents. Other opaque UUIDs are
     # alpha-renamed in deterministic *sorted semantic input* order below.
     unknown: dict[str, str] = {}
+    obligation_names: dict[str, str] = {}
+
+    def index_obligation_ids(obj):
+        # Stable obligation source text and references must be preserved. Its
+        # current 64-character ID also hashes per-execution ephemeral step IDs,
+        # so alpha-rename that opaque ID only, including every later reference.
+        if isinstance(obj, dict):
+            candidate = obj.get("obligation_id")
+            if isinstance(candidate, str) and re.fullmatch(r"[0-9a-f]{64}", candidate):
+                obligation_names.setdefault(
+                    candidate, f"<obligation-id-{len(obligation_names) + 1}>"
+                )
+            for key in sorted(obj):
+                index_obligation_ids(obj[key])
+        elif isinstance(obj, list):
+            for item in obj:
+                index_obligation_ids(item)
+
+    index_obligation_ids(value)
+    names = {**names, **obligation_names}
 
     def walk(obj):
         if isinstance(obj, dict):
