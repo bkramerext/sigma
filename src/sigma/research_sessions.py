@@ -6454,11 +6454,13 @@ def _obligation_ledger(
         # false identities. Preserve actual model notes and legacy artifact-only
         # obligations, while skipping only explicitly coordinator-added copies.
         propagated = skeptic.get("coordinator_added_obligations")
-        propagated_texts = {
-            _normalized_obligation_text(note)
-            for note in propagated
-            if isinstance(note, str)
-        } if isinstance(propagated, list) else set()
+        propagated_texts: set[str] = set()
+        if isinstance(propagated, list):
+            propagated_texts = {
+                _normalized_obligation_text(note)
+                for note in propagated
+                if isinstance(note, str)
+            }
         artifact_notes = artifact.get("open_obligations")
         if isinstance(artifact_notes, list) and propagated_texts:
             artifact_notes = [
