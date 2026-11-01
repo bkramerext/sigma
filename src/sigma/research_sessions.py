@@ -8243,6 +8243,16 @@ async def _portfolio_role_call(
             )
             if branch.get("status") not in {"queued", "running"}:
                 return False
+            # Persistent per-strategy dispatch fencing. The session state lock
+            # protects this check and the subsequent saved step reservation,
+            # even when another strategy's provider call is still in flight.
+            # The process-independent worker lock prevents a second backend
+            # worker from owning this session simultaneously.
+            if any(
+                step.get("strategy_id") == strategy_id and step.get("status") == "running"
+                for step in record.get("steps", [])
+            ):
+                return False
             try:
                 context = _portfolio_context(record, branch, role, cycle)
                 clipped_prior_attempts = sum(
