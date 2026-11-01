@@ -10284,7 +10284,9 @@ async def _portfolio_strategy_pipeline(
                 item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
             )
             stage = (
-                "model_configuration"
+                "project_snapshot"
+                if "project snapshot" in str(exc).lower()
+                else "model_configuration"
                 if "selected model is no longer available" in str(exc).lower()
                 else "account_verification"
                 if "account or billing" in str(exc).lower()
