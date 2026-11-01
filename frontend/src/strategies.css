@@ -1042,6 +1042,17 @@
 .workspace-page .session-summary > .session-outcome-inline,
 .workspace-page .session-summary > .session-progress-inline { display: block; min-width: 0; margin: 4px 0 0 18px; overflow-wrap: anywhere; }
 .workspace-page .session-summary > .session-status { display: flex; width: fit-content; }
+.workspace-page .session-summary > .session-strategy-live-status {
+  list-style: none;
+  min-width: 0;
+  margin: 6px 0 0 18px;
+  padding: 0;
+  color: var(--muted, #a7a7a7);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.workspace-page .session-strategy-live-status li { margin: 2px 0; overflow-wrap: anywhere; }
+.workspace-page .session-strategy-live-status strong { color: var(--text, #e3e8ec); font-weight: 600; }
 
 /* Shared hover/focus state for all workspace icon buttons, including pane actions. */
 .workspace-page .workspace-icon-button { transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
