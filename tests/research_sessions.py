@@ -3975,7 +3975,7 @@ def test_limits_validation(path: Path):
     invalid = [
         {**before, "model_calls": 1},
         {**before, "model_calls": 121},
-        {**before, "research_rounds": 6, "model_calls": 30},
+        {**before, "research_rounds": 10, "model_calls": 30},
         {**before, "session_duration_minutes": 7 * 24 * 60 + 1},
         {**before, "output_tokens_per_call": 20001},
         {**before, "maximum_estimated_cost_usd": 0.001},
@@ -3992,7 +3992,7 @@ def test_limits_validation(path: Path):
             raise AssertionError(f"invalid research limits were accepted: {candidate}")
     valid_upper = {
         **before,
-        "research_rounds": 5,
+        "research_rounds": 9,
         "model_calls": 120,
         "session_duration_minutes": 7 * 24 * 60,
         "output_tokens_per_call": 20000,
@@ -4001,7 +4001,7 @@ def test_limits_validation(path: Path):
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
     research_sessions.save_limits(str(path), before)
     assert research_sessions.get_limits(str(path)) == before
-    older_saved = {**before, "research_rounds": 6, "model_calls": 20}
+    older_saved = {**before, "research_rounds": 10, "model_calls": 20}
     limits_file = path / "research-sessions" / "limits.json"
     limits_file.write_text(json.dumps(older_saved), encoding="utf-8")
     assert research_sessions.get_limits(str(path)) == older_saved
@@ -5680,6 +5680,84 @@ async def test_concurrent_strategy_portfolio(path: Path):
     assert len(finished["portfolio_decision"]["strategy_actions"]) == 3
     assert finished["portfolio_decision"]["status"] == "model_reported_unverified"
 
+
+
+async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14(
+    path: Path,
+):
+    """54 completed agent turns survive a transient failure at dispatch fourteen.
+
+    Provider attempts remain separately budgeted, while a technical failure
+    never masquerades as research completion. No paid provider is contacted.
+    """
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Reliability propagation", "Investigate how tool failures propagate."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Architectural mitigations", "Test controls against faulty observations."
+    ).project.strategies[-1]
+    limits = research_sessions.save_limits(
+        str(path),
+        {
+            **research_sessions.get_limits(str(path)),
+            "research_rounds": 9,
+            # One failed, separately accounted attempt must not consume the
+            # final successful Investigator/Skeptic turn.
+            "model_calls": 56,
+            "session_duration_minutes": None,
+        },
+    )
+    requests = 0
+
+    async def handler(request):
+        nonlocal requests
+        requests += 1
+        if requests == 14:
+            raise httpx.ReadError("Synthetic transport interruption at turn fourteen")
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        cycle = context["cycle"]
+        response = (
+            investigation(cycle)
+            if payload["text"]["format"]["name"] == "research_investigator"
+            else skeptic(cycle)
+        )
+        return httpx.Response(200, json=provider_response(response))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    branches = finished["strategy_runs"]
+    assert requests == 55, (requests, finished["message"])
+    assert finished["calls_used"] == 55
+    assert finished["status"] == "ended", (finished["status"], finished["message"])
+    assert len(finished["artifacts"]) == 27
+    assert len([s for s in finished["steps"] if s["status"] == "completed"]) == 54
+    assert len([s for s in finished["steps"] if s["status"] == "failed"]) == 1
+    assert all(branch["cycle"] == 9 for branch in branches), branches
+    assert all(len(branch["artifacts"]) == 9 for branch in branches), branches
+    assert all(branch["status"] == "ended" for branch in branches), branches
+    assert finished.get("termination_reason_code") != "research_completed_early"
+    assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
 
 async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(path: Path):
     view, first, credential, config = await setup(path)
