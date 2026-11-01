@@ -82,10 +82,25 @@ def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not
         code=None,
         http_status=429,
         streamed=False,
+        provider_request_id="req_safe-123",
+        response_shape="responses-error",
+        provider_limit_headers={
+            "x-codex-primary-used-percent": "100",
+            "set-cookie": "secret=session",
+        },
     )
     assert research_sessions._provider_failure_fields(rate_limit)["failure_kind"] == (
         "provider_rate_limited"
     )
+    assert research_sessions._provider_failure_fields(rate_limit)["provider_request_id"] == (
+        "req_safe-123"
+    )
+    assert research_sessions._provider_failure_fields(rate_limit)["provider_response_shape"] == (
+        "responses-error"
+    )
+    assert research_sessions._provider_failure_fields(rate_limit)["provider_limit_headers"] == {
+        "x-codex-primary-used-percent": "100"
+    }
     assert research_sessions._transient_failure_kind(rate_limit) == "provider_rate_limited"
     account_limit = research_sessions.ChatGPTProviderRejection(
         "plan usage limit",
@@ -582,9 +597,23 @@ def test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff():
                 {"error": {"code": "rate_limit_exceeded"}},
                 "chatgpt",
                 retry_after="17",
+                provider_request_id="req_safe-123",
+                provider_limit_headers={
+                    "x-ratelimit-reset-requests": "1s",
+                    "x-codex-secondary-used-percent": "36",
+                    "authorization": "secret",
+                    "x-codex-primary-used-percent": "100\\nsecret",
+                },
             )
         except research_sessions.ChatGPTProviderRejection as exc:
             assert exc.retry_after_seconds == 17
+            assert exc.provider_request_id == "req_safe-123"
+            assert exc.response_shape == "responses-error"
+            assert exc.code == "rate_limit_exceeded"
+            assert exc.provider_limit_headers == {
+                "x-ratelimit-reset-requests": "1s",
+                "x-codex-secondary-used-percent": "36",
+            }
         else:
             raise AssertionError("Expected a classified temporary provider rate limit")
 
@@ -763,6 +792,314 @@ async def setup(path: Path):
     }
     config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
     return view, strategy, credential, config
+
+
+def test_preinvestigation_source_selection_covers_five_domains_and_rereads_only_if_needed(
+    monkeypatch,
+):
+    from sigma import research_method_sources
+
+    scenarios = (
+        (
+            "computer_science",
+            "Agent Reliability Evaluation",
+            "Fault injection with retries and acknowledgments",
+            "ai-reliability",
+        ),
+        (
+            "computer_science",
+            "Sovereign AI Federation",
+            "Campus gateway revocation routing",
+            "federation",
+        ),
+        (
+            "biology",
+            "Xenopus Tadpoles",
+            "Tail regeneration and wound timing",
+            "animal-regeneration",
+        ),
+        (
+            "mathematical",
+            "Nonconsecutive Subset Sums",
+            "Count subsets modulo three",
+            "combinatorics",
+        ),
+        ("physics", "Warp Drive Design", "Spacetime metric and stress energy", "relativity"),
+    )
+    for mode, title, problem, branch in scenarios:
+        frozen = research_method_sources.select_method_sources(
+            mode, title, problem, ("Propose a method",), ()
+        )
+        assert frozen["status"] == "selected"
+        assert frozen["branch"] == branch
+        assert len(frozen["sources"]) == 3
+        assert [row["tier"] for row in frozen["sources"]] == [
+            "general",
+            "discipline",
+            "branch",
+        ]
+        assert all(
+            source["url"].startswith("https://") and len(source["notes"]) >= 50
+            for source in frozen["sources"]
+        )
+        assert research_method_sources.methodology_digest(frozen) == (
+            research_method_sources.methodology_digest(frozen)
+        )
+
+        # The most recent comprehensive session's exact notes are preserved.
+        later = research_method_sources.select_method_sources(
+            mode,
+            title,
+            problem,
+            ("Another method",),
+            (
+                {
+                    "id": "prior-session-id",
+                    "created_at": "2026-11-01T00:00:00+00:00",
+                    "research_method_sources": frozen,
+                },
+            ),
+        )
+        assert later["status"] == "reused"
+        assert later["source_session_id"] == "prior-session-id"
+        assert later["sources"] == frozen["sources"]
+
+    # Later catalog edits must not silently alter frozen research methods.
+    earlier = research_method_sources.select_method_sources(
+        "physics", "Warp", "spacetime metric", (), ()
+    )
+    original_note = earlier["sources"][-1]["notes"]
+    with monkeypatch.context() as patch:
+        updated = dict(research_method_sources.BY_ID["tong-einstein-equations"])
+        updated["notes"] = "REVISED: " + original_note
+        patch.setattr(
+            research_method_sources,
+            "BY_ID",
+            {**research_method_sources.BY_ID, updated["id"]: updated},
+        )
+        stable = research_method_sources.select_method_sources(
+            "physics",
+            "Warp",
+            "spacetime metric",
+            (),
+            ({"id": "saved", "research_method_sources": earlier},),
+        )
+    assert stable["status"] == "reused"
+    assert stable["sources"][-1]["notes"] == original_note
+
+    # An incidental mention of a gateway must not override the actual topic.
+    reliability = research_method_sources.select_method_sources(
+        "computer_science",
+        "AI Agent Reliability",
+        "Evaluate reliability when jobs pass a gateway and route retries",
+        ("Model external acknowledgment",),
+        (),
+    )
+    assert reliability["branch"] == "ai-reliability"
+    federation = research_method_sources.select_method_sources(
+        "computer_science",
+        "Sovereign AI Federation",
+        "Evaluate agent reliability under a campus gateway and network partition",
+        ("Compare authorization policies",),
+        (),
+    )
+    assert federation["branch"] == "federation"
+
+    # If the specialty changes, the previous choice is no longer sufficient.
+    original = research_method_sources.select_method_sources(
+        "mathematical", "Counting subsets", "combinatorics recurrence", (), ()
+    )
+    updated = research_method_sources.select_method_sources(
+        "mathematical",
+        "Topology problem",
+        "topological spaces and homotopy",
+        (),
+        ({"id": "old", "research_method_sources": original},),
+    )
+    assert updated["branch"] is None and updated["status"] == "selected"
+    assert len(updated["sources"]) == 2
+    assert not any(source.get("branch") for source in updated["sources"])
+
+
+def test_method_source_bad_or_unreadable_candidates_never_block(monkeypatch):
+    from sigma import research_method_sources
+
+    untrusted = dict(research_method_sources.BY_ID["applied-combinatorics"])
+    untrusted["notes"] = ""
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            research_method_sources,
+            "BY_ID",
+            {**research_method_sources.BY_ID, untrusted["id"]: untrusted},
+        )
+        patch.setattr(
+            research_method_sources,
+            "CATALOG",
+            tuple(
+                untrusted if row["id"] == untrusted["id"] else row
+                for row in research_method_sources.CATALOG
+            ),
+        )
+        selected = research_method_sources.select_method_sources(
+            "mathematical", "Counting", "nonconsecutive subset recurrence", (), ()
+        )
+    assert selected["status"] == "selected"
+    assert len(selected["sources"]) == 2
+    assert all(item["notes"] for item in selected["sources"])
+    previous = {
+        "id": "prior",
+        "research_method_sources": {
+            "mode": "mathematical",
+            "branch": "combinatorics",
+            "sources": [{"id": "missing"}, {"id": "tao-solving-mathematical-problems"}],
+        },
+    }
+    refreshed = research_method_sources.select_method_sources(
+        "mathematical", "Counting", "subset recurrence", (), (previous,)
+    )
+    assert refreshed["status"] == "selected"
+    assert len(refreshed["sources"]) == 3
+    assert refreshed["source_session_id"] is None
+
+
+def test_research_methodology_outcome_is_not_claimed_as_independent_science():
+    from sigma import research_method_sources
+
+    selected = research_method_sources.select_method_sources(
+        "physics", "Warp", "causal spacetime metric", (), ()
+    )
+    record = {
+        "id": "method-test",
+        "status": "queued",
+        "steps": [],
+        "artifacts": [],
+        "strategy_runs": [],
+        "research_method_sources": selected,
+    }
+    outcome = research_sessions._outcome(record)
+    assert outcome["source_material"] == selected
+    assert outcome["source_material"]["status"] == "selected"
+    assert "verification_label" in outcome
+    assert [r["id"] for r in outcome["source_material"]["sources"]] == [
+        "nasem-scientific-methods",
+        "nasem-physical-models",
+        "tong-einstein-equations",
+    ]
+
+
+def test_phase2_methodology_routes_common_and_domain_methods_without_overfit():
+    """Every current research mode gets a shared core and one suited lens."""
+    from sigma.projects import ResearchMode
+
+    assert set(research_sessions.RESEARCH_MODE_METHOD_GUIDANCE) == {
+        mode.value for mode in ResearchMode
+    }
+    common = {
+        "execution_tools": [],
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+    }
+    math = {**common, "investigation_type": "mathematical"}
+    physics = {**common, "investigation_type": "physics"}
+    bio = {**common, "investigation_type": "biology"}
+    systems = {**common, "investigation_type": "computer_science"}
+    law = {**common, "investigation_type": "law"}
+    math_inv = research_sessions._role_instructions("investigator", math)
+    math_skep = research_sessions._role_instructions("skeptic", math)
+    physics_inv = research_sessions._role_instructions("investigator", physics)
+    bio_inv = research_sessions._role_instructions("investigator", bio)
+    sys_inv = research_sessions._role_instructions("investigator", systems)
+    law_inv = research_sessions._role_instructions("investigator", law)
+
+    # A new research session receives evidence-to-action expectations, while
+    # a resumed v2 session must not silently adopt a different methodology.
+    assert research_sessions.RESEARCH_METHOD_VERSION == "phase2-i2-v3"
+    assert "actually executed computation" in math_inv
+    assert "actual result" in math_skep
+    assert "novelty unassessed" in physics_inv
+    assert "discriminating next_question" in math_skep
+    assert "discriminating next_question" not in math_inv
+    old_context = {**physics, "research_method_version": "phase2-i2-v2"}
+    old_instructions = research_sessions._role_instructions("skeptic", old_context)
+    assert "actually executed computation" not in old_instructions
+    assert "discriminating next_question" not in old_instructions
+    assert research_sessions._role_instructions("skeptic", {}) == (
+        research_sessions._role_instructions("skeptic", {"research_method_version": "phase2-i2-v2"})
+    )
+
+    for mode in ResearchMode:
+        for role in ("investigator", "skeptic"):
+            guidance = research_sessions._role_instructions(
+                role, {**common, "investigation_type": mode.value}
+            )
+            assert "Across disciplines, specify the question" in guidance
+            assert "source pointer is not an inspected source" in guidance
+            assert "No live external-source retrieval tool is available" in guidance
+            assert research_sessions.RESEARCH_MODE_METHOD_GUIDANCE[mode.value] in guidance
+            assert "one- or two-sentence status" in guidance
+
+    assert "In any branch of mathematics" in math_inv
+    assert "universal claims" in math_skep
+    assert "general relativity" not in math_inv.lower()
+    assert "For any branch of physics" in physics_inv
+    assert "general relativity" in physics_inv.lower()
+    assert "No unperformed intervention" in bio_inv
+    assert "external ground truth" in sys_inv
+    assert "controlling authority" in law_inv
+    assert "For any branch of physics" not in math_inv
+    assert "In any branch of mathematics" not in physics_inv
+    assert "For biological hypotheses" not in physics_inv
+
+    for context in ({}, {"investigation_type": "unknown"}, {"investigation_type": 42}):
+        fallback = research_sessions._role_instructions("skeptic", {**common, **context})
+        assert "Across disciplines" in fallback
+        assert "unit of analysis" in fallback
+        assert "For any branch of physics" not in fallback
+
+
+def test_method_sources_yield_to_mandatory_research_when_context_is_full():
+    """Noncritical methodology must never make a genuine research turn fail."""
+    context = {
+        "problem": "A fixed scientific objective.",
+        "methodology_source_material": [{"id": "source", "notes": "optional methods " * 1000}],
+        "methodology_source_status": "selected",
+        "context_manifest": {"sources": []},
+    }
+    assert research_sessions.compact_dispatch_context(context, limit=1200)
+    assert "methodology_source_material" not in context
+    assert context["methodology_source_status"] == "omitted_due_to_context_limit"
+    assert context["problem"] == "A fixed scientific objective."
+    assert context["context_manifest"]["methodology_sources_not_supplied"]["count"] == 1
+
+
+def test_method_source_notes_reach_real_role_request_audit():
+    """The pre-turn source decision reaches both roles without a provider call."""
+    from sigma import research_method_sources
+
+    selected = research_method_sources.select_method_sources(
+        "physics", "Warp Drive Design", "spacetime metric and curvature", (), ()
+    )
+    context = {
+        "problem": "Investigate a spacetime model without assuming feasibility.",
+        "investigation_type": "physics",
+        "research_method_version": research_sessions.RESEARCH_METHOD_VERSION,
+        "methodology_source_material": selected["sources"],
+        "methodology_source_status": selected["status"],
+        "execution_tools": [],
+    }
+    record = {
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    for role in ("investigator", "skeptic"):
+        request = research_sessions._role_request_payload(record, role, context)
+        assert "methodology_source_material" in request["input"][0]["content"]
+        assert research_method_sources.CATALOG[0]["notes"] in request["input"][0]["content"]
+        assert "NASEM" in request["input"][0]["content"]
+        assert "Use the session's methodology_source_material" in request["instructions"]
+        assert "No live external-source retrieval tool" in request["instructions"]
+        assert "For any branch of physics" in request["instructions"]
 
 
 def test_request_audit_truncation_tokens_and_reconciliation():
@@ -3426,7 +3763,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         await asyncio.wait_for(started_call.wait(), 2)
         progress = research_sessions.get_session(str(path), started["id"])
         assert "Investigator agent turn 1/12 in progress" in progress["message"]
-        paused = await research_sessions.control_session(str(path), started["id"], "pause")
+        await research_sessions.control_session(str(path), started["id"], "pause")
         await asyncio.sleep(0.02)
         paused = research_sessions.get_session(str(path), started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 1
@@ -6597,7 +6934,10 @@ async def test_parallel_budget_pressure_defers_without_ending_research(path: Pat
         "research_rounds": 1,
         "model_calls": 4,
         "output_tokens_per_call": 20000,
-        "maximum_estimated_cost_usd": 0.30,
+        # Versioned method notes legitimately increase the prompt's bounded
+        # cost reserve. Keep the ceiling above four settled fixture calls but
+        # below two simultaneous worst-case output reservations.
+        "maximum_estimated_cost_usd": 0.40,
     }
     research_sessions.save_limits(str(path), limits)
     observed_deferral = []
@@ -7757,6 +8097,56 @@ async def test_resume_limits_reconcile_portfolio_terminal_state(path: Path):
         )
 
 
+async def test_resume_persists_paused_time_before_guarded_reread(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered = asyncio.Event()
+
+    async def handler(_request):
+        entered.set()
+        await asyncio.Event().wait()
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        await research_sessions.control_session(str(path), started["id"], "pause")
+
+    saved = research_sessions._read(str(path), started["id"])
+    saved["status"] = "paused"
+    saved["deadline_at"] = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
+    saved["stopped_at"] = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
+    for branch in saved["strategy_runs"]:
+        branch["status"] = "paused"
+    research_sessions._save(str(path), saved)
+
+    async def idle_worker(*_args):
+        await asyncio.Event().wait()
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=idle_worker),
+    ):
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        durable = research_sessions._read(str(path), started["id"])
+        assert datetime.fromisoformat(durable["deadline_at"]) > datetime.now(UTC)
+        assert durable["stopped_duration_seconds"] >= 59
+        assert durable.get("stopped_at") is None
+        await research_sessions.control_session(str(path), started["id"], "pause")
+
+
 async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -7854,9 +8244,25 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
             body = "".join(
                 f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
             )
-            return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "text/event-stream",
+                    "x-request-id": "req-limited-123",
+                    "x-codex-primary-used-percent": "100",
+                    "x-codex-secondary-used-percent": "36",
+                    "set-cookie": "secret=never-log",
+                },
+                text=body,
+            )
         return httpx.Response(
             429,
+            headers={
+                "x-request-id": "req-limited-123",
+                "x-codex-primary-used-percent": "100",
+                "x-codex-secondary-used-percent": "36",
+                "set-cookie": "secret=never-log",
+            },
             json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
         )
 
@@ -7881,21 +8287,24 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         )
         finished = await wait_for(path, started["id"])
 
-    assert finished["status"] == "ended"
+    assert finished["status"] == "paused"
     assert len(provider_calls) == 1
     assert provider_calls == [first.id]
-    assert (
-        "ChatGPT rejected a request because its plan or app usage limit was reached"
-        in finished["message"]
-    )
+    assert "Research paused after a confirmed provider usage-limit rejection" in finished["message"]
     branches = {branch["strategy_id"]: branch for branch in finished["strategy_runs"]}
-    assert branches[first.id]["status"] == "failed"
-    assert branches[second.id]["status"] == "ended"
-    assert "Not started because ChatGPT rejected a request" in branches[second.id]["reason"]
+    assert branches[first.id]["status"] == "paused"
+    assert branches[second.id]["status"] == "paused"
+    assert "explicitly resume this session" in branches[second.id]["reason"]
     limited = next(step for step in finished["steps"] if step["status"] == "failed")
     assert limited["failure_kind"] == "provider_limited"
     assert limited["provider_http_status"] == (200 if streamed else 429)
     assert limited["provider_error_code"] == "subscription_sharing_usage_limit_exceeded"
+    assert limited["provider_request_id"] == "req-limited-123"
+    assert limited["provider_response_shape"] in {"responses-error", "other-object"}
+    assert limited["provider_limit_headers"] == {
+        "x-codex-primary-used-percent": "100",
+        "x-codex-secondary-used-percent": "36",
+    }
     metrics = {
         item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
     }
@@ -7915,6 +8324,191 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
         assert limited.get("provider_stream_event") is None
         assert "HTTP 429" in limited["failure_message"]
     assert finished["calls_used"] == 1
+    assert datetime.fromisoformat(finished["stopped_at"]) <= datetime.fromisoformat(
+        limited["finished_at"]
+    )
+
+
+async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Path):
+    view, strategy, credential, config = await setup(path)
+    credential["mode"] = "chatgpt"
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    research_sessions.save_limits(str(path), limits)
+    provider_limited = True
+    calls: list[str] = []
+
+    async def handler(request):
+        nonlocal provider_limited
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        calls.append(role)
+        if provider_limited:
+            return httpx.Response(
+                429,
+                json={"error": {"code": "subscription_sharing_usage_limit_exceeded"}},
+            )
+        output = (
+            investigation(1)
+            if role == "research_investigator"
+            else skeptic(1, "stop", "no_progress")
+        )
+        response_id = f"recovered-{len(calls)}"
+        envelope = {
+            "id": response_id,
+            "status": "completed",
+            "usage": {"input_tokens": 25, "output_tokens": 12},
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": json.dumps(output)}],
+                }
+            ],
+        }
+        events = [
+            {"type": "response.created", "sequence_number": 0, "response": {"id": response_id}},
+            {"type": "response.completed", "sequence_number": 1, "response": envelope},
+        ]
+        body = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events)
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        paused = await wait_for(path, started["id"])
+        assert paused["status"] == "paused"
+        assert paused["calls_used"] == 1 and calls == ["research_investigator"]
+        rejected_attempt = paused["steps"][0]["attempt_id"]
+
+        provider_limited = False
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        finished = await wait_for(path, started["id"])
+
+    assert len(calls) == 3
+    assert finished["calls_used"] == 3
+    assert [step["status"] for step in finished["steps"]] == [
+        "failed",
+        "completed",
+        "completed",
+    ]
+    assert finished["steps"][0]["attempt_id"] == rejected_attempt
+    assert finished["provider_usage_limited"] is False
+    assert [step["role"] for step in finished["steps"][1:]] == ["investigator", "skeptic"]
+
+
+async def test_invalid_completed_response_is_not_marked_dispatch_unknown(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}
+    research_sessions.save_limits(str(path), limits)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        if role == "research_investigator":
+            output = investigation(1)
+        else:
+            output = skeptic(1)
+            obligation = context["obligation_ledger"][0]
+            output["obligation_reviews"] = [
+                {
+                    "obligation_id": obligation["obligation_id"],
+                    "status": "unresolved",
+                    "basis_artifact_ids": [],
+                    "basis_step_ids": ["step-not-selected"],
+                    "rationale": "The cited step is intentionally outside the supplied context.",
+                }
+            ]
+        response = provider_response(output)
+        response["id"] = f"response-{role}"
+        return httpx.Response(200, json=response)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    skeptic_step = next(step for step in finished["steps"] if step["role"] == "skeptic")
+    audit = skeptic_step["provider_input_audit"]
+    assert finished["calls_used"] == 2
+    assert skeptic_step["status"] == "failed"
+    assert skeptic_step["failure_kind"] == "response_invalid"
+    assert skeptic_step["response_validation_kind"] == "unsupported_context_reference"
+    assert audit["status"] == "provider_response_invalid"
+    assert audit["provider_response_id"] == "response-research_skeptic"
+    assert skeptic_step["token_usage"] == {
+        "input_tokens": 120,
+        "cached_input_tokens": 20,
+        "output_tokens": 80,
+    }
+    assert skeptic_step["token_usage_status"] == "reported"
+    assert "not supplied" in finished["message"].lower()
+
+
+def test_provider_limit_recovery_requires_known_dispatch_and_enough_turns():
+    strategy_id = str(uuid4())
+    record = {
+        "provider_usage_limited": True,
+        "cycle_limit": 3,
+        "call_limit": 6,
+        "calls_used": 3,
+        "strategy_runs": [
+            {"strategy_id": strategy_id, "status": "failed", "current_action": "Failed"}
+        ],
+        "steps": [
+            {"strategy_id": strategy_id, "role": "investigator", "status": "completed"},
+            {"strategy_id": strategy_id, "role": "skeptic", "status": "completed"},
+            {
+                "strategy_id": strategy_id,
+                "role": "investigator",
+                "status": "failed",
+                "failure_kind": "provider_limited",
+                "provider_input_audit": {"status": "provider_response_rejected"},
+            },
+        ],
+    }
+    branches, reason = research_sessions._provider_limit_recovery_plan(record)
+    assert branches is None and "Only 3 call attempts remain" in str(reason)
+
+    record["call_limit"] = 7
+    branches, reason = research_sessions._provider_limit_recovery_plan(record)
+    assert reason is None and branches == record["strategy_runs"]
+
+    record["steps"].append(
+        {
+            "strategy_id": strategy_id,
+            "role": "skeptic",
+            "status": "failed",
+            "failure_kind": "provider_error",
+            "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+        }
+    )
+    record["calls_used"] = 4
+    branches, reason = research_sessions._provider_limit_recovery_plan(record)
+    assert branches is None and "uncertain or non-rejected" in str(reason)
+    assert "Only 3 call attempts remain" in str(reason)
 
 
 async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
@@ -10516,6 +11110,177 @@ def test_project_cost_denial_reports_affordable_first_call() -> None:
     assert ledger["calls"] == []
 
 
+def test_obligation_dispatch_citations_exclude_withheld_history() -> None:
+    """No paid Skeptic response should be invited to cite unsupplied IDs."""
+    from copy import deepcopy
+
+    saved = {
+        "obligation_id": "open-1",
+        "status": "unresolved",
+        "text": "Check the counterexample.",
+        "source_artifact_ids": ["present", "withheld", "prior"],
+        "source_artifact_count": 5,
+        "basis_artifact_ids": ["present", "withheld"],
+        "supplied_source_artifact_ids": ["present", "withheld"],
+        "pointer_source_artifact_ids": ["withheld"],
+        "source_step_ids": ["old-step", "current-step"],
+        "basis_step_ids": ["old-step", "current-step"],
+        "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+    }
+    original = deepcopy(saved)
+    context = {
+        "context_artifact_ids": ["present"],
+        "prior_session_artifact_ids": ["prior"],
+        "investigator_step_id": "current-step",
+        "obligation_ledger": [deepcopy(saved)],
+    }
+    research_sessions.restrict_obligation_citations_to_supplied_context(context)
+    actual = context["obligation_ledger"][0]
+    assert actual["source_artifact_ids"] == ["present", "prior"]
+    assert actual["supplied_source_artifact_ids"] == ["present"]
+    assert actual["basis_artifact_ids"] == ["present"]
+    assert actual["pointer_source_artifact_ids"] == []
+    assert actual["source_artifact_count"] == 5
+    assert actual["unsupplied_source_artifact_count"] == 3
+    assert actual["withheld_pointer_source_count"] == 1
+    assert actual["source_step_ids"] == ["current-step"]
+    assert actual["basis_step_ids"] == ["current-step"]
+    assert actual["withheld_source_step_ids_count"] == 1
+    assert actual["source_artifact_availability"] == ("incomplete_extract_original_not_supplied")
+    assert saved == original, "Only the dispatch copy may change"
+
+    # Portfolio contexts pass through this normalization after their base
+    # agent context, so repeated finalization must retain omission accounting.
+    research_sessions.restrict_obligation_citations_to_supplied_context(context)
+    assert actual["withheld_pointer_source_count"] == 1
+    assert actual["withheld_source_step_ids_count"] == 1
+
+    allowed = {
+        "context_artifact_ids": ["present"],
+        "prior_session_artifact_ids": [],
+        "investigator_step_id": "current-step",
+        "obligation_ledger": [
+            {
+                "obligation_id": "open-2",
+                "source_artifact_ids": ["present"],
+                "source_artifact_count": 1,
+                "supplied_source_artifact_ids": ["present"],
+                "source_step_ids": ["current-step"],
+                "source_artifact_availability": "adequate_bounded_extract_original_not_supplied",
+            }
+        ],
+    }
+    research_sessions.restrict_obligation_citations_to_supplied_context(allowed)
+    assert allowed["obligation_ledger"][0]["source_artifact_ids"] == ["present"]
+    assert allowed["obligation_ledger"][0]["source_artifact_availability"] == (
+        "adequate_bounded_extract_original_not_supplied"
+    )
+
+
+def test_obligation_dispatch_request_contains_only_supplied_citations() -> None:
+    """Inspect the final serialized Skeptic inputs for both context builders."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "dispatch-citation-audit.sigma"
+        _test_obligation_dispatch_request_contains_only_supplied_citations(path)
+
+
+def _test_obligation_dispatch_request_contains_only_supplied_citations(path: Path) -> None:
+    from copy import deepcopy
+
+    view = initialize_project(path, "Dispatch citation audit", "Check evidence references.")
+    strategy_id = str(uuid4())
+    peer_strategy_id = str(uuid4())
+    investigator_step_id = str(uuid4())
+    source = {
+        "id": "selected-source",
+        "project_id": view.project.id,
+        "session_id": "saved-session",
+        "strategy_id": strategy_id,
+        "strategy_title": "Selected strategy",
+        "sequence": 1,
+        "strategy_cycle": 1,
+        "claim_or_question": "Selected bounded evidence.",
+        "evidence_status": "unverified extract",
+    }
+    obligation = {
+        "obligation_id": "open-1",
+        "strategy_id": strategy_id,
+        "status": "unresolved",
+        "text": "Review the counterexample.",
+        "source_artifact_ids": ["selected-source", "prior-source", "withheld-source"],
+        "source_artifact_count": 3,
+        "basis_artifact_ids": ["selected-source", "withheld-source"],
+        "supplied_source_artifact_ids": ["selected-source", "withheld-source"],
+        "pointer_source_artifact_ids": ["withheld-source"],
+        "source_step_ids": ["old-step"],
+        "basis_step_ids": ["old-step"],
+    }
+    record = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "project_title": view.project.title,
+        "problem": view.project.problem,
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "mode": "chatgpt",
+        "strategy_ids": [strategy_id, peer_strategy_id],
+        "strategy_id": strategy_id,
+        "strategy_title": "Selected strategy",
+        "strategy_text": "Inspect supplied evidence.",
+        "current_question": "Review the saved counterexample.",
+        "strategy_snapshot": [],
+        "artifacts": [source],
+        "steps": [
+            {
+                "id": investigator_step_id,
+                "strategy_id": strategy_id,
+                "role": "investigator",
+                "cycle": 2,
+                "status": "completed",
+            }
+        ],
+        "prior_session_findings": [
+            {"id": "prior-source", "claim_or_question": "Prior supplied extract."}
+        ],
+        "prior_session_obligations": [deepcopy(obligation)],
+        "pending_investigation": {"claim": "Current claim.", "open_obligations": []},
+        "status": "running",
+    }
+    original_obligation = deepcopy(record["prior_session_obligations"][0])
+    branch = {
+        "strategy_id": strategy_id,
+        "strategy_title": "Selected strategy",
+        "strategy_text": "Inspect supplied evidence.",
+        "current_question": "Review the saved counterexample.",
+        "cycle": 1,
+        "status": "running",
+        "pending_investigation": record["pending_investigation"],
+    }
+
+    contexts = (
+        research_sessions._agent_context(record, "skeptic", 2),
+        research_sessions._portfolio_context(record, branch, "skeptic", 2),
+    )
+    for context in contexts:
+        payload = research_sessions._role_request_payload(record, "skeptic", context)
+        exact_input = json.loads(payload["input"][0]["content"])
+        ledger_entry = exact_input["obligation_ledger"][0]
+        assert ledger_entry["source_artifact_ids"] == ["selected-source", "prior-source"]
+        assert ledger_entry["basis_artifact_ids"] == ["selected-source"]
+        assert ledger_entry["supplied_source_artifact_ids"] == [
+            "selected-source",
+            "prior-source",
+        ]
+        assert ledger_entry["pointer_source_artifact_ids"] == []
+        assert ledger_entry["withheld_pointer_source_count"] == 1
+        assert ledger_entry["withheld_source_step_ids_count"] == 1
+        assert ledger_entry["withheld_basis_step_ids_count"] == 1
+        assert "withheld-source" not in json.dumps(ledger_entry)
+        assert "old-step" not in json.dumps(ledger_entry)
+    assert record["prior_session_obligations"][0] == original_obligation
+
+
 def test_context_compaction_preserves_obligation_count_for_portfolio_dispatch():
     """Regression for Session #5: portfolio coordination must not KeyError."""
     from copy import deepcopy
@@ -10670,6 +11435,16 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
     assert excerpt["evidence_availability"] == "incomplete_extract_original_not_supplied"
     assert excerpt["reasoning_steps_total"] == 24
     assert excerpt["reasoning_steps_omitted"] == 20
+    assert excerpt["reasoning_step_original_positions_supplied"] == [1, 8, 16, 24]
+    assert excerpt["reasoning_step_original_positions_omitted"] == [
+        index for index in range(1, 25) if index not in {1, 8, 16, 24}
+    ]
+    assert [item["title"] for item in excerpt["reasoning_steps"]] == [
+        "Step 0",
+        "Step 7",
+        "Step 15",
+        "Step 23",
+    ]
     assert "reasoning_steps" in excerpt["extract_truncated_fields"]
     assert skeptic_context["context_manifest"]["inflight_investigator_extract"][
         "source_step_id"
@@ -10822,6 +11597,8 @@ def main():
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
     test_context_manifest_compaction_preserves_omission_accounting()
+    test_obligation_dispatch_citations_exclude_withheld_history()
+    test_obligation_dispatch_request_contains_only_supplied_citations()
     test_context_compaction_preserves_obligation_count_for_portfolio_dispatch()
     test_dispatch_budget_compacts_historical_evidence_not_live_inputs()
     test_rate_limit_retry_observes_provider_retry_after_and_minimum_backoff()
@@ -10926,6 +11703,17 @@ def main():
                 root / "chatgpt-sse-error-event.sigma", streamed=True, sse_error_event=True
             )
         )
+        asyncio.run(
+            test_chatgpt_usage_limit_recovers_only_after_explicit_resume(
+                root / "chatgpt-limit-resume.sigma"
+            )
+        )
+        asyncio.run(
+            test_invalid_completed_response_is_not_marked_dispatch_unknown(
+                root / "invalid-completed-response.sigma"
+            )
+        )
+        test_provider_limit_recovery_requires_known_dispatch_and_enough_turns()
         asyncio.run(
             test_session_deadline_bounds_generous_call_timeout(
                 root / "generous-call-deadline.sigma"
