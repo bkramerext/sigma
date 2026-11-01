@@ -77,3 +77,47 @@ A second, more directly relevant [open SIWC telemetry issue](https://github.com/
 | PR #434 READY / Phase 1 release | UNMET | Must remain STAGING; all sessions incomplete |
 
 No merge, deployment, or paper-generation change was made. This handoff records the provider rejection after explicit recovery attempts plus the recovery fix; it does not mark iteration 2's research objective complete.
+
+## Recovery completion update (supersedes execution counts above)
+
+This update follows the recovery runs and local-validation reconciliation. The five studies remain incomplete; no scientific conclusion is certified. Their full latest exports and validation are committed to PR #434 at `8cb66b9646969d9740c563f833ef52862bb24109` (branch `phase2/research-snapshot-handoff`). PR #434 remains **STAGING**, `ready=false`.
+
+| Project | Valid role turns / 12 | Failed roles | Required turns never dispatched | Attempts | Current session status |
+|---|---:|---:|---:|---:|---|
+| AI Agent Reliability and Evaluation | 10 | 2 | 0 | 18 | paused; two final Skeptics are dispatch-unknown |
+| Sovereign AI Federation | 6 | 2 | 4 | 11 | failed; two completed outputs failed local context validation |
+| Xenopus Tadpoles | 5 | 2 | 5 | 7 | failed |
+| Nonconsecutive Subset Sums Modulo 3 | 10 | 0 | 2 | 13 | ended early after strategy stop decision |
+| Warp Drive | 9 | 1 | 2 | 13 | ended |
+| **Total** | **40 / 60** | **7** | **13** | **62** | **0/5 complete** |
+
+The 62 attempts comprise 44 completed provider responses (40 locally accepted outputs and four locally invalid outputs), 16 explicit provider-limit rejections, and two Agent requests with unknown provider completion. There were no automatic retries and no API-key or metered fallback. Reported response-token usage is 1,176,717. Three projects ran concurrently initially; later recovery used existing admission with up to six calls in flight. Initial combined wall time was 555.993 seconds. No active call remains.
+
+### Cooldown diagnosis
+
+The provider returns `subscription_sharing_usage_limit_exceeded` in-band over outer HTTP 200 in this connection. We observed no `Retry-After` or reset timestamp. A canary 13m38s after a confirmed rejection failed again; a later Investigator dispatched 15m25s after the latest rejection succeeded. That is a single observed recovery interval, not a known cooldown duration. Rejections happened at overlaps from 1 through 10 and later at 1–2, so observed peak concurrency does not identify the quota rule. The status page was operational. SIGMA cannot detect the state before a provider response or infer its reset from missing headers; the official [recovery guide](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery) recommends pausing and checking Usage but publishes no reset time. Do not automatically retry this specific usage-limit code based on an assumed fixed delay.
+
+### Evidence and fixes
+
+PR #434 contains regenerated bundles for all five projects, `MANIFEST.json`, `EXPORT_VALIDATION.md`, and `provider-response-validation.json.gz`. All five original input hashes were rechecked; all bundles were parsed and imported into isolated temporary projects with matching identities. All 62 saved provider request bodies matched their stored SHA-256 values and contained the selected general, discipline and branch method notes. The sidecar preserves all four completed-but-invalid provider response envelopes, request/step/response IDs, usage, context manifests, wire captures, and local validation failure details. The two unknown Agent requests were not replayed. Pre-reconciliation session copies remain under `/private/tmp/sigma-phase2-green-i2/runner/provider-response-audit-pre-fix`; raw session logs remain under `/private/tmp/sigma-phase2-green-i2/projects/.sigma-session-logs`.
+
+Bounded fixes already pushed to PR #433 (branch `phase2/green-iteration-1`, head `93588d9b8d22c43e4b4ff9c47e24e35388e72937`) preserve request IDs and safe allowlisted provider metadata, account for confirmed paused time in session deadlines, and classify completed responses rejected by local validation as `response_invalid` rather than dispatch-unknown. A focused regression covers the latter. The resume deadline correction used saved event timestamps, did not reset elapsed active work or call budgets, and made no speculative replay. The context-evidence selection defect remains unresolved; fixing it safely needs another engineering iteration. Math's early strategy stop and the Agent observer's cancellation of two calls also remain protocol-completion/orchestration issues; I did not change the general loop or scheduler.
+
+At source commit `93588d9b8d22c43e4b4ff9c47e24e35388e72937`, `./sigma test` passed the repository checks: 336-file format check, Ruff, Pyright (0 errors/warnings), frontend typecheck/build, and research-session coverage. The documented graph-present sandbox skip occurred; graph-withheld checks passed. Existing large-chunk advisory remains. Passing tests are not evidence of scientific validity.
+
+### Scientific record and disposition
+
+The saved findings remain provisional and should be read from the complete per-project bundles, including all round-level Investigator/Skeptic records and cross-strategy context. In brief: Agent contains a conditional exactly-once recovery indistinguishability argument; Sovereign a conditional reservation-ledger hard-cap argument; Xenopus an identifiability limitation for unpaired early/late marginals; Math a candidate order-eight recurrence and Fibonacci-ratio limit; Warp an ansatz-specific negative-energy and wall-energy derivation. Their assumptions, counterexamples, evidence gaps, unresolved obligations, and full research artifacts are in the exports. None has independent source verification, and incomplete Skeptic coverage means none is ready for Phase 1. Chat 2's independent scientific review is pending.
+
+| Gate | Status |
+|---|---|
+| Five project identities, frozen input provenance and full partial exports preserved | MET |
+| Concurrent initial launch via existing execution mechanisms | MET |
+| Configured arithmetic (2 strategies × 3 rounds × Investigator/Skeptic = 12 each) | MET |
+| All 60 completed role turns, including final Skeptics | UNMET (40/60) |
+| Context-validation defect fixed | UNMET; evidence is preserved, safe correction still needed |
+| Provider cooldown duration known | UNVERIFIED |
+| Independent scientific review / validity established | UNVERIFIED |
+| PR #434 READY for Phase 1 | UNMET; must remain STAGING |
+
+No merge, deployment, or paper-generation change was made. This handoff reports the execution and stopping conditions accurately; it does not complete the five required investigations.
