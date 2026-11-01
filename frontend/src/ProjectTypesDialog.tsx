@@ -59,6 +59,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLButtonElement>(null);
   const initialCustomIds = useRef<string[]>([]);
+  const initialDrafts = useRef('[]');
   const initialCustomNames = useRef<Map<string, string>>(new Map());
   const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
@@ -87,7 +88,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     if (!response.ok) throw new Error('Project types could not be loaded.');
     const data = await response.json() as { project_types: ProjectTypeRecord[]; icons: { placeholder: ProjectTypeRecord['icon'] }; revision: string };
     setBuiltins(data.project_types.filter(item => !item.user_defined));
-    setDrafts(data.project_types.filter(item => item.user_defined));
+    const savedCustomTypes = data.project_types.filter(item => item.user_defined);
+    initialDrafts.current = JSON.stringify(savedCustomTypes);
+    setDrafts(savedCustomTypes);
     setPlaceholderIcon(data.icons.placeholder);
     initialCustomIds.current = data.project_types.filter(item => item.user_defined).map(item => item.id);
     initialCustomNames.current = new Map(data.project_types.filter(item => item.user_defined).map(item => [item.id, item.name]));
@@ -131,6 +134,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     }
   }
   async function save() {
+    if (JSON.stringify(drafts) === initialDrafts.current) return;
     setBusy(true); setError('');
     try {
       const removed = initialCustomIds.current.filter(id => !drafts.some(draft => draft.id === id));
@@ -172,6 +176,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
       {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy || !!generatingId} onClick={() => setDrafts(previous => previous.filter(candidate => candidate.id !== item.id))}>Remove</button></div>}
     </div>
   </details>;
+  const hasChanges = JSON.stringify(drafts) !== initialDrafts.current;
   const invalidDraft = drafts.some(item => !item.name.trim() || !item.scope.trim() || item.icon.kind !== 'data' && item.icon.kind !== 'builtin' || !item.research_standards_references.every(Boolean) || !item.publication_standards_references.every(Boolean));
   return <dialog ref={dialog} className="project-types-dialog" aria-labelledby="project-types-title" onCancel={event => { event.preventDefault(); if (!busy && !generatingId) close(); }} onClick={event => { if (event.target === dialog.current && !busy && !generatingId) close(); }} onKeyDownCapture={event => {
     if (event.key !== 'Tab') return;
@@ -186,7 +191,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     event.preventDefault();
     focusable[nextIndex].focus();
   }}>
-    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !!generatingId || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button></div></header>
+    <header><h2 id="project-types-title">Project Types</h2><div className="project-types-header-actions"><button type="button" disabled={busy || !!generatingId || !revision || !hasChanges || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button><button ref={first} type="button" disabled={busy || !!generatingId} onClick={close}>Cancel</button></div></header>
     <div className="project-types-body">
       <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !!generatingId || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim()} onClick={() => setAddingId(null)}>Save</button><button type="button" disabled={!!generatingId} onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !!generatingId || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
       <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
