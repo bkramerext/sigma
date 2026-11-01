@@ -1,5 +1,8 @@
 # SIGMA research-methodology selection: cross-disciplinary core, discipline lens, problem-specific method
 
+
+> **Current evidence-quality addendum (Nov 1, 2026):** See [EVIDENCE_ACTION_CHAIN.md](EVIDENCE_ACTION_CHAIN.md) for a cross-disciplinary, claim-level audit of genuine evidence, Skeptic-driven corrective work, prior-art checks and revised conclusions. The project-selection rule is now best scientifically reviewed available *per subject* (see [single-PR handoff](handoff/README.md)), not an all-five 12/12 barrier to paper writing. The protocol target of 12 authentic turns remains unchanged. New sessions use methodology version `phase2-i2-v3`; existing I2 sessions without a pinned version continue using v2 instructions. The evaluation is not satisfied merely by the presence of new prompts, and no new external literature retrieval capability is implied.
+
 **Phase 2 I2 method version:** `phase2-i2-v2`. Owned by scientific coordinator (Chat 2), used by Green for actual Investigator/Skeptic research. This is an engineering/research contract; it does **not** independently prove that any research session has become scientifically better. Preserve architecture, strategy execution, scheduling and UI.
 
 ## Pre-investigation source discovery and stable selection
