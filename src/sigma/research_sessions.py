@@ -10271,7 +10271,10 @@ async def _portfolio_strategy_pipeline(
                 if "account or billing" in str(exc).lower()
                 else "branch_execution"
             )
-            _record_preflight_failure(record, saved, role, stage, exc)
+            # Preserve the original timeout classification beneath a
+            # user-friendly model/account availability error.
+            cause = exc.__cause__ if isinstance(exc.__cause__, Exception) else exc
+            _record_preflight_failure(record, saved, role, stage, cause)
             # Conservatively retain any uncertainty about a dispatched attempt.
             for step in record.get("steps", []):
                 if step.get("strategy_id") != strategy_id or step.get("status") != "running":
