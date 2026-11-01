@@ -1,9 +1,10 @@
 R4R handoff — Issue #441 / Research Process polish
 
-PR: pending creation
+PR: https://github.com/bkramerext/sigma/pull/444
 Branch: gray/441-research-process-polish
 Base: main at 4b2f34f92264bb6614cbcee0aecc19834dabf85b
 Tested implementation HEAD: 338a3271888f3ac74790bf6c0b46032a78a262e4
+The branch was at 73dac5e87a8881ac6c0a6f66f965b4dbdf8247fa when PR #444 was opened. The final PR head also contains this handoff-link update; use current PR metadata for the exact tip.
 
 Changes
 - Renamed the first About disclosure to exactly “Research Process” and preserved its stable `workflow` disclosure-state key and expanded default.
