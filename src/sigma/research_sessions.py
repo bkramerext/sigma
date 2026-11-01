@@ -6233,9 +6233,7 @@ def _context_obligation_count(context: dict[str, Any]) -> int:
     ledger = context.get("obligation_ledger")
     if isinstance(ledger, list):
         return sum(
-            1
-            for item in ledger
-            if isinstance(item, dict) and item.get("status") == "unresolved"
+            1 for item in ledger if isinstance(item, dict) and item.get("status") == "unresolved"
         )
     outstanding = context.get("outstanding_obligations")
     return len(outstanding) if isinstance(outstanding, list) else 0
