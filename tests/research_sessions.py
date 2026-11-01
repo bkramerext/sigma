@@ -5617,6 +5617,9 @@ async def test_strategy_skeptic_does_not_wait_for_sibling_investigator(path: Pat
             # The original global Investigator wave barrier deadlocks here.
             await asyncio.wait_for(fast_skeptic_seen.wait(), timeout=3)
         if strategy_id == second.id and role == "research_skeptic":
+            # Only durably committed reviewed peer findings can cross into
+            # this turn. The slow Investigator is still in flight.
+            assert context["other_strategy_evidence"] == []
             fast_skeptic_seen.set()
         output = (
             investigation(context["cycle"])
