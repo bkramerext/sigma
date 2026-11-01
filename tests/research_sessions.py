@@ -6184,7 +6184,9 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
     async def scenario(name: str, fanout: int):
         path = root / f"parity-{name}.sigma"
         view, first, credential, config = await setup(path)
-        second = create_strategy(path, "Independent peer", "Derive a complementary invariant.").project.strategies[-1]
+        second = create_strategy(
+            path, "Independent peer", "Derive a complementary invariant."
+        ).project.strategies[-1]
         limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 2, "model_calls": 8}
         research_sessions.save_limits(str(path), limits)
         seen: dict[tuple[str, int, str], dict[str, Any]] = {}
@@ -6205,7 +6207,8 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
                 "peer_objections": [item["objections"] for item in peers],
                 "pending_claim": (
                     context.get("investigator_output", {}).get("claim")
-                    if role == "research_skeptic" else None
+                    if role == "research_skeptic"
+                    else None
                 ),
             }
             await asyncio.sleep(0.008 if title == first.title else 0.001)
@@ -6236,8 +6239,13 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             ),
         ):
             started = await research_sessions.start_session(
-                str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
-                expected_limits=limits, strategy_ids=[first.id, second.id],
+                str(path),
+                first.id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+                strategy_ids=[first.id, second.id],
             )
             finished = await asyncio.wait_for(wait_for(path, started["id"]), timeout=10)
         assert finished["status"] == "ended" and finished["calls_used"] == 8
@@ -6245,17 +6253,24 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
         titles = {first.id: first.title, second.id: second.title}
         findings = sorted(
             (
-                titles[artifact["strategy_id"]], artifact["strategy_cycle"],
-                artifact["claim_or_question"], artifact["method"],
-                tuple(artifact["objections"]), artifact["coordinator_decision"],
+                titles[artifact["strategy_id"]],
+                artifact["strategy_cycle"],
+                artifact["claim_or_question"],
+                artifact["method"],
+                tuple(artifact["objections"]),
+                artifact["coordinator_decision"],
                 artifact["next_question"],
             )
             for artifact in finished["artifacts"]
         )
         decisions = [
             (
-                titles[branch["strategy_id"]], branch["status"], branch["cycle"],
-                branch["calls_used"], branch.get("last_decision"), branch.get("current_question"),
+                titles[branch["strategy_id"]],
+                branch["status"],
+                branch["cycle"],
+                branch["calls_used"],
+                branch.get("last_decision"),
+                branch.get("current_question"),
             )
             for branch in finished["strategy_runs"]
         ]
@@ -6861,10 +6876,10 @@ async def test_stop_reconciles_queued_portfolio_branches(path: Path):
         )
         await asyncio.wait_for(entered.wait(), 2)
         for _ in range(100):
-            if state["count"] == 3:
+            if state["count"] == 4:
                 break
             await asyncio.sleep(0.01)
-        assert state["count"] == state["active"] == 3
+        assert state["count"] == state["active"] == 4
         stopped = await research_sessions.control_session(str(path), started["id"], "stop")
 
     assert stopped["status"] == "stopped"
@@ -9805,9 +9820,7 @@ def test_parallel_funding_uses_estimates_without_changing_provider_request() -> 
         "output_token_limit": 4000,
     }
     context = {"problem": "Shared research objective", "strategy": "Independent approach"}
-    provider_request = research_sessions._role_request_payload(
-        record, "investigator", context
-    )
+    provider_request = research_sessions._role_request_payload(record, "investigator", context)
     assert provider_request["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
     cost_estimate = research_sessions._reserve_cost(record, context, "investigator")
     assert cost_estimate is not None and 0 < cost_estimate < 0.10
@@ -9815,7 +9828,9 @@ def test_parallel_funding_uses_estimates_without_changing_provider_request() -> 
 
 def test_portfolio_capacity_tracks_strategies_not_billing_mode() -> None:
     for sponsored in (True, False):
-        with patch.object(research_sessions.cloud_research, "billing_enabled", return_value=sponsored):
+        with patch.object(
+            research_sessions.cloud_research, "billing_enabled", return_value=sponsored
+        ):
             assert research_sessions._portfolio_call_concurrency(1) == 1
             assert research_sessions._portfolio_call_concurrency(12) == 12
     with patch.dict("os.environ", {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": "32"}):
@@ -10030,16 +10045,20 @@ def main():
                 root / "strategy-parallel-421.sigma"
             )
         )
-        asyncio.run(test_duplicate_strategy_dispatch_is_fenced_during_provider_call(
-            root / "duplicate-strategy-dispatch.sigma"
-        ))
+        asyncio.run(
+            test_duplicate_strategy_dispatch_is_fenced_during_provider_call(
+                root / "duplicate-strategy-dispatch.sigma"
+            )
+        )
         asyncio.run(test_provider_gate_fairness_and_cancelled_waiter())
         test_backend_global_provider_file_slots_are_bounded(root)
         asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
-        asyncio.run(test_parallel_budget_pressure_defers_without_ending_research(
-            root / "budget-pressure-deferral.sigma"
-        ))
+        asyncio.run(
+            test_parallel_budget_pressure_defers_without_ending_research(
+                root / "budget-pressure-deferral.sigma"
+            )
+        )
         test_parallel_schedule_preserves_research_semantics(root)
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
