@@ -165,24 +165,34 @@ BRANCH_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     (
         "biology",
         "animal-regeneration",
-        re.compile(r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b", re.IGNORECASE),
+        re.compile(
+            r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b",
+            re.IGNORECASE,
+        ),
     ),
     (
         "computer_science",
         "federation",
-        re.compile(r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE),
+        re.compile(
+            r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b",
+            re.IGNORECASE,
+        ),
     ),
     (
         "computer_science",
         "ai-reliability",
         re.compile(
-            r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b", re.IGNORECASE
+            r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b",
+            re.IGNORECASE,
         ),
     ),
     (
         "engineering",
         "federation",
-        re.compile(r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.IGNORECASE),
+        re.compile(
+            r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b",
+            re.IGNORECASE,
+        ),
     ),
 )
 
@@ -278,8 +288,10 @@ def select_method_sources(
         source_rows = old.get("sources")
         if not isinstance(source_rows, list):
             continue
-        if not all(isinstance(row, Mapping) and isinstance(row.get("id"), str)
-                   for row in source_rows):
+        if not all(
+            isinstance(row, Mapping) and isinstance(row.get("id"), str)
+            for row in source_rows
+        ):
             continue
         ids: list[str] = [str(row["id"]) for row in source_rows]
         if not _complete(ids, mode, branch):
@@ -323,7 +335,11 @@ def select_method_sources(
             selected.append(_source(row))
     if len(selected) < 2:  # Safe fallback if future catalog entries become unusable.
         for row in rows:
-            if row.get("tier") == "discipline" and row["id"] not in {i["id"] for i in selected}:
+            if (
+                row.get("tier") == "discipline"
+                and row.get("mode") in {mode, "default"}
+                and row["id"] not in {i["id"] for i in selected}
+            ):
                 selected.append(_source(row))
                 break
     return {
