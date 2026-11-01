@@ -5980,13 +5980,11 @@ async def test_three_strategies_reach_18_turns_each_after_transport_failure_at_t
     assert research_sessions.get_session(str(path), started["id"])["calls_used"] == 55
     # Attempt fourteen fails before its request body is inspected by the mock.
     assert len(dispatched_contexts) == 54
-    assert any(
-        c.get("context_manifest", {}).get("dispatch_budget_compaction")
-        or c.get("context_manifest", {}).get("inflight_investigator_extract")
-        or c.get("context_manifest", {}).get("omitted_count", 0) > 0
-        or c.get("context_manifest", {}).get("mandatory_source_omitted_count", 0) > 0
-        for c in dispatched_contexts
-    ), "The 54-turn fixture must exercise context compaction or explicit history omissions"
+    # The source-selector may bound history before the dispatch-only compactor
+    # runs. Test the invariant rather than requiring a particular algorithm
+    # or provenance marker: cumulative saved research greatly exceeds the
+    # allowable request, but every submitted packet remains under budget.
+    assert research_sessions._json_bytes(finished["artifacts"]) > dispatch_limit * 5
     assert all(
         len(a["investigator_output"]["method"]) > 4_000
         and len(a["investigator_output"]["reasoning_steps"]) == 4
