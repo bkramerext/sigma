@@ -137,6 +137,8 @@ with sync_playwright() as playwright:
     expect(parent.get_by_text("A project type with this name already exists.")).to_have_count(0)
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
     expect(parent.get_by_role("button", name="Generate icon")).to_be_visible()
+    icon_box = parent.locator(".project-type-icon-edit .research-type-icon").first.bounding_box()
+    assert icon_box and 20 <= icon_box["width"] <= 25 and 20 <= icon_box["height"] <= 25
     # Mock a rejected AI request: error persists inline, prior icon remains,
     # editor must stay open, and a retry action remains available.
     page.route("**/api/project-types/icon", lambda route: route.fulfill(
@@ -152,9 +154,12 @@ with sync_playwright() as playwright:
     expect(parent.locator(".project-type-card-icon svg")).to_be_visible()
     page.unroute("**/api/project-types/icon")
     parent.get_by_role("button", name="New", exact=True).first.click()
+    # The next New remains unavailable until the just-created row contains a URL.
+    expect(parent.get_by_role("button", name="New", exact=True).first).to_be_disabled()
     url_input = parent.get_by_label("Research reference URL 1")
     url_input.fill("https://example.org/research-standard")
     expect(url_input).to_have_value("https://example.org/research-standard")
+    expect(parent.get_by_role("button", name="New", exact=True).first).to_be_enabled()
     assert url_input.evaluate("element => document.activeElement === element"), (
         "URL input remounted during typing"
     )
