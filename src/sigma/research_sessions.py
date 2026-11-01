@@ -78,7 +78,7 @@ MAX_REJECTED_INTERVENTIONS = 8
 # Internal experiment only. Literal frozen sources remain the shipped dispatch
 # format until an unscripted comparison establishes that aliasing is understood.
 EXPERIMENTAL_EXACT_TEXT_POOL = False
-CALL_TIMEOUT = 15 * 60
+CALL_TIMEOUT = 60 * 60
 # Verified against the OpenAI API model catalog on 2026-10-31:
 # https://developers.openai.com/api/docs/models/compare?model=gpt-6-astra
 # Every listed API model advertises 128,000 max output tokens and reasoning
@@ -800,7 +800,7 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         raise ProjectError("Maximum concurrent sessions must be between 1 and 4")
     result["max_concurrent_sessions"] = concurrency
     bounds = {
-        "research_rounds": (1, 9),
+        "research_rounds": (1, 60),
         "model_calls": (2, 120),
         "output_tokens_per_call": (256, 20000),
     }
@@ -853,9 +853,13 @@ def coordinate_decision(
     question = next_question.strip() or next(
         (item.strip() for item in obligations if item.strip()), ""
     )
-    if stop_reason == "decisive_counterexample":
+    # A Skeptic that explicitly requests continuation cannot terminate its
+    # strategy just because it used a contradictory stop-reason label.
+    # Preserve the next question, especially for counterexamples to *earlier*
+    # candidate arguments that do not refute the current strategy.
+    if assessment == "stop" and stop_reason == "decisive_counterexample":
         return "stop_decisive_counterexample", ""
-    if stop_reason == "productive_conclusion":
+    if assessment == "stop" and stop_reason == "productive_conclusion":
         return "stop_productive_conclusion", ""
     if cycle >= cycle_limit or calls_used >= call_limit:
         return "stop_budget_exhausted", ""
@@ -9687,12 +9691,19 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
         or branch.get("current_action") == "Budget exhausted"
     ]
     if budget_stopped:
-        limit_kind = "turn" if calls >= call_limit else "round"
+        deferred_pair = any(
+            branch.get("current_action") == "Budget exhausted"
+            and str(branch.get("reason") or "").startswith("Deferred:")
+            for branch in runs
+        )
+        limit_kind = "turn" if calls >= call_limit or deferred_pair else "round"
         saved = sum(len(item.get("artifacts", [])) for item in runs)
         why = (
             "the shared turn limit was reached"
             if calls >= call_limit
             else "the remaining shared turns could not fund another complete Investigator/Skeptic pair"
+            if deferred_pair
+            else "the per-strategy round ceiling was reached"
         )
         return (
             f"{limit_kind}_limit_reached",
