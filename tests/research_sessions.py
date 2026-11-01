@@ -11417,6 +11417,8 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
         record["cycle_limit"] = 3
         record["call_limit"] = 3
         record["calls_used"] = 2
+        record["deadline_at"] = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+        record["duration_limit_minutes"] = 60
         record["status"] = "failed"
         record["current_action"] = "Failed"
         accepted_id = str(uuid4())
@@ -11471,6 +11473,13 @@ async def test_terminal_protocol_resume_extends_only_exact_shortfall(path: Path)
         assert research_sessions._read(str(path), started["id"])["steps"] == original["steps"]
         assert resumed["call_limit_adjustments"][-1]["from"] == 3
         assert resumed["call_limit_adjustments"][-1]["to"] == 7
+        resumed_record = research_sessions._read(str(path), started["id"])
+        time_extension = resumed_record["protocol_completion_time_extensions"][-1]
+        assert time_extension["remaining_protocol_calls"] == 5
+        assert time_extension["elapsed_session_clock_preserved"] is True
+        assert time_extension["additional_minutes"] >= 5 * research_sessions.CALL_TIMEOUT // 60
+        assert datetime.fromisoformat(resumed_record["deadline_at"]) > datetime.now(UTC)
+        assert resumed_record["duration_limit_minutes"] > 60
         branch = resumed["strategy_runs"][0]
         assert branch["cycle"] == 1
         assert branch["protocol_completion_recovery"]["role"] == "skeptic"

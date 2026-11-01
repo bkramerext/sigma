@@ -5367,6 +5367,7 @@ async def control_session(
             )
             record["provider_limit_recovery_ready"] = bool(record.get("provider_usage_limited"))
             record["protocol_completion_recovery_active"] = True
+            record["protocol_completion_required_calls"] = int(plan["required_calls"])
             record["current_action"] = "Paused · protocol completion"
             record["message"] = (
                 "The saved terminal session is eligible for explicit protocol completion. "
@@ -5459,6 +5460,35 @@ async def control_session(
         # authentication/model checks fail or another resume is attempted.
         record["stopped_at"] = _now()
         _save(record["project_path"], record)
+    if protocol_completion_resume and isinstance(record.get("deadline_at"), str):
+        old_deadline = datetime.fromisoformat(record["deadline_at"])
+        required_calls = max(0, int(record.get("protocol_completion_required_calls", 0)))
+        minimum_remaining_time = timedelta(seconds=required_calls * CALL_TIMEOUT)
+        new_deadline = max(old_deadline, datetime.now(UTC) + minimum_remaining_time)
+        if new_deadline > old_deadline:
+            extension_seconds = (new_deadline - old_deadline).total_seconds()
+            extension_minutes = math.ceil(extension_seconds / 60)
+            record["deadline_at"] = new_deadline.isoformat()
+            record["duration_limit_minutes"] = int(
+                record.get("duration_limit_minutes", 0)
+            ) + extension_minutes
+            record.setdefault("protocol_completion_time_extensions", []).append(
+                {
+                    "at": _now(),
+                    "previous_deadline_at": old_deadline.isoformat(),
+                    "new_deadline_at": new_deadline.isoformat(),
+                    "additional_minutes": extension_minutes,
+                    "remaining_protocol_calls": required_calls,
+                    "minimum_per_call_timeout_seconds": CALL_TIMEOUT,
+                    "elapsed_session_clock_preserved": True,
+                }
+            )
+            _event(
+                record,
+                "session.protocol_time_limit_extended",
+                f"The existing elapsed-work clock was preserved and its deadline extended by {extension_minutes} minutes to allow up to {CALL_TIMEOUT} seconds per each of {required_calls} missing protocol role turns.",
+            )
+            _save(record["project_path"], record)
     if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
         record["deadline_at"]
     ) <= datetime.now(UTC):
@@ -5657,6 +5687,7 @@ async def control_session(
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])
             record.pop("protocol_completion_recovery_active", None)
+            record.pop("protocol_completion_required_calls", None)
             if cloud_research.billing_enabled():
                 try:
                     cloud_research.prepare_job(record)
