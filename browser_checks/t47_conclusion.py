@@ -464,6 +464,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(conclusion.locator(".outcome-markdown h3").first).to_have_text(
                     "Preliminary finding"
                 )
+                # Markdown headings belong inside the compact research
+                # disclosure, not at document-cover typography sizes.
+                reasoning = outcome.locator(".outcome-reasoning-subsection")
+                reasoning.locator(":scope > summary").click()
+                heading = reasoning.locator(".outcome-markdown h1").first
+                subheading = reasoning.locator(".outcome-markdown h2").first
+                expect(heading).to_have_text("Reasoning / proof")
+                expect(subheading).to_have_text("Investigated problem")
+                assert heading.evaluate(
+                    "element => Number.parseFloat(getComputedStyle(element).fontSize)"
+                ) <= 20
+                assert subheading.evaluate(
+                    "element => Number.parseFloat(getComputedStyle(element).fontSize)"
+                ) <= 17
                 outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
