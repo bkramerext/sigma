@@ -155,8 +155,8 @@ with sync_playwright() as playwright:
     expect(child.locator(".project-type-card-icon svg")).to_be_visible()
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
     save = dialog.locator("header").get_by_role("button", name="Save", exact=True)
-    expect(save).to_be_enabled()
-    save.click()
+    expect(save).to_be_disabled()  # Section Save persisted the new type.
+    dialog.locator("header").get_by_role("button", name="Cancel").click()
     expect(dialog).not_to_be_visible()
     catalog = page.request.get(f"{FIXTURE_URL}/api/project-types").json()
     parent_type = next(
@@ -209,13 +209,14 @@ with sync_playwright() as playwright:
     second_card = dialog.locator(".project-type-card[open]")
     second_card.get_by_label("Name").fill("Browser Second")
     second_card.get_by_label("Scope").fill("Second saved scope")
-    dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
     with page.expect_response(
         lambda response: (
             response.url.endswith("/api/project-types") and response.request.method == "PUT"
         )
     ):
-        dialog.get_by_role("button", name="Save", exact=True).click()
+        dialog.locator(".project-types-section-heading").first.get_by_role("button", name="Save").click()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
+    dialog.locator("header").get_by_role("button", name="Cancel").click()
     second_type = next(
         item
         for item in page.request.get(f"{FIXTURE_URL}/api/project-types").json()["project_types"]
