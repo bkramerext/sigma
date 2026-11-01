@@ -6962,16 +6962,17 @@ def _select_context_artifacts(
         for item_id, item in by_id.items()
         if item_id in unresolved_source_ids or _artifact_is_critical(item)
     }
-    protected_extract_ids = set(critical_ids)
     mandatory_ids = set(critical_ids)
     if artifacts and isinstance(artifacts[-1].get("id"), str):
         mandatory_ids.add(artifacts[-1]["id"])
+    all_mandatory_ids = set(mandatory_ids)
     if len(mandatory_ids) > MAX_CONTEXT_ARTIFACTS:
-        raise ResearchContextLimitError(
-            f"{len(mandatory_ids)} mandatory current-session evidence sources exceed the "
-            f"{MAX_CONTEXT_ARTIFACTS}-source context bound. No provider call was made; "
-            "saved research records were preserved. Narrow the question or inspect the evidence."
-        )
+        # Preserve the newest material evidence and carry older sources as
+        # omission pointers instead of terminating a long-running session.
+        recent_material = [
+            item_id for item_id in reversed(list(by_id)) if item_id in mandatory_ids
+        ]
+        mandatory_ids = set(recent_material[:MAX_CONTEXT_ARTIFACTS])
     ordered_ids = [item_id for item_id in by_id if item_id in mandatory_ids]
     optional_ids = [item_id for item_id in reversed(list(by_id)) if item_id not in mandatory_ids]
     selected: list[dict[str, Any]] = []
@@ -6984,19 +6985,31 @@ def _select_context_artifacts(
             if item.get("extract_truncated_fields")
             else "bounded_deterministic_extract_original_not_supplied"
         )
-        if item_id in protected_extract_ids and item.get("extract_truncated_fields"):
-            raise ResearchContextLimitError(
-                "A mandatory research evidence extract is incomplete "
-                f"({', '.join(item['extract_truncated_fields'])}). No provider call was made; "
-                "the original artifact remains saved and must be inspected before continuing."
-            )
+        # If an extract is incomplete, its evidence_availability and source
+        # readiness explicitly say so. Other branches must still be allowed
+        # to continue; the original source remains intact in saved research.
         selected.append(item)
         mandatory_bytes += _json_bytes(item)
     if mandatory_bytes > MAX_AGENT_CONTEXT_BYTES // 2:
-        raise ResearchContextLimitError(
-            "Mandatory research context exceeds the safe input limit. No provider call was made; "
-            "saved artifacts were preserved. Narrow the question or reduce the critical evidence."
-        )
+        # Keep recent decisive material in full where possible. Older sources
+        # become pointer-only, not silently truncated or treated as reviewed.
+        for index, item in enumerate(selected):
+            if mandatory_bytes <= MAX_AGENT_CONTEXT_BYTES // 2:
+                break
+            pointer = {
+                key: item[key]
+                for key in ("id", "strategy_id", "session_id", "sequence")
+                if key in item
+            }
+            pointer.update({
+                "evidence_availability": "pointer_only_original_not_supplied",
+                "extract_truncated_fields": ["budget_compacted_original_not_supplied"],
+                "note": "Saved original intact; this pointer is not a supplied proof or verified source.",
+            })
+            saved_bytes = _json_bytes(item) - _json_bytes(pointer)
+            if saved_bytes > 0:
+                selected[index] = pointer
+                mandatory_bytes -= saved_bytes
     optional_bytes = mandatory_bytes
     for item_id in optional_ids:
         if not isinstance(item_id, str):
@@ -7032,8 +7045,8 @@ def _select_context_artifacts(
             _manifest_source_group(
                 "current_session_material_evidence",
                 ordered_ids,
-                "representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history",
-                "deterministic_extract",
+                "recent material sources for unresolved obligations, decisive outcomes and the latest artifact; omitted older originals are retained",
+                "bounded_extract_or_explicit_pointer",
             ),
             _manifest_source_group(
                 "current_session_history",
@@ -7052,8 +7065,12 @@ def _select_context_artifacts(
         if item is not None
     ]
     manifest = {
-        "policy_version": "t37-v1",
+        "policy_version": "continuity-v2",
         "byte_limit": MAX_AGENT_CONTEXT_BYTES,
+        "mandatory_source_omitted_count": len(all_mandatory_ids - mandatory_ids),
+        "mandatory_source_omitted_ids": [
+            item_id for item_id in by_id if item_id in all_mandatory_ids - mandatory_ids
+        ][:MAX_CONTEXT_OMISSION_POINTERS],
         "selection_order": "unresolved obligations and marked counterexamples, newest artifact, then newest optional history; stable source order in prompt",
         "selected_count": len(selected),
         "omitted_count": len(omitted),
