@@ -432,7 +432,7 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
             nonlocal calls
             calls += 1
             assert response_model is papers.TeXProofreadResult
-            if r"\\\\alpha" not in _input["exact_tex_chunk"]:
+            if r"\\alpha" not in _input["exact_tex_chunk"]:
                 return response_model(corrections=[]), "fixture"
             return (
                 response_model(
@@ -1410,7 +1410,7 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
             return authored, config["model"]
 
         async def fake_proofreader(_context, *_args, **_kwargs):
-            if r"\\\\alpha" not in _context["exact_tex_chunk"]:
+            if r"\\alpha" not in _context["exact_tex_chunk"]:
                 return papers.TeXProofreadResult(corrections=[]), config["model"]
             return (
                 papers.TeXProofreadResult(
