@@ -8284,10 +8284,38 @@ async def _portfolio_role_call(
 ) -> bool | Literal["retry", "funding_wait"]:
     if role == "skeptic":
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
-    # Acquire session capacity first, then a process-wide provider slot.
-    # Budget reservations are created only after both slots are available.
+    # Never hold a session lock or provider capacity through awaited identity
+    # and model checks. This is optimistic preflight; frozen identity/model
+    # bindings are validated again after acquiring the short state lock.
+    record_for_preflight = _read(path, session_id)
+    if record_for_preflight["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+        return False
+    try:
+        view, _guard = _snapshot(path)
+    except Exception as exc:
+        raise ProjectError(f"Project snapshot failed before dispatch: {exc}") from exc
+    if not _same_session_project(record_for_preflight, view):
+        raise ProjectError("Project identity changed; session paused before a new call.")
+    try:
+        credential = await asyncio.wait_for(auth_context(), timeout=PREFLIGHT_TIMEOUT)
+    except Exception as exc:
+        raise ProjectError(
+            "AI account or billing connection could not be verified; "
+            f"session paused before a new call: {str(exc).strip() or 'preflight timed out'}"[:500]
+        ) from exc
+    try:
+        config = await asyncio.wait_for(
+            _frozen_session_configuration(view, credential, record_for_preflight),
+            timeout=PREFLIGHT_TIMEOUT,
+        )
+    except Exception as exc:
+        raise ProjectError(
+            "Selected model is no longer available; session paused before a new call: "
+            f"{str(exc).strip() or 'preflight timed out'}"[:500]
+        ) from exc
+    tools = await asyncio.to_thread(execution_capabilities)
+    # Reserve funded attempts only after a global provider slot is available.
     async with semaphore, _portfolio_global_gate(session_id):
-        tools = await asyncio.to_thread(execution_capabilities)
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
@@ -8400,61 +8428,24 @@ async def _portfolio_role_call(
                 )
                 _save(path, record)
                 return False
-            try:
-                view, _guard = _snapshot(path)
-            except Exception as exc:
-                _record_preflight_failure(record, branch, role, "project_snapshot", exc)
-                _save(path, record)
-                raise
             if not _same_session_project(record, view):
-                exc = ProjectError("Project identity changed; session paused before a new call.")
-                _record_preflight_failure(record, branch, role, "project_binding", exc)
-                _save(path, record)
-                raise exc
-            try:
-                credential = await asyncio.wait_for(auth_context(), timeout=PREFLIGHT_TIMEOUT)
-            except Exception as exc:
-                _record_preflight_failure(record, branch, role, "account_verification", exc)
-                _save(path, record)
-                raise ProjectError(
-                    "AI account or billing connection could not be verified; "
-                    "session paused before a new call: "
-                    f"{str(exc).strip() or 'preflight timed out'}"[:500]
-                ) from exc
+                raise ProjectError("Project identity changed; session paused before a new call.")
             if (
                 credential["mode"] != record["mode"]
                 or _digest(credential["identity"]) != record["identity_hash"]
             ):
-                exc = ProjectError(
+                raise ProjectError(
                     "AI account or billing identity changed; session paused before another call."
                 )
-                _record_preflight_failure(record, branch, role, "account_binding", exc)
-                _save(path, record)
-                raise exc
-            try:
-                config = await asyncio.wait_for(
-                    _frozen_session_configuration(view, credential, record),
-                    timeout=PREFLIGHT_TIMEOUT,
-                )
-            except Exception as exc:
-                _record_preflight_failure(record, branch, role, "model_configuration", exc)
-                _save(path, record)
-                raise ProjectError(
-                    "Selected model is no longer available; session paused before a new call: "
-                    f"{str(exc).strip() or 'preflight timed out'}"[:500]
-                ) from exc
             if (
                 not config["available"]
                 or config["model"] != record["model"]
                 or config["reasoning_effort"] != record["reasoning_effort"]
             ):
-                exc = ProjectError(
+                raise ProjectError(
                     "Selected model is no longer available; session paused before a new call: "
                     + config.get("message", "the saved model configuration is unavailable")
                 )
-                _record_preflight_failure(record, branch, role, "model_configuration", exc)
-                _save(path, record)
-                raise exc
             if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
                 record["deadline_at"]
             ) <= datetime.now(UTC):
