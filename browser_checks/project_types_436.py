@@ -129,8 +129,8 @@ with sync_playwright() as playwright:
     expect(dialog).not_to_be_visible()
     expect(types_button).to_be_focused()
 
-    # Create two custom types in one Save. The child uses an unsaved parent as
-    # a one-time copy; the placeholder is free and replaceable with a catalog icon.
+    # Create a parent with the one top-level Save, then a derived child with
+    # another top-level Save. The placeholder is free and replaceable.
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     dialog.locator(".project-types-section-heading").first.get_by_role("button", name="New").click()
