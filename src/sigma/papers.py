@@ -2787,11 +2787,12 @@ def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
         )
         if not incomplete:
             continue
+        steps = session.get("steps")
         failed = [
             step
-            for step in session.get("steps", [])
+            for step in steps
             if isinstance(step, dict) and step.get("status") in {"failed", "interrupted"}
-        ] if isinstance(session.get("steps"), list) else []
+        ] if isinstance(steps, list) else []
         last = failed[-1] if failed else {}
         call = last.get("call_number")
         role = last.get("role")
@@ -2816,7 +2817,8 @@ def _annotate_research_completion(
     """Retain frozen session status in the published limitations section."""
     notes = _research_completion_limitations(package)
     missing = [
-        note for note in notes
+        note
+        for note in notes
         if note not in draft.limitations and note not in draft.validation_warnings
     ]
     if not missing:
@@ -2824,11 +2826,15 @@ def _annotate_research_completion(
     available = max(0, 12 - len(draft.limitations))
     updated = {"limitations": [*draft.limitations, *missing[:available]]}
     if len(missing) > available:
-        updated["validation_warnings"] = list(dict.fromkeys([
-            *draft.validation_warnings,
-            "At least one saved research session ended without its planned final "
-            "review; inspect the complete frozen session record.",
-        ]))[:12]
+        updated["validation_warnings"] = list(
+            dict.fromkeys(
+                [
+                    *draft.validation_warnings,
+                    "At least one saved research session ended without its planned final "
+                    "review; inspect the complete frozen session record.",
+                ]
+            )
+        )[:12]
     return draft.model_copy(update=updated)
 
 
