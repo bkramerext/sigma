@@ -5,7 +5,6 @@ export type ProjectTypeRecord = {
   id: string;
   name: string;
   scope: string;
-  description: string;
   based_on?: string | null;
   user_defined: boolean;
   icon: { kind: string; key?: string; data_uri?: string; view_box?: string; elements?: Array<{ tag: string; attrs?: Record<string, string | number>; text?: string; children?: Array<{ tag: string; attrs?: Record<string, string | number>; text?: string; children?: never }> }> };
@@ -16,7 +15,7 @@ export type ProjectTypeRecord = {
 };
 
 type Props = { onClose: () => void; renderIcon: (item: ProjectTypeRecord) => ReactNode };
-const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', description: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
+const blank = (icon: ProjectTypeRecord['icon']): ProjectTypeRecord => ({ id: crypto.randomUUID(), name: '', scope: '', user_defined: true, icon: structuredClone(icon), research_standards_references: [], publication_standards_references: [] });
 
 export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -27,7 +26,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
   const [builtins, setBuiltins] = useState<ProjectTypeRecord[]>([]);
   const [drafts, setDrafts] = useState<ProjectTypeRecord[]>([]);
   const [placeholderIcon, setPlaceholderIcon] = useState<ProjectTypeRecord['icon'] | null>(null);
-  const [showBuiltins, setShowBuiltins] = useState(true);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState('');
   const [error, setError] = useState('');
@@ -66,11 +65,12 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     const item = blank(placeholderIcon);
     setDrafts(previous => [...previous, item]);
     setOpen(item.id);
+    setAddingId(item.id);
   }
   function basedOn(id: string, parentId: string) {
     const parent = [...builtins, ...drafts].find(item => item.id === parentId);
     if (!parent) return;
-    edit(id, { based_on: parent.id, description: parent.description, scope: parent.scope, icon: structuredClone(parent.icon), research_standards_references: [...parent.research_standards_references], publication_standards_references: [...parent.publication_standards_references], origin: parent.id });
+    edit(id, { based_on: parent.id, scope: parent.scope, icon: structuredClone(parent.icon), research_standards_references: [...parent.research_standards_references], publication_standards_references: [...parent.publication_standards_references], origin: parent.id });
   }
   async function save() {
     setBusy(true); setError('');
@@ -98,7 +98,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     const setAt = (index: number, value: string) => edit(item.id, { [field]: urls.map((url, i) => i === index ? value : url) });
     return <table className="pt-reference-table"><colgroup><col/><col/></colgroup><thead><tr><th>URL</th><th>Action</th></tr></thead><tbody>
       {urls.map((url, index) => <tr key={index}><td>{readonly ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <input aria-label={`${field === 'research_standards_references' ? 'Research' : 'Publication'} reference URL ${index + 1}`} type="url" value={url} onChange={event => setAt(index, event.target.value)}/>}</td><td>{!readonly && <button type="button" onClick={() => edit(item.id, { [field]: urls.filter((_, i) => i !== index) })}>Remove</button>}</td></tr>)}
-      {!readonly && <tr><td><input aria-label={`New ${field === 'research_standards_references' ? 'research' : 'publication'} reference URL`} type="url" placeholder="https://" value="" readOnly/></td><td><button type="button" onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td></tr>}
+      {!readonly && <tr><td><button type="button" onClick={() => edit(item.id, { [field]: [...urls, ''] })}>New</button></td><td/></tr>}
     </tbody></table>;
   };
   const card = (item: ProjectTypeRecord, readonly: boolean) => <details className="project-type-card" key={item.id} open={open === item.id} onToggle={event => { if (event.currentTarget.open) setOpen(item.id); }}>
@@ -106,9 +106,8 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     <div className="project-type-card-body">
       <label>Name<input value={item.name} disabled={readonly} onChange={event => edit(item.id, { name: event.target.value })}/></label>
       <label>Scope<input value={item.scope} disabled={readonly} onChange={event => edit(item.id, { scope: event.target.value })}/></label>
-      <label>Description<textarea value={item.description} disabled={readonly} onChange={event => edit(item.id, { description: event.target.value })}/></label>
       {!readonly && <label>Based on<select value={item.based_on ?? ''} onChange={event => event.target.value ? basedOn(item.id, event.target.value) : edit(item.id, { based_on: null })}><option value="">None</option>{[...sortedBuiltins, ...sortedDrafts.filter(option => option.id !== item.id)].map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>}
-      {!readonly && <label>Icon<select aria-label={`Icon for ${item.name || 'new project type'}`} value={item.icon.kind === 'builtin' ? item.icon.key ?? 'placeholder' : ''} onChange={event => { const choice = event.target.value; const source = builtins.find(candidate => candidate.id === choice); edit(item.id, { icon: source ? structuredClone(source.icon) : structuredClone(placeholderIcon ?? item.icon) }); }}><option value="placeholder">Temporary SIGMA placeholder</option>{sortedBuiltins.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select><span className="project-type-icon-edit">{renderIcon(item)}<small>This icon can be replaced later.</small></span></label>}
+      {!readonly && <div className="project-type-icon-edit" aria-label={`Icon for ${item.name || 'new project type'}`}>{renderIcon(item)}<small>AI icon generation requires a configured image provider.</small></div>}
       <section><h3>Research standards references</h3>{listEditor(item, 'research_standards_references', readonly)}</section>
       <section><h3>Publication standards references</h3>{listEditor(item, 'publication_standards_references', readonly)}</section>
       {!readonly && <div className="project-type-card-actions"><button type="button" disabled={busy} onClick={() => setDrafts(previous => previous.filter(candidate => candidate.id !== item.id))}>Remove</button></div>}
@@ -129,9 +128,9 @@ export default function ProjectTypesDialog({ onClose, renderIcon }: Props) {
     focusable[nextIndex].focus();
   }}>
     <header><h2 id="project-types-title">Project Types</h2><div><button ref={first} type="button" disabled={busy} onClick={close}>Cancel</button><button type="button" disabled={busy || invalidDraft} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button></div></header>
-    <div className="project-types-body"><label className="project-types-checkbox"><input type="checkbox" checked={showBuiltins} onChange={event => setShowBuiltins(event.target.checked)}/>Show built-in project types</label>
-      {showBuiltins && <section><h3>Built-in project types</h3>{sortedBuiltins.map(item => card(item, true))}</section>}
-      <section><h3>User-defined project types</h3>{sortedDrafts.map(item => card(item, false))}<button type="button" className="project-types-add" disabled={busy || !placeholderIcon} onClick={add}>Add project type</button></section>
+    <div className="project-types-body">
+      <section><div className="project-types-section-heading"><h3>User-defined project types</h3>{addingId ? <div><button type="button" disabled={busy || !drafts.find(d => d.id === addingId)?.name.trim() || !drafts.find(d => d.id === addingId)?.scope.trim()} onClick={() => setAddingId(null)}>Save</button><button type="button" onClick={() => { setDrafts(previous => previous.filter(d => d.id !== addingId)); setAddingId(null); }}>Cancel</button></div> : <button type="button" disabled={busy || !placeholderIcon} onClick={add}>New</button>}</div>{sortedDrafts.map(item => card(item, false))}</section>
+      <section><div className="project-types-section-heading"><h3>Built-in project types</h3><span>(cannot be modified)</span></div>{sortedBuiltins.map(item => card(item, true))}</section>
       {error && <p role="alert">{error}</p>}
     </div>
   </dialog>;
