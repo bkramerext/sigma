@@ -61,6 +61,7 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             if field == "prior_artifacts"
             else set()
         )
+
         def is_material(index: int) -> bool:
             item = entries[index]
             return isinstance(item, dict) and item.get(id_field) in material_ids
@@ -88,21 +89,61 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             compacted[field] = compacted.get(field, 0) + 1
             pointers.setdefault(field, []).append(entry[id_field])
 
-    # Source completeness must reflect the *final* delivered packet rather
-    # than the earlier, pre-compaction selection.
-    supplied = {
-        entry.get("id"): entry
-        for entry in context.get("prior_artifacts", [])
-        if isinstance(entry, dict)
-    }
+    # A pointer is discoverable history, not a supplied source suitable as
+    # evidence for an argument, cross-strategy link or obligation closure.
+    # Keep citation allowlists synchronized with the final dispatch packet.
+    pointers_by_field: dict[str, set[str]] = {}
+    for field, id_field in (
+        ("prior_artifacts", "id"),
+        ("prior_session_findings", "id"),
+        ("other_strategy_evidence", "artifact_id"),
+    ):
+        pointers_by_field[field] = {
+            item[id_field]
+            for item in context.get(field, [])
+            if isinstance(item, dict)
+            and isinstance(item.get(id_field), str)
+            and item.get("evidence_availability") == "pointer_only_original_not_supplied"
+        }
+    pointer_artifacts = pointers_by_field["prior_artifacts"]
+    pointer_findings = pointers_by_field["prior_session_findings"]
+    if pointer_artifacts:
+        context["context_artifact_ids"] = [
+            item_id
+            for item_id in context.get("context_artifact_ids", [])
+            if item_id not in pointer_artifacts
+        ]
+    if pointer_findings:
+        approved = context.get("approved_continuation")
+        approved_ids = (
+            {
+                item["artifact_id"]
+                for item in approved.get("sources", [])
+                if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+            }
+            if isinstance(approved, dict)
+            else set()
+        )
+        context["prior_session_artifact_ids"] = [
+            item_id
+            for item_id in context.get("prior_session_artifact_ids", [])
+            if item_id not in pointer_findings or item_id in approved_ids
+        ]
     for obligation in context.get("obligation_ledger", []):
         if not isinstance(obligation, dict):
             continue
-        if any(
-            supplied.get(sid, {}).get("evidence_availability")
-            == "pointer_only_original_not_supplied"
-            for sid in obligation.get("supplied_source_artifact_ids", [])
-        ):
+        supplied_ids = obligation.get("supplied_source_artifact_ids", [])
+        if not isinstance(supplied_ids, list):
+            continue
+        missing_ids = [
+            item_id for item_id in supplied_ids
+            if item_id in pointer_artifacts or item_id in pointer_findings
+        ]
+        if missing_ids:
+            obligation["supplied_source_artifact_ids"] = [
+                item_id for item_id in supplied_ids if item_id not in missing_ids
+            ]
+            obligation["pointer_source_artifact_ids"] = missing_ids
             obligation["source_artifact_availability"] = "incomplete_extract_original_not_supplied"
 
     if _bytes(context) > limit:
