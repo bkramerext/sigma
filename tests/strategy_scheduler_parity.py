@@ -39,6 +39,7 @@ def canonicalize(value, names: dict[str, str]):
     # alpha-renamed in deterministic *sorted semantic input* order below.
     unknown: dict[str, str] = {}
     obligation_names: dict[str, str] = {}
+    short_obligation_names: dict[str, str] = {}
 
     def index_obligation_ids(obj):
         # Stable obligation source text and references must be preserved. Its
@@ -49,6 +50,14 @@ def canonicalize(value, names: dict[str, str]):
             if isinstance(candidate, str) and re.fullmatch(r"[0-9a-f]{64}", candidate):
                 obligation_names.setdefault(
                     candidate, f"<obligation-id-{len(obligation_names) + 1}>"
+                )
+            # Continuity-v2 assigns compact oN IDs when an obligation is
+            # first saved. Parallel branches may commit in a different order;
+            # alpha-rename the *identifier* by its first canonical occurrence,
+            # retaining all of its subsequent references and substantive text.
+            elif isinstance(candidate, str) and re.fullmatch(r"o[1-9][0-9]*", candidate):
+                short_obligation_names.setdefault(
+                    candidate, f"<short-obligation-id-{len(short_obligation_names) + 1}>"
                 )
             for key in sorted(obj):
                 index_obligation_ids(obj[key])
@@ -66,6 +75,10 @@ def canonicalize(value, names: dict[str, str]):
             return [walk(item) for item in obj]
         if not isinstance(obj, str):
             return obj
+        # Exact-value replacement avoids changing ordinary prose containing
+        # an oN substring; references to the same ID remain tied together.
+        if obj in short_obligation_names:
+            return short_obligation_names[obj]
         for identifier, label in sorted(names.items(), key=lambda row: -len(row[0])):
             obj = obj.replace(identifier, label)
         obj = TIMESTAMP_RE.sub("<timestamp>", obj)
@@ -239,6 +252,32 @@ async def snapshot():
 
 
 if __name__ == "__main__":
+    # Renaming is valid only for consistent IDs, never for changed substance or
+    # a reference silently pointing at a different obligation.
+    baseline = {
+        "obligations": [
+            {"obligation_id": "o2", "claim": "First proof obligation"},
+            {"obligation_id": "o1", "claim": "Second proof obligation"},
+        ],
+        "referenced_obligation": "o2",
+    }
+    reordered = {
+        "obligations": [
+            {"obligation_id": "o1", "claim": "First proof obligation"},
+            {"obligation_id": "o2", "claim": "Second proof obligation"},
+        ],
+        "referenced_obligation": "o1",
+    }
+    assert canonicalize(baseline, {}) == canonicalize(reordered, {})
+    assert canonicalize(baseline, {}) != canonicalize(
+        {**reordered, "referenced_obligation": "o2"}, {}
+    )
+    assert canonicalize(baseline, {}) != canonicalize(
+        {**reordered, "obligations": [
+            {**reordered["obligations"][0], "claim": "Changed proof obligation"},
+            reordered["obligations"][1],
+        ]}, {}
+    )
     output = asyncio.run(snapshot())
     Path(sys.argv[2]).write_text(json.dumps(output, sort_keys=True, indent=2) + "\n")
     print(
