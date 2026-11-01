@@ -123,6 +123,15 @@ CATALOG: tuple[dict[str, str], ...] = (
         "notes": "For AI-agent reliability specify external ground-truth oracle, fault and retry model, observation horizon and task sampling. A proposed reliability test is not an executed benchmark; acceptance by an evaluator is not necessarily correctness.",
     },
     {
+        "id": "nasa-federation-decisions",
+        "tier": "branch",
+        "branch": "federation",
+        "mode": "computer_science",
+        "title": "NASA — 6.8 Decision Analysis",
+        "url": "https://www.nasa.gov/reference/6-8-decision-analysis/",
+        "notes": "When designing federated computing systems compare feasible local, gateway, approved external and federation alternatives against common authorized tasks. Apply cost-benefit, sensitivity, constraints, and decision thresholds; report unknown source policies and implementation limits.",
+    },
+    {
         "id": "nist-comparative-design",
         "tier": "branch",
         "branch": "federation",
@@ -145,6 +154,9 @@ BRANCH_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     )),
     ("biology", "animal-regeneration", re.compile(
         r"\b(tadpole\w*|xenopus|regenerat\w*|wound|tail|erk|animal)\b", re.I
+    )),
+    ("computer_science", "federation", re.compile(
+        r"\b(federat\w*|sovereign\w*|gateway|campus|revocation|quota|routing)\b", re.I
     )),
     ("computer_science", "ai-reliability", re.compile(
         r"\b(agent\w*|retr(?:y|ies)|external effect|reliab\w*|checkpoint|acknowledg\w*)\b", re.I
@@ -236,7 +248,13 @@ def select_method_sources(
         ids = [s.get("id") for s in source_rows if isinstance(s, Mapping)]
         if not all(isinstance(i, str) for i in ids) or not _complete(ids, mode, branch):
             continue
-        rows = [_source(BY_ID[i]) for i in ids]
+        # Retain the previous *readable content*, not only source IDs:
+        # later catalog copy edits must not silently change a controlled
+        # multi-session research comparison. Reject unsafe/empty old rows.
+        if not all(_usable(row) and row.get("tier") == BY_ID[row["id"]]["tier"]
+                   for row in source_rows):
+            continue
+        rows = [dict(row) for row in source_rows]
         return {
             "version": CATALOG_VERSION,
             "status": "reused",
