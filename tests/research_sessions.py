@@ -2706,13 +2706,16 @@ def test_project_compact_obligation_ids_preserve_legacy_references(path: Path):
     # All three ID families are accepted as references, but an agent cannot
     # review an ID absent from the supplied ledger.
     for value in ("o12", first_digest, str(uuid4())):
-        assert research_sessions.ObligationReview(
-            obligation_id=value,
-            status="unresolved",
-            basis_artifact_ids=[],
-            basis_step_ids=[],
-            rationale="This still requires verification.",
-        ).obligation_id == value
+        assert (
+            research_sessions.ObligationReview(
+                obligation_id=value,
+                status="unresolved",
+                basis_artifact_ids=[],
+                basis_step_ids=[],
+                rationale="This still requires verification.",
+            ).obligation_id
+            == value
+        )
 
 
 def test_t37_obligation_identity_lifecycle_and_history(path: Path):
