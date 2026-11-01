@@ -432,6 +432,8 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
             nonlocal calls
             calls += 1
             assert response_model is papers.TeXProofreadResult
+            if r"\\\\alpha" not in _input["exact_tex_chunk"]:
+                return response_model(corrections=[]), "fixture"
             return (
                 response_model(
                     corrections=[
@@ -488,9 +490,10 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
         assert r"$\alpha=3$" in corrected
         assert r"\\cite{source:one}" in corrected
         assert provenance["status"] == "complete"
-        assert provenance["provider_calls_attempted"] == 1
+        assert provenance["provider_calls_attempted"] == 2
+        assert provenance["pass_number"] == 2
         assert provenance["corrections"] == ["math_notation"]
-        assert provenance["initial_sha256"] == papers.hashlib.sha256(tex.encode()).hexdigest()
+        assert provenance["original_sha256"] == papers.hashlib.sha256(tex.encode()).hexdigest()
         proofread_progress = [item for item in progress if item["stage"] == "proofreading"]
         assert proofread_progress
         assert all(
@@ -1348,6 +1351,8 @@ def test_diagram_compile_fallback_preserves_evidence_tables_and_provider_account
             return authored, config["model"]
 
         async def fake_proofreader(_context, *_args, **_kwargs):
+            if r"\\\\alpha" not in _context["exact_tex_chunk"]:
+                return papers.TeXProofreadResult(corrections=[]), config["model"]
             return (
                 papers.TeXProofreadResult(
                     corrections=[
