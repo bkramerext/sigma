@@ -5804,6 +5804,47 @@ async def test_preflight_failure_isolates_branch_and_commits_sibling(path: Path)
     assert len(reopened["artifacts"]) == 1
 
 
+async def test_stop_is_responsive_during_slow_provider_preflight(path: Path):
+    """Pausing or stopping does not wait behind a model/account network check."""
+    view, first, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}
+    research_sessions.save_limits(str(path), limits)
+    checking = asyncio.Event()
+    release = asyncio.Event()
+    verification_calls = 0
+
+    async def account_check():
+        nonlocal verification_calls
+        verification_calls += 1
+        if verification_calls > 1:
+            checking.set()
+            await release.wait()
+        return credential
+
+    with (
+        patch.object(research_sessions, "auth_context", new=account_check),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+    ):
+        started = await research_sessions.start_session(
+            str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
+            expected_limits=limits,
+        )
+        await asyncio.wait_for(checking.wait(), timeout=5)
+        try:
+            stopped = await asyncio.wait_for(
+                research_sessions.control_session(str(path), started["id"], "stop"),
+                timeout=1,
+            )
+            assert stopped["status"] == "stopped"
+        finally:
+            release.set()
+        saved = research_sessions.get_session(str(path), started["id"])
+        assert saved["status"] == "stopped"
+        assert saved["calls_used"] == 0
+        assert saved["steps"] == []
+
+
 async def test_duplicate_strategy_dispatch_is_fenced_during_provider_call(path: Path):
     """Two dispatchers must not run the same strategy turn concurrently."""
     view, first, credential, config = await setup(path)
@@ -10457,6 +10498,11 @@ def main():
         asyncio.run(
             test_preflight_failure_isolates_branch_and_commits_sibling(
                 root / "fault-isolation-421.sigma"
+            )
+        )
+        asyncio.run(
+            test_stop_is_responsive_during_slow_provider_preflight(
+                root / "stop-during-preflight-421.sigma"
             )
         )
         asyncio.run(test_provider_gate_fairness_and_cancelled_waiter())
