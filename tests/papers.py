@@ -3173,9 +3173,9 @@ def test_writing_guidance_is_listed_in_paper_tex_without_becoming_evidence() -> 
         "sha256": "a" * 64,
     }
     tex = papers._tex(draft(), [], "f" * 64, writing_sources=[source])
-    assert r"\\section*{Paper writing source material used}" in tex
+    assert r"\section*{Paper writing source material used}" in tex
     assert "Writing Mathematics" in tex
-    assert r"\\url{https://example.org/writing-math}" in tex
+    assert r"\url{https://example.org/writing-math}" in tex
     assert "not the scientific evidence or findings" in tex
     empty_tex = papers._tex(draft(), [], "f" * 64, writing_sources=[])
     assert "No external writing-guidance sources were recorded." in empty_tex
