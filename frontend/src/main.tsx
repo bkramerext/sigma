@@ -748,7 +748,6 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       data-tooltip={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
       onClick={onClick}>{markdownSymbol}</button>;
   const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
-  const conclusionFormatToggle = markdownButton('Conclusion', activeSections.has('conclusion'), () => toggleMarkdownSection('conclusion'));
   const reasoningFormatToggle = markdownButton('Reasoning / proof', activeSections.has('reasoning'), () => toggleMarkdownSection('reasoning'));
   const citationsFormatToggle = markdownButton('Citations and evidence', activeSections.has('citations'), () => toggleMarkdownSection('citations'));
   const assessmentsFormatToggle = markdownButton('Strategy Assessments', activeSections.has('assessments'), () => toggleMarkdownSection('assessments'));
@@ -784,8 +783,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
       </div>}
       {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
-        <details className="outcome-subsection outcome-conclusion has-markdown-control" open>
-          <summary><DisclosureChevron expanded={false}/>Conclusion</summary>{conclusionFormatToggle}
+        <details className="outcome-subsection outcome-conclusion" open>
+          <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
           <div className="outcome-subsection-content outcome-conclusion-content">
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
             {session.outcome.conclusion && activeSections.has('conclusion')
