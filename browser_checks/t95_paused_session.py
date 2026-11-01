@@ -330,6 +330,39 @@ with tempfile.TemporaryDirectory(prefix="sigma-t95-browser-") as temporary:
             for width in (1440, 390):
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            # Dismissing old status notices is a persisted presentation choice.
+            # Both duplicate banners disappear; the session and Resume stay intact.
+            row.locator(".session-row-disclosure").click()
+            expect(row.locator(".stopped-session-guidance")).to_be_visible()
+            expect(
+                row.get_by_role("complementary", name="Session status and next steps")
+            ).to_be_visible()
+            row.locator(".stopped-session-guidance").get_by_role(
+                "button", name="Dismiss notices for Session #1"
+            ).click()
+            expect(row.locator(".stopped-session-guidance")).to_have_count(0)
+            expect(
+                row.get_by_role("complementary", name="Session status and next steps")
+            ).to_have_count(0)
+            expect(row.locator(".session-status")).to_have_text("stopped")
+            expect(row.locator('button[title="Resume session #1"]')).to_be_visible()
+            page.reload()
+            row = page.locator(f'li[data-session-id="{session["id"]}"]')
+            expect(row.locator(".stopped-session-guidance")).to_have_count(0)
+            expect(row.locator(".session-status")).to_have_text("stopped")
+            expect(row.locator('button[title="Resume session #1"]')).to_be_visible()
+            # Another historical session retains its own independent notices.
+            other_row = page.locator(".session-row").filter(has_text="Session #2")
+            expect(other_row.locator(".stopped-session-guidance")).to_be_visible()
+            other_row.locator(".session-row-disclosure").click()
+            other_row.get_by_role(
+                "complementary", name="Session status and next steps"
+            ).get_by_role("button", name="Dismiss notices for Session #2").click()
+            expect(other_row.locator(".stopped-session-guidance")).to_have_count(0)
+            expect(
+                other_row.get_by_role("complementary", name="Session status and next steps")
+            ).to_have_count(0)
+            expect(other_row.locator(".session-status")).to_have_text("stopped")
             page.screenshot(path="/tmp/sigma-t95-paused-desktop.png", full_page=True)
             context.close()
 

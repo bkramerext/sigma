@@ -515,7 +515,26 @@ function formattedOutcomeSession(
   };
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
+// Local presentation preference only; the saved session and research evidence are immutable.
+// Include the current lifecycle and reason so a materially different stop reappears.
+function sessionNoticeKey(session: ResearchSession): string {
+  const source = [
+    session.id, session.status, session.termination_reason_code ?? '',
+    session.message ?? '', session.next_step_guidance ?? '', session.calls_used,
+  ].join('|');
+  let hash = 2166136261;
+  for (let i = 0; i < source.length; i++) {
+    hash = Math.imul(hash ^ source.charCodeAt(i), 16777619);
+  }
+  return `${session.id}:${(hash >>> 0).toString(16)}`;
+}
+
+function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss: () => void }) {
+  return <button type="button" className="session-notice-dismiss" aria-label={`Dismiss notices for Session #${number}`}
+    title={`Dismiss Session #${number} notices`} onClick={onDismiss}>Dismiss</button>;
+}
+
+function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
   path: string;
   session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
   onEnableAdvancedOutcome: () => Promise<void>;
@@ -523,6 +542,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
+  dismissedStatusNotice: boolean; onDismissStatusNotice: () => void;
 }) {
   const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
     containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
@@ -742,7 +762,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
       {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
       {provenancePrelude}
-      {(budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+        <SessionNoticeDismiss number={session.session_number} onDismiss={onDismissStatusNotice}/>
         <strong>{statusHeading}</strong>
         {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
@@ -1039,6 +1060,26 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [announcement, setAnnouncement] = useState('');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
+  const noticeStorageKey = `sigma.dismissedSessionNotices:${path}`;
+  const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState<Set<string>>(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(noticeStorageKey) || '[]');
+      return new Set(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []);
+    } catch { return new Set<string>(); }
+  });
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(noticeStorageKey) || '[]');
+      setDismissedNoticeKeys(new Set(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []));
+    } catch { setDismissedNoticeKeys(new Set()); }
+  }, [noticeStorageKey]);
+  const dismissSessionNotice = (key: string) => {
+    setDismissedNoticeKeys(current => {
+      const next = new Set([...current, key].slice(-250));
+      try { window.localStorage.setItem(noticeStorageKey, JSON.stringify([...next])); } catch { /* Local storage can be unavailable; in-memory dismissal still works. */ }
+      return next;
+    });
+  };
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
@@ -1364,12 +1405,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
+                {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
             </div>
-            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
+            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
