@@ -1451,9 +1451,22 @@ def _evidence_based_long_plan(
         return score, sentence, ", ".join(provenance), tuple(valid_refs)
 
     ranked_candidates = {id(note): candidate(note) for note in notes}
-    question = str(project_data.get("problem") or title).strip()[:850]
-    if not question:
-        question = title
+
+    def bounded_question(value: str, limit: int = 850) -> str:
+        """Summarize at a complete sentence/word boundary, never inside a URL."""
+        value = " ".join(value.split()).strip()
+        if len(value) <= limit:
+            return value
+        question_end = re.search(r"\?(?=\s|$)", value[:limit])
+        if question_end:
+            return value[: question_end.end()]
+        boundaries = list(re.finditer(r"(?<=[.!?])\s+(?=[A-Z])", value[:limit]))
+        if boundaries:
+            return value[: boundaries[-1].start() + 1].strip()
+        words = value[:limit].rsplit(" ", 1)
+        return (words[0] if len(words) > 1 else title).rstrip(" ,;:") + "…"
+
+    question = bounded_question(str(project_data.get("problem") or title)) or title
     categories: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         (
             "Background and research context",
