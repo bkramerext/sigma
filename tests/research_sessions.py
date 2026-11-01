@@ -9421,7 +9421,7 @@ def test_dispatch_budget_compacts_historical_evidence_not_live_inputs():
         "reasoning_steps": [
             {
                 "title": f"Step {i}",
-                "argument": "Reasoning detail " * 720,
+                "argument": "Reasoning detail " * 650,
                 "epistemic_status": "deduction",
                 "basis_artifact_ids": [],
             }
