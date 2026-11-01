@@ -65,6 +65,14 @@ async def main_async(root: Path):
         "This does not prove RH.\n\n"
         "The investigation is paused; this is not a completed conclusion."
     )
+    reasoning_source = (
+        "The proposed recurrence follows only under the bounded assumption. "
+        "The skeptic has not independently checked the base case."
+    )
+    reasoning_markdown = (
+        "The proposed recurrence follows only under the **bounded assumption**. "
+        "The skeptic has not independently checked the base case."
+    )
     conclusion_session_id = str(uuid4())
     session_dir = conclusion_path / "research-sessions"
     session_dir.mkdir()
@@ -75,7 +83,12 @@ async def main_async(root: Path):
                 "id": conclusion_session_id,
                 "project_id": inspect_project(conclusion_path).project.id,
                 "project_path": str(conclusion_path.resolve()),
-                "outcome": {"conclusion": conclusion_source},
+                "outcome": {
+                    "conclusion": conclusion_source,
+                    "solution_review": {"argument_summary": reasoning_source},
+                },
+                "artifacts": [{"method": reasoning_source}],
+                "strategy_assessments": [{"rationale": reasoning_source}],
             }
         ),
         encoding="utf-8",
@@ -113,7 +126,9 @@ async def main_async(root: Path):
             "required": ["body", "warnings"],
             "additionalProperties": False,
         }
-        if context["text"] == conclusion_source:
+        if context["text"] == reasoning_source:
+            output = reasoning_markdown
+        elif context["text"] == conclusion_source:
             assert context["target_format"] == "markdown"
             assert "standalone display-math blocks" in body["instructions"]
             output = conclusion_markdown
@@ -199,7 +214,49 @@ async def main_async(root: Path):
         assert response.status_code == 200, response.text
         assert response.json()["body"] == conclusion_markdown
         assert session_path.read_bytes() == session_before_conversion
-        print("PASS AI Markdown conversion of immutable historical Conclusions with typed math")
+        conversion = await convert_text(
+            str(conclusion_path),
+            "research-block",
+            "markdown",
+            expected_digest=digest(reasoning_source),
+            session_id=conclusion_session_id,
+            field_path="outcome.solution_review.argument_summary",
+        )
+        assert conversion["body"] == reasoning_markdown
+        assert conversion["source_digest"] == digest(reasoning_source)
+        assert session_path.read_bytes() == session_before_conversion
+        assert not (conclusion_path / "text-representations.json").exists()
+
+        with TestClient(app) as api:
+            conversion_response = api.post(
+                "/api/projects/text/convert",
+                json={
+                    "path": str(conclusion_path),
+                    "scope": "research-block",
+                    "session_id": conclusion_session_id,
+                    "field_path": "artifacts.0.method",
+                    "target": "markdown",
+                    "expected_digest": digest(reasoning_source),
+                    "expected_binding": binding["identity"],
+                },
+            )
+            blocked = api.post(
+                "/api/projects/text/convert",
+                json={
+                    "path": str(conclusion_path),
+                    "scope": "research-block",
+                    "session_id": conclusion_session_id,
+                    "field_path": "outcome.metrics.operational",
+                    "target": "markdown",
+                    "expected_digest": digest(reasoning_source),
+                    "expected_binding": binding["identity"],
+                },
+            )
+        assert conversion_response.status_code == 200, conversion_response.text
+        assert conversion_response.json()["body"] == reasoning_markdown
+        assert blocked.status_code != 200
+        assert session_path.read_bytes() == session_before_conversion
+        print("PASS immutable saved research text Markdown, per-block API and metrics exclusion")
 
     # Large strategy descriptions can produce a response envelope above the
     # smaller proposal limit even though the converted body remains bounded.

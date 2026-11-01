@@ -2,7 +2,7 @@
 .workspace-page { --workspace-bg: #04101b; --workspace-panel: #030e18; --workspace-line: #233c4b; background: radial-gradient(ellipse at 80% 15%, #0c2031, transparent 65%), var(--workspace-bg); }
 .workspace-page .workspace-layout { grid-template-columns: 246px minmax(0, 1fr); }
 .workspace-page .site-header { min-height: 96px; }
-.workspace-page .workspace-content { padding: 12px 40px 40px; }
+.workspace-page .workspace-content { padding: 12px 20px 40px; }
 .workspace-page .project-intro { padding: 22px 0 12px; margin-bottom: 0; max-height: none; overflow: visible; border-bottom: 0; }
 .workspace-page .project-intro .objective { max-width: none; }
 .workspace-page .project-eyebrow { margin: 0 0 12px; text-transform: uppercase; letter-spacing: .25em; font-size: 11px; color: #e4ad67; }
@@ -668,7 +668,7 @@
 .workspace-page .outcome-heading { display: flex; align-items: center; justify-content: flex-start; min-width: 0; }
 .workspace-page .outcome-heading-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .workspace-page .outcome-heading h3 { margin: 0; color: #f0d0a4; font: 400 19px/1.35 Georgia,serif; }
-.workspace-page .outcome-heading-title > .sigma-render-toggle { position: static; display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0 0 0 20px; padding: 0; appearance: none; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
+.workspace-page .outcome-heading-title > .sigma-render-toggle { position: static; display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0; padding: 0; appearance: none; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
 .workspace-page .outcome-heading-title > .sigma-render-toggle:hover:not(:disabled),
 .workspace-page .outcome-heading-title > .sigma-render-toggle[aria-pressed="true"] { border: 0; background: transparent; color: #f1c58d; box-shadow: none; }
 .workspace-page .outcome-heading-title > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
@@ -1091,6 +1091,11 @@
   border-radius: 5px;
   background: #09141e;
 }
+/* Make the active research card easier to spot without changing its layout. */
+.workspace-page .session-row:has(.session-status.session-running) {
+  background: #112331;
+  border-color: #466071;
+}
 .workspace-page .session-row-heading { padding: 14px 16px; }
 .workspace-page .session-row-content { padding: 0 16px 16px 40px; border: 0; }
 @media (max-width: 600px) {
@@ -1106,3 +1111,59 @@
 .workspace-page .session-summary .session-heading-actions > .session-mini-process-control,
 .workspace-page .session-summary .session-heading-actions > .session-log-open-link,
 .workspace-page .session-summary .session-heading-actions > .session-remove-link { align-self: center; }
+
+
+/* Markdown belongs beside section headings; each section can render independently. */
+.workspace-page .outcome-subsection.has-markdown-control { position: relative; }
+.workspace-page .outcome-subsection.has-markdown-control > summary { padding-right: 52px; }
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle,
+.workspace-page .outcome-summary-title > .sigma-render-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; min-height: 28px; padding: 0;
+  border: 0; background: transparent; box-shadow: none; color: #aab4ba;
+}
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle {
+  position: absolute; top: 4px; right: 10px; z-index: 1;
+}
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .outcome-summary-title > .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle[aria-pressed="true"],
+.workspace-page .outcome-summary-title > .sigma-render-toggle[aria-pressed="true"] {
+  color: #f1c58d; background: transparent; border: 0; box-shadow: none;
+}
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle:focus-visible,
+.workspace-page .outcome-summary-title > .sigma-render-toggle:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 2px;
+}
+.workspace-page .outcome-subsection.has-markdown-control .markdown-logo,
+.workspace-page .outcome-summary-title .markdown-logo {
+  width: 24px; height: 20px; display: block;
+}
+.workspace-page .outcome-summary-title { display: flex; align-items: center; gap: 8px; }
+.workspace-page .outcome-summary-title .outcome-summary-kicker { margin: 0; }
+.workspace-page .outcome-markdown-progress { color: #c8d3dc; font-size: 12px; margin: 7px 0; }
+
+
+/* Hover must not imply that an unselected Markdown representation is active. */
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle[aria-pressed="false"]:hover {
+  color: #aab4ba;
+}
+
+
+/* Session guidance is dismissible, like the request-error toasts.
+   This controls visibility only; the research state and history are unchanged. */
+.workspace-page .stopped-session-guidance,
+.workspace-page .research-pause-guidance { position: relative; padding-right: 84px; }
+.workspace-page .session-notice-dismiss {
+  position: absolute; top: 7px; right: 12px; z-index: 1;
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: #f1c58d; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.workspace-page .session-notice-dismiss:hover:not(:disabled) {
+  color: #ffe0ab; border: 0; background: transparent; box-shadow: none;
+}
+.workspace-page .session-notice-dismiss:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 3px;
+}

@@ -12,9 +12,10 @@ import os
 import re
 import threading
 import zlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -4038,16 +4039,16 @@ async def submit_intervention(
         if (
             kind not in {"objection", "evidence", "priority"}
             or not normalized
-            or len(normalized) > 1200
+            or len(normalized) > 20000
         ):
             _reject_intervention(
                 record,
                 intervention_id=intervention_id,
                 kind=kind,
-                text=normalized[:1200],
+                text=normalized[:20000],
                 strategy_ids=selected_ids,
                 agent_roles=roles,
-                reason="Feedback type or text is invalid; feedback must be 1–1,200 characters.",
+                reason="Feedback type or text is invalid; feedback may be up to 20,000 characters.",
             )
         if (
             not roles
@@ -4277,6 +4278,31 @@ def _snapshot(path: str) -> tuple[Any, str]:
         return view, _digest(read_file(view.path, "project.json"))
     state = Path(view.path) / "project.json"
     return view, _digest(state.read_bytes())
+
+
+def _same_session_project(record: dict[str, Any], view: Any) -> bool:
+    """Research runs on frozen session inputs, not the mutable project revision.
+
+    A project can be renamed, edited, reformatted, have strategies re-ordered,
+    enabled or removed, or change its preferred model without rewriting already
+    accepted research. Only a foreign/replaced project identity is fatal.
+    """
+    return view.project.id == record.get("project_id")
+
+
+async def _frozen_session_configuration(
+    view: Any, credential: Mapping[str, Any], record: dict[str, Any]
+) -> dict[str, Any]:
+    """Check provider access for the model selected when the session began."""
+    pinned = replace(
+        view,
+        project=replace(
+            view.project,
+            ai_model=record["model"],
+            reasoning_effort=record["reasoning_effort"],
+        ),
+    )
+    return await configuration(view=pinned, context=credential)
 
 
 def _project_guard_state(project: Any) -> str:
@@ -4673,16 +4699,14 @@ async def start_session(
         raise ProjectError(config["message"])
     async with _manager_lock:
         with _project_manager_lock(view.path):
-            # A project may change during preflight. Do not admit stale research.
-            locked_view, locked_guard = _snapshot(view.path)
-            if locked_view.project.id != expected_project_id or locked_guard != guard:
-                raise ProjectError("Project changed during research preflight; review it and retry")
-            limits = get_limits(view.path)
-            limits = _validate_limits(limits)
-            if expected_limits is not None and _validate_limits(expected_limits) != limits:
-                raise ProjectError(
-                    "Research limits changed before confirmation; review the current limits and retry"
-                )
+            # The session is created from the preflight's frozen research inputs.
+            # UI updates and changed limits during preflight apply to future starts
+            # and must not invalidate or cancel this one. Read the latest safety
+            # limits without rebuilding the chosen problem, strategies, or model.
+            locked_view, _locked_guard = _snapshot(view.path)
+            if locked_view.project.id != expected_project_id:
+                raise ProjectError("Project identity changed during research preflight")
+            limits = _validate_limits(get_limits(view.path))
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
@@ -5003,15 +5027,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         _save(path, record)
     if record["status"] not in {"paused", "stopped"}:
         return _public(record)
-    if action == "resume":
-        project = inspect_project(path).project
-        strategy_ids = record.get("strategy_ids", [record.get("strategy_id")])
-        for strategy_id in strategy_ids:
-            strategy = next((item for item in project.strategies if item.id == strategy_id), None)
-            if strategy is None or strategy.removed_at is not None or not strategy.enabled:
-                raise ProjectError(
-                    "A strategy in this session is disabled; enable it before resuming"
-                )
+    # Resume uses the frozen accepted strategy snapshot. New edits, removals,
+    # eligibility changes and reordering affect future sessions only.
     interrupted_call = (
         record.get("status") == "paused"
         and bool(record.get("steps"))
@@ -5059,19 +5076,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
     view, guard = _snapshot(record["project_path"])
     credential = await auth_context()
     guard_state_hash = _project_guard_state(view.project)
-    guard_matches = guard == record.get("guard_hash")
-    if not guard_matches:
-        saved_state_hash = record.get("guard_state_hash")
-        guard_matches = (
-            saved_state_hash == guard_state_hash
-            if isinstance(saved_state_hash, str)
-            else _legacy_resume_state_matches(record, view.project)
-        )
-    if not guard_matches or view.project.id != record["project_id"]:
-        record["message"] = "Project or strategy changed; research remains paused."
+    if not _same_session_project(record, view):
+        record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
-    config = await configuration(view=view, context=credential)
+    config = await _frozen_session_configuration(view, credential, record)
     if (
         not config["available"]
         or config["model"] != record["model"]
@@ -5115,9 +5124,9 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
-            _, locked_guard = _snapshot(record["project_path"])
-            if locked_guard != guard:
-                record["message"] = "Project or strategy changed; research remains paused."
+            locked_view, _locked_guard = _snapshot(record["project_path"])
+            if not _same_session_project(record, locked_view):
+                record["message"] = "Project identity changed; research remains paused."
                 _save(record["project_path"], record)
                 raise ProjectError(record["message"])
             record["guard_hash"] = guard
@@ -8281,13 +8290,13 @@ async def _portfolio_role_call(
                 _save(path, record)
                 return False
             try:
-                view, guard = _snapshot(path)
+                view, _guard = _snapshot(path)
             except Exception as exc:
                 _record_preflight_failure(record, branch, role, "project_snapshot", exc)
                 _save(path, record)
                 raise
-            if guard != record["guard_hash"] or view.project.id != record["project_id"]:
-                exc = ProjectError("Project or strategy changed; session paused before a new call.")
+            if not _same_session_project(record, view):
+                exc = ProjectError("Project identity changed; session paused before a new call.")
                 _record_preflight_failure(record, branch, role, "project_binding", exc)
                 _save(path, record)
                 raise exc
@@ -8313,7 +8322,8 @@ async def _portfolio_role_call(
                 raise exc
             try:
                 config = await asyncio.wait_for(
-                    configuration(view=view, context=credential), timeout=PREFLIGHT_TIMEOUT
+                    _frozen_session_configuration(view, credential, record),
+                    timeout=PREFLIGHT_TIMEOUT,
                 )
             except Exception as exc:
                 _record_preflight_failure(record, branch, role, "model_configuration", exc)
@@ -9261,10 +9271,10 @@ async def _execute_pending_python(
         ) <= datetime.now(UTC):
             return
         if record.get("guard_hash"):
-            view, guard = _snapshot(path)
-            if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+            view, _guard = _snapshot(path)
+            if not _same_session_project(record, view):
                 raise ProjectError(
-                    f"Project or strategy changed; session paused before {tool} dispatch."
+                    f"Project identity changed; session paused before {tool} dispatch."
                 )
         branch["current_action"] = f"{tool} execution"
         record["current_action"] = f"{tool} execution · {branch['strategy_title']}"
@@ -10719,12 +10729,12 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
-                view, guard = _snapshot(path)
+                view, _guard = _snapshot(path)
                 credential = await auth_context()
-                if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+                if not _same_session_project(record, view):
                     record["status"] = "paused"
                     record["message"] = (
-                        "Project or strategy changed; session paused before a new call."
+                        "Project identity changed; session paused before a new call."
                     )
                     _save(path, record)
                     return
@@ -10738,7 +10748,7 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
-                config = await configuration(view=view, context=credential)
+                config = await _frozen_session_configuration(view, credential, record)
                 if (
                     not config["available"]
                     or config["model"] != record["model"]

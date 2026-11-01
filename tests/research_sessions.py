@@ -25,6 +25,7 @@ from sigma.projects import (
     inspect_project,
     project_path,
     set_strategy_enabled,
+    update_project,
 )
 from sigma.research_budget import BudgetExceeded
 
@@ -1064,7 +1065,7 @@ async def test_start_preflight_does_not_hold_project_or_global_admission_locks(p
         await research_sessions._tasks[result["id"]]
 
 
-async def test_start_revalidates_project_after_slow_preflight(path: Path):
+async def test_start_preserves_frozen_inputs_after_slow_preflight(path: Path):
     view, strategy, credential, config = await setup(path)
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -1074,7 +1075,12 @@ async def test_start_revalidates_project_after_slow_preflight(path: Path):
         await release.wait()
         return credential
 
+    async def no_provider_worker(_session_id: str, _path: str):
+        # The regression validates admission without invoking a paid provider.
+        return
+
     with (
+        patch.object(research_sessions, "_worker", new=no_provider_worker),
         patch.object(research_sessions, "auth_context", new=slow_auth),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
     ):
@@ -1090,13 +1096,14 @@ async def test_start_revalidates_project_after_slow_preflight(path: Path):
             )
         finally:
             release.set()
-        try:
-            await asyncio.wait_for(task, timeout=2)
-        except ProjectError as exc:
-            assert "changed during research preflight" in str(exc)
-        else:
-            raise AssertionError("Stale strategy snapshots must not dispatch research")
-    assert research_sessions.list_sessions(str(path)) == []
+        started = await asyncio.wait_for(task, timeout=2)
+        await research_sessions._tasks[started["id"]]
+    record = research_sessions._read(str(path), started["id"])
+    assert record["strategy_text"] == strategy.approach
+    assert record["strategy_title"] == strategy.title
+    assert record["strategy_runs"][0]["strategy_text"] == strategy.approach
+    assert inspect_project(path).project.strategies[0].title == "Revised approach"
+    assert len(research_sessions.list_sessions(str(path))) == 1
 
 
 async def test_project_concurrent_session_limit_is_atomic(path: Path):
@@ -2104,16 +2111,21 @@ async def test_portfolio_python_queue_and_stop(path: Path):
             else:
                 finished = await wait_for(case, started["id"])
         assert state["maximum"] == 1 and state["active"] == 0
-        assert len(calls) == (1 if stopping else 3), calls
+        assert len(calls) == (1 if action == "stop" else 3), calls
         assert (
             finished["status"]
-            == {"complete": "ended", "stop": "stopped", "project-change": "paused"}[action]
+            == {"complete": "ended", "stop": "stopped", "project-change": "ended"}[action]
         ), finished
-        if stopping:
+        if action == "stop":
             assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 1
             assert len(finished["steps"]) == 3 and finished["calls_used"] == 3
         else:
             assert len(finished["artifacts"]) == 3 and finished["calls_used"] == 6
+            assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 3
+        if action == "project-change":
+            assert not any(event["kind"] == "research.paused" for event in finished["events"]), (
+                "Live strategy edits must not pause the frozen running session"
+            )
 
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
@@ -7916,14 +7928,20 @@ async def test_response_transport_and_parsed_bounds(path: Path):
     )
 
 
-async def test_changed_bindings_pause_before_provider(path: Path):
+async def test_project_edits_do_not_pause_research_but_account_changes_do(path: Path):
     view, strategy, credential, config = await setup(path)
-    changed = {**credential, "identity": "different-account"}
     entered = asyncio.Event()
     release = asyncio.Event()
     provider_calls = []
 
     original_role_call = research_sessions._portfolio_role_call
+
+    async def pinned_configuration(*, view, context):
+        # No mid-run UI preference may change the model or thinking level
+        # selected when Play began.
+        assert view.project.ai_model == MODEL
+        assert view.project.reasoning_effort == "high"
+        return config
 
     async def blocked_role_call(*args, **kwargs):
         entered.set()
@@ -7932,13 +7950,15 @@ async def test_changed_bindings_pause_before_provider(path: Path):
 
     async def handler(request):
         provider_calls.append(request)
-        return httpx.Response(200, json=provider_response(investigation(1)))
+        role = json.loads(request.content)["text"]["format"]["name"]
+        output = skeptic(1, "stop") if role == "research_skeptic" else investigation(1)
+        return httpx.Response(200, json=provider_response(output))
 
     with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(
-            research_sessions, "auth_context", new=AsyncMock(side_effect=[credential, changed])
+            research_sessions, "configuration", new=AsyncMock(side_effect=pinned_configuration)
         ),
-        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "_portfolio_role_call", new=blocked_role_call),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
@@ -7954,16 +7974,45 @@ async def test_changed_bindings_pause_before_provider(path: Path):
         edit_strategy(
             str(path), strategy.id, strategy.title, strategy.approach + " Revised source."
         )
+        set_strategy_enabled(str(path), strategy.id, False)
+        current = inspect_project(path).project
+        update_project(
+            str(path),
+            current.title,
+            current.problem + " (edited after session started)",
+            current.investigation_type.value,
+            current.ai_model,
+            "medium",
+            {
+                "title": current.title,
+                "problem": current.problem,
+                "investigation_type": current.investigation_type.value,
+                "ai_model": current.ai_model,
+                "reasoning_effort": current.reasoning_effort,
+                "difficulty": current.difficulty.value if current.difficulty else None,
+                "show_advanced_outcome_details": False,
+            },
+            show_advanced_outcome_details=True,
+        )
+        assert inspect_project(path).project.show_advanced_outcome_details
+        assert inspect_project(path).project.reasoning_effort == "medium"
         release.set()
-        paused = await wait_for(path, started["id"])
-    assert paused["status"] == "paused" and paused["calls_used"] == 0
-    assert "Project or strategy changed" in paused["message"]
-    assert provider_calls == []
+        continued = await wait_for(path, started["id"])
+    assert continued["status"] in {"completed", "ended"}, continued["message"]
+    assert continued["calls_used"] >= 2
+    assert len(provider_calls) >= 2
+    # The running session must retain its original, accepted strategy.
+    persisted = research_sessions._read(str(path), started["id"])
+    assert persisted["strategy_text"] == strategy.approach
+    assert persisted["strategy_runs"][0]["strategy_text"] == strategy.approach
+    assert persisted["problem"] == view.project.problem
+    assert persisted["model"] == config["model"]
 
     account_path = path.parent / "account-change.sigma"
     account_view, account_strategy, account_credential, account_config = await setup(account_path)
     entered.clear()
     release.clear()
+    provider_calls.clear()
     with (
         patch.object(
             research_sessions,
@@ -9482,7 +9531,9 @@ def main():
             )
         )
         asyncio.run(test_response_transport_and_parsed_bounds(root / "parsed.sigma"))
-        asyncio.run(test_changed_bindings_pause_before_provider(root / "binding.sigma"))
+        asyncio.run(
+            test_project_edits_do_not_pause_research_but_account_changes_do(root / "binding.sigma")
+        )
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
         asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
         test_deliberate_argument_gap_is_preserved_and_not_complete()
@@ -9542,7 +9593,7 @@ def main():
             )
         )
         asyncio.run(
-            test_start_revalidates_project_after_slow_preflight(
+            test_start_preserves_frozen_inputs_after_slow_preflight(
                 root / "admission-preflight-revalidation.sigma"
             )
         )

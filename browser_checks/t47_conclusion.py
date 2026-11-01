@@ -390,7 +390,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "element => (element.compareDocumentPosition(element.parentElement.querySelector('.outcome-subsections')) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0"
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text("The investigation is paused")
-                toggle = outcome.get_by_role("button", name="Show saved Conclusion")
+                toggle = conclusion.get_by_role("button", name="Show saved Conclusion text")
                 toggle.hover()
                 toggle_style = toggle.evaluate(
                     "e => ({rect:e.getBoundingClientRect().toJSON(), "
@@ -409,11 +409,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(toggle).to_have_attribute("aria-pressed", "true")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
-                source_toggle = conclusion.locator(
-                    ".outcome-conclusion-actions .sigma-render-toggle"
-                )
+                source_toggle = conclusion.locator(":scope > .sigma-render-toggle")
                 expect(source_toggle).to_have_attribute("aria-pressed", "true")
-                expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion")
+                expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion text")
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
                 expect(finding).to_have_text("Preliminary finding")
@@ -523,9 +521,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             )
             mobile_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             mobile_conclusion = mobile_row.locator("details.outcome-conclusion")
-            mobile_toggle = mobile_conclusion.locator(
-                ".outcome-conclusion-actions .sigma-render-toggle"
-            )
+            mobile_toggle = mobile_conclusion.locator(":scope > .sigma-render-toggle")
             expect(mobile_toggle).to_have_attribute("aria-pressed", "true")
             expect(mobile_conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
             expect(mobile_conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
@@ -565,10 +561,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(row.locator(".outcome-simple .outcome-markdown .katex").first).to_be_visible()
             expect(row.locator(".outcome-simple .outcome-markdown .katex-error")).to_have_count(0)
             expect(row.locator(".outcome-conclusion-format-note")).to_have_count(0)
-            expect(row.get_by_role("button", name="Show saved Conclusion")).to_be_visible()
-            expect(row.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
-                "aria-pressed", "true"
-            )
+            # Simple Outcome is controlled by its heading Markdown button alone.
+            # Advanced Conclusion has its own control; simple mode must not duplicate it.
+            expect(row.locator(".outcome-simple .sigma-render-toggle")).to_have_count(0)
+            expect(row.locator(".outcome-heading-title > .sigma-render-toggle")).to_be_visible()
+            expect(
+                row.get_by_role("button", name="Format all research sections as Markdown")
+            ).to_have_attribute("aria-pressed", "false")
             prelude = row.locator(".outcome-evidence-prelude")
             expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
             expect(prelude).to_contain_text(

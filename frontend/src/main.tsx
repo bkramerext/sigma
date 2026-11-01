@@ -436,7 +436,105 @@ function ContextManifestNotes({ manifest }: { manifest: ContextManifest }) {
   return <ul className="context-omission-notes">{notes.map(item => <li key={item.key}>{item.text}</li>)}</ul>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
+type OutcomeMarkdownSection = 'conclusion' | 'reasoning' | 'citations' | 'assessments';
+type OutcomeMarkdownBlock = { field: string; source: string; section: OutcomeMarkdownSection };
+type FormattedOutcomeBlock = { source: string; body: string };
+
+function outcomeTextBlocks(session: ResearchSession): OutcomeMarkdownBlock[] {
+  const blocks: OutcomeMarkdownBlock[] = [];
+  const add = (section: OutcomeMarkdownSection, field: string, source?: string) => {
+    if (source?.trim()) blocks.push({ section, field, source });
+  };
+  add('conclusion', session.outcome.conclusion ? 'outcome.conclusion' : 'outcome.summary',
+    session.outcome.conclusion || session.outcome.summary);
+  const review = session.outcome.solution_review;
+  if (review) {
+    for (const field of ['claim', 'argument_summary', 'skeptic_response'] as const)
+      add('reasoning', 'outcome.solution_review.' + field, review[field]);
+    review.argument_steps?.forEach((step, index) =>
+      add('reasoning', `outcome.solution_review.argument_steps.${index}.argument`, step.argument));
+    review.strategy_findings?.forEach((finding, index) => {
+      add('reasoning', `outcome.solution_review.strategy_findings.${index}.claim`, finding.claim);
+      finding.reasoning_steps.forEach((step, stepIndex) =>
+        add('reasoning', `outcome.solution_review.strategy_findings.${index}.reasoning_steps.${stepIndex}.argument`, step.argument));
+    });
+  }
+  session.artifacts.forEach((artifact, index) => {
+    for (const field of ['claim_or_question', 'method', 'skeptic_response', 'coordinator_decision', 'next_question'] as const)
+      add('citations', `artifacts.${index}.${field}`, artifact[field]);
+  });
+  session.strategy_assessments?.forEach((assessment, index) =>
+    add('assessments', `strategy_assessments.${index}.rationale`, assessment.rationale));
+  return blocks;
+}
+
+function formattedOutcomeSession(
+  session: ResearchSession,
+  selected: ReadonlySet<OutcomeMarkdownSection>,
+  blocks: Record<string, FormattedOutcomeBlock>,
+): ResearchSession {
+  const resolve = (section: OutcomeMarkdownSection, field: string, text: string) =>
+    selected.has(section) && blocks[field]?.source === text ? blocks[field].body : text;
+  const review = session.outcome.solution_review;
+  const newReview = review ? {
+    ...review,
+    claim: resolve('reasoning', 'outcome.solution_review.claim', review.claim || ''),
+    argument_summary: resolve('reasoning', 'outcome.solution_review.argument_summary', review.argument_summary || ''),
+    skeptic_response: resolve('reasoning', 'outcome.solution_review.skeptic_response', review.skeptic_response || ''),
+    argument_steps: review.argument_steps?.map((step, index) => ({
+      ...step, argument: resolve('reasoning', `outcome.solution_review.argument_steps.${index}.argument`, step.argument),
+    })),
+    strategy_findings: review.strategy_findings?.map((finding, index) => ({
+      ...finding,
+      claim: resolve('reasoning', `outcome.solution_review.strategy_findings.${index}.claim`, finding.claim),
+      reasoning_steps: finding.reasoning_steps.map((step, stepIndex) => ({
+        ...step, argument: resolve('reasoning', `outcome.solution_review.strategy_findings.${index}.reasoning_steps.${stepIndex}.argument`, step.argument),
+      })),
+    })),
+  } : review;
+  return {
+    ...session,
+    outcome: {
+      ...session.outcome,
+      conclusion: resolve('conclusion', 'outcome.conclusion', session.outcome.conclusion || ''),
+      summary: resolve('conclusion', 'outcome.summary', session.outcome.summary || ''),
+      solution_review: newReview,
+    },
+    artifacts: session.artifacts.map((artifact, index) => ({
+      ...artifact,
+      claim_or_question: resolve('citations', `artifacts.${index}.claim_or_question`, artifact.claim_or_question),
+      method: resolve('citations', `artifacts.${index}.method`, artifact.method),
+      skeptic_response: resolve('citations', `artifacts.${index}.skeptic_response`, artifact.skeptic_response),
+      coordinator_decision: resolve('citations', `artifacts.${index}.coordinator_decision`, artifact.coordinator_decision),
+      next_question: resolve('citations', `artifacts.${index}.next_question`, artifact.next_question),
+    })),
+    strategy_assessments: session.strategy_assessments?.map((assessment, index) => ({
+      ...assessment,
+      rationale: resolve('assessments', `strategy_assessments.${index}.rationale`, assessment.rationale),
+    })),
+  };
+}
+
+// Local presentation preference only; the saved session and research evidence are immutable.
+// Include the current lifecycle and reason so a materially different stop reappears.
+function sessionNoticeKey(session: ResearchSession): string {
+  const source = [
+    session.id, session.status, session.termination_reason_code ?? '',
+    session.message ?? '', session.next_step_guidance ?? '', session.calls_used,
+  ].join('|');
+  let hash = 2166136261;
+  for (let i = 0; i < source.length; i++) {
+    hash = Math.imul(hash ^ source.charCodeAt(i), 16777619);
+  }
+  return `${session.id}:${(hash >>> 0).toString(16)}`;
+}
+
+function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss: () => void }) {
+  return <button type="button" className="session-notice-dismiss" aria-label={`Dismiss notices for Session #${number}`}
+    title={`Dismiss Session #${number} notices`} onClick={onDismiss}>Dismiss</button>;
+}
+
+function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
   path: string;
   session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
   onEnableAdvancedOutcome: () => Promise<void>;
@@ -444,22 +542,27 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
+  dismissedStatusNotice: boolean; onDismissStatusNotice: () => void;
 }) {
-  const savedConclusionHasMath = containsMathNotation(session.outcome.conclusion || '');
-  const startsWithRenderedMath = containsMathNotation(
-    `${session.outcome.conclusion || ''}\n${session.outcome.summary || ''}`,
-  );
-  const [outcomeMarkdown, setOutcomeMarkdown] = useState(startsWithRenderedMath);
-  const [conclusionMarkdown, setConclusionMarkdown] = useState(savedConclusionHasMath);
-  const [convertedConclusion, setConvertedConclusion] = useState<string | null>(null);
-  const [conclusionFormatWarnings, setConclusionFormatWarnings] = useState<string[]>([]);
-  const [conclusionRendering, setConclusionRendering] = useState(false);
-  const [conclusionFormatError, setConclusionFormatError] = useState('');
+  const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
+    containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
+  const [convertedBlocks, setConvertedBlocks] = useState<Record<string, FormattedOutcomeBlock>>({});
+  const convertedBlocksRef = useRef<Record<string, FormattedOutcomeBlock>>({});
+  const [conversionError, setConversionError] = useState('');
+  const [conversionProgress, setConversionProgress] = useState('');
+  const conversionQueue = useRef<OutcomeMarkdownBlock[]>([]);
+  const conversionWorker = useRef(false);
+  const conversionCurrent = useRef<OutcomeMarkdownBlock | null>(null);
+  const conversionAbort = useRef<AbortController | null>(null);
+  const completedConversions = useRef(0);
+  const totalConversions = useRef(0);
   const [advancedOutcomeEnableError, setAdvancedOutcomeEnableError] = useState('');
   const [enablingAdvancedOutcome, setEnablingAdvancedOutcome] = useState(false);
-  const conclusionConversionAbort = useRef<AbortController | null>(null);
-  const [reasoningMarkdown, setReasoningMarkdown] = useState(false);
-  const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
+  const blocks = useMemo(() => outcomeTextBlocks(session), [session]);
+  const activeSections = useMemo(() => new Set(markdownSections), [markdownSections]);
+  const renderSession = useMemo(() =>
+    formattedOutcomeSession(session, activeSections, convertedBlocks),
+    [session, activeSections, convertedBlocks]);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   const [interventionKind, setInterventionKind] = useState<ResearchIntervention['kind']>('priority');
   const [interventionText, setInterventionText] = useState('');
@@ -470,7 +573,10 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   useEffect(() => {
     setActivityExpanded(session.status === 'queued' || session.status === 'running');
   }, [session.status]);
-  useEffect(() => () => conclusionConversionAbort.current?.abort(), []);
+  useEffect(() => () => {
+    conversionQueue.current = [];
+    conversionAbort.current?.abort();
+  }, [session.id]);
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
   const approvedPackets = Object.values(session.approved_continuations ?? {});
@@ -481,12 +587,9 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const hasEvidence = session.artifacts.length > 0 || primaryEvidenceIds.length > 0;
   const historicalSummary = !session.outcome.conclusion && !['queued', 'running', 'paused'].includes(session.status);
   const resultLabel = session.outcome.conclusion ? 'Conclusion' : historicalSummary ? 'Historical session summary' : 'Session summary';
-  const resultText = session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
-  const simpleDisplaySession = convertedConclusion !== null && outcomeMarkdown
-    ? { ...session, outcome: { ...session.outcome, conclusion: convertedConclusion } }
-    : session;
-  const simpleResult = simpleOutcomeLead(simpleDisplaySession);
-  const simpleOutcomeMarkdown = outcomeMarkdown;
+  const resultText = renderSession.outcome.conclusion || renderSession.outcome.summary || 'No outcome summary was recorded.';
+  const simpleResult = simpleOutcomeLead(renderSession);
+  const simpleOutcomeMarkdown = activeSections.has('conclusion');
   const verificationLabel = review?.verification_status === 'verified' ? 'Verified in the session record' : review?.verification_status === 'convincing_unverified' ? 'Convincing but unverified' : review?.verification_status === 'incomplete' ? 'Evidence incomplete' : 'Not independently verified';
   const qualificationItems = [...new Set([...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? []), ...(session.outcome.caveats ?? [])])];
   const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
@@ -530,9 +633,6 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const canIntervene = supportsIntervention && interventionWindowOpen
     && interventionCount.filter(item => item.status !== 'rejected').length < 24
     && interventionCount.length < 32;
-  const interventionHelp = session.status === 'paused' || session.status === 'stopped'
-    ? 'Applies after resume; no call starts now.'
-    : 'Applies on a later call; no call starts now.';
   async function submitIntervention(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const agentRoles = [targetAgentRole];
@@ -553,79 +653,105 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       reportRequestFailure(errorMessage(cause));
     } finally { setInterventionBusy(false); }
   }
-  async function toggleConclusionMarkdown() {
-    if (conclusionMarkdown) {
-      setConclusionMarkdown(false);
-      setOutcomeMarkdown(false);
-      return;
-    }
-    if (convertedConclusion !== null) {
-      setConclusionMarkdown(true);
-      setOutcomeMarkdown(true);
-      return;
-    }
-    if (savedConclusionHasMath) {
-      setConclusionMarkdown(true);
-      setOutcomeMarkdown(true);
-      return;
-    }
-    const source = session.outcome.conclusion;
-    if (!source || conclusionRendering) return;
-    const controller = new AbortController();
-    conclusionConversionAbort.current = controller;
-    setConclusionRendering(true);
-    setConclusionFormatError('');
-    let finishProviderRequest = () => {};
+  async function drainConversions() {
+    if (conversionWorker.current) return;
+    conversionWorker.current = true;
     try {
-      const settingsResponse = await fetch(
-        `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
-        { signal: controller.signal },
-      );
-      const settings = await settingsResponse.json();
-      if (!settingsResponse.ok || !settings.available) {
-        throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
-      }
-      finishProviderRequest = beginProviderRequest('text-conversion');
-      const sourceDigest = await sha256Text(source);
-      const converted = await post<{ body: string; warnings: string[]; source_digest: string }>(
-        'text/convert',
-        {
-          path,
-          scope: 'research-conclusion',
-          session_id: session.id,
-          target: 'markdown',
-          expected_digest: sourceDigest,
-          expected_binding: settings.binding,
-        },
-        controller.signal,
-      );
-      if (converted.source_digest !== sourceDigest) {
-        throw new Error('The saved Conclusion changed during formatting. Reopen the session and retry.');
-      }
-      setConvertedConclusion(converted.body);
-      setConclusionFormatWarnings(converted.warnings ?? []);
-      setConclusionMarkdown(true);
-      setOutcomeMarkdown(true);
-    } catch (cause) {
-      if (!controller.signal.aborted) {
-        const message = errorMessage(cause);
-        setConclusionFormatError(message);
-        reportRequestFailure(message);
+      while (conversionQueue.current.length) {
+        const block = conversionQueue.current.shift()!;
+        conversionCurrent.current = block;
+        const controller = new AbortController();
+        conversionAbort.current = controller;
+        setConversionProgress(`Formatting ${completedConversions.current + 1} of ${totalConversions.current} text blocks…`);
+        let finishProviderRequest = () => {};
+        try {
+          const expectedDigest = await sha256Text(block.source);
+          if (controller.signal.aborted) continue;
+          // Hosted inference requires a current account binding. Obtain it for
+          // each queued block; never silently reuse a different account.
+          const settingsResponse = await fetch(
+            `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
+            { signal: controller.signal },
+          );
+          const settings = await settingsResponse.json();
+          if (!settingsResponse.ok || !settings.available) {
+            throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+          }
+          finishProviderRequest = beginProviderRequest('text-conversion');
+          const converted = await post<{ body: string; source_digest: string; warnings: string[] }>(
+            'text/convert',
+            {
+              path, scope: 'research-block', session_id: session.id, field_path: block.field,
+              target: 'markdown', expected_digest: expectedDigest,
+              expected_binding: settings.binding, expected_project_id: session.project_id,
+            },
+            controller.signal,
+          );
+          if (converted.source_digest !== expectedDigest)
+            throw new Error('Research text changed while formatting. The saved source is unchanged.');
+          const next = { ...convertedBlocksRef.current, [block.field]: { source: block.source, body: converted.body } };
+          convertedBlocksRef.current = next;
+          setConvertedBlocks(next);
+        } catch (cause) {
+          if (!controller.signal.aborted) {
+            setConversionError(`Markdown formatting paused: ${errorMessage(cause)}. Saved research remains unchanged; Markdown rendering stays available.`);
+            conversionQueue.current = [];
+          }
+        } finally {
+          finishProviderRequest();
+          completedConversions.current++;
+          if (conversionAbort.current === controller) conversionAbort.current = null;
+          conversionCurrent.current = null;
+        }
       }
     } finally {
-      finishProviderRequest();
-      if (conclusionConversionAbort.current === controller) {
-        conclusionConversionAbort.current = null;
-        setConclusionRendering(false);
-      }
+      conversionWorker.current = false;
+      setConversionProgress('');
     }
   }
-  const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
-  const conclusionToggleLabel = conclusionMarkdown
-    ? 'Show saved Conclusion'
-    : convertedConclusion !== null || savedConclusionHasMath ? 'Render Conclusion as Markdown' : 'Format Conclusion with AI';
-  const conclusionFormatToggle = <button type="button" className={`sigma-render-toggle${conclusionMarkdown ? ' sigma-render-active' : ''}${conclusionRendering ? ' sigma-render-pending' : ''}`} aria-label={conclusionToggleLabel} aria-pressed={conclusionMarkdown} aria-busy={conclusionRendering} data-tooltip={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} title={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} disabled={conclusionRendering} onClick={() => void toggleConclusionMarkdown()}>{conclusionRendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
-  const reasoningFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} aria-pressed={reasoningMarkdown} data-tooltip={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} title={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} onClick={() => setReasoningMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
+  function enqueueConversions(target: OutcomeMarkdownSection[]) {
+    const candidates = blocks.filter(block => target.includes(block.section) && block.source.trim().length >= 40
+      && block.source.length <= 20000 && convertedBlocksRef.current[block.field]?.source !== block.source
+      && !conversionQueue.current.some(item => item.field === block.field && item.source === block.source));
+    if (!candidates.length) return;
+    if (!conversionWorker.current) { completedConversions.current = 0; totalConversions.current = 0; }
+    totalConversions.current += candidates.length;
+    conversionQueue.current.push(...candidates);
+    setConversionError('');
+    void drainConversions();
+  }
+  function toggleMarkdownSection(section: OutcomeMarkdownSection) {
+    if (activeSections.has(section)) {
+      setMarkdownSections(current => current.filter(item => item !== section));
+      conversionQueue.current = conversionQueue.current.filter(block => block.section !== section);
+      if (conversionCurrent.current?.section === section) conversionAbort.current?.abort();
+    } else {
+      setMarkdownSections(current => [...current, section]);
+      enqueueConversions([section]);
+    }
+  }
+  function toggleAllMarkdown() {
+    const all: OutcomeMarkdownSection[] = ['conclusion', 'reasoning', 'citations', 'assessments'];
+    if (all.every(section => activeSections.has(section))) {
+      setMarkdownSections([]);
+      conversionQueue.current = [];
+      conversionAbort.current?.abort();
+    } else {
+      setMarkdownSections(all);
+      enqueueConversions(all);
+    }
+  }
+  const markdownSymbol = <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>;
+  const markdownButton = (label: string, active: boolean, onClick: () => void) =>
+    <button type="button" className="sigma-render-toggle" aria-label={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
+      aria-pressed={active} title={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
+      data-tooltip={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
+      onClick={onClick}>{markdownSymbol}</button>;
+  const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
+  const conclusionFormatToggle = markdownButton('Conclusion', activeSections.has('conclusion'), () => toggleMarkdownSection('conclusion'));
+  const reasoningFormatToggle = markdownButton('Reasoning / proof', activeSections.has('reasoning'), () => toggleMarkdownSection('reasoning'));
+  const citationsFormatToggle = markdownButton('Citations and evidence', activeSections.has('citations'), () => toggleMarkdownSection('citations'));
+  const assessmentsFormatToggle = markdownButton('Strategy Assessments', activeSections.has('assessments'), () => toggleMarkdownSection('assessments'));
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
@@ -633,18 +759,18 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{outcomeDisplayLabel(session)}</span></div></div>
+      {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
+      {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
       {provenancePrelude}
-      {(budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
+        <SessionNoticeDismiss number={session.session_number} onDismiss={onDismissStatusNotice}/>
         <strong>{statusHeading}</strong>
         {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
       </aside>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
-        <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
+        <div className="outcome-summary-text"><div className="outcome-summary-title"><span className="outcome-summary-kicker">{resultLabel}</span></div>
           {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
-          {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</div>}
-          {convertedConclusion !== null && outcomeMarkdown && <div className="outcome-conclusion-format-note"><p>AI formatted this reading view; the saved Conclusion is unchanged. Compare the saved text before relying on changed notation. Formatting does not verify the mathematics.</p>{!!conclusionFormatWarnings.length && <ul>{conclusionFormatWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
-          {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
           <p className="advanced-outcome-hint">Want more detail? Turn on <button type="button" className="advanced-outcome-link" disabled={enablingAdvancedOutcome} onClick={async () => {
             setEnablingAdvancedOutcome(true); setAdvancedOutcomeEnableError('');
             try { await onEnableAdvancedOutcome(); }
@@ -658,16 +784,13 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
       </div>}
       {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
-        <details className="outcome-subsection outcome-conclusion" open>
-          <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
+        <details className="outcome-subsection outcome-conclusion has-markdown-control" open>
+          <summary><DisclosureChevron expanded={false}/>Conclusion</summary>{conclusionFormatToggle}
           <div className="outcome-subsection-content outcome-conclusion-content">
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
-            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</div>}
-            {convertedConclusion !== null && conclusionMarkdown && <div className="outcome-conclusion-format-note"><p>AI formatted this reading view; the saved Conclusion is unchanged. Compare the saved text before relying on changed notation. Formatting does not verify the mathematics.</p>{!!conclusionFormatWarnings.length && <ul>{conclusionFormatWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
-            {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
-            {session.outcome.conclusion && conclusionMarkdown
-              ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={convertedConclusion ?? session.outcome.conclusion}/></Suspense></div>
-              : !session.outcome.conclusion && outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
+            {session.outcome.conclusion && activeSections.has('conclusion')
+              ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={renderSession.outcome.conclusion || session.outcome.conclusion}/></Suspense></div>
+              : !session.outcome.conclusion && activeSections.has('conclusion') ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(renderSession)}/></Suspense></div>
                 : <div className="outcome-conclusion-source">{resultText}</div>}
             {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
             <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
@@ -690,18 +813,18 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             </section>)}
           </div>
         </details>}
-        {review && <details className="outcome-subsection outcome-reasoning-subsection"><summary><DisclosureChevron expanded={false}/>Reasoning / proof</summary><div className="outcome-subsection-content"><div className="outcome-reasoning-actions"><h4>Reasoning / proof</h4>{reasoningFormatToggle}</div>{reasoningMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{review.argument_summary || review.claim || 'No reasoning was saved.'}</p>}><RenderedMarkdown body={researchReasoningMarkdown(session)}/></Suspense></div> : <div className="solution-review"><p><strong>Investigated:</strong> {session.problem || 'Project objective unavailable in this historical record.'}</p><p><strong>Bounded strategy:</strong> {session.strategy_text || session.strategy_title || 'Strategy details unavailable.'}</p><p><strong>Claim:</strong> {review.claim || 'No claim recorded.'}</p><p><strong>Skeptic response:</strong> {review.skeptic_response || 'No substantive Skeptic response recorded.'}</p>{!!review.skeptic_objections?.length && <p><strong>Skeptic objections:</strong> {review.skeptic_objections.join(' · ')}</p>}{review.argument_steps?.length ? <ol>{review.argument_steps.map(step => <li key={`${step.research_artifact_id ?? ''}:${step.number}`}><strong>{step.title}</strong> <span>({step.epistemic_status})</span><p>{step.argument}</p><p><strong>Skeptic review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || 'No rationale recorded'}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences([...(step.basis_artifact_ids || []), ...(step.research_artifact_id ? [step.research_artifact_id] : [])], session)}</p></li>)}</ol> : <p>No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.</p>}{(review.strategy_findings?.length ?? 0) > 0 && <div><h4>Findings by strategy</h4>{review.strategy_findings!.map(item => <section key={item.strategy_id}><h5>{item.strategy_title} · {item.status}</h5><p>{item.claim}</p>{!!item.execution_status && <p><strong>Execution status:</strong> {item.execution_status}</p>}{!!item.failure_reason && <p><strong>Failure detail:</strong> {item.failure_reason}</p>}{item.reasoning_steps.length ? <ol>{item.reasoning_steps.map(step => <li key={step.number}><strong>{step.title}</strong> ({step.epistemic_status})<p>{step.argument}</p><p><strong>Review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || item.skeptic_response}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}</li>)}</ol> : <p>No structured reasoning steps were preserved for this finding.</p>}{!!item.objections.length && <p><strong>Objections:</strong> {item.objections.join(' · ')}</p>}{!!item.open_obligations.length && <p><strong>Open obligations:</strong> {item.open_obligations.join(' · ')}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences(item.research_artifact_ids?.length ? item.research_artifact_ids : (item.research_artifact_id ? [item.research_artifact_id] : []), session)}</p></section>)}</div>}<p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations considered:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Still open:</strong> {review.open_obligations?.join(' · ') || 'None recorded'}</p>{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{!!review.resolved_objections?.length && <p><strong>Objections addressed:</strong> {review.resolved_objections.join(' · ')}</p>}</div>}</div></details>}
-        {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection">
-          <summary><DisclosureChevron expanded={false}/>Citations, evidence &amp; obligations</summary>
+        {review && <details className="outcome-subsection outcome-reasoning-subsection has-markdown-control"><summary><DisclosureChevron expanded={false}/>Reasoning / proof</summary>{reasoningFormatToggle}<div className="outcome-subsection-content">{activeSections.has('reasoning') ? <div className="outcome-markdown"><Suspense fallback={<p>{review.argument_summary || review.claim || 'No reasoning was saved.'}</p>}><RenderedMarkdown body={researchReasoningMarkdown(renderSession)}/></Suspense></div> : <div className="solution-review"><p><strong>Investigated:</strong> {session.problem || 'Project objective unavailable in this historical record.'}</p><p><strong>Bounded strategy:</strong> {session.strategy_text || session.strategy_title || 'Strategy details unavailable.'}</p><p><strong>Claim:</strong> {review.claim || 'No claim recorded.'}</p><p><strong>Skeptic response:</strong> {review.skeptic_response || 'No substantive Skeptic response recorded.'}</p>{!!review.skeptic_objections?.length && <p><strong>Skeptic objections:</strong> {review.skeptic_objections.join(' · ')}</p>}{review.argument_steps?.length ? <ol>{review.argument_steps.map(step => <li key={`${step.research_artifact_id ?? ''}:${step.number}`}><strong>{step.title}</strong> <span>({step.epistemic_status})</span><p>{step.argument}</p><p><strong>Skeptic review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || 'No rationale recorded'}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences([...(step.basis_artifact_ids || []), ...(step.research_artifact_id ? [step.research_artifact_id] : [])], session)}</p></li>)}</ol> : <p>No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.</p>}{(review.strategy_findings?.length ?? 0) > 0 && <div><h4>Findings by strategy</h4>{review.strategy_findings!.map(item => <section key={item.strategy_id}><h5>{item.strategy_title} · {item.status}</h5><p>{item.claim}</p>{!!item.execution_status && <p><strong>Execution status:</strong> {item.execution_status}</p>}{!!item.failure_reason && <p><strong>Failure detail:</strong> {item.failure_reason}</p>}{item.reasoning_steps.length ? <ol>{item.reasoning_steps.map(step => <li key={step.number}><strong>{step.title}</strong> ({step.epistemic_status})<p>{step.argument}</p><p><strong>Review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || item.skeptic_response}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}</li>)}</ol> : <p>No structured reasoning steps were preserved for this finding.</p>}{!!item.objections.length && <p><strong>Objections:</strong> {item.objections.join(' · ')}</p>}{!!item.open_obligations.length && <p><strong>Open obligations:</strong> {item.open_obligations.join(' · ')}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences(item.research_artifact_ids?.length ? item.research_artifact_ids : (item.research_artifact_id ? [item.research_artifact_id] : []), session)}</p></section>)}</div>}<p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations considered:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Still open:</strong> {review.open_obligations?.join(' · ') || 'None recorded'}</p>{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{!!review.resolved_objections?.length && <p><strong>Objections addressed:</strong> {review.resolved_objections.join(' · ')}</p>}</div>}</div></details>}
+        {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection has-markdown-control">
+          <summary><DisclosureChevron expanded={false}/>Citations, evidence &amp; obligations</summary>{citationsFormatToggle}
           <div className="outcome-subsection-content">
-            {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h4>Research artifacts</h4><button type="button" className="sigma-render-toggle" aria-label={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} aria-pressed={artifactsMarkdown} data-tooltip={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} title={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} onClick={() => setArtifactsMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div><ol>{session.artifacts.map(artifact => {
+            {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h4>Research artifacts</h4></div><ol>{session.artifacts.map(artifact => {
               const sage = !!artifact.investigator_output.sage_execution;
               const executionField = sage ? 'sage_execution' : 'python_execution';
               const toolName = sage ? 'SageMath' : 'Python';
               const execution = artifact.investigator_output[executionField] && typeof artifact.investigator_output[executionField] === 'object' ? artifact.investigator_output[executionField] as Record<string, unknown> : null;
               const captured = execution && Array.isArray(execution.artifacts) ? execution.artifacts as Record<string, unknown>[] : [];
               const reused = artifact.investigator_output[executionField + '_reuse_reason'];
-              return <li key={artifact.id} id={`research-artifact-${session.id}-${artifact.id}`}>{artifactsMarkdown ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(artifact)}/></Suspense></div> : <details>
+              return <li key={artifact.id} id={`research-artifact-${session.id}-${artifact.id}`}>{activeSections.has('citations') ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(renderSession.artifacts.find(item => item.id === artifact.id) ?? artifact)}/></Suspense></div> : <details>
                 <summary>Round {artifact.strategy_cycle ?? artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
                 <div className="research-artifact-content"><p><strong>Method:</strong> {artifact.method}</p><p><strong>Assumptions:</strong> {artifact.assumptions.join(' · ') || 'None stated'}</p><p><strong>Evidence status:</strong> {artifact.evidence_status}</p><p><strong>Skeptic response:</strong> {artifact.skeptic_response}</p><p><strong>Objections:</strong> {artifact.objections.join(' · ') || 'No concrete objection recorded'}</p><p><strong>Open obligations:</strong> {artifact.open_obligations.join(' · ') || 'None recorded'}</p>{Array.isArray(artifact.skeptic_output.obligation_reviews) && artifact.skeptic_output.obligation_reviews.length > 0 && <p><strong>Obligation dispositions:</strong> {(artifact.skeptic_output.obligation_reviews as Record<string, unknown>[]).map(review => `${String(review.status ?? 'unknown')} · ${String(review.rationale ?? '')} [${Array.isArray(review.basis_artifact_ids) ? review.basis_artifact_ids.join(', ') : 'no artifact source'}]`).join(' · ')}. Model-reported and unverified.</p>}<p><strong>Coordinator decision:</strong> {artifact.coordinator_decision}</p><p><strong>Next question:</strong> {artifact.next_question || 'No further question; the session ended.'}</p>
                   {execution && <section className="outcome-python-evidence"><h5>{toolName} execution · {String(execution.status ?? 'status unavailable')}</h5><details className="research-execution-record"><summary>Execution source and output</summary><pre>{JSON.stringify(execution, null, 2)}</pre></details><p><strong>Execution ID:</strong> {String(execution.id ?? 'Unavailable')}</p>{typeof execution.exit_code === 'number' && <p><strong>Exit code:</strong> {execution.exit_code}</p>}{typeof reused === 'string' && <p><strong>Reuse:</strong> {reused}</p>}<p>{typeof execution.source === 'string' ? 'Exact source is retained in the execution record.' : 'Source unavailable in this record.'} Computation status is not proof of a mathematical claim.</p>{!!captured.length && <div><strong>Captured files</strong><ul>{captured.map((file, index) => <li key={index}>{String(file.filename ?? 'Unnamed file')} · {typeof file.size_bytes === 'number' ? `${file.size_bytes} bytes` : 'size unavailable'} · SHA-256 {String(file.sha256 ?? 'unavailable')}</li>)}</ul></div>}</section>}
@@ -731,13 +854,13 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             <div className="research-session-actions"><a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a></div>
           </div>
         </details>
-          <details className="outcome-subsection">
-          <summary><DisclosureChevron expanded={false}/>Strategy Assessments</summary>
+          <details className="outcome-subsection has-markdown-control">
+          <summary><DisclosureChevron expanded={false}/>Strategy Assessments</summary>{assessmentsFormatToggle}
           <div className="outcome-subsection-content">
             <p className="outcome-subsection-intro">Each assessment records a strategy’s contribution to the project objective in this session.</p>
             {session.strategy_assessments?.length ? <div className="outcome-assessment-list">{session.strategy_assessments.map((item, index) => {
               const label: Record<StrategyAssessment['assessment'], string> = { contributed_to_solution: 'Contributed to solution', productive: 'Productive', unproductive: 'Unproductive', not_used: 'Not used', disabled: 'Disabled', unknown: 'Unknown' };
-              return <article className="outcome-assessment" key={item.strategy_id ?? index}><h4>{item.strategy_title}</h4><div className="outcome-label-value"><dt>Disposition</dt><dd>{label[item.assessment] ?? 'Unknown'}</dd></div><div className="outcome-label-value"><dt>Rationale</dt><dd>{item.rationale || 'No rationale recorded'}</dd></div><div className="outcome-label-value"><dt>Cited evidence</dt><dd>{idList(item.basis_artifact_ids)}</dd></div></article>;
+              return <article className="outcome-assessment" key={item.strategy_id ?? index}><h4>{item.strategy_title}</h4><div className="outcome-label-value"><dt>Disposition</dt><dd>{label[item.assessment] ?? 'Unknown'}</dd></div><div className="outcome-label-value"><dt>Rationale</dt><dd>{activeSections.has('assessments') ? <Suspense fallback={item.rationale}><RenderedMarkdown body={renderSession.strategy_assessments?.[index]?.rationale || item.rationale || 'No rationale recorded'}/></Suspense> : item.rationale || 'No rationale recorded'}</dd></div><div className="outcome-label-value"><dt>Cited evidence</dt><dd>{idList(item.basis_artifact_ids)}</dd></div></article>;
             })}</div> : <p className="outcome-unavailable">No strategy assessments were recorded for this session.</p>}
             {session.portfolio_decision?.strategy_actions?.length ? <section className="coordinator-portfolio-review" aria-label="Coordinator portfolio recommendations"><h4>Coordinator recommendations</h4><p>Evidence-linked recommendations are model-reported and unverified. Saved strategies are never changed automatically.</p><ul>{session.portfolio_decision.strategy_actions.map(item => <li key={item.strategy_id}><p><strong>{item.strategy_title}:</strong> {item.action.replaceAll('_', ' ')}</p><p>{item.rationale}{item.basis_artifact_ids.length > 0 && <> · Evidence: {idList(item.basis_artifact_ids)}</>}</p>{!!item.next_question && <p><strong>Next question:</strong> {item.next_question}</p>}</li>)}</ul>
               {!!session.portfolio_decision.combination_candidates?.length && <div className="coordinator-combinations"><strong>Combination candidates for human review</strong><ul>{session.portfolio_decision.combination_candidates.map((item, index) => { const titles = item.strategy_ids.map(id => session.strategy_runs?.find(branch => branch.strategy_id === id)?.strategy_title ?? 'Strategy'); return <li key={`${item.strategy_ids.join(':')}-${index}`}><p>{titles.join(' + ')} · {idList(item.basis_artifact_ids)}</p>{item.rationales.map((rationale, rationaleIndex) => <p key={rationaleIndex}>{rationale}</p>)}</li>; })}</ul></div>}
@@ -769,8 +892,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           <fieldset className="human-intervention-type" aria-label="Feedback type"><label><input type="radio" name={`feedback-type-${session.id}`} value="priority" checked={interventionKind === 'priority'} onChange={() => setInterventionKind('priority')}/> Priority</label><label><input type="radio" name={`feedback-type-${session.id}`} value="objection" checked={interventionKind === 'objection'} onChange={() => setInterventionKind('objection')}/> Objection</label><label><input type="radio" name={`feedback-type-${session.id}`} value="evidence" checked={interventionKind === 'evidence'} onChange={() => setInterventionKind('evidence')}/> New Evidence</label></fieldset>
           <fieldset className="human-intervention-target" aria-label="Feedback recipient"><label><input type="radio" name={`feedback-target-${session.id}`} value="investigator" checked={targetAgentRole === 'investigator'} onChange={() => setTargetAgentRole('investigator')}/> For investigator</label><label><input type="radio" name={`feedback-target-${session.id}`} value="skeptic" checked={targetAgentRole === 'skeptic'} onChange={() => setTargetAgentRole('skeptic')}/> For skeptic</label></fieldset>
           <label className="human-intervention-strategy"><span className="sr-only">Strategy</span><select aria-label="Strategy" value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
-          <label className="human-intervention-text">Feedback<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a research instruction or evidence note."/></label>
-          <div className="human-intervention-submit"><button type="submit" className="text-view-link" aria-describedby={`human-feedback-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim()}>{interventionBusy ? 'Adding…' : 'Add'}</button><small id={`human-feedback-help-${session.id}`}>{interventionText.length}/1,200 · {interventionHelp}</small></div>
+          <label className="human-intervention-text">Feedback<textarea value={interventionText} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a research instruction or evidence note."/></label>
+          <div className="human-intervention-submit"><button type="submit" className="text-view-link" aria-describedby={`human-feedback-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim()}>{interventionBusy ? 'Adding…' : 'Add'}</button><small id={`human-feedback-help-${session.id}`}>Applies on next resume.</small></div>
           {interventionError && <p className="error" role="alert">{interventionError}</p>}
         </form>}
         {!!session.interventions?.length && <ol className="human-intervention-history">{session.interventions.slice(-8).reverse().map(item => <li key={item.id}>
@@ -937,6 +1060,26 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
   const [announcement, setAnnouncement] = useState('');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
+  const noticeStorageKey = `sigma.dismissedSessionNotices:${path}`;
+  const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState<Set<string>>(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(noticeStorageKey) || '[]');
+      return new Set(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []);
+    } catch { return new Set<string>(); }
+  });
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(noticeStorageKey) || '[]');
+      setDismissedNoticeKeys(new Set(Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : []));
+    } catch { setDismissedNoticeKeys(new Set()); }
+  }, [noticeStorageKey]);
+  const dismissSessionNotice = (key: string) => {
+    setDismissedNoticeKeys(current => {
+      const next = new Set([...current, key].slice(-250));
+      try { window.localStorage.setItem(noticeStorageKey, JSON.stringify([...next])); } catch { /* Local storage can be unavailable; in-memory dismissal still works. */ }
+      return next;
+    });
+  };
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
@@ -1262,12 +1405,12 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
+                {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
             </div>
-            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
+            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
