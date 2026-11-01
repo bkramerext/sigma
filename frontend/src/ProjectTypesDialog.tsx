@@ -27,8 +27,7 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const selected = options.find(option => option.id === value);
-  const widestLabel = Math.max(4, ...options.map(option => option.name.length));
-  const pickerWidth = `min(100%, ${Math.ceil(widestLabel * 0.7 + 7)}ch)`;
+  const widestName = options.reduce((longest, option) => option.name.length > longest.length ? option.name : longest, "None");
   useEffect(() => {
     if (!expanded) return;
     const outside = (event: PointerEvent) => {
@@ -37,7 +36,8 @@ function BasedOnPicker({ value, options, renderIcon, onChoose }: {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, [expanded]);
-  return <div className="research-type-picker pt-based-on-picker" ref={root} style={{ width: pickerWidth }}>
+  return <div className="research-type-picker pt-based-on-picker" ref={root}>
+    <span className="pt-picker-width-measure" aria-hidden="true"><span className="pt-picker-icon-space"/><span>{widestName}</span><span className="pt-picker-chevron-space"/></span>
     <button ref={trigger} type="button" role="combobox" aria-label="Based on project type" aria-expanded={expanded}
       aria-haspopup="listbox" onClick={() => setExpanded(open => !open)}
       onKeyDown={event => {
