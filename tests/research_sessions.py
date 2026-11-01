@@ -6174,6 +6174,72 @@ async def test_parallel_budget_pressure_defers_without_ending_research(path: Pat
     assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
 
 
+async def _main_wave_dispatch_for_parity(
+    session_id: str,
+    path: str,
+    selected: list[dict[str, Any]],
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+    run_wave,
+) -> None:
+    """Original main@48c1fb2 dispatch logic, retained as baseline fixture.
+
+    This deliberately uses the original three wave phases and calls the same
+    role implementation as production. Only scheduling changes in the A/B.
+    """
+    needs_review = [branch for branch in selected if branch.get("pending_investigation")]
+    needs_investigation = [
+        branch for branch in selected if not branch.get("pending_investigation")
+    ]
+    await run_wave(
+        [
+            research_sessions._portfolio_role_call_with_recovery(
+                session_id,
+                path,
+                branch["strategy_id"],
+                "skeptic",
+                branch["cycle"],
+                semaphore,
+                state_lock,
+            )
+            for branch in needs_review
+        ]
+    )
+    investigators = await run_wave(
+        [
+            research_sessions._portfolio_role_call_with_recovery(
+                session_id,
+                path,
+                branch["strategy_id"],
+                "investigator",
+                branch["cycle"] + 1,
+                semaphore,
+                state_lock,
+            )
+            for branch in needs_investigation
+        ]
+    )
+    investigator_success = [
+        branch
+        for branch, result in zip(needs_investigation, investigators, strict=True)
+        if result is True
+    ]
+    await run_wave(
+        [
+            research_sessions._portfolio_role_call_with_recovery(
+                session_id,
+                path,
+                branch["strategy_id"],
+                "skeptic",
+                branch["cycle"] + 1,
+                semaphore,
+                state_lock,
+            )
+            for branch in investigator_success
+        ]
+    )
+
+
 def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
     """Identical deterministic role outputs must produce identical research data.
 
@@ -6190,8 +6256,11 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
         limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 2, "model_calls": 8}
         research_sessions.save_limits(str(path), limits)
         seen: dict[tuple[str, int, str], dict[str, Any]] = {}
+        slow_investigator_active = False
+        fast_skeptic_overlapped_slow_investigator = False
 
         async def handler(request):
+            nonlocal slow_investigator_active, fast_skeptic_overlapped_slow_investigator
             payload = json.loads(request.content)
             context = json.loads(payload["input"])
             role = payload["text"]["format"]["name"]
@@ -6211,7 +6280,18 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
                     else None
                 ),
             }
-            await asyncio.sleep(0.008 if title == first.title else 0.001)
+            if title == first.title and cycle == 1 and role == "research_investigator":
+                slow_investigator_active = True
+                try:
+                    await asyncio.sleep(0.06)
+                finally:
+                    slow_investigator_active = False
+            elif title == second.title and cycle == 1 and role == "research_skeptic":
+                if slow_investigator_active:
+                    fast_skeptic_overlapped_slow_investigator = True
+                await asyncio.sleep(0.002)
+            else:
+                await asyncio.sleep(0.002)
             if role == "research_investigator":
                 output = investigation(cycle)
                 output["claim"] = f"{title} finding at round {cycle}."
@@ -6231,6 +6311,15 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(research_sessions, "execution_capabilities", return_value=[]),
+            patch.object(
+                research_sessions,
+                "_portfolio_run_selected",
+                new=(
+                    _main_wave_dispatch_for_parity
+                    if name == "original-main"
+                    else research_sessions._portfolio_run_selected
+                ),
+            ),
             patch(
                 "sigma.research_sessions.httpx.AsyncClient",
                 side_effect=lambda **kwargs: REAL_CLIENT(
@@ -6274,11 +6363,22 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             )
             for branch in finished["strategy_runs"]
         ]
-        return seen, findings, decisions, finished["outcome"]["assessment"]
+        return (
+            seen,
+            findings,
+            decisions,
+            finished["outcome"]["assessment"],
+            fast_skeptic_overlapped_slow_investigator,
+        )
 
-    serial = asyncio.run(scenario("serial", 1))
+    baseline = asyncio.run(scenario("original-main", 3))
     parallel = asyncio.run(scenario("parallel", 32))
-    assert parallel == serial, "Parallel dispatch changed saved research or provider context"
+    assert baseline[:-1] == parallel[:-1], (
+        "New parallel dispatch changed provider inputs or research results "
+        "relative to original main@48c1fb2 scheduling"
+    )
+    assert baseline[-1] is False, "Original main unexpectedly overlapped the phases"
+    assert parallel[-1] is True, "Parallel scheduling did not exercise overlap"
 
 
 async def test_peer_finding_changes_target_investigator_after_stop_and_resume(path: Path):
