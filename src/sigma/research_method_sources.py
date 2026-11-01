@@ -66,8 +66,8 @@ CATALOG: tuple[dict[str, str], ...] = (
         "id": "nasa-systems-handbook",
         "tier": "discipline",
         "mode": "engineering",
-        "title": "NASA — Systems Engineering Handbook",
-        "url": "https://www.nasa.gov/reference/systems-engineering-handbook/",
+        "title": "NASA Systems Engineering Handbook — 6.8 Decision Analysis",
+        "url": "https://www.nasa.gov/reference/6-8-decision-analysis/",
         "notes": "Compare feasible alternatives against a common requirement and measurable acceptance criterion. Separate proposed design, analytical bound, implementation feasibility, risks and residual uncertainty.",
     },
     {
@@ -91,8 +91,8 @@ CATALOG: tuple[dict[str, str], ...] = (
         "tier": "branch",
         "branch": "combinatorics",
         "mode": "mathematical",
-        "title": "Keller & Trotter — Applied Combinatorics (open HTML textbook)",
-        "url": "https://appliedcombinatorics.org/appcomb/",
+        "title": "Oscar Levin — Generating Functions (open HTML textbook)",
+        "url": "https://discrete.openmathbooks.org/dmoi4/sec_addtops-genfun.html",
         "notes": "For finite counting use a bijection, generating function or recurrence only when its interpretation is derived. Verify initial conditions, weighted identities and exact finite cases; distinguish computationally fitted identities from global proof.",
     },
     {
