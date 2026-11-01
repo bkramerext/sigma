@@ -2314,12 +2314,106 @@ def test_hosted_deployment_forwards_global_spend_window() -> None:
     ), "The hosted backend silently ignored the approved spending-window setting."
 
 
+def test_maximum_liability_enforced_across_calls() -> None:
+    """An estimated member charge cannot overcommit the global worst-case pool."""
+    with TemporaryDirectory(prefix="sigma-global-liability-") as directory:
+        root = Path(directory)
+        ledger_root = root / "ledger"
+        ledger_root.mkdir(mode=0o700)
+        member = workspace(root, "c" * 32)
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+                    "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "1.00",
+                    "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+                },
+            ),
+            patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+            patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=False),
+            patch.object(
+                cloud_research,
+                "_effective_user_spend_ceiling_decimal",
+                return_value=Decimal("1.00"),
+            ),
+        ):
+            binding = cloud_workspaces._CURRENT.set(member)
+            try:
+                first = job(member.workspace_id)
+                cloud_research.prepare_job(first)
+                assert cloud_research.claim_job(first["id"])
+                cloud_research.reserve_call(
+                    first["id"],
+                    "liability-a",
+                    0.02,
+                    100,
+                    maximum_liability_usd=0.80,
+                )
+                # The user allowance sees 2 cents, but globally 80 cents is held.
+                assert cloud_research.snapshot()["user_reserved_and_estimated_usd"] == 0.02
+                assert cloud_research.snapshot()["global_remaining_usd"] == 0.20
+                try:
+                    cloud_research.reserve_call(
+                        first["id"],
+                        "liability-b",
+                        0.02,
+                        100,
+                        maximum_liability_usd=0.30,
+                    )
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "global" in str(exc).lower()
+                else:
+                    raise AssertionError("The global cap admitted an unfunded output exposure")
+                cloud_research.settle_call(
+                    first["id"],
+                    "liability-a",
+                    input_tokens=90,
+                    output_tokens=10,
+                    estimated_cost_usd=0.02,
+                )
+                cloud_research.reserve_call(
+                    first["id"],
+                    "liability-b",
+                    0.02,
+                    100,
+                    maximum_liability_usd=0.30,
+                )
+                assert cloud_research.snapshot()["global_remaining_usd"] == 0.68
+
+                # Parallel admission must remain serializable: each new call
+                # estimates one cent, but claims thirty cents of global risk.
+                def concurrent_reserve(index: int) -> bool:
+                    thread_binding = cloud_workspaces._CURRENT.set(member)
+                    try:
+                        cloud_research.reserve_call(
+                            first["id"],
+                            f"liability-parallel-{index}",
+                            0.01,
+                            10,
+                            maximum_liability_usd=0.30,
+                        )
+                        return True
+                    except cloud_research.CloudResearchUnavailable:
+                        return False
+                    finally:
+                        cloud_workspaces._CURRENT.reset(thread_binding)
+
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    admitted = list(pool.map(concurrent_reserve, range(8)))
+                assert sum(admitted) == 2, admitted
+                assert cloud_research.snapshot()["global_remaining_usd"] == 0.08
+            finally:
+                cloud_workspaces._CURRENT.reset(binding)
+
+
 def main() -> None:
     # This suite validates the explicitly configured API-key admission path;
     # never inherit the repository's local ChatGPT provider default.
     os.environ.setdefault("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
     os.environ.setdefault("SIGMA_CLOUD_OPENAI_API_KEY", "cloud-research-fixture-key")
     test_hosted_deployment_forwards_global_spend_window()
+    test_maximum_liability_enforced_across_calls()
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         base = Path(temp)
         persistent_root = (

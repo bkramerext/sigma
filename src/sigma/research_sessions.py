@@ -10,10 +10,13 @@ import json
 import math
 import os
 import re
+import stat
 import threading
+import weakref
 import zlib
-from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
+from collections import deque
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -120,6 +123,12 @@ _session_state_locks: dict[str, asyncio.Lock] = {}
 _manager_lock = asyncio.Lock()
 _gate = threading.Lock()
 _python_gate = threading.Lock()
+# In-process admission gates; hosted calls also acquire cross-process OS slots.
+_portfolio_global_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _FairProviderGate] = (
+    weakref.WeakKeyDictionary()
+)
+_portfolio_global_gates_lock = threading.Lock()
+_portfolio_slot_cursor = 0
 
 
 class ResearchContextLimitError(ProjectError):
@@ -2935,15 +2944,25 @@ def _settle_request_budget(
     return "Provider usage is unavailable; the full request and output reservation remains held."
 
 
-def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) -> float | None:
+def _reserve_cost(
+    record: dict[str, Any], context: dict[str, Any], role: str, *, estimate: bool = False
+) -> float | None:
     prices = TOKEN_PRICES_PER_MILLION.get(record["model"])
     if prices is None:
         return None
     payload = _role_request_payload(record, role, context)
     input_byte_bound = len(_serialized_role_request(payload)) + 8192
-    output_tokens = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
-    if output_tokens is None:
+    provider_output_bound = MODEL_OUTPUT_LIMITS.get(str(record.get("model", "")))
+    if provider_output_bound is None:
         return None
+    # Default remains the conservative upper-bound contract for legacy
+    # consumers. Only portfolio funding admission opts into estimates;
+    # provider payload/output constraints and researcher context do not change.
+    output_tokens = (
+        min(provider_output_bound, max(1, int(record.get("output_token_limit") or 4000)))
+        if estimate
+        else provider_output_bound
+    )
     # UTF-8 bytes conservatively bound billable input tokens. OpenAI applies
     # 2x input/cache and 1.5x output rates above its documented long-context
     # threshold; reflect that in both admission and settlement.
@@ -2965,7 +2984,7 @@ def _call_cost_reservation(
     if record.get("cloud_sponsored") is True or (
         record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
     ):
-        return _reserve_cost(record, context, role)
+        return _reserve_cost(record, context, role, estimate=True)
     return None
 
 
@@ -8431,6 +8450,16 @@ def _commit_portfolio_review(
     return artifact
 
 
+def _portfolio_has_pending_reservation(
+    record: dict[str, Any], exclude_step_id: str | None = None
+) -> bool:
+    """Transient funding pressure must not terminate work that can settle."""
+    return any(
+        step.get("status") == "running" and step.get("id") != exclude_step_id
+        for step in record.get("steps", [])
+    )
+
+
 async def _portfolio_role_call(
     session_id: str,
     path: str,
@@ -8439,11 +8468,62 @@ async def _portfolio_role_call(
     cycle: int,
     semaphore: asyncio.Semaphore,
     state_lock: asyncio.Lock,
-) -> bool | Literal["retry"]:
+) -> bool | Literal["retry", "funding_wait"]:
     if role == "skeptic":
         await _complete_pending_python(session_id, path, strategy_id, cycle, state_lock)
-    async with semaphore:
-        tools = await asyncio.to_thread(execution_capabilities)
+    # Mandatory evidence guards must run BEFORE any credential/model preflight.
+    # Reassemble after the await to include newly delivered human interventions.
+    async with state_lock:
+        initial = _read(path, session_id)
+        if initial["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+            return False
+        initial_branch = next(
+            item for item in initial["strategy_runs"] if item["strategy_id"] == strategy_id
+        )
+        try:
+            _portfolio_context(initial, initial_branch, role, cycle)
+        except ResearchContextLimitError as exc:
+            _record_preflight_failure(initial, initial_branch, role, "context_assembly", exc)
+            initial_branch["status"] = "paused"
+            initial_branch["current_action"] = "Paused · context limit"
+            initial_branch["termination_reason_code"] = "context_limit"
+            initial_branch["reason"] = str(exc).strip()[:1000]
+            initial["message"] = initial_branch["reason"]
+            _event(initial, "research.context_blocked", initial_branch["reason"])
+            _save(path, initial)
+            return False
+    # Never hold a session lock or provider capacity through awaited identity
+    # and model checks. This is optimistic preflight; frozen identity/model
+    # bindings are validated again after acquiring the short state lock.
+    record_for_preflight = _read(path, session_id)
+    if record_for_preflight["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+        return False
+    try:
+        view, _guard = _snapshot(path)
+    except Exception as exc:
+        raise ProjectError(f"Project snapshot failed before dispatch: {exc}") from exc
+    if not _same_session_project(record_for_preflight, view):
+        raise ProjectError("Project identity changed; session paused before a new call.")
+    try:
+        credential = await asyncio.wait_for(auth_context(), timeout=PREFLIGHT_TIMEOUT)
+    except Exception as exc:
+        raise ProjectError(
+            "AI account or billing connection could not be verified; "
+            f"session paused before a new call: {str(exc).strip() or 'preflight timed out'}"[:500]
+        ) from exc
+    try:
+        config = await asyncio.wait_for(
+            _frozen_session_configuration(view, credential, record_for_preflight),
+            timeout=PREFLIGHT_TIMEOUT,
+        )
+    except Exception as exc:
+        raise ProjectError(
+            "Selected model is no longer available; session paused before a new call: "
+            f"{str(exc).strip() or 'preflight timed out'}"[:500]
+        ) from exc
+    tools = await asyncio.to_thread(execution_capabilities)
+    # Reserve funded attempts only after a global provider slot is available.
+    async with _portfolio_global_gate(session_id):
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
@@ -8452,6 +8532,53 @@ async def _portfolio_role_call(
                 item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
             )
             if branch.get("status") not in {"queued", "running"}:
+                return False
+            # Enforce the saved dependency state, not merely the absence of a
+            # provider request. A second Investigator cannot start after its
+            # result was saved but before the matching Skeptic has dispatched.
+            if role == "investigator":
+                prior_cycle = branch.get("cycle", 0)
+                # Transient failures retry the same cycle under a new durable
+                # request ID. Do not block a legitimate retry, and never
+                # rerun a successfully completed Investigator turn.
+                retry_cycle = (
+                    cycle == prior_cycle
+                    and any(
+                        item.get("strategy_id") == strategy_id
+                        and item.get("role") == "investigator"
+                        and item.get("cycle") == cycle
+                        and item.get("status") in {"failed", "incomplete"}
+                        for item in record.get("steps", [])
+                    )
+                    and not any(
+                        item.get("strategy_id") == strategy_id
+                        and item.get("role") == "investigator"
+                        and item.get("cycle") == cycle
+                        and item.get("status") == "completed"
+                        for item in record.get("steps", [])
+                    )
+                )
+                if (
+                    not (cycle == prior_cycle + 1 or retry_cycle)
+                    or branch.get("pending_investigation") is not None
+                    or branch.get("pending_skeptic") is not None
+                ):
+                    return False
+            elif (
+                cycle != branch.get("cycle")
+                or branch.get("pending_investigation") is None
+                or branch.get("pending_skeptic") is not None
+            ):
+                return False
+            # Persistent per-strategy dispatch fencing. The session state lock
+            # protects this check and the subsequent saved step reservation,
+            # even when another strategy's provider call is still in flight.
+            # The process-independent worker lock prevents a second backend
+            # worker from owning this session simultaneously.
+            if any(
+                step.get("strategy_id") == strategy_id and step.get("status") == "running"
+                for step in record.get("steps", [])
+            ):
                 return False
             try:
                 context = _portfolio_context(record, branch, role, cycle)
@@ -8510,61 +8637,24 @@ async def _portfolio_role_call(
                 )
                 _save(path, record)
                 return False
-            try:
-                view, _guard = _snapshot(path)
-            except Exception as exc:
-                _record_preflight_failure(record, branch, role, "project_snapshot", exc)
-                _save(path, record)
-                raise
             if not _same_session_project(record, view):
-                exc = ProjectError("Project identity changed; session paused before a new call.")
-                _record_preflight_failure(record, branch, role, "project_binding", exc)
-                _save(path, record)
-                raise exc
-            try:
-                credential = await asyncio.wait_for(auth_context(), timeout=PREFLIGHT_TIMEOUT)
-            except Exception as exc:
-                _record_preflight_failure(record, branch, role, "account_verification", exc)
-                _save(path, record)
-                raise ProjectError(
-                    "AI account or billing connection could not be verified; "
-                    "session paused before a new call: "
-                    f"{str(exc).strip() or 'preflight timed out'}"[:500]
-                ) from exc
+                raise ProjectError("Project identity changed; session paused before a new call.")
             if (
                 credential["mode"] != record["mode"]
                 or _digest(credential["identity"]) != record["identity_hash"]
             ):
-                exc = ProjectError(
+                raise ProjectError(
                     "AI account or billing identity changed; session paused before another call."
                 )
-                _record_preflight_failure(record, branch, role, "account_binding", exc)
-                _save(path, record)
-                raise exc
-            try:
-                config = await asyncio.wait_for(
-                    _frozen_session_configuration(view, credential, record),
-                    timeout=PREFLIGHT_TIMEOUT,
-                )
-            except Exception as exc:
-                _record_preflight_failure(record, branch, role, "model_configuration", exc)
-                _save(path, record)
-                raise ProjectError(
-                    "Selected model is no longer available; session paused before a new call: "
-                    f"{str(exc).strip() or 'preflight timed out'}"[:500]
-                ) from exc
             if (
                 not config["available"]
                 or config["model"] != record["model"]
                 or config["reasoning_effort"] != record["reasoning_effort"]
             ):
-                exc = ProjectError(
+                raise ProjectError(
                     "Selected model is no longer available; session paused before a new call: "
                     + config.get("message", "the saved model configuration is unavailable")
                 )
-                _record_preflight_failure(record, branch, role, "model_configuration", exc)
-                _save(path, record)
-                raise exc
             if isinstance(record.get("deadline_at"), str) and datetime.fromisoformat(
                 record["deadline_at"]
             ) <= datetime.now(UTC):
@@ -8594,16 +8684,29 @@ async def _portfolio_role_call(
                 _role_request_payload(record, role, context)
             )
             request_token_bound = len(serialized_request) + 8192
-            token_reserve = request_token_bound + output_bound
+            # Hard input/cost budgets reserve the full model output bound.
+            # Sponsored user token allowances remain estimated; global dollar
+            # exposure is independently reserved at the maximum output bound.
+            estimated_output_tokens = (
+                output_bound
+                if isinstance(hard_ledger, dict)
+                else min(output_bound, max(1, int(record.get("output_token_limit") or 4000)))
+            )
+            token_reserve = request_token_bound + estimated_output_tokens
             if isinstance(hard_ledger, dict):
                 try:
                     budget_reservation = reserve_before_dispatch(
                         hard_ledger,
                         call_id=step_id,
                         request_body=serialized_request,
-                        output_token_reservation=output_bound,
+                        output_token_reservation=estimated_output_tokens,
+                        allow_concurrent=True,
                     )
                 except BudgetExceeded as exc:
+                    if _portfolio_has_pending_reservation(record):
+                        branch["current_action"] = "Waiting for funding settlement"
+                        _save(path, record)
+                        return "funding_wait"
                     branch["status"] = "ended"
                     branch["reason"] = str(exc)
                     branch["current_action"] = "Budget limit"
@@ -8659,6 +8762,10 @@ async def _portfolio_role_call(
                     record["tokens_reserved"] = max(
                         0, int(record.get("tokens_reserved", 0)) - token_reserve
                     )
+                if _portfolio_has_pending_reservation(record):
+                    branch["current_action"] = "Waiting for funding settlement"
+                    _save(path, record)
+                    return "funding_wait"
                 branch["status"] = "ended"
                 branch["reason"] = (
                     "The bounded session token budget cannot reserve another provider call."
@@ -8682,6 +8789,16 @@ async def _portfolio_role_call(
                         record["tokens_reserved"] = max(
                             0, int(record.get("tokens_reserved", 0)) - token_reserve
                         )
+                    if (
+                        reserve is not None
+                        and record.get("cost_status") == "available"
+                        and isinstance(current_cost, (int, float))
+                        and current_cost + reserve <= record["maximum_estimated_cost_usd"]
+                        and _portfolio_has_pending_reservation(record)
+                    ):
+                        branch["current_action"] = "Waiting for funding settlement"
+                        _save(path, record)
+                        return "funding_wait"
                     branch["status"] = "paused"
                     branch["reason"] = (
                         "A conservative cost reserve prevented another provider call."
@@ -8795,7 +8912,16 @@ async def _portfolio_role_call(
                         raise cloud_research.CloudResearchUnavailable(
                             "Cloud inference cannot be bounded for this model."
                         )
-                    cloud_research.reserve_call(session_id, step_id, reserve, token_reserve)
+                    # The user's sponsored allowance uses a practical cost
+                    # estimate, while the shared global cap holds the full
+                    # provider-output exposure until actual usage settles.
+                    cloud_research.reserve_call(
+                        session_id,
+                        step_id,
+                        reserve,
+                        token_reserve,
+                        maximum_liability_usd=_reserve_cost(record, context, role, estimate=False),
+                    )
                 except cloud_research.CloudResearchUnavailable as exc:
                     record["calls_used"] = max(0, record["calls_used"] - 1)
                     branch["calls_used"] = max(0, branch["calls_used"] - 1)
@@ -8819,7 +8945,35 @@ async def _portfolio_role_call(
                         }
                     )
                     # The cloud ledger refused this reservation before dispatch.
-                    # Keep it retryable after allowance/ceiling replenishment.
+                    # If concurrent requests have unsettled reservations, defer
+                    # without consuming an agent turn. Their eventual settlements
+                    # may release sufficient headroom for this exact next turn.
+                    if _portfolio_has_pending_reservation(record, step_id) and any(
+                        term in str(exc).casefold()
+                        for term in (
+                            "capacity",
+                            "allowance",
+                            "spend ceiling",
+                            "token budget",
+                            "token reservation",
+                        )
+                    ):
+                        step["failure_kind"] = "funding_wait_pre_dispatch"
+                        branch["status"] = "queued"
+                        branch["current_action"] = "Waiting for funding settlement"
+                        record["current_steps"] = [
+                            item["id"]
+                            for item in record["steps"]
+                            if item.get("status") == "running"
+                        ]
+                        record["current_step"] = (
+                            record["current_steps"][-1] if record["current_steps"] else None
+                        )
+                        _refresh_token_accounting(record)
+                        _save(path, record)
+                        return "funding_wait"
+                    # Keep permanent funding rejection retryable only after
+                    # allowance/ceiling replenishment by explicit resume.
                     branch["status"] = "paused"
                     branch["funding_resume_allowed"] = True
                     branch["current_action"] = "Budget limit"
@@ -9708,9 +9862,18 @@ async def _portfolio_role_call_with_recovery(
     """Retry only explicitly bounded clipped or transient attempts."""
     max_attempts = MAX_CLIPPED_AUTO_RETRIES + MAX_TRANSIENT_AUTO_RETRIES + 1
     for attempt in range(max_attempts):
-        result = await _portfolio_role_call(
-            session_id, path, strategy_id, role, cycle, semaphore, state_lock
-        )
+        # Funding deferrals are not paid attempts or recovery retries. Wait
+        # outside all locks and provider slots until an earlier call settles.
+        while True:
+            # Admission order is determined before asynchronous account/model
+            # preflight. Do not hold the global provider gate during preflight.
+            async with semaphore:
+                result = await _portfolio_role_call(
+                    session_id, path, strategy_id, role, cycle, semaphore, state_lock
+                )
+            if result != "funding_wait":
+                break
+            await asyncio.sleep(0.2)
         if result != "retry":
             return result
         record = _read(path, session_id)
@@ -9958,10 +10121,11 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
 
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
-    # A sponsored call holds a conservative allowance reservation until usage
-    # settles. Dispatch sequentially so sibling calls do not fail just because
-    # they overlap those temporary reservations.
-    semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
+    # One in-flight call per strategy; the backend-wide gate protects provider
+    # capacity, while the existing durable ledger reserves funded attempts.
+    semaphore = asyncio.Semaphore(
+        _portfolio_call_concurrency(len(_read(path, session_id).get("strategy_runs", [])))
+    )
 
     async def run_wave(calls: list[Any]) -> list[Any]:
         # Do not hold process-global research/proposal gates across provider I/O.
@@ -10196,57 +10360,11 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             record["current_action"] = f"{len(selected)} strategies active · shared budget"
             _save(path, record)
 
-        needs_review = [branch for branch in selected if branch.get("pending_investigation")]
-        needs_investigation = [
-            branch for branch in selected if not branch.get("pending_investigation")
-        ]
-        await run_wave(
-            [
-                _portfolio_role_call_with_recovery(
-                    session_id,
-                    path,
-                    branch["strategy_id"],
-                    "skeptic",
-                    branch["cycle"],
-                    semaphore,
-                    state_lock,
-                )
-                for branch in needs_review
-            ]
-        )
-        investigators = await run_wave(
-            [
-                _portfolio_role_call_with_recovery(
-                    session_id,
-                    path,
-                    branch["strategy_id"],
-                    "investigator",
-                    branch["cycle"] + 1,
-                    semaphore,
-                    state_lock,
-                )
-                for branch in needs_investigation
-            ]
-        )
-        investigator_success = [
-            branch
-            for branch, result in zip(needs_investigation, investigators, strict=True)
-            if result is True
-        ]
-        await run_wave(
-            [
-                _portfolio_role_call_with_recovery(
-                    session_id,
-                    path,
-                    branch["strategy_id"],
-                    "skeptic",
-                    branch["cycle"] + 1,
-                    semaphore,
-                    state_lock,
-                )
-                for branch in investigator_success
-            ]
-        )
+        # Independent branch pipelines: a fast Investigator can dispatch its
+        # Skeptic without waiting for an unrelated slow Investigator. Each
+        # branch remains strictly sequential; the coordinator still applies
+        # cross-branch decisions at a completed wave boundary.
+        await _portfolio_run_selected(session_id, path, selected, semaphore, state_lock, run_wave)
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
@@ -10301,8 +10419,264 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             _save(path, record)
 
 
-def _portfolio_call_concurrency() -> int:
-    return 1 if cloud_research.billing_enabled() else 3
+async def _portfolio_run_selected(
+    session_id: str,
+    path: str,
+    selected: list[dict[str, Any]],
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+    run_wave: Callable[[list[Any]], Awaitable[list[Any]]],
+) -> None:
+    """Schedule independent I/S branches; coordinator still commits a full round.
+
+    The dispatched roles never publish peer-visible artifacts until this whole
+    batch returns and _portfolio_worker performs its coordinated review. Tests
+    can replace this dispatch seam with the original wave-based scheduler to
+    check that parallel dispatch preserves the actual research inputs/results.
+    """
+    await run_wave(
+        [
+            _portfolio_strategy_pipeline(session_id, path, branch, semaphore, state_lock)
+            for branch in selected
+        ]
+    )
+
+
+async def _portfolio_strategy_pipeline(
+    session_id: str,
+    path: str,
+    branch: dict[str, Any],
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+) -> bool:
+    """Complete one branch's next dependency-ordered turn or turn pair."""
+    strategy_id = branch["strategy_id"]
+    cycle = branch["cycle"]
+    role = "skeptic" if branch.get("pending_investigation") is not None else "investigator"
+    try:
+        if role == "skeptic":
+            return await _portfolio_role_call_with_recovery(
+                session_id, path, strategy_id, role, cycle, semaphore, state_lock
+            )
+        if not await _portfolio_role_call_with_recovery(
+            session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
+        ):
+            return False
+        role = "skeptic"
+        return await _portfolio_role_call_with_recovery(
+            session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
+        )
+    except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
+        async with state_lock:
+            record = _read(path, session_id)
+            if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
+                return False
+            saved = next(
+                item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
+            )
+            stage = (
+                "project_snapshot"
+                if "project snapshot" in str(exc).lower()
+                else "model_configuration"
+                if "selected model is no longer available" in str(exc).lower()
+                else "account_verification"
+                if "account or billing" in str(exc).lower()
+                else "branch_execution"
+            )
+            # Preserve the original timeout classification beneath a
+            # user-friendly model/account availability error.
+            cause = exc.__cause__ if isinstance(exc.__cause__, Exception) else exc
+            _record_preflight_failure(record, saved, role, stage, cause)
+            # Conservatively retain any uncertainty about a dispatched attempt.
+            for step in record.get("steps", []):
+                if step.get("strategy_id") != strategy_id or step.get("status") != "running":
+                    continue
+                step["status"] = "interrupted"
+                step["failure_kind"] = "branch_execution_failure"
+                step["token_usage_status"] = "unavailable"
+                step["finished_at"] = _now()
+                if isinstance(record.get("hard_budget_ledger"), dict):
+                    mark_unknown(record["hard_budget_ledger"], call_id=step["id"])
+                if cloud_research.billing_enabled() and step.get("attempt_id"):
+                    try:
+                        cloud_research.mark_call_unknown(session_id, step["attempt_id"])
+                    except cloud_research.CloudResearchUnavailable:
+                        pass  # Retain the original spending reservation.
+            guarded = _is_guard_failure(str(exc))
+            saved["status"] = "paused" if guarded else "failed"
+            saved["current_action"] = "Paused · preflight" if guarded else "Failed · strategy"
+            saved["reason"] = str(exc).strip()[:1000] or "Strategy execution failed."
+            saved["termination_reason_code"] = (
+                "preflight_error" if guarded else "strategy_execution_failure"
+            )
+            _refresh_token_accounting(record)
+            _event(
+                record,
+                "strategy.paused" if guarded else "strategy.failed",
+                f"{saved['strategy_title']}: {saved['reason']}",
+            )
+            _save(path, record)
+        return False
+
+
+def _bounded_concurrency_env(name: str, default: int, maximum: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    # Invalid values fail closed rather than removing any capacity bound.
+    if not raw.isdecimal():
+        return 1
+    return min(maximum, max(1, int(raw)))
+
+
+def _portfolio_call_concurrency(strategy_count: int) -> int:
+    """No arbitrary session throttle; each strategy may have one active turn."""
+    return max(1, strategy_count)
+
+
+class _FairProviderGate:
+    """Bounded, FIFO-within-owner, round-robin-between-owner provider queue.
+
+    This object is owned by a single event loop. A session may have multiple
+    waiting strategies, but cannot crowd out another user's pending requests.
+    Filesystem slots additionally enforce the backend-wide cap across processes.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.active = 0
+        self.waiting: dict[str, deque[asyncio.Future[None]]] = {}
+        self.owners: deque[str] = deque()
+        self.last_owner: str | None = None
+
+    def _dispatch(self) -> None:
+        while self.active < self.limit and self.owners:
+            # Give another waiting owner priority over the one last served.
+            # Merely appending a late arrival behind a busy owner's backlog
+            # would otherwise let one session monopolize released capacity.
+            if len(self.owners) > 1 and self.owners[0] == self.last_owner:
+                self.owners.rotate(-1)
+            owner = self.owners.popleft()
+            waiting = self.waiting[owner]
+            future = waiting.popleft()
+            if waiting:
+                self.owners.append(owner)
+            else:
+                del self.waiting[owner]
+            if future.cancelled():
+                continue
+            self.active += 1
+            self.last_owner = owner
+            future.set_result(None)
+
+    async def acquire(self, owner: str) -> None:
+        future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        waiting = self.waiting.get(owner)
+        if waiting is None:
+            waiting = deque()
+            self.waiting[owner] = waiting
+            self.owners.append(owner)
+        waiting.append(future)
+        self._dispatch()
+        try:
+            await future
+        except BaseException:
+            if future.done() and not future.cancelled():
+                # Cancellation may race with delivery of a provider slot.
+                self.release()
+            else:
+                future.cancel()
+                waiting = self.waiting.get(owner)
+                if waiting is not None:
+                    waiting.remove(future)
+                    if not waiting:
+                        del self.waiting[owner]
+                        self.owners.remove(owner)
+                self._dispatch()
+            raise
+
+    def release(self) -> None:
+        if self.active <= 0:
+            raise RuntimeError("Provider capacity was released without a matching claim.")
+        self.active -= 1
+        self._dispatch()
+
+
+def _portfolio_global_limit() -> int:
+    """Total in-flight research provider requests on this backend: 32."""
+    return _bounded_concurrency_env("SIGMA_RESEARCH_GLOBAL_INFLIGHT", 32, 32)
+
+
+def _shared_provider_slot() -> int | None:
+    """Claim one OS-wide slot, or return None if every slot is occupied.
+
+    Hosted backend processes share a private storage root. OS flock releases on
+    process exit, without treating uncertain inference attempts as complete.
+    """
+    global _portfolio_slot_cursor
+    # All local processes share the same projects directory; hosted workers
+    # share cloud workspace storage. Use the OS lock in BOTH modes.
+    from sigma.projects import local_projects_root
+
+    base = cloud_workspaces.storage_root() if cloud_workspaces.enabled() else local_projects_root()
+    root = base / "provider-slots"
+    root.mkdir(mode=0o700, exist_ok=True)
+    info = root.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+        raise ProjectError("Shared provider capacity directory is not private.")
+    slots = _portfolio_global_limit()
+    with _portfolio_global_gates_lock:
+        first = _portfolio_slot_cursor % slots
+        _portfolio_slot_cursor += 1
+    for offset in range(slots):
+        path = root / f"slot-{(first + offset) % slots:02d}.lock"
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        acquired = False
+        try:
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
+            ):
+                raise ProjectError("Shared provider capacity slot is not private.")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            acquired = True
+            return fd
+        finally:
+            if not acquired:
+                os.close(fd)
+    return None
+
+
+@asynccontextmanager
+async def _portfolio_global_gate(session_id: str):
+    loop = asyncio.get_running_loop()
+    with _portfolio_global_gates_lock:
+        gate = _portfolio_global_gates.get(loop)
+        if gate is None:
+            gate = _FairProviderGate(_portfolio_global_limit())
+            _portfolio_global_gates[loop] = gate
+    workspace = cloud_workspaces.current()
+    owner = workspace.workspace_id if workspace is not None else session_id
+    await gate.acquire(owner)
+    fd: int | None = None
+    try:
+        # Cross-process provider cap is enforced through durable private OS
+        # slots; waiters do not own project/session state locks.
+        while fd is None:
+            fd = _shared_provider_slot()
+            if fd is None:
+                await asyncio.sleep(0.05)
+        yield
+    finally:
+        if fd is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+        gate.release()
 
 
 def _bounded_note(value: Any, limit: int) -> str:
@@ -11054,7 +11428,9 @@ async def _worker(session_id: str, path: str) -> None:
                     guidance=guidance,
                 )
                 _save(path, record)
-                output, usage = await _call(record, role, context, step_id=step["id"])
+                # Legacy sessions share the same backend-wide provider capacity.
+                async with _portfolio_global_gate(session_id):
+                    output, usage = await _call(record, role, context, step_id=step["id"])
             finally:
                 for gate in reversed(gates):
                     gate.release()

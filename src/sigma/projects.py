@@ -1130,6 +1130,11 @@ def projects_root() -> Path:
     workspace = cloud_workspaces.current()
     if workspace is not None:
         return workspace.path
+    return local_projects_root()
+
+
+def local_projects_root() -> Path:
+    """Validate the single local backend root, not a request-bound workspace."""
     from sigma.storage import persistent_disk_enabled
 
     if persistent_disk_enabled():

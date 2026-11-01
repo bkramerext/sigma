@@ -43,7 +43,7 @@ def _call_bounds(ledger: dict[str, Any]) -> tuple[int, int, float, int]:
     cost_bound = 0.0
     for item in ledger["calls"]:
         calls += 1
-        if item["status"] == "settled":
+        if item["status"] in {"settled", "rejected"}:
             input_bound += item["input_tokens"]
             output_bound += item["output_tokens"]
         else:
@@ -61,13 +61,20 @@ def reserve_before_dispatch(
     call_id: str,
     request_body: bytes,
     output_token_reservation: int | None = None,
+    allow_concurrent: bool = False,
 ) -> dict[str, Any]:
-    """Reserve usage/cost before dispatch; request bytes conservatively bound input tokens."""
+    """Reserve usage/cost before dispatch; request bytes bound input tokens.
+
+    Portfolio dispatch may permit multiple distinct reservations when the caller
+    serializes ledger mutations under its session state lock. Every new claim
+    still checks aggregate call, input-token and cost ceilings atomically.
+    Standalone/legacy callers retain the one-outstanding-call default.
+    """
     if ledger.get("version") != LEDGER_VERSION:
         raise BudgetExceeded("Research budget ledger version is invalid")
     if ledger.get("blocked_reason"):
         raise BudgetExceeded("Research arm is blocked by an unknown or invalid provider call")
-    if any(item.get("status") == "reserved" for item in ledger["calls"]):
+    if not allow_concurrent and any(item.get("status") == "reserved" for item in ledger["calls"]):
         raise BudgetExceeded("A prior provider call is still in flight or unsettled")
     if any(item.get("call_id") == call_id for item in ledger["calls"]):
         raise BudgetExceeded("Research call ID has already been reserved")

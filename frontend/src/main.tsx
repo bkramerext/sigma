@@ -214,19 +214,50 @@ function sessionEstimatedCostLabel(session: ResearchSession): string {
   return cost > 0 && cost < 0.001 ? `${label} <$0.001` : `${label} ${amount}`;
 }
 
-function liveResearchSummary(session: ResearchSession): string | null {
+function parallelSessionActivity(session: ResearchSession): string | null {
   if (session.status !== 'running') return null;
-  const action = session.current_action?.trim();
-  const question = session.current_question?.trim();
-  const source = [action, question].filter(Boolean).join(': ');
-  if (!source) return null;
-  const words = source.replace(/\s+/g, ' ').split(' ');
-  return words.length > 50 ? `${words.slice(0, 50).join(' ')}…` : source.replace(/\s+/g, ' ');
+  if (!session.strategy_runs || session.strategy_runs.length <= 1) return null;
+  const active = new Set((session.steps ?? []).filter(step => step.status === 'running').map(step => step.strategy_id));
+  const waiting = session.strategy_runs.filter(branch =>
+    (branch.status === 'queued' || branch.status === 'running') && !active.has(branch.strategy_id),
+  ).length;
+  return `${active.size} in flight · ${waiting} waiting`;
+}
+
+function strategyLiveStatusLines(session: ResearchSession): { id: string; label: string; detail: string }[] {
+  if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
+  const active = new Map(
+    session.steps.filter(step => step.status === 'running' && step.strategy_id)
+      .map(step => [step.strategy_id, step] as const),
+  );
+  return session.strategy_runs.map((branch, index) => {
+    const step = active.get(branch.strategy_id);
+    const action = branch.current_action || '';
+    const role = step?.role === 'skeptic' || /skeptic/i.test(action) ? 'Skeptic'
+      : step?.role === 'investigator' || /investigator/i.test(action) ? 'Investigator'
+        : /coordinat/i.test(action) ? 'Coordinator'
+          : branch.status === 'queued' ? 'Queued'
+            : branch.status === 'paused' ? 'Paused'
+              : branch.status === 'failed' ? 'Failed'
+                : branch.status === 'ended' ? 'Ended' : 'Waiting';
+    const detail = step
+      ? branch.current_question || 'In progress'
+      : branch.status === 'queued' && branch.current_question ? branch.current_question
+        : branch.reason || (action && !['Investigator', 'Skeptic'].includes(action) ? action : 'In progress');
+    // The label already identifies the activity. Do not echo it in the detail.
+    const redundantPrefix = role === 'Coordinator' ? /^Coordinat(?:ing|or)\b[\s:·–—-]*/i
+      : role === 'Waiting' ? /^Waiting(?: for)?\b[\s:·–—-]*/i
+        : role === 'Paused' ? /^(?:Paused|Pausing)\b[\s:·–—-]*/i
+          : role === 'Failed' ? /^Failed\b[\s:·–—-]*/i
+            : role === 'Ended' ? /^Ended\b[\s:·–—-]*/i
+              : role === 'Queued' ? /^Queued\b[\s:·–—-]*/i : null;
+    const compact = (redundantPrefix ? detail.replace(redundantPrefix, '') : detail).replace(/\s+/g, ' ').trim() || 'In progress';
+    return { id: branch.strategy_id, label: `S${index + 1}/${role}`, detail: compact.length > 150 ? `${compact.slice(0, 147)}…` : compact };
+  });
 }
 
 function outcomeDisplayLabel(session: ResearchSession): string {
-  const liveSummary = liveResearchSummary(session);
-  return liveSummary ?? `${session.outcome.label}${session.outcome.provisional ? ' · provisional' : ''}`;
+  return `${session.outcome.label}${session.outcome.provisional ? ' · provisional' : ''}`;
 }
 
 function stoppedSessionGuidance(session: ResearchSession): { cause: string; next: string } {
@@ -1596,8 +1627,9 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {(item.status === 'paused' || item.status === 'stopped') && <SessionRenderBoundary key={`${item.id}:notice`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session #{item.session_number} stopped notice could not be displayed; its saved record remains available in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
-                <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
-                <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
+                {(['ended', 'completed', 'failed'].includes(item.status)) && <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>}
+                <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</small>
+                {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
               </div>
             </div>
             {sessionExpanded ? <ResearchDisplayBoundary label={`Session #${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
