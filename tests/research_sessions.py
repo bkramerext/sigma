@@ -6236,10 +6236,19 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
     from sigma.session_log import log_path as session_log_path
 
     trace, _ = read_session_log_frames(session_log_path(str(path), view.project.id, finished["id"]))
-    # An availability event means an explicit handoff was queued to an active
-    # receiving strategy, not merely that peer evidence was present in the
-    # request. On this terminal two-round test no future receiving turn is
-    # guaranteed, so only require the actual provider-input audit below.
+    # A cross-strategy handoff is queued only while its recipient is active.
+    # Both strategies stop in cycle 2, so a terminal batch need not enqueue
+    # a future handoff. Verify any emitted events have real saved provenance;
+    # the required peer evidence is checked in the provider requests below.
+    available_handoffs = [
+        event for event in trace if event["type"] == "cross_strategy_artifact_availability"
+    ]
+    saved_artifact_ids = {item["id"] for item in finished["artifacts"]}
+    assert all(
+        event["source_artifact_id"] in saved_artifact_ids
+        and event["target_artifact_id"] in saved_artifact_ids
+        for event in available_handoffs
+    )
     peer_requests = [
         event
         for event in trace
