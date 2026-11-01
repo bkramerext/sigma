@@ -522,6 +522,65 @@ def test_tex_proofreading_preserves_science_and_checkpoints_provider_work() -> N
             assert compiled.startswith(b"%PDF-")
 
 
+
+def test_tex_proofreader_three_passes_with_early_convergence() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "three-pass.sigma"
+        view = initialize_project(path, "Three-pass fixture", "Convergent corrections.")
+        state = papers._new_work(
+            "a" * 64, view.project.id, "b" * 64, "fixture", "high", kind="one_shot"
+        )
+        tex = (
+            "\\documentclass{article}\\n\\begin{document}\\n"
+            + r"$\\\\alpha+\\\\beta=3$"
+            + "\\n\\end{document}\\n"
+        )
+        calls = 0
+
+        async def provider(_payload, *_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            corrections = []
+            if calls <= 2:
+                symbol = "alpha" if calls == 1 else "beta"
+                corrections = [
+                    papers.TeXCorrection(
+                        category="math_notation",
+                        find="\\\\\\\\" + symbol,
+                        replace="\\\\" + symbol,
+                        rationale="Correct a double TeX escape.",
+                    )
+                ]
+            return papers.TeXProofreadResult(corrections=corrections), "fixture"
+
+        async def report(*_args, **_kwargs):
+            return None
+
+        async def run():
+            with (
+                patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+                patch.object(papers, "_provider_structured", new=provider),
+            ):
+                return await papers._proofread_tex(
+                    tex, state,
+                    binding={"identity": "fixture", "mode": "api_key", "token": "fixture"},
+                    config={"model": "fixture", "reasoning_effort": "high"},
+                    project_id=view.project.id,
+                    project_path_value=str(path),
+                    report=report,
+                )
+
+        result, checkpoint = asyncio.run(run())
+        assert papers.MAX_PROOFREADER_PASSES == 3
+        assert checkpoint["pass_number"] == 3
+        assert checkpoint["provider_calls_attempted"] == 3
+        assert checkpoint["status"] == "complete"
+        assert r"$\\alpha+\\beta=3$" in result
+        assert calls == 3
+        again, _ = asyncio.run(run())
+        assert again == result
+        assert calls == 3
+
 def test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data() -> None:
     normal = r"\documentclass{article}\begin{document}Result $x=3$.\end{document}"
     assert papers._tex_static_diagnostics(normal) == []
@@ -5481,6 +5540,7 @@ def test_fast_long_draft_obeys_combined_diagram_and_table_preference() -> None:
 
 def main() -> None:
     test_tex_proofreading_preserves_science_and_checkpoints_provider_work()
+    test_tex_proofreader_three_passes_with_early_convergence()
     test_tex_diagnostics_allow_geometry_fixes_but_protect_visual_data()
     test_tex_proofreader_rejects_scientific_edits_and_does_not_replay_uncertain_calls()
     test_longtable_semantic_signature_normalizes_every_table_preamble()
