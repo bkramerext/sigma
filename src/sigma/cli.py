@@ -98,6 +98,11 @@ COMMAND_DETAILS = {
         "./sigma agentic-runs projects/demo.sigma [RUN_ID]",
         "A supplied run ID must exist in this project's saved evidence.",
     ),
+    "resume-research-batch": (
+        "Resume and supervise multiple saved research sessions concurrently.",
+        "./sigma resume-research-batch --spec messages/phase2_green_i2_resume_spec.json",
+        "Uses saved sessions and SIGMA's existing scheduling/provider limits. Keep the terminal open; Ctrl-C pauses active sessions and preserves uncertain calls.",
+    ),
     "save-text": (
         "Save authored Plain or Markdown source using a digest to prevent overwriting newer text.",
         "./sigma save-text projects/demo.sigma --scope project --format markdown --body '# Notes' --expected-digest DIGEST",
@@ -236,6 +241,11 @@ def main() -> None:
     )
     runs.add_argument("path")
     runs.add_argument("run_id", nargs="?", help="Run ID to export as a complete JSON record")
+    batch = add_command(commands, "resume-research-batch")
+    batch.add_argument("--spec", required=True, help="JSON project/session specification")
+    batch.add_argument("--poll-seconds", type=float, default=10.0)
+    batch.add_argument("--max-recovery-resumes", type=int, default=12)
+    batch.add_argument("--dry-run", action="store_true", help="Validate and print without dispatch")
     save_text = add_command(commands, "save-text", help="Save an authored Plain or Markdown source")
     save_text.add_argument("path")
     save_text.add_argument("--scope", choices=["project", "strategy"], required=True)
@@ -358,6 +368,17 @@ def main() -> None:
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:
         sys.exit(run_tooling(args.command))
+    if args.command == "resume-research-batch":
+        from sigma.research_batch import run
+
+        sys.exit(
+            run(
+                args.spec,
+                poll_seconds=args.poll_seconds,
+                max_recovery_resumes=args.max_recovery_resumes,
+                dry_run=args.dry_run,
+            )
+        )
     try:
         load_local_config()
         if args.command == "init":
