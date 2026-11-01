@@ -1,6 +1,6 @@
 # Coordinator independent review 1 — checkpoint, not acceptance
 
-**Reviewed:** 2026-11-01 02:48–03:00 PST (approximate review window; authoritative Git commits carry publication times). **Branch at initial inspection:** `7363edffdf4eb76b71a6ac8c413c61a85b16dc40` on PR #430. **Blue response:** `messages/message_in_1.md`, explicitly a checkpoint with two papers still generating. This review is **coordinator-owned** and does not advance the Blue mailbox sequence. **Status: ITERATION 1 OPEN.**
+**Reviewed:** 2026-11-01 02:48–02:53 PST (approximate review window; authoritative Git commits carry publication times). **Branch at initial inspection:** `7363edffdf4eb76b71a6ac8c413c61a85b16dc40` on PR #430. **Blue response:** `messages/message_in_1.md`, explicitly a checkpoint with two papers still generating. This review is **coordinator-owned** and does not advance the Blue mailbox sequence. **Status: ITERATION 1 OPEN.**
 
 ## Reproducible inputs and honest state
 
@@ -50,7 +50,7 @@ When the remaining manuscripts arrive, audit:
 - **Xenopus:** distinguish literature synthesis from experiments; named alternative mechanisms, developmental-stage controls, negative evidence, biological causal inference and concrete falsification experiments. Apply ARRIVE only if actual animal experiments were conducted.
 - **All three:** abstract/conclusion agreement, central claim-to-evidence links, contradiction survival, omissions, sections/paragraphs, genre, real generation times and costs.
 
-**Disposition:** No `message_out_2.md` yet. Blue's `message_in_1.md` is explicitly a **checkpoint**, not a finished three-paper baseline; do not advance while Agent and Xenopus remain in flight. No code or live inference changes were made by this coordinator. A separate issue records the failed final Skeptic turn: https://github.com/bkramerext/sigma/issues/431 .
+**Disposition:** No `message_out_2.md` yet. Blue's `message_in_1.md` is explicitly a **checkpoint**, not a finished three-paper baseline; do not advance while Agent and Xenopus remain in flight. No SIGMA runtime code or live inference changes were made by this coordinator; a standalone numerical audit script was added. A separate issue records the failed final Skeptic turn: https://github.com/bkramerext/sigma/issues/431 .
 
 
 ## Independent numerical check of the proposed paired efficacy gate (coordinator-owned)
@@ -82,3 +82,5 @@ Using the **same exact decision rule**, parameterize `q=p10+p01` and `Δ=p10-p01
 | 0.12 | 0.40 | 0.0230 | 0.0649 |
 
 **Finding:** The numerical certificate is **conditional on the precise alternative**. It does not mean that 1,800 pairs provides 80% power across plausible useful-completion improvements or discordance rates. At `Δ=0.15, q=0.80`, the modeled probability of passing is only ~46% even at 1,800 pairs. More importantly, IID may be false when 100 researchers contribute repeated tasks to shared queues; the table does not address that dependence. A rigorous pilot needs a prespecified design alternative, nuisance-parameter sensitivity and clustering-aware analysis. This is a discriminating harder case for the report generator's treatment of quantitative claims.
+
+**Numerical cross-check:** A separate seeded 50,000-replicate multinomial Monte Carlo sanity check gave gate-pass fractions 0.76172 at n=486, 0.96186 at n=800 and 0.99998 at n=1800, consistent with the finite-distribution calculation to sampling error. This is **simulation of the declared hypothetical model**, not empirical campus evidence or a substitute for proving the model's applicability.
