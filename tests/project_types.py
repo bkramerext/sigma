@@ -135,7 +135,8 @@ def main() -> None:
             )
             assert clean_response.status_code == 200, clean_response.text
             cleaned = next(
-                item for item in clean_response.json()["project_types"]
+                item
+                for item in clean_response.json()["project_types"]
                 if item["id"] == "ref-cleanup"
             )
             assert cleaned["research_standards_references"] == [
