@@ -1767,9 +1767,20 @@ def _evidence_based_long_plan(
     ]
     if result_claim is not None:
         conclusions.append(
-            f"The strongest indexed argument is: {result_claim.statement} "
+            f"One central recorded finding is: {result_claim.statement} "
             "Its validity remains conditional on the saved premises and "
             "outstanding review."
+        )
+    other_results = [
+        claim
+        for claim in claims
+        if claim_kinds.get(claim.id) == "result" and claim is not result_claim
+    ]
+    if other_results:
+        conclusions.append(
+            "A separate source-linked finding must also be accounted for: "
+            + other_results[0].statement
+            + " Its relationship to the first finding requires explicit assessment."
         )
     if negative_claim is not None:
         conclusions.append(
