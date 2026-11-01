@@ -4,6 +4,8 @@ Branch: `gray/441-research-process-polish`
 
 Base: `main` at `4b2f34f92264bb6614cbcee0aecc19834dabf85b`
 
+Tested source: `338a3271888f3ac74790bf6c0b46032a78a262e4`
+
 ## Acceptance
 
 | Requirement | Result | Evidence |
@@ -15,14 +17,14 @@ Base: `main` at `4b2f34f92264bb6614cbcee0aecc19834dabf85b`
 | Existing architecture diagram and sticky disclosure states are preserved | **MET** | Chrome verifies architecture disclosure content and verifies expanded/collapsed section states across close/reopen/reload. The existing `workflow` localStorage key is unchanged. |
 | README prominently links to the hosted app, uses the `Workflow` heading, and retains stage explanations and caveats | **MET** | Source assertions in `browser_checks/issue441_readme_mermaid.py` check the exact hosted URL near the top, exact heading, and accurate research versus optional-paper export text. |
 | README diagram is horizontal, linear, six boxes and five ordinary links | **MET** | Source assertions and independent real-Chrome render check `flowchart LR`, six nodes, five connectors, left-to-right node order, no branch/special edge syntax and legibility in the 980px render frame. [Independent render](readme-mermaid-independent.png). |
-| GitHub's own Mermaid visual rendering | **UNVERIFIED** | Check the pushed branch in real Chrome. If GitHub remains on a spinner or otherwise fails to display the complete horizontal diagram, report that separately; the independent render is evidence that the Mermaid source renders. |
+| GitHub's own Mermaid visual rendering | **MET** | Real Chrome loaded the pushed README at HTTP 200. GitHub's Mermaid iframe rendered an SVG with all six labels and five connectors in left-to-right order. [GitHub preview screenshot](github-mermaid-preview.png). |
 
 ## Checks run
 
 - `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 uv run --with playwright --no-sync python browser_checks/issue441_research_process.py` — passed in real Google Chrome.
 - `uv run --with playwright --no-sync python browser_checks/issue441_readme_mermaid.py` — passed in real Google Chrome using Mermaid JS v11 to render the exact README block.
-- `./sigma test` — passed all steps: Python suites, Ruff check/format, Pyright (0 errors, warnings or information), frontend typecheck and production build. The graph-present sandbox subcase skipped because its local image is unavailable; the existing large JavaScript chunk advisory remains.
+- `./sigma test` — passed all steps: Python suites, Ruff check/format (337 Python files formatted), Pyright (0 errors, warnings or information), frontend typecheck and production build. The graph-present sandbox subcase skipped because its local image is unavailable; the existing large JavaScript chunk advisory remains.
 - `git diff --check` — passed.
-- GitHub preview of pushed README — pending; report **UNVERIFIED** until a completed GitHub-rendered diagram is visible.
+- GitHub README preview — passed in real Chrome at HTTP 200; the embedded Mermaid frame rendered the expected six nodes/five connectors. Screenshot preserved above. The viewer's control toolbar overlaps a small part of the final box border, but its `Review/export` label remains fully legible; the independent renderer screenshot is free of viewer controls.
 
 No provider calls or deployment occurred. No research, paper-generation, About pill/navigation or Project Types behavior changed.
