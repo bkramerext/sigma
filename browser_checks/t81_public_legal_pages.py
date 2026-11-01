@@ -42,7 +42,7 @@ def main() -> None:
                         ).to_be_visible()
                     else:
                         expect(
-                            page.get_by_text("No terms yet, except just have fun.", exact=True)
+                            page.get_by_text("No terms except to discover something interesting, wonderous, or pioneering.", exact=True)
                         ).to_be_visible()
                     assert not [url for url in api_requests if "/api/cloud-auth/" in url], (
                         api_requests
