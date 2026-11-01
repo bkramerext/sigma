@@ -4295,11 +4295,31 @@ def test_easy_paper_avoids_unnecessary_long_form_calls() -> None:
 def test_fallback_planner_ranks_complete_research_notes_over_operational_fields() -> None:
     source = "session:fixture"
     notes = [
-        papers.EvidenceNote(statement="events/4/project_change/previous/reasoning_effort: high", kind="result", evidence_refs=[source]),
-        papers.EvidenceNote(statement="events/10/failure_kind: preflight_error", kind="negative", evidence_refs=[source]),
-        papers.EvidenceNote(statement="investigator_output/result: The saved comparison found a stable difference between the two measured conditions.", kind="result", evidence_refs=[source]),
-        papers.EvidenceNote(statement="skeptic_response/counterexample: A saved counterexample shows that the proposed rule fails for the boundary case.", kind="negative", evidence_refs=[source]),
-        papers.EvidenceNote(statement="investigator_output/proof/0: This proof begins with a long incomplete fragment", kind="result", evidence_refs=[source]),
+        papers.EvidenceNote(
+            statement="events/4/project_change/previous/reasoning_effort: high",
+            kind="result",
+            evidence_refs=[source],
+        ),
+        papers.EvidenceNote(
+            statement="events/10/failure_kind: preflight_error",
+            kind="negative",
+            evidence_refs=[source],
+        ),
+        papers.EvidenceNote(
+            statement="investigator_output/result: The saved comparison found a stable difference between the two measured conditions.",
+            kind="result",
+            evidence_refs=[source],
+        ),
+        papers.EvidenceNote(
+            statement="skeptic_response/counterexample: A saved counterexample shows that the proposed rule fails for the boundary case.",
+            kind="negative",
+            evidence_refs=[source],
+        ),
+        papers.EvidenceNote(
+            statement="investigator_output/proof/0: This proof begins with a long incomplete fragment",
+            kind="result",
+            evidence_refs=[source],
+        ),
     ]
     plan = papers._evidence_based_long_plan(
         {"title": "Fixture project", "problem": "What changes across conditions?"}, notes, {source}

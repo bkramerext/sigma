@@ -1349,19 +1349,21 @@ def _evidence_based_long_plan(
         title = "Research synthesis: " + title
     title = title[:180]
 
-    def candidate(note: EvidenceNote) -> tuple[int, str] | None:
+    def candidate(note: EvidenceNote) -> tuple[int, str]:
         """Select complete research prose; keep operational fields as provenance."""
         label, separator, value = note.statement.partition(": ")
         if not separator:
-            return None
+            return (-1, "")
         path = label.casefold().strip()
-        if path.startswith(("events/", "project_change/", "title", "created_at", "updated_at")) or any(
+        if path.startswith(
+            ("events/", "project_change/", "title", "created_at", "updated_at")
+        ) or any(
             part in path for part in ("reasoning_effort", "preflight_error", "failure_kind", "ui_")
         ):
-            return None
+            return (-1, "")
         sentence = " ".join(value.split()).strip()
         if len(sentence) < 35 or not sentence.endswith((".", "?", "!")):
-            return None
+            return (-1, "")
         score = (40 if note.kind in {"result", "negative"} else 20) + min(len(sentence), 260) // 20
         score += 5 if len(note.evidence_refs) > 1 else 0
         return score, sentence
@@ -1426,8 +1428,11 @@ def _evidence_based_long_plan(
                 continue
             chunk = refs[offset : offset + 40]
             matching = max(
-                (note for note in relevant if set(note.evidence_refs) & set(chunk)
-                 and ranked_candidates[id(note)] is not None),
+                (
+                    note
+                    for note in relevant
+                    if set(note.evidence_refs) & set(chunk) and ranked_candidates[id(note)][0] >= 0
+                ),
                 key=lambda note: (ranked_candidates[id(note)][0], note.statement),
                 default=None,
             )
@@ -1454,7 +1459,11 @@ def _evidence_based_long_plan(
                         )
                     )[:20],
                     reasoning=(
-                        (f"Recorded at {matching.statement.partition(': ')[0]}; " if matching else "")
+                        (
+                            f"Recorded at {matching.statement.partition(': ')[0]}; "
+                            if matching
+                            else ""
+                        )
                         + "This is a recorded research item, not an independently "
                         "verified conclusion; the cited saved evidence requires assessment."
                     ),
@@ -1506,8 +1515,9 @@ def _evidence_based_long_plan(
         )
 
     questions = [
-        ranked_candidates[id(note)][1] for note in notes
-        if note.kind == "question" and ranked_candidates[id(note)] is not None
+        ranked_candidates[id(note)][1]
+        for note in notes
+        if note.kind == "question" and ranked_candidates[id(note)][0] >= 0
     ]
     warnings = [
         (
@@ -1528,10 +1538,11 @@ def _evidence_based_long_plan(
     # never infer a proof, experiment, or resolution from a result-shaped note.
     def complete_excerpt(kind: str) -> str | None:
         eligible = [
-            ranked_candidates[id(note)] for note in notes
-            if note.kind == kind and ranked_candidates[id(note)] is not None
+            ranked_candidates[id(note)]
+            for note in notes
+            if note.kind == kind and ranked_candidates[id(note)][0] >= 0
         ]
-        return max(eligible, default=None, key=lambda item: (item[0], item[1]))[1] if eligible else None
+        return max(eligible, default=(-1, ""), key=lambda item: (item[0], item[1]))[1] or None
 
     first_question = re.split(r"(?<=[.!?])\s+", question, maxsplit=1)[0]
     if len(first_question) > 320 or not first_question.endswith((".", "!", "?")):
