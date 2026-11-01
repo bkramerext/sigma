@@ -6448,13 +6448,23 @@ def _obligation_ledger(
         source_project_id, source_strategy_id, assumptions = note_scope(
             artifact, objective_review, skeptic
         )
+        # Stored records also carry coordinator-expanded summaries. Those are
+        # references to earlier obligations, not new obligations scoped by
+        # this artifact's assumptions. Re-ingesting them creates exponentially
+        # many distinct identities and eventually stops long research sessions.
+        # Keep legacy artifacts readable when no structured model outputs exist.
+        structured = isinstance(artifact.get("investigator_output"), dict) or isinstance(
+            artifact.get("skeptic_output"), dict
+        )
+        model_remaining = skeptic.get("model_remaining_obligations")
         note_fields = (
             investigator.get("open_obligations"),
-            artifact.get("open_obligations"),
+            None if structured else artifact.get("open_obligations"),
             artifact.get("objections"),
             objective_review.get("unresolved_objections"),
             skeptic.get("unresolved_objections"),
-            skeptic.get("remaining_obligations"),
+            model_remaining if isinstance(model_remaining, list)
+            else skeptic.get("remaining_obligations"),
         )
         for notes in note_fields:
             for note in notes if isinstance(notes, list) else []:
