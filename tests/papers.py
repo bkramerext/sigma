@@ -4438,7 +4438,7 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
         <= {session, result_a, result_b, skeptic, complete_proof_ref, truncated_ref, obligation}
         for claim in plan.claims
     )
-    assert any(session in section.evidence_refs for section in plan.sections)
+    assert all(session not in section.evidence_refs for section in plan.sections)
     assert any("process restart" in obligation for obligation in plan.open_obligations)
     conclusion = " ".join(plan.conclusions)
     assert "stable difference" in conclusion and "no stable difference" in conclusion
