@@ -140,15 +140,11 @@ def test_global_spend_holds_full_provider_exposure() -> None:
         "CREATE TABLE calls (amount_usd REAL, maximum_liability_usd REAL, "
         "status TEXT, created_at TEXT)"
     )
-    db.execute(
-        "INSERT INTO calls VALUES (0.04, 1.28, 'reserved', '2026-01-01')"
-    )
+    db.execute("INSERT INTO calls VALUES (0.04, 1.28, 'reserved', '2026-01-01')")
     with patch.object(cloud_research, "_global_window_start", return_value=None):
         assert cloud_research._global_call_amount_units(db) == 1_280_000_000
         assert cloud_research._call_amount_units(db, "") == 40_000_000
-        db.execute(
-            "UPDATE calls SET amount_usd=0.08, status='usage_estimated'"
-        )
+        db.execute("UPDATE calls SET amount_usd=0.08, status='usage_estimated'")
         assert cloud_research._global_call_amount_units(db) == 80_000_000
     db.close()
 

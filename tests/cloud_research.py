@@ -2333,7 +2333,8 @@ def test_maximum_liability_enforced_across_calls() -> None:
             patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
             patch.object(cloud_research, "_admin_has_unlimited_spend", return_value=False),
             patch.object(
-                cloud_research, "_effective_user_spend_ceiling_decimal",
+                cloud_research,
+                "_effective_user_spend_ceiling_decimal",
                 return_value=Decimal("1.00"),
             ),
         ):
@@ -2343,7 +2344,10 @@ def test_maximum_liability_enforced_across_calls() -> None:
                 cloud_research.prepare_job(first)
                 assert cloud_research.claim_job(first["id"])
                 cloud_research.reserve_call(
-                    first["id"], "liability-a", 0.02, 100,
+                    first["id"],
+                    "liability-a",
+                    0.02,
+                    100,
                     maximum_liability_usd=0.80,
                 )
                 # The user allowance sees 2 cents, but globally 80 cents is held.
@@ -2351,7 +2355,10 @@ def test_maximum_liability_enforced_across_calls() -> None:
                 assert cloud_research.snapshot()["global_remaining_usd"] == 0.20
                 try:
                     cloud_research.reserve_call(
-                        first["id"], "liability-b", 0.02, 100,
+                        first["id"],
+                        "liability-b",
+                        0.02,
+                        100,
                         maximum_liability_usd=0.30,
                     )
                 except cloud_research.CloudResearchUnavailable as exc:
@@ -2359,11 +2366,17 @@ def test_maximum_liability_enforced_across_calls() -> None:
                 else:
                     raise AssertionError("The global cap admitted an unfunded output exposure")
                 cloud_research.settle_call(
-                    first["id"], "liability-a", input_tokens=90, output_tokens=10,
+                    first["id"],
+                    "liability-a",
+                    input_tokens=90,
+                    output_tokens=10,
                     estimated_cost_usd=0.02,
                 )
                 cloud_research.reserve_call(
-                    first["id"], "liability-b", 0.02, 100,
+                    first["id"],
+                    "liability-b",
+                    0.02,
+                    100,
                     maximum_liability_usd=0.30,
                 )
                 assert cloud_research.snapshot()["global_remaining_usd"] == 0.68
@@ -2374,7 +2387,10 @@ def test_maximum_liability_enforced_across_calls() -> None:
                     thread_binding = cloud_workspaces._CURRENT.set(member)
                     try:
                         cloud_research.reserve_call(
-                            first["id"], f"liability-parallel-{index}", 0.01, 10,
+                            first["id"],
+                            f"liability-parallel-{index}",
+                            0.01,
+                            10,
                             maximum_liability_usd=0.30,
                         )
                         return True

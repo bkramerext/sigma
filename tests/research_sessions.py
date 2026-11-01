@@ -5788,8 +5788,13 @@ async def test_preflight_failure_isolates_branch_and_commits_sibling(path: Path)
         ),
     ):
         started = await research_sessions.start_session(
-            str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
-            expected_limits=limits, strategy_ids=[first.id, second.id],
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
         )
         final = await asyncio.wait_for(wait_for(path, started["id"]), timeout=10)
 
@@ -5827,7 +5832,11 @@ async def test_stop_is_responsive_during_slow_provider_preflight(path: Path):
         patch.object(research_sessions, "execution_capabilities", return_value=[]),
     ):
         started = await research_sessions.start_session(
-            str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
             expected_limits=limits,
         )
         await asyncio.wait_for(checking.wait(), timeout=5)

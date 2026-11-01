@@ -8732,9 +8732,7 @@ async def _portfolio_role_call(
                         step_id,
                         reserve,
                         token_reserve,
-                        maximum_liability_usd=_reserve_cost(
-                            record, context, role, estimate=False
-                        ),
+                        maximum_liability_usd=_reserve_cost(record, context, role, estimate=False),
                     )
                 except cloud_research.CloudResearchUnavailable as exc:
                     record["calls_used"] = max(0, record["calls_used"] - 1)
@@ -10277,7 +10275,7 @@ async def _portfolio_strategy_pipeline(
         return await _portfolio_role_call_with_recovery(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         )
-    except Exception as exc:  # A single branch must never discard completed sibling output.
+    except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"stopped", "paused", "ended", "completed", "failed"}:
@@ -10319,8 +10317,11 @@ async def _portfolio_strategy_pipeline(
                 "preflight_error" if guarded else "strategy_execution_failure"
             )
             _refresh_token_accounting(record)
-            _event(record, "strategy.paused" if guarded else "strategy.failed",
-                   f"{saved['strategy_title']}: {saved['reason']}")
+            _event(
+                record,
+                "strategy.paused" if guarded else "strategy.failed",
+                f"{saved['strategy_title']}: {saved['reason']}",
+            )
             _save(path, record)
         return False
 
