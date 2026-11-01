@@ -146,6 +146,20 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
     if not isinstance(manifest, dict):
         return False
 
+    # Method references are optional secondary guidance. Never let a bulky
+    # methods packet prevent a real Investigator/Skeptic turn, or cause a
+    # proof premise to be discarded sooner than necessary. The full frozen
+    # pre-turn selection remains in the authoritative saved session.
+    if _bytes(context) > limit and context.get("methodology_source_material"):
+        selected = context.pop("methodology_source_material")
+        context["methodology_source_status"] = "omitted_due_to_context_limit"
+        manifest["methodology_sources_not_supplied"] = {
+            "count": len(selected) if isinstance(selected, list) else 0,
+            "reason": "Optional method notes omitted to preserve actual research evidence in the model context; full selection remains in saved session.",
+        }
+        if _bytes(context) <= limit:
+            return True
+
     # This exact list is derivable from the ledger and often repeats long
     # obligations; do not remove the obligations themselves.
     if isinstance(context.get("obligation_ledger"), list):
@@ -287,20 +301,6 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
                 compacted[field] = compacted.get(field, 0) + 1
                 if isinstance(entry, dict) and isinstance(entry.get(id_field), str):
                     pointers.setdefault(field, []).append(entry[id_field])
-
-    # Method references are optional secondary guidance. Never let a bulky
-    # methods packet prevent a real Investigator/Skeptic turn, or cause a
-    # proof premise to be discarded sooner than necessary. The full frozen
-    # pre-turn selection remains in the authoritative saved session.
-    if _bytes(context) > limit and context.get("methodology_source_material"):
-        selected = context.pop("methodology_source_material")
-        context["methodology_source_status"] = "omitted_due_to_context_limit"
-        manifest["methodology_sources_not_supplied"] = {
-            "count": len(selected) if isinstance(selected, list) else 0,
-            "reason": "Optional method notes omitted to preserve actual research evidence in the model context; full selection remains in saved session.",
-        }
-        if _bytes(context) <= limit:
-            return True
 
     # Even one valid Investigator can emit 24 long reasoning steps, exceeding
     # the 256 KB packet limit before any historical context is added. Prefer
