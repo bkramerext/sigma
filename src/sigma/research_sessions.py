@@ -10,11 +10,12 @@ import json
 import math
 import os
 import re
+import stat
 import threading
 import weakref
 import zlib
 from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -115,13 +116,12 @@ _session_state_locks: dict[str, asyncio.Lock] = {}
 _manager_lock = asyncio.Lock()
 _gate = threading.Lock()
 _python_gate = threading.Lock()
-# Per-event-loop admission gates, shared by every research session in this
-# server process. Cross-process admission is tracked separately under #419.
-_portfolio_global_gates: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, asyncio.Semaphore
-] = weakref.WeakKeyDictionary()
+# In-process admission gates; hosted calls also acquire cross-process OS slots.
+_portfolio_global_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
 _portfolio_global_gates_lock = threading.Lock()
-
+_portfolio_slot_cursor = 0
 
 
 class ResearchContextLimitError(ProjectError):
@@ -9740,10 +9740,11 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
 
 async def _portfolio_worker(session_id: str, path: str) -> None:
     state_lock = _session_state_lock(session_id)
-    # A sponsored call holds a conservative allowance reservation until usage
-    # settles. Dispatch sequentially so sibling calls do not fail just because
-    # they overlap those temporary reservations.
-    semaphore = asyncio.Semaphore(_portfolio_call_concurrency())
+    # One in-flight call per strategy; the backend-wide gate protects provider
+    # capacity, while the existing durable ledger reserves funded attempts.
+    semaphore = asyncio.Semaphore(
+        _portfolio_call_concurrency(len(_read(path, session_id).get("strategy_runs", [])))
+    )
 
     async def run_wave(calls: list[Any]) -> list[Any]:
         # Do not hold process-global research/proposal gates across provider I/O.
@@ -9984,9 +9985,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         # cross-branch decisions at a completed wave boundary.
         await run_wave(
             [
-                _portfolio_strategy_pipeline(
-                    session_id, path, branch, semaphore, state_lock
-                )
+                _portfolio_strategy_pipeline(session_id, path, branch, semaphore, state_lock)
                 for branch in selected
             ]
         )
@@ -10077,24 +10076,83 @@ def _bounded_concurrency_env(name: str, default: int, maximum: int) -> int:
     return min(maximum, max(1, int(raw)))
 
 
-def _portfolio_call_concurrency() -> int:
-    # Sponsored provider reservations are conservative. A dedicated funding
-    # policy is required before allowing two overlapping hosted calls.
-    if cloud_research.billing_enabled():
-        return 1
-    return _bounded_concurrency_env("SIGMA_RESEARCH_SESSION_INFLIGHT", 3, 12)
+def _portfolio_call_concurrency(strategy_count: int) -> int:
+    """No arbitrary session throttle; each strategy may have one active turn."""
+    return max(1, strategy_count)
 
 
-def _portfolio_global_gate() -> asyncio.Semaphore:
+def _portfolio_global_limit() -> int:
+    """Total in-flight research provider requests on this backend: 32."""
+    return _bounded_concurrency_env("SIGMA_RESEARCH_GLOBAL_INFLIGHT", 32, 32)
+
+
+def _shared_provider_slot() -> int | None:
+    """Claim one OS-wide slot, or return None if every slot is occupied.
+
+    Hosted backend processes share a private storage root. OS flock releases on
+    process exit, without treating uncertain inference attempts as complete.
+    """
+    global _portfolio_slot_cursor
+    root = cloud_workspaces.storage_root() / "provider-slots"
+    root.mkdir(mode=0o700, exist_ok=True)
+    info = root.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or info.st_mode & 0o077
+    ):
+        raise ProjectError("Shared provider capacity directory is not private.")
+    slots = _portfolio_global_limit()
+    with _portfolio_global_gates_lock:
+        first = _portfolio_slot_cursor % slots
+        _portfolio_slot_cursor += 1
+    for offset in range(slots):
+        path = root / f"slot-{(first + offset) % slots:02d}.lock"
+        fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        acquired = False
+        try:
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
+            ):
+                raise ProjectError("Shared provider capacity slot is not private.")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            acquired = True
+            return fd
+        finally:
+            if not acquired:
+                os.close(fd)
+    return None
+
+
+@asynccontextmanager
+async def _portfolio_global_gate():
     loop = asyncio.get_running_loop()
     with _portfolio_global_gates_lock:
         gate = _portfolio_global_gates.get(loop)
         if gate is None:
-            gate = asyncio.Semaphore(
-                _bounded_concurrency_env("SIGMA_RESEARCH_GLOBAL_INFLIGHT", 6, 32)
-            )
+            gate = asyncio.Semaphore(_portfolio_global_limit())
             _portfolio_global_gates[loop] = gate
-        return gate
+    async with gate:
+        fd: int | None = None
+        # On the hosted backend, flock also enforces capacity across multiple
+        # server processes using the same private persistent volume.
+        if cloud_workspaces.enabled():
+            while fd is None:
+                fd = _shared_provider_slot()
+                if fd is None:
+                    await asyncio.sleep(0.05)
+        try:
+            yield
+        finally:
+            if fd is not None:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
 
 
 def _bounded_note(value: Any, limit: int) -> str:
