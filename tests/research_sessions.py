@@ -6105,6 +6105,98 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
     assert (path / "project.json").read_bytes() == project_before
 
 
+def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
+    """Identical deterministic role outputs must produce identical research data.
+
+    Exclude request IDs, timestamps and nondeterministic wall-clock ordering;
+    include model context, peer evidence, findings and coordinator decisions.
+    """
+
+    async def scenario(name: str, fanout: int):
+        path = root / f"parity-{name}.sigma"
+        view, first, credential, config = await setup(path)
+        second = create_strategy(path, "Independent peer", "Derive a complementary invariant.").project.strategies[-1]
+        limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 2, "model_calls": 8}
+        research_sessions.save_limits(str(path), limits)
+        seen: dict[tuple[str, int, str], dict[str, Any]] = {}
+
+        async def handler(request):
+            payload = json.loads(request.content)
+            context = json.loads(payload["input"])
+            role = payload["text"]["format"]["name"]
+            title = context["strategy"]["title"]
+            cycle = context["cycle"]
+            peers = context["other_strategy_evidence"]
+            assert len(peers) == cycle - 1, (title, role, cycle)
+            seen[(title, cycle, role)] = {
+                "question": context["question"],
+                "prior_claims": [item["claim_or_question"] for item in context["prior_artifacts"]],
+                "peer_claims": [item["claim_or_question"] for item in peers],
+                "peer_assumptions": [item["assumptions"] for item in peers],
+                "peer_objections": [item["objections"] for item in peers],
+                "pending_claim": (
+                    context.get("investigator_output", {}).get("claim")
+                    if role == "research_skeptic" else None
+                ),
+            }
+            await asyncio.sleep(0.008 if title == first.title else 0.001)
+            if role == "research_investigator":
+                output = investigation(cycle)
+                output["claim"] = f"{title} finding at round {cycle}."
+            else:
+                output = skeptic(
+                    cycle,
+                    "revise" if cycle == 1 else "stop",
+                    "recoverable_objection" if cycle == 1 else "productive_conclusion",
+                )
+                output["next_question"] = (
+                    "Test peer evidence on the next round." if cycle == 1 else ""
+                )
+            return httpx.Response(200, json=provider_response(output))
+
+        with (
+            patch.dict("os.environ", {"SIGMA_RESEARCH_GLOBAL_INFLIGHT": str(fanout)}),
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "execution_capabilities", return_value=[]),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(path), first.id, str(uuid4()), view.project.id, credential["identity"],
+                expected_limits=limits, strategy_ids=[first.id, second.id],
+            )
+            finished = await asyncio.wait_for(wait_for(path, started["id"]), timeout=10)
+        assert finished["status"] == "ended" and finished["calls_used"] == 8
+        assert len(finished["artifacts"]) == 4 and len(seen) == 8
+        titles = {first.id: first.title, second.id: second.title}
+        findings = [
+            (
+                titles[artifact["strategy_id"]], artifact["strategy_cycle"],
+                artifact["claim_or_question"], artifact["method"],
+                tuple(artifact["objections"]), artifact["coordinator_decision"],
+                artifact["next_question"],
+            )
+            for artifact in finished["artifacts"]
+        ]
+        decisions = [
+            (
+                titles[branch["strategy_id"]], branch["status"], branch["cycle"],
+                branch["calls_used"], branch.get("last_decision"), branch.get("current_question"),
+            )
+            for branch in finished["strategy_runs"]
+        ]
+        return seen, findings, decisions, finished["outcome"]["assessment"]
+
+    serial = asyncio.run(scenario("serial", 1))
+    parallel = asyncio.run(scenario("parallel", 32))
+    assert parallel == serial, "Parallel dispatch changed saved research or provider context"
+
+
 async def test_peer_finding_changes_target_investigator_after_stop_and_resume(path: Path):
     view, source, credential, config = await setup(path)
     target = create_strategy(
@@ -9859,6 +9951,7 @@ def main():
         test_backend_global_provider_file_slots_are_bounded(root)
         asyncio.run(test_global_inflight_limit_bounds_multiple_strategy_sessions(root))
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        test_parallel_schedule_preserves_research_semantics(root)
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
                 root / "portfolio-cross-review.sigma"
