@@ -3264,7 +3264,8 @@ def _tex(
 ) -> str:
     include_claim_details = include_claim_details or include_research_details
     include_validation_notes = include_validation_notes or include_research_details
-    include_research_excerpts = include_research_excerpts or include_research_details
+    # Research detail is not consent to append the entire saved transcript.
+    # An explicit excerpts choice must remain independent.
     esc = _latex
     prose = _latex_prose
 
