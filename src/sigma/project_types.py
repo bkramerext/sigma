@@ -62,10 +62,14 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
     for item in value:
         if not isinstance(item, str) or len(item) > 2048:
             raise ProjectError(f"{field} contains an invalid URL")
+        # Blank draft rows are not references. Discard them on Save.
+        candidate = item.strip()
+        if not candidate:
+            continue
         from urllib.parse import urlsplit, urlunsplit
 
         try:
-            parsed = urlsplit(item.strip())
+            parsed = urlsplit(candidate)
             hostname = parsed.hostname
             port = parsed.port
         except ValueError as exc:
@@ -86,7 +90,7 @@ def _validate_references(value: Any, field: str) -> tuple[str, ...]:
         )
         key = normalized.casefold()
         if key in {entry.casefold() for entry in cleaned}:
-            raise ProjectError(f"{field} cannot contain duplicate URLs")
+            continue  # Keep first canonical occurrence; deduplicate on Save.
         cleaned.append(normalized)
     return tuple(sorted(cleaned, key=str.casefold))
 
