@@ -1384,6 +1384,12 @@ def _evidence_based_long_plan(
         if ": " in note.statement
     }
     field_values: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
+    indexed_fragments: dict[tuple[str, str], list[str]] = {}
+    for note in notes:
+        label, separator, value = note.statement.partition(": ")
+        if separator:
+            for ref in note.evidence_refs:
+                indexed_fragments.setdefault((ref, label.casefold()), []).append(value)
 
     def collect_fields(value: Any, source_ref: str, source_kind: str, path: str = "") -> None:
         if isinstance(value, dict):
@@ -1419,12 +1425,17 @@ def _evidence_based_long_plan(
         valid_refs: list[str] = []
         for ref in note.evidence_refs:
             matches = field_values.get((ref, path), [])
-            exact = [entry for entry in matches if entry[2] == sentence]
-            # Multiple path suffix matches are ambiguous, and any truncated
-            # chunk is ineligible even when its last character is punctuation.
-            if len(matches) != 1 or len(exact) != 1:
+            # Multiple path suffix matches are ambiguous. Reassemble all
+            # indexed pieces in source order, then admit only an exact match
+            # to the original scalar. This protects punctuated middle chunks
+            # while preserving complete fields that span several notes.
+            if len(matches) != 1:
                 continue
-            source_kind, full_path, _content = exact[0]
+            source_kind, full_path, full_content = matches[0]
+            pieces = indexed_fragments.get((ref, path), [])
+            if "".join(pieces) != full_content or len(full_content) > 1600:
+                continue
+            sentence = full_content
             path_parts = full_path.casefold().split("/")
             if source_kind == "project" or (source_kind == "session" and path_parts[0] == "events"):
                 continue
@@ -1435,7 +1446,7 @@ def _evidence_based_long_plan(
         score = (40 if note.kind in {"result", "negative"} else 20) + min(len(sentence), 260) // 20
         score += 5 if len(note.evidence_refs) > 1 else 0
         if not sentence.endswith((".", "?", "!")):
-            sentence += "."
+            return (-1, "", "", ())
         return score, sentence, ", ".join(provenance), tuple(valid_refs)
 
     ranked_candidates = {id(note): candidate(note) for note in notes}
@@ -1476,6 +1487,7 @@ def _evidence_based_long_plan(
     )
     sections: list[LongSectionPlan] = []
     claims: list[PaperClaim] = []
+    claim_kinds: dict[str, str] = {}
     covered: set[str] = set()
     groups: list[tuple[str, str, list[str], list[EvidenceNote]]] = []
     for heading, purpose, kinds in categories:
@@ -1508,12 +1520,15 @@ def _evidence_based_long_plan(
                 reverse=True,
             )
             matching: list[EvidenceNote] = []
-            covered_candidate_refs: set[str] = set()
+            covered_candidate_fields: set[tuple[str, tuple[str, ...]]] = set()
             for note in ranked:
-                candidate_refs = set(ranked_candidates[id(note)][3]) & set(chunk)
-                if candidate_refs - covered_candidate_refs:
+                candidate_refs = tuple(
+                    ref for ref in ranked_candidates[id(note)][3] if ref in chunk
+                )
+                candidate_field = (ranked_candidates[id(note)][2], candidate_refs)
+                if candidate_field not in covered_candidate_fields:
                     matching.append(note)
-                    covered_candidate_refs.update(candidate_refs)
+                    covered_candidate_fields.add(candidate_field)
                 if len(matching) >= 3:
                     break
             statement = " ".join(ranked_candidates[id(note)][1] for note in matching) or (
@@ -1551,6 +1566,8 @@ def _evidence_based_long_plan(
                     ),
                 )
             )
+            if matching:
+                claim_kinds[claim_id] = matching[0].kind
             sections.append(
                 LongSectionPlan(
                     heading=heading if offset == 0 else f"{heading}: additional evidence",
@@ -1624,6 +1641,7 @@ def _evidence_based_long_plan(
             for note in notes
             if note.kind == kind
             and ranked_candidates[id(note)][0] >= 0
+            and len(ranked_candidates[id(note)][1]) <= 260
             and ranked_candidates[id(note)][1].endswith((".", "?", "!"))
         ]
         return (
@@ -1658,6 +1676,21 @@ def _evidence_based_long_plan(
         "or proof steps absent from the frozen record."
     )
     abstract = " ".join(abstract_parts)
+    conclusion_claims = [
+        next((claim for claim in claims if claim_kinds.get(claim.id) == kind), None)
+        for kind in ("result", "negative", "limitation", "question")
+    ]
+    conclusion_claims = [claim for claim in conclusion_claims if claim is not None]
+    if not conclusion_claims:
+        conclusion_claims = claims[:1]
+    conclusions = [
+        f"Recorded {claim_kinds.get(claim.id, 'research')}: {claim.statement}"
+        for claim in conclusion_claims
+    ]
+    conclusions.append(
+        "These source records are provisional and require independent assessment; "
+        "unresolved evidence and obligations remain."
+    )
     return LongPaperPlan(
         title=title,
         abstract=abstract,
@@ -1680,12 +1713,8 @@ def _evidence_based_long_plan(
             )
         ],
         open_obligations=questions[:16],
-        conclusions=[
-            "The indexed record supports only provisional interpretation: "
-            + "; ".join(f"{claim.id} ({claim.statement})" for claim in claims[:3])[:1200]
-            + ". Unresolved evidence and obligations remain; no independent verification is claimed."
-        ],
-        conclusion_claim_ids=[claim.id for claim in claims[:3]],
+        conclusions=conclusions,
+        conclusion_claim_ids=[claim.id for claim in conclusion_claims],
         validation_warnings=warnings,
         diagrams=[],
     )

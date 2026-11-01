@@ -4297,10 +4297,24 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
     result_a = "artifact:result-a"
     result_b = "artifact:result-b"
     skeptic = "artifact:skeptic"
+    complete_proof_ref = "artifact:complete-proof"
+    truncated_ref = "artifact:truncated"
     obligation = "artifact:obligation"
     long_proof = (
         "P" * 430 + " and therefore this final step follows only if the earlier premises hold."
     )
+    complete_proof = (
+        "The derivation starts from the stated assumptions. "
+        + "The intermediate step preserves the same invariant. " * 10
+        + "The complete final implication follows under those assumptions."
+    )
+    truncated_text = "This imported field ends abruptly without a complete claim"
+    obligation_text = "Determine whether the effect record remains durable after a process restart?"
+    complete_chunk_size = papers.FAST_NOTE_TEXT_LENGTH - len("complete_proof") - 3
+    complete_chunks = [
+        complete_proof[index : index + complete_chunk_size]
+        for index in range(0, len(complete_proof), complete_chunk_size)
+    ]
     notes = [
         papers.EvidenceNote(
             statement="events/4/project_change/previous/reasoning_effort: high",
@@ -4332,10 +4346,23 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
             kind="result",
             evidence_refs=[skeptic],
         ),
+        *[
+            papers.EvidenceNote(
+                statement=f"complete_proof: {chunk}",
+                kind="result",
+                evidence_refs=[complete_proof_ref],
+            )
+            for chunk in complete_chunks
+        ],
         papers.EvidenceNote(
-            statement="open_obligation: Determine whether the effect record remains durable after a process restart?",
+            statement=f"open_obligation: {obligation_text}",
             kind="question",
             evidence_refs=[obligation],
+        ),
+        papers.EvidenceNote(
+            statement=f"truncated_capture: {truncated_text}",
+            kind="result",
+            evidence_refs=[truncated_ref],
         ),
     ]
     sources = [
@@ -4367,31 +4394,42 @@ def test_fallback_planner_ranks_complete_research_notes_over_operational_fields(
                 "proof": long_proof,
             },
         },
+        {"id": complete_proof_ref, "kind": "artifact", "data": {"complete_proof": complete_proof}},
+        {"id": truncated_ref, "kind": "artifact", "data": {"truncated_capture": truncated_text}},
         {
             "id": obligation,
             "kind": "artifact",
-            "data": {"open_obligation": notes[6].statement.removeprefix("open_obligation: ")},
+            "data": {"open_obligation": obligation_text},
         },
     ]
     plan = papers._evidence_based_long_plan(
         {"title": "Fixture project", "problem": "What changes across conditions?"},
         notes,
-        {session, result_a, result_b, skeptic, obligation},
+        {session, result_a, result_b, skeptic, complete_proof_ref, truncated_ref, obligation},
         sources,
     )
     assert all("events/" not in claim.statement for claim in plan.claims)
     assert all("proof:" not in claim.statement for claim in plan.claims)
     result_claim = next(claim for claim in plan.claims if "stable difference" in claim.statement)
     assert "reports no stable difference" in result_claim.statement
-    assert set(result_claim.evidence_refs) == {result_a, result_b}
+    assert {result_a, result_b} <= set(result_claim.evidence_refs)
     assert any("retry failure" in claim.statement for claim in plan.claims)
+    full_proof_claim = next(
+        claim for claim in plan.claims if "derivation starts" in claim.statement
+    )
+    assert "complete final implication" in full_proof_claim.statement
+    assert complete_proof_ref in full_proof_claim.evidence_refs
+    assert all("ends abruptly" not in claim.statement for claim in plan.claims)
     assert all(
-        set(claim.evidence_refs) <= {session, result_a, result_b, skeptic, obligation}
+        set(claim.evidence_refs)
+        <= {session, result_a, result_b, skeptic, complete_proof_ref, truncated_ref, obligation}
         for claim in plan.claims
     )
     assert any(session in section.evidence_refs for section in plan.sections)
     assert any("process restart" in obligation for obligation in plan.open_obligations)
-    assert "stable difference" in plan.conclusions[0]
+    conclusion = " ".join(plan.conclusions)
+    assert "stable difference" in conclusion and "no stable difference" in conclusion
+    assert "process restart" in conclusion
 
 
 def test_frozen_snapshot_generation_gate_checks_identity_hash_and_source_uniqueness() -> None:
