@@ -6479,21 +6479,23 @@ async def test_stop_concurrent_portfolio_preserves_completed_boundary(path: Path
             strategy_ids=[first.id, second.id, third.id],
         )
         for _ in range(100):
-            if request_state["count"] >= 3 and request_state["active"] == 2:
+            if request_state["count"] >= 4 and request_state["active"] == 2:
                 break
             await asyncio.sleep(0.01)
-        assert request_state["count"] == 3
+        assert request_state["count"] == 4
         assert request_state["active"] == 2
         assert request_state["maximum"] == 3
         stopped = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped["status"] == "stopped"
-        assert request_state["count"] == 3
+        assert request_state["count"] == 4
         assert request_state["active"] == 0
         interrupted = research_sessions.get_session(str(path), started["id"])
+        # The fast branch finished I/S before stop; its review is still durable
+        # as a pending Skeptic until the coordinator resumes.
         assert interrupted["artifacts"] == []
-        assert interrupted["calls_used"] == 3
-        assert len(interrupted["steps"]) == 3
-        assert sum(step["status"] == "completed" for step in interrupted["steps"]) == 1
+        assert interrupted["calls_used"] == 4
+        assert len(interrupted["steps"]) == 4
+        assert sum(step["status"] == "completed" for step in interrupted["steps"]) == 2
         assert sum(step["status"] == "interrupted" for step in interrupted["steps"]) == 2
         completed = next(step for step in interrupted["steps"] if step["status"] == "completed")
         assert completed["output"]["claim"]
