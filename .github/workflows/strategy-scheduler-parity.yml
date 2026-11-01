@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   original-main-parity:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 423
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 423 || github.event.pull_request.number == 426
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
