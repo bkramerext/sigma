@@ -27,10 +27,36 @@ from sigma.projects import (
     set_strategy_enabled,
     update_project,
 )
-from sigma.research_budget import BudgetExceeded
+from sigma.research_budget import (
+    BudgetExceeded,
+    new_ledger,
+    reserve_before_dispatch,
+    settle_rejected,
+    totals,
+)
 
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
+
+
+def test_rejected_call_releases_hard_tokens_but_counts_attempt() -> None:
+    ledger = new_ledger(
+        call_limit=3,
+        input_token_limit=200_000,
+        output_tokens_per_call=4000,
+        cost_limit_usd=5.0,
+        input_price_per_million=1.0,
+        output_price_per_million=10.0,
+    )
+    reserve_before_dispatch(ledger, call_id="rejected", request_body=b"test")
+    settle_rejected(ledger, call_id="rejected")
+    current = totals(ledger)
+    assert current["calls_including_unknown"] == 1
+    assert current["input_tokens_used_or_reserved"] == 0
+    assert current["output_tokens_used_or_reserved"] == 0
+    assert current["cost_usd_used_or_reserved"] == 0
+    reserve_before_dispatch(ledger, call_id="next", request_body=b"another")
+    assert totals(ledger)["calls_including_unknown"] == 2
 
 
 def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried():
@@ -10244,6 +10270,7 @@ def main():
     test_cost_limit_outcome_preserves_partial_cycle_reason()
     test_unknown_provider_attempt_keeps_held_session_cost()
     test_sponsored_unlimited_cost_still_reserves_global_call_spend()
+    test_rejected_call_releases_hard_tokens_but_counts_attempt()
     test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not_retried()
     test_portfolio_termination_does_not_promote_scheduler_terminal_to_research_success()
     test_sponsorship_does_not_shorten_project_duration()
