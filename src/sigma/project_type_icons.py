@@ -44,7 +44,7 @@ async def generate_icon(name: str, scope: str) -> dict[str, str]:
         style = STYLE_REFERENCE.read_bytes()
     except OSError as exc:
         raise ProjectError("The SIGMA icon style reference is unavailable") from exc
-    if not style.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or len(style) > 4_000_000:
+    if not style.startswith(b"\x89PNG\r\n\x1a\n") or len(style) > 4_000_000:
         raise ProjectError("The SIGMA icon style reference is invalid")
 
     prompt = (
