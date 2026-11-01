@@ -534,6 +534,32 @@ function SessionNoticeDismiss({ number, onDismiss }: { number: number; onDismiss
     title={`Dismiss Session #${number} notices`} onClick={onDismiss}>Dismiss</button>;
 }
 
+// An in-flow exit slot: the notice slides through its own bottom edge
+// as that slot collapses, instead of flying toward the viewport footer.
+// Dismissal is a presentation-only operation; saved research is unchanged.
+function SessionNotice({ number, onDismiss, kind, ariaLabel, children }: {
+  number: number; onDismiss: () => void; kind: string; ariaLabel: string; children: ReactNode;
+}) {
+  const [exiting, setExiting] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+  const dismiss = () => {
+    if (timer.current !== null) return;
+    setExiting(true);
+    timer.current = window.setTimeout(onDismiss, 600);
+  };
+  return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
+    <div className="session-notice-exit-inner">
+      <div className={kind} role={kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
+        <SessionNoticeDismiss number={number} onDismiss={dismiss}/>
+        {children}
+      </div>
+    </div>
+  </div>;
+}
+
 function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
   path: string;
   session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
@@ -761,12 +787,11 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
       {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
       {provenancePrelude}
-      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <aside className="research-pause-guidance" aria-label="Session status and next steps">
-        <SessionNoticeDismiss number={session.session_number} onDismiss={onDismissStatusNotice}/>
+      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} kind="research-pause-guidance" ariaLabel="Session status and next steps">
         <strong>{statusHeading}</strong>
         {budgetDenied ? <><p>{budgetNotice}</p>{budgetReason && <p>{budgetReason}</p>}</> : !!session.message && <p>{session.message}</p>}
         <p>{statusNextStep}</p>
-      </aside>}
+      </SessionNotice>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><div className="outcome-summary-title"><span className="outcome-summary-kicker">{resultLabel}</span></div>
           {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
@@ -1404,7 +1429,7 @@ function ResearchWorkspace({ path, projectId, strategies, nextStrategyOrdinal, o
                   {confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session #${item.session_number}, including its saved research record and artifacts?` : `Remove Session #${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
-                {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <div className="stopped-session-guidance" role="note" aria-label={`Why session ${item.session_number} stopped and what to do next`}><SessionNoticeDismiss number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</div>; })()}
+                {(item.status === 'paused' || item.status === 'stopped') && !dismissedNoticeKeys.has(sessionNoticeKey(item)) && (() => { const guidance = stoppedSessionGuidance(item); const hasCompleteFinding = item.artifacts.some(artifact => Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0); return <SessionNotice key={sessionNoticeKey(item)} number={item.session_number} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))} kind="stopped-session-guidance" ariaLabel={`Why session ${item.session_number} stopped and what to do next`}><p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>{!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}</SessionNotice>; })()}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{outcomeDisplayLabel(item)}</span></small>
                 <small className="session-progress-inline">Round {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} agent turns · {sessionEstimatedCostLabel(item)}</small>
               </div>
