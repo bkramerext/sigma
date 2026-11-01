@@ -906,6 +906,9 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Start new session #2", exact=True).click()
     pause_row = research.locator("li[data-session-id]").filter(has_text="Session #2")
     expect(pause_row.locator(".session-status")).to_contain_text("running", timeout=10000)
+    expect(pause_row.locator(".session-remove-link")).to_have_count(0)
+    expect(pause_row.locator(".session-remove-actions")).to_have_count(0)
+    expect(pause_row.get_by_role("button", name="Stop", exact=True)).to_be_visible()
     live_label = pause_row.locator(".session-outcome-inline")
     running_record = page.evaluate(
         """async ({path, id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()""",
@@ -934,6 +937,7 @@ with sync_playwright() as playwright:
     recent_project.click()
     reopened_row = page.locator(".sessions-pane li[data-session-id]").filter(has_text="Session #2")
     expect(reopened_row.locator(".session-status")).to_contain_text("running", timeout=10000)
+    expect(reopened_row.locator(".session-remove-link")).to_have_count(0)
     reopened_box = reopened_row.bounding_box()
     assert (
         reopened_box
@@ -974,6 +978,8 @@ with sync_playwright() as playwright:
     expect(pause_row.locator(".session-status")).to_contain_text(
         re.compile("queued|running"), timeout=5000
     )
+    expect(pause_row.locator(".session-remove-link")).to_have_count(0)
+    expect(pause_row.locator(".session-remove-actions")).to_have_count(0)
     expect(page.get_by_role("group", name="Confirm resume Session 2")).to_have_count(0)
     pause_row.get_by_role("button", name="Stop", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
