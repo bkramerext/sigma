@@ -409,9 +409,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(toggle).to_have_attribute("aria-pressed", "true")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
-                source_toggle = conclusion.locator(
-                    ":scope > .sigma-render-toggle"
-                )
+                source_toggle = conclusion.locator(":scope > .sigma-render-toggle")
                 expect(source_toggle).to_have_attribute("aria-pressed", "true")
                 expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion text")
                 finding = conclusion.locator(".outcome-markdown h3").first
@@ -523,9 +521,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             )
             mobile_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             mobile_conclusion = mobile_row.locator("details.outcome-conclusion")
-            mobile_toggle = mobile_conclusion.locator(
-                ":scope > .sigma-render-toggle"
-            )
+            mobile_toggle = mobile_conclusion.locator(":scope > .sigma-render-toggle")
             expect(mobile_toggle).to_have_attribute("aria-pressed", "true")
             expect(mobile_conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
             expect(mobile_conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)

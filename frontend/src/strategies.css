@@ -2,7 +2,7 @@
 .workspace-page { --workspace-bg: #04101b; --workspace-panel: #030e18; --workspace-line: #233c4b; background: radial-gradient(ellipse at 80% 15%, #0c2031, transparent 65%), var(--workspace-bg); }
 .workspace-page .workspace-layout { grid-template-columns: 246px minmax(0, 1fr); }
 .workspace-page .site-header { min-height: 96px; }
-.workspace-page .workspace-content { padding: 12px 40px 40px; }
+.workspace-page .workspace-content { padding: 12px 20px 40px; }
 .workspace-page .project-intro { padding: 22px 0 12px; margin-bottom: 0; max-height: none; overflow: visible; border-bottom: 0; }
 .workspace-page .project-intro .objective { max-width: none; }
 .workspace-page .project-eyebrow { margin: 0 0 12px; text-transform: uppercase; letter-spacing: .25em; font-size: 11px; color: #e4ad67; }
@@ -1142,3 +1142,9 @@
 .workspace-page .outcome-summary-title { display: flex; align-items: center; gap: 8px; }
 .workspace-page .outcome-summary-title .outcome-summary-kicker { margin: 0; }
 .workspace-page .outcome-markdown-progress { color: #c8d3dc; font-size: 12px; margin: 7px 0; }
+
+
+/* Hover must not imply that an unselected Markdown representation is active. */
+.workspace-page .outcome-subsection.has-markdown-control > .sigma-render-toggle[aria-pressed="false"]:hover {
+  color: #aab4ba;
+}

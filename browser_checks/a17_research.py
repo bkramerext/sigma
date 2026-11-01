@@ -1088,7 +1088,9 @@ with sync_playwright() as playwright:
     expect(first_session.locator(".session-outcome")).to_contain_text("Outcome")
     expect(first_session.locator(".session-outcome h3")).to_have_text("Outcome")
     outcome_title = first_session.locator(".outcome-heading-title > h3")
-    outcome_toggle = first_session.get_by_role("button", name="Format all research sections as Markdown")
+    outcome_toggle = first_session.get_by_role(
+        "button", name="Format all research sections as Markdown"
+    )
     outcome_label = first_session.locator(".outcome-heading-title > .outcome-label")
 
     def assert_outcome_markdown_control_flow():
@@ -1224,9 +1226,9 @@ with sync_playwright() as playwright:
     expect(outcome_toggle).to_be_focused()
     assert outcome_toggle.evaluate("e => getComputedStyle(e).outlineStyle") == "solid"
     page.keyboard.press("Enter")
-    expect(first_session.get_by_role("button", name="Show saved all research sections text")).to_have_attribute(
-        "aria-pressed", "true"
-    )
+    expect(
+        first_session.get_by_role("button", name="Show saved all research sections text")
+    ).to_have_attribute("aria-pressed", "true")
     # Recursive Markdown formatting now queues optional provider formatting calls.
     # Display toggling remains immediate and does not invalidate research.
     assert len(provider_calls) >= conversion_count
@@ -1497,14 +1499,16 @@ with sync_playwright() as playwright:
     max_assessments = open_outcome_section(max_session, "Strategy Assessments")
     expect(max_assessments).to_contain_text("Contributed to solution")
     expect(max_session.locator(".session-outcome")).to_contain_text("no formal proof checker")
-    max_math_toggle = max_session.get_by_role("button", name="Format all research sections as Markdown")
+    max_math_toggle = max_session.get_by_role(
+        "button", name="Format all research sections as Markdown"
+    )
     calls_before_math_toggle = len(provider_calls)
     max_math_toggle.focus()
     expect(page.get_by_role("tooltip")).to_have_text("Format all research sections as Markdown")
     max_math_toggle.click()
-    expect(max_session.get_by_role("button", name="Show saved all research sections text")).to_have_attribute(
-        "aria-pressed", "true"
-    )
+    expect(
+        max_session.get_by_role("button", name="Show saved all research sections text")
+    ).to_have_attribute("aria-pressed", "true")
     markdown_outcome = max_session.locator(".outcome-markdown")
     expect(markdown_outcome.locator(".katex").first).to_be_visible()
     expect(markdown_outcome).to_contain_text("For every integer")

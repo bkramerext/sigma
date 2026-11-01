@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import re
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -80,7 +81,7 @@ def _saved_research_block(path: str, session_id: str, field_path: str) -> str:
     record = next((item for item in records if item.get("id") == session_id), None)
     if record is None:
         raise ProjectError("Saved research session is unavailable")
-    value = record
+    value: Any = record
     for part in field_path.split("."):
         if isinstance(value, list) and part.isdecimal():
             index = int(part)
@@ -427,7 +428,8 @@ async def _convert_text(
                 )
             latest = inspect_project(path).project
             if scope not in {"research-conclusion", "research-block"} and (
-                latest.ai_model, latest.reasoning_effort
+                latest.ai_model,
+                latest.reasoning_effort,
             ) != (
                 config["model"],
                 config["reasoning_effort"],
@@ -437,6 +439,8 @@ async def _convert_text(
                 )
             if scope in {"research-conclusion", "research-block"}:
                 if scope == "research-block":
+                    if session_id is None or field_path is None:
+                        raise ProjectError("Saved research field binding is required")
                     latest_text = _saved_research_block(path, session_id, field_path)
                 else:
                     from sigma.research_sessions import read_session_snapshot

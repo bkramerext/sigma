@@ -2105,16 +2105,21 @@ async def test_portfolio_python_queue_and_stop(path: Path):
             else:
                 finished = await wait_for(case, started["id"])
         assert state["maximum"] == 1 and state["active"] == 0
-        assert len(calls) == (1 if stopping else 3), calls
+        assert len(calls) == (1 if action == "stop" else 3), calls
         assert (
             finished["status"]
-            == {"complete": "ended", "stop": "stopped", "project-change": "paused"}[action]
+            == {"complete": "ended", "stop": "stopped", "project-change": "ended"}[action]
         ), finished
-        if stopping:
+        if action == "stop":
             assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 1
             assert len(finished["steps"]) == 3 and finished["calls_used"] == 3
         else:
             assert len(finished["artifacts"]) == 3 and finished["calls_used"] == 6
+            assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 3
+        if action == "project-change":
+            assert not any(
+                event["kind"] == "research.paused" for event in finished["events"]
+            ), "Live strategy edits must not pause the frozen running session"
 
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
@@ -7944,10 +7949,10 @@ async def test_project_edits_do_not_pause_research_but_account_changes_do(path: 
         return httpx.Response(200, json=provider_response(output))
 
     with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(
-            research_sessions, "auth_context", new=AsyncMock(return_value=credential)
+            research_sessions, "configuration", new=AsyncMock(side_effect=pinned_configuration)
         ),
-        patch.object(research_sessions, "configuration", new=AsyncMock(side_effect=pinned_configuration)),
         patch.object(research_sessions, "_portfolio_role_call", new=blocked_role_call),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
@@ -9519,7 +9524,9 @@ def main():
             )
         )
         asyncio.run(test_response_transport_and_parsed_bounds(root / "parsed.sigma"))
-        asyncio.run(test_project_edits_do_not_pause_research_but_account_changes_do(root / "binding.sigma"))
+        asyncio.run(
+            test_project_edits_do_not_pause_research_but_account_changes_do(root / "binding.sigma")
+        )
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
         asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
         test_deliberate_argument_gap_is_preserved_and_not_complete()
