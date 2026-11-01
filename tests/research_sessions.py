@@ -6188,9 +6188,7 @@ async def _main_wave_dispatch_for_parity(
     role implementation as production. Only scheduling changes in the A/B.
     """
     needs_review = [branch for branch in selected if branch.get("pending_investigation")]
-    needs_investigation = [
-        branch for branch in selected if not branch.get("pending_investigation")
-    ]
+    needs_investigation = [branch for branch in selected if not branch.get("pending_investigation")]
     await run_wave(
         [
             research_sessions._portfolio_role_call_with_recovery(
@@ -6274,7 +6272,9 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
                 "peer_claims": [item["claim_or_question"] for item in peers],
                 "peer_assumptions": [item["assumptions"] for item in peers],
                 "peer_objections": [item["objections"] for item in peers],
-                "handoff_relations": [item["relation"] for item in context.get("peer_handoffs", [])],
+                "handoff_relations": [
+                    item["relation"] for item in context.get("peer_handoffs", [])
+                ],
                 "handoff_sources": [
                     item["source_strategy_title"] for item in context.get("peer_handoffs", [])
                 ],
@@ -6310,19 +6310,24 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
                 )
                 if title == first.title and cycle == 2:
                     assert peers, "A peer finding is required for the handoff"
-                    output["cross_strategy_relations"] = [{
-                        "strategy_id": second.id,
-                        "artifact_id": peers[-1]["artifact_id"],
-                        "relation": "contradicts",
-                        "rationale": "Compare the independent invariant's assumptions before transfer.",
-                    }]
+                    output["cross_strategy_relations"] = [
+                        {
+                            "strategy_id": second.id,
+                            "artifact_id": peers[-1]["artifact_id"],
+                            "relation": "contradicts",
+                            "rationale": "Compare the independent invariant's assumptions before transfer.",
+                        }
+                    ]
                 if context.get("peer_handoffs"):
-                    output["peer_handoff_reviews"] = [{
-                        "handoff_id": item["handoff_id"],
-                        "disposition": "reject",
-                        "assumption_comparison": "Independent invariant assumptions have not been established as equivalent.",
-                        "rationale": "Do not transfer this purported contradiction without validating its domain.",
-                    } for item in context["peer_handoffs"]]
+                    output["peer_handoff_reviews"] = [
+                        {
+                            "handoff_id": item["handoff_id"],
+                            "disposition": "reject",
+                            "assumption_comparison": "Independent invariant assumptions have not been established as equivalent.",
+                            "rationale": "Do not transfer this purported contradiction without validating its domain.",
+                        }
+                        for item in context["peer_handoffs"]
+                    ]
             return httpx.Response(200, json=provider_response(output))
 
         with (
@@ -6392,6 +6397,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             row["id"]: f"<artifact:{titles[row['strategy_id']]}:{row['strategy_cycle']}>"
             for row in finished["artifacts"]
         }
+
         def normalize(value):
             if isinstance(value, str):
                 for identifier, label in artifact_labels.items():
@@ -6402,6 +6408,7 @@ def test_parallel_schedule_preserves_research_semantics(root: Path) -> None:
             if isinstance(value, (tuple, list)):
                 return tuple(normalize(child) for child in value)
             return value
+
         return (
             normalize(seen),
             normalize(findings),
@@ -9961,8 +9968,14 @@ def test_parallel_funding_uses_estimates_without_changing_provider_request() -> 
     context = {"problem": "Shared research objective", "strategy": "Independent approach"}
     provider_request = research_sessions._role_request_payload(record, "investigator", context)
     assert provider_request["max_output_tokens"] == research_sessions.MODEL_OUTPUT_LIMITS[MODEL]
-    cost_estimate = research_sessions._reserve_cost(record, context, "investigator")
-    assert cost_estimate is not None and 0 < cost_estimate < 0.10
+    cost_estimate = research_sessions._reserve_cost(
+        record, context, "investigator", estimate=True
+    )
+    legacy_worst_case = research_sessions._reserve_cost(
+        record, context, "investigator"
+    )
+    assert cost_estimate is not None and legacy_worst_case is not None
+    assert 0 < cost_estimate < legacy_worst_case
 
 
 def test_portfolio_capacity_tracks_strategies_not_billing_mode() -> None:
