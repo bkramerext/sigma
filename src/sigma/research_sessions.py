@@ -5624,9 +5624,11 @@ async def _call_provider(
     supplied_reasoning_sources = set(context.get("context_artifact_ids", []))
     supplied_reasoning_sources.update(context.get("prior_session_artifact_ids", []))
     supplied_reasoning_sources.update(
-        item.get("artifact_id")
+        item["artifact_id"]
         for item in context.get("other_strategy_evidence", [])
-        if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+        if isinstance(item, dict)
+        and isinstance(item.get("artifact_id"), str)
+        and item.get("evidence_availability") != "pointer_only_original_not_supplied"
     )
     reasoning_items = (
         validated.get("reasoning_steps", [])
@@ -5652,6 +5654,7 @@ async def _call_provider(
             (item.get("strategy_id"), item.get("artifact_id"))
             for item in context.get("other_strategy_evidence", [])
             if isinstance(item, dict)
+            and item.get("evidence_availability") != "pointer_only_original_not_supplied"
         }
         seen: set[tuple[str, str]] = set()
         for relation in validated["cross_strategy_relations"]:
@@ -5990,7 +5993,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         supplied = [
             item
             for item in source_ids
-            if item in artifact_availability or item in prior_finding_by_id
+            if (
+                item in artifact_availability
+                and artifact_availability[item] != "pointer_only_original_not_supplied"
+            )
+            or item in prior_finding_by_id
         ]
         obligation["supplied_source_artifact_ids"] = supplied
         if not supplied:
@@ -6044,7 +6051,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "outstanding_obligations": [
             item["text"] for item in obligations if item["status"] == "unresolved"
         ],
-        "context_artifact_ids": [a["id"] for a in selected],
+        "context_artifact_ids": [
+            a["id"]
+            for a in selected
+            if a.get("evidence_availability") != "pointer_only_original_not_supplied"
+        ],
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
