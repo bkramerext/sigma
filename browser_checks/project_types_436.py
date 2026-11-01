@@ -79,6 +79,7 @@ with sync_playwright() as playwright:
     types_button.click()
     dialog = page.get_by_role("dialog", name="Project Types")
     expect(dialog).to_be_visible()
+    expect(dialog.locator("header").get_by_role("button", name="Save")).to_be_disabled()
     expect(dialog.get_by_role("checkbox", name="Show built-in project types")).to_have_count(0)
     expect(dialog.get_by_text("(cannot be modified)", exact=True)).to_be_visible()
     page.set_viewport_size({"width": 1440, "height": 1000})
@@ -87,6 +88,8 @@ with sync_playwright() as playwright:
     literature = dialog.locator('.project-type-card:has(> summary strong:text-is("Literature"))')
     literature.locator("summary").click()
     expect(literature.locator(".project-type-card-icon svg")).to_be_visible()
+    expect(literature.get_by_text("http://temp.com/style.html")).to_have_count(2)
+    expect(literature.get_by_text("Actions")).to_have_count(0)
     builtin_names = (
         dialog.locator(".project-types-body > section")
         .nth(1)
